@@ -2607,21 +2607,36 @@ const ApplicantManagement = () => {
       }
 
       const result = await response.json();
-      
-      // 상세 분석 결과 처리
-      const analysisData = result.analysis_result;
-      
+
+      // 디버깅 로그 추가
+      console.log('📦 업로드 응답:', result);
+
+      // 상세 분석 결과 처리 (누락 시 안전 가드)
+      const analysisData = result.analysis_result || {};
+      console.log('🔍 analysisData:', analysisData);
+
+      // overall_summary 위치 호환 처리 (백엔드가 최상위 또는 analysis_result 내부에 둘 수 있음)
+      const overallSummary = result.overall_summary || analysisData.overall_summary || null;
+      const totalScore = overallSummary?.total_score ?? (
+        typeof analysisData.overall_score === 'number' ? analysisData.overall_score / 10 : 0
+      );
+      console.log('🧮 overallSummary:', overallSummary, 'totalScore:', totalScore);
+
+      if (!overallSummary) {
+        console.warn('⚠️ overall_summary 누락: result 또는 analysis_result 구조 확인 필요.', result);
+      }
+
       // 이력서 분석 결과 생성
       const analysisResult = {
         documentType: documentType,
-        fileName: result.filename,
+        fileName: result.filename || (resumeFile && resumeFile.name) || 'unknown',
         analysisDate: new Date().toLocaleString(),
-        summary: `AI 상세 분석 완료 - 총점: ${analysisData.overall_summary.total_score}/10`,
+        summary: `AI 상세 분석 완료 - 총점: ${totalScore}/10`,
         skills: extractSkillsFromAnalysis(analysisData, documentType),
         experience: extractExperienceFromAnalysis(analysisData, documentType),
         education: extractEducationFromAnalysis(analysisData, documentType),
         recommendations: extractRecommendationsFromAnalysis(analysisData, documentType),
-        score: analysisData.overall_summary.total_score * 10, // 0-100 점수로 변환
+        score: totalScore * 10, // 0-100 점수로 변환
         processingTime: result.processing_time || 0,
         extractedTextLength: result.extracted_text_length,
         detailedAnalysis: analysisData // 상세 분석 데이터 추가
@@ -2700,21 +2715,23 @@ const ApplicantManagement = () => {
   };
 
   const extractRecommendationsFromAnalysis = (analysisData, documentType) => {
-    // 선택한 항목에 대한 요약 정보 반환
+    // 총점 계산: overall_summary.total_score 우선, 없으면 overall_score(0-100)을 0-10으로 변환
+    const totalScore = (
+      analysisData?.overall_summary?.total_score ??
+      (typeof analysisData?.overall_score === 'number' ? analysisData.overall_score / 10 : 0)
+    );
+
     if (documentType === '이력서' && analysisData.resume_analysis) {
       const itemCount = Object.keys(analysisData.resume_analysis).length;
-      const totalScore = analysisData.overall_summary.total_score;
       return [`이력서 분석 완료: 총 ${itemCount}개 항목 분석, 평균 점수 ${totalScore}/10점`];
     } else if (documentType === '자기소개서' && analysisData.cover_letter_analysis) {
       const itemCount = Object.keys(analysisData.cover_letter_analysis).length;
-      const totalScore = analysisData.overall_summary.total_score;
       return [`자기소개서 분석 완료: 총 ${itemCount}개 항목 분석, 평균 점수 ${totalScore}/10점`];
     } else if (documentType === '포트폴리오' && analysisData.portfolio_analysis) {
       const itemCount = Object.keys(analysisData.portfolio_analysis).length;
-      const totalScore = analysisData.overall_summary.total_score;
       return [`포트폴리오 분석 완료: 총 ${itemCount}개 항목 분석, 평균 점수 ${totalScore}/10점`];
     }
-    
+
     return ['문서 분석이 완료되었습니다.'];
   };
 
