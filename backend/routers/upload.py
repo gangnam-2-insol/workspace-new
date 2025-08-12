@@ -87,9 +87,9 @@ class OverallSummary(BaseModel):
     recommendation: str
 
 class DetailedAnalysisResponse(BaseModel):
-    resume_analysis: ResumeAnalysis
-    cover_letter_analysis: CoverLetterAnalysis
-    portfolio_analysis: PortfolioAnalysis
+    resume_analysis: Optional[ResumeAnalysis] = None
+    cover_letter_analysis: Optional[CoverLetterAnalysis] = None
+    portfolio_analysis: Optional[PortfolioAnalysis] = None
     overall_summary: OverallSummary
 
 # 허용된 파일 타입
@@ -573,9 +573,9 @@ async def generate_detailed_analysis_with_gemini(content: str, document_type: st
             
             print(f"🔍 총 점수: {total_score}, 항목 수: {count}")
             
-            # 평균 점수 계산 (소수점 포함)
+            # 평균 점수 계산 (정수로 변환)
             if count > 0:
-                average_score = round(total_score / count, 1)
+                average_score = int(round(total_score / count))
             else:
                 average_score = 0
             
@@ -608,6 +608,49 @@ async def generate_detailed_analysis_with_gemini(content: str, document_type: st
             
             analysis_result["overall_summary"]["total_score"] = average_score
             analysis_result["overall_summary"]["recommendation"] = recommendation
+            
+            # 문서 타입에 따라 누락된 필드에 기본값 제공
+            if document_type == "resume" and "resume_analysis" not in analysis_result:
+                # 이력서 분석 결과가 없는 경우 기본값 생성
+                analysis_result["resume_analysis"] = {
+                    "basic_info_completeness": {"score": 0, "feedback": "분석 실패"},
+                    "job_relevance": {"score": 0, "feedback": "분석 실패"},
+                    "experience_clarity": {"score": 0, "feedback": "분석 실패"},
+                    "tech_stack_clarity": {"score": 0, "feedback": "분석 실패"},
+                    "project_recency": {"score": 0, "feedback": "분석 실패"},
+                    "achievement_metrics": {"score": 0, "feedback": "분석 실패"},
+                    "readability": {"score": 0, "feedback": "분석 실패"},
+                    "typos_and_errors": {"score": 0, "feedback": "분석 실패"},
+                    "update_freshness": {"score": 0, "feedback": "분석 실패"}
+                }
+            
+            if document_type == "cover_letter" and "cover_letter_analysis" not in analysis_result:
+                # 자기소개서 분석 결과가 없는 경우 기본값 생성
+                analysis_result["cover_letter_analysis"] = {
+                    "motivation_relevance": {"score": 0, "feedback": "분석 실패"},
+                    "problem_solving_STAR": {"score": 0, "feedback": "분석 실패"},
+                    "quantitative_impact": {"score": 0, "feedback": "분석 실패"},
+                    "job_understanding": {"score": 0, "feedback": "분석 실패"},
+                    "unique_experience": {"score": 0, "feedback": "분석 실패"},
+                    "logical_flow": {"score": 0, "feedback": "분석 실패"},
+                    "keyword_diversity": {"score": 0, "feedback": "분석 실패"},
+                    "sentence_readability": {"score": 0, "feedback": "분석 실패"},
+                    "typos_and_errors": {"score": 0, "feedback": "분석 실패"}
+                }
+            
+            if document_type == "portfolio" and "portfolio_analysis" not in analysis_result:
+                # 포트폴리오 분석 결과가 없는 경우 기본값 생성
+                analysis_result["portfolio_analysis"] = {
+                    "project_overview": {"score": 0, "feedback": "분석 실패"},
+                    "tech_stack": {"score": 0, "feedback": "분석 실패"},
+                    "personal_contribution": {"score": 0, "feedback": "분석 실패"},
+                    "achievement_metrics": {"score": 0, "feedback": "분석 실패"},
+                    "visual_quality": {"score": 0, "feedback": "분석 실패"},
+                    "documentation_quality": {"score": 0, "feedback": "분석 실패"},
+                    "job_relevance": {"score": 0, "feedback": "분석 실패"},
+                    "unique_features": {"score": 0, "feedback": "분석 실패"},
+                    "maintainability": {"score": 0, "feedback": "분석 실패"}
+                }
             
             processing_time = (datetime.now() - start_time).total_seconds()
             print(f"분석 처리 완료: {processing_time:.2f}초")
