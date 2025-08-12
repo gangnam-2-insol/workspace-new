@@ -12,7 +12,6 @@ import CoverLetterValidation from './pages/CoverLetterValidation/CoverLetterVali
 import TalentRecommendation from './pages/TalentRecommendation/TalentRecommendation';
 import UserManagement from './pages/UserManagement/UserManagement';
 import Settings from './pages/Settings/Settings';
-import TestGithubSummary from './pages/TestGithubSummary';
 import FloatingChatbot from './chatbot/components/FloatingChatbot';
 import AITooltip from './components/AITooltip';
 
@@ -152,7 +151,6 @@ function App() {
           <Route path="/talent" element={<TalentRecommendation />} />
           <Route path="/users" element={<UserManagement />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/github-test" element={<TestGithubSummary />} />
         </Routes>
       </Layout>
 
