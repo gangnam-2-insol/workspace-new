@@ -1,9 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import TemplateModal from './TemplateModal';
-import TitleRecommendationModal from '../../components/TitleRecommendationModal';
-import TestAutoFillButton from '../../components/TestAutoFillButton';
 import { 
   FiX, 
   FiArrowLeft, 
@@ -445,11 +443,6 @@ const ImageBasedRegistration = ({
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templates, setTemplates] = useState([]);
   
-  const [titleRecommendationModal, setTitleRecommendationModal] = useState({
-    isOpen: false,
-    finalFormData: null
-  });
-  
   // AI 자동 플로우 시작 이벤트 리스너
   React.useEffect(() => {
     const handleStartImageBasedAIFlow = () => {
@@ -492,15 +485,6 @@ const ImageBasedRegistration = ({
     deadline: ''
   });
 
-  // 모달이 열릴 때 챗봇 닫기
-  useEffect(() => {
-    if (isOpen) {
-      console.log('ImageBasedRegistration 모달이 열림 - 챗봇 닫기 이벤트 발생');
-      const event = new CustomEvent('closeChatbot');
-      window.dispatchEvent(event);
-    }
-  }, [isOpen]);
-
   const [generatedImages, setGeneratedImages] = useState([]);
 
   const steps = [
@@ -515,38 +499,10 @@ const ImageBasedRegistration = ({
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    
-    // 급여 필드에 대한 특별 처리
-    if (name === 'salary') {
-      // 입력값에서 숫자만 추출 (콤마, 하이픈, 틸드 포함)
-      const numericValue = value.replace(/[^\d,~\-]/g, '');
-      setFormData(prev => ({
-        ...prev,
-        [name]: numericValue
-      }));
-    } else {
-      setFormData(prev => ({
-        ...prev,
-        [name]: value
-      }));
-    }
-  };
-  
-  // 급여를 표시용으로 포맷하는 함수
-  const formatSalaryDisplay = (salaryValue) => {
-    if (!salaryValue) return '';
-    
-    // 이미 "만원"이 포함되어 있으면 그대로 반환
-    if (salaryValue.includes('만원') || salaryValue.includes('협의') || salaryValue.includes('면접')) {
-      return salaryValue;
-    }
-    
-    // 숫자만 있는 경우 "만원" 추가
-    if (/^\d+([,\d~\-]*)?$/.test(salaryValue.trim())) {
-      return `${salaryValue}만원`;
-    }
-    
-    return salaryValue;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
   const handleGenerateImages = async () => {
@@ -626,8 +582,8 @@ const ImageBasedRegistration = ({
         `
       };
       
-      // 시뮬레이션: 1초 후 완료
-      await new Promise(resolve => setTimeout(resolve, 1000));
+      // 시뮬레이션: 2초 후 완료
+      await new Promise(resolve => setTimeout(resolve, 2000));
       
       console.log('✅ 이메일 전송 완료');
       alert(`📧 인사담당자(${jobData.contactEmail})에게 등록 완료 알림 이메일이 전송되었습니다.`);
@@ -653,139 +609,17 @@ const ImageBasedRegistration = ({
   };
 
   const handleComplete = async () => {
-    if (selectedImage) {
-      console.log('이미지 기반 등록 완료 - 제목 추천 모달 열기');
+    if (selectedImage && onComplete) {
       const completeData = { ...formData, selectedImage };
       
-      // 제목 추천 모달 열기
-      setTitleRecommendationModal({
-        isOpen: true,
-        finalFormData: completeData
-      });
+      // 채용공고 등록 완료 처리
+      onComplete(completeData);
+      
+      // 인사담당자에게 알림 이메일 전송
+      if (formData.contactEmail) {
+        await sendNotificationEmail(completeData);
+      }
     }
-  };
-
-  // 제목 추천 모달에서 제목 선택
-  const handleTitleSelect = async (selectedTitle) => {
-    console.log('추천 제목 선택:', selectedTitle);
-    const finalData = {
-      ...titleRecommendationModal.finalFormData,
-      title: selectedTitle
-    };
-    
-    // 제목 추천 모달 닫기
-    setTitleRecommendationModal({
-      isOpen: false,
-      finalFormData: null
-    });
-    
-    // 최종 등록 완료
-    onComplete(finalData);
-    
-    // 인사담당자에게 알림 이메일 전송
-    if (finalData.contactEmail) {
-      await sendNotificationEmail(finalData);
-    }
-  };
-
-  // 제목 추천 모달에서 직접 입력
-  const handleDirectTitleInput = async (customTitle) => {
-    console.log('직접 입력 제목:', customTitle);
-    const finalData = {
-      ...titleRecommendationModal.finalFormData,
-      title: customTitle
-    };
-    
-    // 제목 추천 모달 닫기
-    setTitleRecommendationModal({
-      isOpen: false,
-      finalFormData: null
-    });
-    
-    // 최종 등록 완료
-    onComplete(finalData);
-    
-    // 인사담당자에게 알림 이메일 전송
-    if (finalData.contactEmail) {
-      await sendNotificationEmail(finalData);
-    }
-  };
-
-  // 제목 추천 모달 닫기
-  const handleTitleModalClose = () => {
-    setTitleRecommendationModal({
-      isOpen: false,
-      finalFormData: null
-    });
-  };
-
-  // 모달 완전 초기화 함수
-  const resetModalState = () => {
-    console.log('=== ImageBasedRegistration 상태 초기화 ===');
-    
-    // 폼 데이터 초기화
-    setFormData({
-      department: '',
-      experience: '',
-      experienceYears: '',
-      headcount: '',
-      mainDuties: '',
-      workHours: '',
-      workDays: '',
-      locationCity: '',
-      locationDistrict: '',
-      salary: '',
-      process: ['서류', '실무면접', '최종면접', '입사'],
-      deadline: '',
-      contactEmail: '',
-      notes: ''
-    });
-
-    // 단계 초기화
-    setCurrentStep(1);
-    setIsGenerating(false);
-    setSelectedImage(null);
-    setIsSendingEmail(false);
-    setShowTemplateModal(false);
-    setTemplates([]);
-
-    // 제목 추천 모달 초기화
-    setTitleRecommendationModal({
-      isOpen: false,
-      finalFormData: null
-    });
-
-    console.log('=== ImageBasedRegistration 상태 초기화 완료 ===');
-  };
-
-  // 컴포넌트가 언마운트되거나 모달이 닫힐 때 초기화
-  useEffect(() => {
-    if (!isOpen) {
-      resetModalState();
-    }
-  }, [isOpen]);
-
-  // 테스트 자동입력 처리
-  const handleTestAutoFill = (sampleData) => {
-    console.log('테스트 자동입력 시작:', sampleData);
-    
-    // 하드코딩된 테스트 값들
-    const testData = {
-      department: '개발팀',
-      experience: '2년이상',
-      headCount: '0명',
-      salary: '연봉 4,000만원 - 6,000만원',
-      contactEmail: 'test@test.com',
-      deadline: '9월 3일까지'
-    };
-
-    // 폼 데이터 일괄 업데이트
-    setFormData(prev => ({ ...prev, ...testData }));
-    
-    console.log('테스트 자동입력 완료:', testData);
-    
-    // 사용자에게 알림
-    alert('🧪 테스트 데이터가 자동으로 입력되었습니다!');
   };
 
   // 단계별 렌더 함수들 (1~5단계)
@@ -1130,40 +964,13 @@ const ImageBasedRegistration = ({
         </FormGroup>
         <FormGroup>
           <Label>연봉</Label>
-          <div style={{ position: 'relative' }}>
-            <Input
-              type="text"
-              name="salary"
-              value={formData.salary}
-              onChange={handleInputChange}
-              placeholder="예: 4000~6000, 5000, 면접 후 협의"
-              style={{ paddingRight: '50px' }}
-            />
-            {formData.salary && /^\d+([,\d~\-]*)?$/.test(formData.salary.trim()) && (
-              <span style={{
-                position: 'absolute',
-                right: '12px',
-                top: '50%',
-                transform: 'translateY(-50%)',
-                color: '#667eea',
-                fontSize: '14px',
-                fontWeight: '500',
-                pointerEvents: 'none'
-              }}>
-                만원
-              </span>
-            )}
-          </div>
-          {formData.salary && (
-            <div style={{ 
-              fontSize: '0.8em', 
-              color: '#667eea', 
-              marginTop: '4px',
-              fontWeight: 'bold'
-            }}>
-              ✅ 입력됨: {formatSalaryDisplay(formData.salary)}
-            </div>
-          )}
+          <Input
+            type="text"
+            name="salary"
+            value={formData.salary}
+            onChange={handleInputChange}
+            placeholder="예: 4,000만원 ~ 6,000만원"
+          />
         </FormGroup>
       </FormGrid>
     </FormSection>
@@ -1296,14 +1103,12 @@ const ImageBasedRegistration = ({
     <AnimatePresence>
       {isOpen && (
         <Overlay
-          key="image-overlay"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
         >
           <Modal
-            key="image-modal"
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
@@ -1311,12 +1116,9 @@ const ImageBasedRegistration = ({
           >
             <Header>
               <Title>이미지 기반 채용공고 등록</Title>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <TestAutoFillButton onAutoFill={handleTestAutoFill} />
-                <CloseButton onClick={onClose}>
-                  <FiX />
-                </CloseButton>
-              </div>
+              <CloseButton onClick={onClose}>
+                <FiX />
+              </CloseButton>
             </Header>
 
             <Content>
@@ -1396,15 +1198,6 @@ const ImageBasedRegistration = ({
         onDeleteTemplate={handleDeleteTemplate}
         templates={templates}
         currentData={formData}
-      />
-
-      {/* 제목 추천 모달 */}
-      <TitleRecommendationModal
-        isOpen={titleRecommendationModal.isOpen}
-        onClose={handleTitleModalClose}
-        formData={titleRecommendationModal.finalFormData}
-        onTitleSelect={handleTitleSelect}
-        onDirectInput={handleDirectTitleInput}
       />
     </AnimatePresence>
   );

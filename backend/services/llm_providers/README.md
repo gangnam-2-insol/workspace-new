@@ -18,9 +18,27 @@ LLM 프로바이더 서비스는 다음과 같은 기능을 제공합니다:
 - Azure OpenAI
 - 스트리밍 응답 지원
 
-### 2. Google Gemini (예정)
-- Google AI Studio API
-- 다양한 모델 지원
+### 2. Google Gemini
+- Google AI Studio API (`google-generativeai`)
+- 모델 예시: `gemini-1.5-flash`, `gemini-1.5-pro`
+- 환경 변수: `GOOGLE_API_KEY`
+
+```python
+from services.llm_providers.base_provider import LLMProviderFactory
+from services.llm_providers import gemini_provider  # 등록을 위해 임포트 필요
+
+config = {
+    "provider": "gemini",
+    "api_key": os.getenv("GOOGLE_API_KEY"),
+    "model_name": "gemini-1.5-flash",
+    "max_tokens": 4000,
+    "temperature": 0.2,
+}
+
+provider = LLMProviderFactory.create_provider("gemini", config)
+response = await provider.safe_generate("안녕하세요")
+print(response.content)
+```
 
 ## 사용법
 

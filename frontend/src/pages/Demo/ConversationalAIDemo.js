@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
-import EnhancedModalChatbot from '../../chatbot/components/EnhancedModalChatbot';
-import LangGraphJobRegistration from '../JobPostingRegistration/LangGraphJobRegistration';
+import EnhancedModalChatbot from '../../components/EnhancedModalChatbot';
 
 const Container = styled.div`
   padding: 20px;
@@ -113,7 +112,6 @@ const Message = styled.div`
 
 const ConversationalAIDemo = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isLangGraphModalOpen, setIsLangGraphModalOpen] = useState(false);
   const [formData, setFormData] = useState({
     department: '',
     headcount: '',
@@ -159,17 +157,6 @@ const ConversationalAIDemo = () => {
       ...prev,
       [fieldKey]: value
     }));
-  };
-
-  const handlePageAction = (action, data) => {
-    if (action === 'openLangGraphRegistration') {
-      setIsLangGraphModalOpen(true);
-    } else if (action === 'updateLangGraphData') {
-      // LangGraph 데이터 업데이트 이벤트 발생
-      window.dispatchEvent(new CustomEvent('langGraphDataUpdate', {
-        detail: { action, data }
-      }));
-    }
   };
 
   return (
@@ -306,7 +293,6 @@ const ConversationalAIDemo = () => {
         fields={fields}
         onFieldUpdate={handleFieldUpdate}
         onComplete={handleComplete}
-        onPageAction={handlePageAction}
         aiAssistant={true}
       >
         <div style={{ display: 'grid', gap: '20px' }}>
@@ -556,13 +542,6 @@ const ConversationalAIDemo = () => {
           </div>
         </div>
       </EnhancedModalChatbot>
-
-      {/* LangGraph 채용공고 등록 페이지 */}
-      <LangGraphJobRegistration
-        isOpen={isLangGraphModalOpen}
-        onClose={() => setIsLangGraphModalOpen(false)}
-        initialData={formData}
-      />
     </Container>
   );
 };

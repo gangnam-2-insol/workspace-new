@@ -1443,7 +1443,7 @@ const getStatusText = (status) => {
       {/* 여기에 모든 모달들이 들어감 */}
       {/* 설정 모달 */}
       {isSettingsModalOpen && (
-        <div className="modal-overlay" onClick={() => {}}>  {/* 배경 클릭 시 닫기 방지 */}
+        <div className="modal-overlay" onClick={() => setIsSettingsModalOpen(false)}>
           <div className="modal-content settings-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>설정</h2>
@@ -1556,7 +1556,7 @@ const getStatusText = (status) => {
 
       {/* 임시 합격자 등록 모달 */}
       {isTemporaryPassModalOpen && (
-        <div className="modal-overlay" onClick={() => {}}>  {/* 배경 클릭 시 닫기 방지 */}
+        <div className="modal-overlay" onClick={() => setIsTemporaryPassModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>임시 합격자 등록</h2>
@@ -1662,7 +1662,7 @@ const getStatusText = (status) => {
 
       {/* AI 자동 스케줄링 모달 */}
       {isAIScheduleModalOpen && (
-        <div className="modal-overlay" onClick={() => {}}>  {/* 배경 클릭 시 닫기 방지 */}
+        <div className="modal-overlay" onClick={() => setIsAIScheduleModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>AI 자동 스케줄링</h2>
@@ -1818,7 +1818,7 @@ const getStatusText = (status) => {
 
       {/* 면접일정 등록 모달 */}
       {isInterviewScheduleModalOpen && selectedApplicantForSchedule && (
-        <div className="modal-overlay" onClick={() => {}}>  {/* 배경 클릭 시 닫기 방지 */}
+        <div className="modal-overlay" onClick={() => setIsInterviewScheduleModalOpen(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>면접일정 등록</h2>

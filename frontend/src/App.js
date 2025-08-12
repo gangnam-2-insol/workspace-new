@@ -3,42 +3,18 @@ import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
 import Layout from './components/Layout/Layout';
 import Dashboard from './pages/Dashboard/Dashboard';
 import JobPostingRegistration from './pages/JobPostingRegistration/JobPostingRegistration';
-import ResumeManagement from './pages/ResumeManagement/ResumeManagement';
 import ApplicantManagement from './pages/ApplicantManagement';
-import InterviewManagement from './pages/InterviewManagement/InterviewManagement';
-import InterviewCalendar from './pages/InterviewManagement/InterviewCalendar';
-import PortfolioAnalysis from './pages/PortfolioAnalysis/PortfolioAnalysis';
-import CoverLetterValidation from './pages/CoverLetterValidation/CoverLetterValidation';
-import TalentRecommendation from './pages/TalentRecommendation/TalentRecommendation';
+// import InterviewManagement from './pages/InterviewManagement/InterviewManagement';
+// import InterviewCalendar from './pages/InterviewManagement/InterviewCalendar';
+
 import UserManagement from './pages/UserManagement/UserManagement';
 import Settings from './pages/Settings/Settings';
-import TestGithubSummary from './pages/TestGithubSummary';
-import FloatingChatbot from './chatbot/components/FloatingChatbot';
-import AITooltip from './components/AITooltip';
-
-
+import FloatingChatbot from './components/FloatingChatbot';
 
 function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const currentPage = location.pathname.replace('/', '') || 'dashboard';
-
-  // 전역 이벤트 리스너 추가 (디버깅용)
-  React.useEffect(() => {
-    const handleGlobalLangGraphDataUpdate = (event) => {
-      console.log('[App.js] 🌍 전역 이벤트 수신:', event);
-      console.log('[App.js] 🌍 이벤트 타입:', event.type);
-      console.log('[App.js] 🌍 이벤트 상세:', event.detail);
-    };
-
-    console.log('[App.js] 전역 이벤트 리스너 등록: langGraphDataUpdate');
-    window.addEventListener('langGraphDataUpdate', handleGlobalLangGraphDataUpdate);
-
-    return () => {
-      console.log('[App.js] 전역 이벤트 리스너 해제');
-      window.removeEventListener('langGraphDataUpdate', handleGlobalLangGraphDataUpdate);
-    };
-  }, []);
 
   const handlePageAction = (action) => { // 이 함수는 'action'이라는 인자 하나만 받습니다.
     console.log('App.js에서 받은 페이지 액션:', action); // 디버깅을 위해 로그를 찍어보세요.
@@ -47,9 +23,7 @@ function App() {
     if (action.startsWith('changePage:')) {
       const targetPage = action.split(':')[1]; // 'job-posting' 추출
       console.log(`App.js가 페이지 이동 요청 수신: /${targetPage}`); // 이동 요청 로그
-      console.log(`navigate 호출: /${targetPage}`); // 네비게이션 로그
       navigate(`/${targetPage}`); // 실제 페이지 이동
-      console.log('페이지 이동 완료');
       return; // 페이지 이동 처리 후 함수 종료
     }
 
@@ -130,10 +104,6 @@ function App() {
         detail: { value: newWorkContent }
       });
       window.dispatchEvent(event);
-    } else if (action === 'openLangGraphRegistration') {
-      // 랭그래프모드용 채용공고등록도우미 열기
-      const event = new CustomEvent('openLangGraphRegistration');
-      window.dispatchEvent(event);
     }
   };
 
@@ -143,54 +113,20 @@ function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/job-posting" element={<JobPostingRegistration />} />
-          <Route path="/resume" element={<ResumeManagement />} />
           <Route path="/applicants" element={<ApplicantManagement />} />
-          <Route path="/interview" element={<InterviewManagement />} />
-          <Route path="/interview-calendar" element={<InterviewCalendar />} />
-          <Route path="/portfolio" element={<PortfolioAnalysis />} />
-          <Route path="/cover-letter" element={<CoverLetterValidation />} />
-          <Route path="/talent" element={<TalentRecommendation />} />
+          {/* <Route path="/interview" element={<InterviewManagement />} /> */}
+          {/* <Route path="/interview-calendar" element={<InterviewCalendar />} /> */}
+
           <Route path="/users" element={<UserManagement />} />
           <Route path="/settings" element={<Settings />} />
-          <Route path="/github-test" element={<TestGithubSummary />} />
         </Routes>
       </Layout>
-
-      {/* AI 말풍선 컴포넌트 */}
-      <AITooltip />
 
       {/* 챗봇 컴포넌트 */}
       <FloatingChatbot
         page={currentPage}
         onFieldUpdate={(field, value) => {
           console.log('챗봇 필드 업데이트:', field, value);
-          
-          // 실제 폼 필드 업데이트를 위한 이벤트 발생
-          const event = new CustomEvent('updateFormField', {
-            detail: { field, value }
-          });
-          window.dispatchEvent(event);
-          
-          // 추가로 개별 필드별 이벤트도 발생
-          const fieldEvents = {
-            'department': 'updateDepartment',
-            'headcount': 'updateHeadcount', 
-            'salary': 'updateSalary',
-            'mainDuties': 'updateWorkContent',
-            'workHours': 'updateWorkHours',
-            'workDays': 'updateWorkDays',
-            'locationCity': 'updateLocation',
-            'contactEmail': 'updateContactEmail',
-            'deadline': 'updateDeadline'
-          };
-          
-          const eventName = fieldEvents[field];
-          if (eventName) {
-            const specificEvent = new CustomEvent(eventName, {
-              detail: { value }
-            });
-            window.dispatchEvent(specificEvent);
-          }
         }}
         onComplete={() => {
           console.log('챗봇 완료');

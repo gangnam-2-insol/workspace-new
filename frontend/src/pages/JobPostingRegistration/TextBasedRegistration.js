@@ -1,14 +1,27 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import TemplateModal from './TemplateModal';
-import EnhancedModalChatbot from '../../chatbot/components/EnhancedModalChatbot';
-import TitleRecommendationModal from '../../components/TitleRecommendationModal';
-import TestAutoFillButton from '../../components/TestAutoFillButton';
-import './TextBasedRegistration.css';
-import { FiX, FiArrowLeft, FiArrowRight, FiCheck, FiFileText, FiClock, FiMapPin, FiDollarSign, FiUsers, FiMail, FiCalendar, FiFolder, FiSettings } from 'react-icons/fi';
+import EnhancedModalChatbot from '../../components/EnhancedModalChatbot';
+import { 
+  FiX, 
+  FiArrowLeft, 
+  FiArrowRight,
+  FiCheck,
+  FiUsers,
+  FiBriefcase,
+  FiCalendar,
+  FiMail,
+  FiMapPin,
+  FiDollarSign,
+  FiAward,
+  FiClock,
+  FiFileText,
+  FiSave,
+  FiFolder,
+  FiRefreshCw
+} from 'react-icons/fi';
 
-// Styled Components
 const Overlay = styled(motion.div)`
   position: fixed;
   top: 0;
@@ -20,27 +33,18 @@ const Overlay = styled(motion.div)`
   align-items: center;
   justify-content: center;
   z-index: 1000;
+  padding: 20px;
 `;
 
 const Modal = styled(motion.div)`
   background: white;
   border-radius: 16px;
-  width: 70%;
-  height: 100%;
-  max-width: 85%;
-  max-height: 95vh;
-  overflow: hidden;
+  max-width: 800px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
   box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
-  margin-left: 2%;
-  margin-right: auto;
-  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  
-  ${props => !props.aiActive && `
-    width: 90%;
-    max-width: 85%;
-    margin-left: auto;
-    margin-right: auto;
-  `}
 `;
 
 const Header = styled.div`
@@ -48,47 +52,92 @@ const Header = styled.div`
   justify-content: space-between;
   align-items: center;
   padding: 24px 32px;
-  border-bottom: 1px solid #e2e8f0;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+  border-bottom: 1px solid var(--border-color);
+  position: sticky;
+  top: 0;
+  background: white;
+  z-index: 10;
 `;
 
 const Title = styled.h2`
-  font-size: 20px;
-  font-weight: 600;
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
   margin: 0;
 `;
 
 const CloseButton = styled.button`
   background: none;
   border: none;
-  color: white;
   font-size: 24px;
   cursor: pointer;
-  padding: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
+  color: var(--text-secondary);
+  padding: 8px;
   border-radius: 50%;
   transition: all 0.3s ease;
 
   &:hover {
-    background: rgba(255, 255, 255, 0.2);
+    background: var(--background-secondary);
+    color: var(--text-primary);
   }
+`;
+
+const ProgressBar = styled.div`
+  width: 100%;
+  height: 4px;
+  background: var(--border-color);
+  border-radius: 2px;
+  margin: 16px 0;
+  overflow: hidden;
+`;
+
+const ProgressFill = styled.div`
+  height: 100%;
+  background: linear-gradient(135deg, #00c851, #00a844);
+  transition: width 0.3s ease;
+  width: ${props => props.progress}%;
+`;
+
+const StepIndicator = styled.div`
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 32px;
+`;
+
+const Step = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+`;
+
+const StepNumber = styled.div`
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  background: ${props => 
+    props.active ? 'linear-gradient(135deg, #00c851, #00a844)' : 
+    props.completed ? 'var(--primary-color)' : 'var(--border-color)'
+  };
+`;
+
+const StepLabel = styled.span`
+  font-size: 12px;
+  color: ${props => 
+    props.active ? 'var(--primary-color)' : 
+    props.completed ? 'var(--text-primary)' : 'var(--text-secondary)'
+  };
+  font-weight: ${props => props.active || props.completed ? '600' : '400'};
 `;
 
 const Content = styled.div`
   padding: 32px;
-  padding-right: 16px;
-  max-height: calc(95vh - 120px);
-  overflow-y: auto;
-  transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  
-  ${props => !props.aiActive && `
-    padding-right: 32px;
-  `}
 `;
 
 const FormSection = styled.div`
@@ -116,25 +165,128 @@ const FormGrid = styled.div`
   }
 `;
 
+const FormGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const Label = styled.label`
+  font-weight: 600;
+  color: var(--text-primary);
+  font-size: 14px;
+`;
+
+const Input = styled.input`
+  padding: 12px 16px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 14px;
+  transition: all 0.3s ease;
+
+  &:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(0, 200, 81, 0.1);
+  }
+`;
+
+const TextArea = styled.textarea`
+  padding: 12px 16px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 14px;
+  min-height: 120px;
+  resize: vertical;
+  transition: all 0.3s ease;
+
+  &:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(0, 200, 81, 0.1);
+  }
+`;
+
+const Select = styled.select`
+  padding: 12px 16px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 14px;
+  background: white;
+  transition: all 0.3s ease;
+
+  &:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(0, 200, 81, 0.1);
+  }
+`;
+
+const RadioGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+`;
+
+const RadioOption = styled.label`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+
+  &:hover {
+    border-color: var(--primary-color);
+    background: rgba(0, 200, 81, 0.05);
+  }
+
+  &.selected {
+    border-color: var(--primary-color);
+    background: rgba(0, 200, 81, 0.1);
+  }
+`;
+
+const RadioInput = styled.input`
+  margin: 0;
+`;
+
+const RadioText = styled.div`
+  flex: 1;
+`;
+
+const RadioTitle = styled.div`
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+`;
+
+const RadioDescription = styled.div`
+  font-size: 12px;
+  color: var(--text-secondary);
+`;
+
 const ButtonGroup = styled.div`
   display: flex;
   gap: 12px;
-  justify-content: flex-end;
+  justify-content: space-between;
   margin-top: 32px;
   padding-top: 24px;
-  border-top: 1px solid #e2e8f0;
+  border-top: 1px solid var(--border-color);
 `;
 
 const Button = styled.button`
   padding: 12px 24px;
-  border: none;
   border-radius: 8px;
   font-weight: 600;
   cursor: pointer;
+  transition: all 0.3s ease;
+  border: none;
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: all 0.3s ease;
 
   &.primary {
     background: linear-gradient(135deg, #00c851, #00a844);
@@ -147,38 +299,41 @@ const Button = styled.button`
   }
 
   &.secondary {
-    background: #f8f9fa;
-    color: var(--text-primary);
-    border: 2px solid #e2e8f0;
+    background: white;
+    color: var(--text-secondary);
+    border: 2px solid var(--border-color);
 
     &:hover {
-      background: #e9ecef;
-      border-color: #ced4da;
-    }
-  }
-
-  &.ai {
-    background: linear-gradient(135deg, #ff6b6b, #ee5a52);
-    color: white;
-
-    &:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 8px 25px rgba(255, 107, 107, 0.3);
+      background: var(--background-secondary);
+      border-color: var(--text-secondary);
     }
   }
 `;
 
-const AINotice = styled.div`
-  background: linear-gradient(135deg, #667eea, #764ba2);
-  color: white;
-  padding: 16px 20px;
-  border-radius: 12px;
-  margin-bottom: 24px;
+const AISuggestion = styled.div`
+  background: rgba(0, 200, 81, 0.1);
+  border: 1px solid rgba(0, 200, 81, 0.2);
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 12px;
+`;
+
+const AISuggestionTitle = styled.div`
+  font-weight: 600;
+  color: var(--primary-color);
+  margin-bottom: 8px;
   display: flex;
   align-items: center;
-  gap: 12px;
-  font-weight: 600;
+  gap: 8px;
 `;
+
+const AISuggestionText = styled.div`
+  font-size: 14px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+`;
+
+// AI 채용공고 작성 도우미 관련 styled components는 메인 챗봇으로 이동됨
 
 const TextBasedRegistration = ({ 
   isOpen, 
@@ -186,474 +341,790 @@ const TextBasedRegistration = ({
   onComplete,
   organizationData = { departments: [] }
 }) => {
-  const [formData, setFormData] = useState({
-    department: '',
-    experience: '신입',
-    experienceYears: '',
-    headcount: '',
-    mainDuties: '',
-    workHours: '',
-    workDays: '',
-    locationCity: '',
-    salary: '',
-    contactEmail: '',
-    deadline: ''
-  });
-
+  const [currentStep, setCurrentStep] = useState(1);
+  const [showTemplateModal, setShowTemplateModal] = useState(false);
+  const [templates, setTemplates] = useState([]);
+  const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [aiChatbot, setAiChatbot] = useState({
     isActive: false,
     currentQuestion: '',
     step: 1
   });
-
-  const [titleRecommendationModal, setTitleRecommendationModal] = useState({
-    isOpen: false,
-    finalFormData: null
-  });
-
-  // WebSocket 연결 및 Agent 출력 관리
-  const [wsConnection, setWsConnection] = useState(null);
-  const [agentOutputs, setAgentOutputs] = useState([]);
-  const [sessionId, setSessionId] = useState(null);
-
-  // 랭그래프 Agent 호출 함수
-  const callLangGraphAgent = async (message) => {
-    try {
-      console.log('🤖 랭그래프 Agent 호출:', message);
-      
-      const response = await fetch('/api/langgraph-agent', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          message: message,
-          conversation_history: [],
-          session_id: sessionId
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error(`HTTP error! status: ${response.status}`);
-      }
-
-      const result = await response.json();
-      console.log('🤖 랭그래프 Agent 응답:', result);
-
-      // 추출된 필드 정보가 있으면 폼에 자동 적용
-      if (result.extracted_fields && Object.keys(result.extracted_fields).length > 0) {
-        console.log('✅ 추출된 필드 정보:', result.extracted_fields);
-        
-        setFormData(prev => {
-          const newFormData = { ...prev, ...result.extracted_fields };
-          console.log('📝 폼 데이터 업데이트:', newFormData);
-          return newFormData;
-        });
-
-        // 성공 알림
-        const fieldNames = Object.keys(result.extracted_fields).join(', ');
-        console.log(`✅ 랭그래프 Agent에서 추출한 정보가 폼에 자동 입력되었습니다! (${fieldNames})`);
-      }
-
-      return result;
-    } catch (error) {
-      console.error('❌ 랭그래프 Agent 호출 오류:', error);
-      return {
-        success: false,
-        response: `랭그래프 Agent 연결에 실패했습니다: ${error.message}`
-      };
-    }
-  };
-
-  // 랭그래프 Agent 테스트 함수
-  const testLangGraphAgent = () => {
-    const testMessages = [
-      "개발자 2명 뽑고 싶어",
-      "연봉 4000만원으로 프론트엔드 개발자 구해요",
-      "서울에서 마케팅팀 1명 채용하려고 해",
-      "신입 개발자 3명 모집, 9 to 6 근무"
-    ];
-    
-    const randomMessage = testMessages[Math.floor(Math.random() * testMessages.length)];
-    callLangGraphAgent(randomMessage);
-  };
-
-  // 모달이 열리면 자동으로 AI 도우미 시작
-  useEffect(() => {
+  const [aiResponse, setAiResponse] = useState('');
+  
+  // 모달이 열릴 때 자동으로 AI 챗봇 시작
+  React.useEffect(() => {
     if (isOpen) {
-      console.log('=== TextBasedRegistration 모달 열림 - AI 도우미 자동 시작 ===');
-      // 먼저 모달을 AI 어시스턴트 크기로 설정
-      setTimeout(() => {
+      // 모달이 열린 후 약간의 지연을 두고 AI 챗봇 시작
+      const timer = setTimeout(() => {
         setAiChatbot({
           isActive: true,
           currentQuestion: '구인 부서를 알려주세요! (예: 개발, 마케팅, 영업, 디자인 등)',
           step: 1
         });
-      }, 1200); // 1.2초 후 AI 도우미 시작 (모달 애니메이션 완료 후)
+      }, 500);
+      
+      return () => clearTimeout(timer);
     }
   }, [isOpen]);
 
-  // AI 챗봇이 비활성화될 때 플로팅 챗봇 다시 표시
-  useEffect(() => {
-    if (!aiChatbot.isActive) {
-      console.log('=== AI 챗봇 비활성화 - 플로팅 챗봇 다시 표시 ===');
-      const floatingChatbot = document.querySelector('.floating-chatbot');
-      if (floatingChatbot) {
-        floatingChatbot.style.display = 'flex';
-      }
-      // 커스텀 이벤트로 플로팅 챗봇에 알림
-      window.dispatchEvent(new CustomEvent('showFloatingChatbot'));
-    }
-  }, [aiChatbot.isActive]);
-
-  // formData 상태 변경 추적
-  useEffect(() => {
-    console.log('=== formData 상태 변경 ===');
-    console.log('현재 formData:', formData);
-    console.log('입력된 필드들:', Object.keys(formData).filter(key => formData[key]));
-  }, [formData]);
-
-  // 랭그래프 Agent 이벤트 수신
-  useEffect(() => {
-    const handleLangGraphFieldUpdate = (event) => {
-      const extractedFields = event.detail.extracted_fields;
-      console.log('🎯 랭그래프 Agent 이벤트 수신:', extractedFields);
-      
-      if (extractedFields && Object.keys(extractedFields).length > 0) {
-        // 필드명 매핑 (백엔드 필드명 → 폼 필드명)
-        const mappedFields = {};
-        Object.entries(extractedFields).forEach(([key, value]) => {
-          switch (key) {
-            case 'location':
-              mappedFields['locationCity'] = value;
-              break;
-            case 'department':
-            case 'headcount':
-            case 'salary':
-            case 'experience':
-            case 'mainDuties':
-            case 'workHours':
-            case 'workDays':
-            case 'contactEmail':
-            case 'deadline':
-              mappedFields[key] = value;
-              break;
-            default:
-              mappedFields[key] = value;
-              break;
-          }
-        });
-        
-        console.log('🔄 필드 매핑 결과:', mappedFields);
-        
-        setFormData(prev => {
-          const newFormData = { ...prev, ...mappedFields };
-          console.log('📝 폼 데이터 업데이트:', newFormData);
-          return newFormData;
-        });
-
-        // 성공 알림
-        const fieldNames = Object.keys(mappedFields).join(', ');
-        console.log(`✅ 랭그래프 Agent에서 추출한 정보가 폼에 자동 입력되었습니다! (${fieldNames})`);
-        
-        // 시각적 피드백 (임시 알림)
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-          position: fixed;
-          top: 20px;
-          right: 20px;
-          background: #667eea;
-          color: white;
-          padding: 15px 20px;
-          border-radius: 8px;
-          box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-          z-index: 10000;
-          font-weight: bold;
-          animation: slideIn 0.3s ease-out;
-        `;
-        notification.textContent = `🎯 ${fieldNames} 필드가 자동으로 입력되었습니다!`;
-        document.body.appendChild(notification);
-        
-        // 3초 후 알림 제거
-        setTimeout(() => {
-          if (notification.parentNode) {
-            notification.parentNode.removeChild(notification);
-          }
-        }, 3000);
-        
-      } else {
-        console.log('⚠️ 추출된 필드가 없습니다.');
+    // 메인 챗봇에서 폼 데이터 업데이트 이벤트 리스너
+  React.useEffect(() => {
+    const handleExternalAIChatbotResponse = (event) => {
+      if (aiChatbot.isActive) {
+        const userResponse = event.detail.message;
+        handleAIChatbotResponse(userResponse);
       }
     };
 
-        window.addEventListener('langGraphDataUpdate', handleLangGraphFieldUpdate);
+    // AI 자동 플로우 시작 이벤트 리스너
+    const handleStartTextBasedAIChatbot = () => {
+      console.log('=== AI 자동 플로우 시작됨 - 텍스트 기반 등록 ===');
+      console.log('현재 aiChatbot 상태:', aiChatbot);
+      console.log('현재 isOpen 상태:', isOpen);
+      
+      setAiChatbot({
+        isActive: true,
+        currentQuestion: '구인 부서를 알려주세요! (예: 개발, 마케팅, 영업, 디자인 등)',
+        step: 1
+      });
+      
+      console.log('AI 챗봇 상태 업데이트 완료');
+      console.log('AI 챗봇이 활성화되었습니다. 사용자에게 질문을 시작합니다.');
+    };
+
+    // 자동 진행 이벤트 리스너
+    const handleAutoProgress = () => {
+      console.log('자동 진행 이벤트 수신됨');
+      // 자동 진행은 AI 챗봇 내부에서 처리되므로 별도 처리 불필요
+    };
+
+    // 채팅봇 수정 명령 이벤트 리스너들
+    const handleUpdateDepartment = (event) => {
+      const newDepartment = event.detail.value;
+      console.log('TextBasedRegistration - 부서 업데이트:', newDepartment);
+      setFormData(prev => ({
+        ...prev,
+        department: newDepartment
+      }));
+    };
+
+    const handleUpdateHeadcount = (event) => {
+      const newHeadcount = event.detail.value;
+      console.log('TextBasedRegistration - 인원 업데이트:', newHeadcount);
+      setFormData(prev => ({
+        ...prev,
+        headcount: newHeadcount
+      }));
+    };
+
+    const handleUpdateSalary = (event) => {
+      const newSalary = event.detail.value;
+      console.log('TextBasedRegistration - 급여 업데이트:', newSalary);
+      setFormData(prev => ({
+        ...prev,
+        salary: newSalary
+      }));
+    };
+
+    const handleUpdateWorkContent = (event) => {
+      const newWorkContent = event.detail.value;
+      console.log('TextBasedRegistration - 업무 내용 업데이트:', newWorkContent);
+      setFormData(prev => ({
+        ...prev,
+        mainDuties: newWorkContent
+      }));
+    };
+
+    window.addEventListener('aiChatbotResponse', handleExternalAIChatbotResponse);
+    window.addEventListener('startTextBasedAIChatbot', handleStartTextBasedAIChatbot);
+    window.addEventListener('autoProgress', handleAutoProgress);
+    window.addEventListener('updateTextFormDepartment', handleUpdateDepartment);
+    window.addEventListener('updateTextFormHeadcount', handleUpdateHeadcount);
+    window.addEventListener('updateTextFormSalary', handleUpdateSalary);
+    window.addEventListener('updateTextFormWorkContent', handleUpdateWorkContent);
     
     return () => {
-      window.removeEventListener('langGraphDataUpdate', handleLangGraphFieldUpdate);
+      window.removeEventListener('aiChatbotResponse', handleExternalAIChatbotResponse);
+      window.removeEventListener('startTextBasedAIChatbot', handleStartTextBasedAIChatbot);
+      window.removeEventListener('autoProgress', handleAutoProgress);
+      window.removeEventListener('updateTextFormDepartment', handleUpdateDepartment);
+      window.removeEventListener('updateTextFormHeadcount', handleUpdateHeadcount);
+      window.removeEventListener('updateTextFormSalary', handleUpdateSalary);
+      window.removeEventListener('updateTextFormWorkContent', handleUpdateWorkContent);
     };
-  }, []);
+  }, [aiChatbot.isActive]);
+  
+  const [formData, setFormData] = useState({
+    // Step 1: 구인 부서
+    department: '',
+    experience: '',
+    experienceYears: '',
+    
+    // Step 2: 구인 정보
+    headcount: '',
+    mainDuties: '',
+    
+    // Step 3: 근무 조건
+    workHours: '',
+    workDays: '',
+    locationCity: '',
+    locationDistrict: '',
+    salary: '',
+    
+    // Step 4: 전형 절차
+    process: ['서류', '실무면접', '최종면접', '입사'],
+    
+    // Step 5: 지원 방법
+    contactEmail: '',
+    deadline: ''
+  });
 
-  // 폼 필드 업데이트 이벤트 리스너 추가
-  useEffect(() => {
-    const handleFormFieldUpdate = (event) => {
-      const { field, value } = event.detail;
-      console.log('=== TextBasedRegistration - 폼 필드 업데이트 이벤트 수신 ===');
-      console.log('필드:', field);
-      console.log('값:', value);
-      
-      setFormData(prev => {
-        const newFormData = { ...prev, [field]: value };
-        console.log('업데이트 후 formData:', newFormData);
-        return newFormData;
-      });
-    };
+  const steps = [
+    { number: 1, label: '구인 부서', icon: FiBriefcase },
+    { number: 2, label: '구인 정보', icon: FiFileText },
+    { number: 3, label: '근무 조건', icon: FiClock },
+    { number: 4, label: '전형 절차', icon: FiAward },
+    { number: 5, label: '지원 방법', icon: FiMail }
+  ];
 
-    // 개별 필드 업데이트 이벤트 리스너들
-    const handleDepartmentUpdate = (event) => {
-      const { value } = event.detail;
-      console.log('부서 업데이트:', value);
-      setFormData(prev => ({ ...prev, department: value }));
-    };
-
-    const handleHeadcountUpdate = (event) => {
-      const { value } = event.detail;
-      console.log('인원 업데이트:', value);
-      setFormData(prev => ({ ...prev, headcount: value }));
-    };
-
-    const handleSalaryUpdate = (event) => {
-      const { value } = event.detail;
-      console.log('연봉 업데이트:', value);
-      setFormData(prev => ({ ...prev, salary: value }));
-    };
-
-    const handleWorkContentUpdate = (event) => {
-      const { value } = event.detail;
-      console.log('업무 내용 업데이트:', value);
-      setFormData(prev => ({ ...prev, mainDuties: value }));
-    };
-
-    const handleWorkHoursUpdate = (event) => {
-      const { value } = event.detail;
-      console.log('근무 시간 업데이트:', value);
-      setFormData(prev => ({ ...prev, workHours: value }));
-    };
-
-    const handleWorkDaysUpdate = (event) => {
-      const { value } = event.detail;
-      console.log('근무 요일 업데이트:', value);
-      setFormData(prev => ({ ...prev, workDays: value }));
-    };
-
-    const handleLocationUpdate = (event) => {
-      const { value } = event.detail;
-      console.log('근무 위치 업데이트:', value);
-      setFormData(prev => ({ ...prev, locationCity: value }));
-    };
-
-    const handleContactEmailUpdate = (event) => {
-      const { value } = event.detail;
-      console.log('연락처 이메일 업데이트:', value);
-      setFormData(prev => ({ ...prev, contactEmail: value }));
-    };
-
-    const handleDeadlineUpdate = (event) => {
-      const { value } = event.detail;
-      console.log('마감일 업데이트:', value);
-      setFormData(prev => ({ ...prev, deadline: value }));
-    };
-
-    // 이벤트 리스너 등록
-    window.addEventListener('updateFormField', handleFormFieldUpdate);
-    window.addEventListener('updateDepartment', handleDepartmentUpdate);
-    window.addEventListener('updateHeadcount', handleHeadcountUpdate);
-    window.addEventListener('updateSalary', handleSalaryUpdate);
-    window.addEventListener('updateWorkContent', handleWorkContentUpdate);
-    window.addEventListener('updateWorkHours', handleWorkHoursUpdate);
-    window.addEventListener('updateWorkDays', handleWorkDaysUpdate);
-    window.addEventListener('updateLocation', handleLocationUpdate);
-    window.addEventListener('updateContactEmail', handleContactEmailUpdate);
-    window.addEventListener('updateDeadline', handleDeadlineUpdate);
-
-    // 클린업 함수
-    return () => {
-      window.removeEventListener('updateFormField', handleFormFieldUpdate);
-      window.removeEventListener('updateDepartment', handleDepartmentUpdate);
-      window.removeEventListener('updateHeadcount', handleHeadcountUpdate);
-      window.removeEventListener('updateSalary', handleSalaryUpdate);
-      window.removeEventListener('updateWorkContent', handleWorkContentUpdate);
-      window.removeEventListener('updateWorkHours', handleWorkHoursUpdate);
-      window.removeEventListener('updateWorkDays', handleWorkDaysUpdate);
-      window.removeEventListener('updateLocation', handleLocationUpdate);
-      window.removeEventListener('updateContactEmail', handleContactEmailUpdate);
-      window.removeEventListener('updateDeadline', handleDeadlineUpdate);
-    };
-  }, []);
+  const progress = (currentStep / steps.length) * 100;
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    
-    // 급여 필드에 대한 특별 처리
-    if (name === 'salary') {
-      // 입력값에서 숫자만 추출 (콤마, 하이픈, 틸드 포함)
-      const numericValue = value.replace(/[^\d,~\-]/g, '');
-      setFormData(prev => ({ ...prev, [name]: numericValue }));
-    } else {
-      setFormData(prev => ({ ...prev, [name]: value }));
-    }
-  };
-  
-  // 급여를 표시용으로 포맷하는 함수
-  const formatSalaryDisplay = (salaryValue) => {
-    if (!salaryValue) return '';
-    
-    // 이미 "만원"이 포함되어 있으면 그대로 반환
-    if (salaryValue.includes('만원') || salaryValue.includes('협의') || salaryValue.includes('면접')) {
-      return salaryValue;
-    }
-    
-    // 숫자만 있는 경우 "만원" 추가
-    if (/^\d+([,\d~\-]*)?$/.test(salaryValue.trim())) {
-      return `${salaryValue}만원`;
-    }
-    
-    return salaryValue;
+    setFormData(prev => ({
+      ...prev,
+      [name]: value
+    }));
   };
 
+  const handleNext = () => {
+    if (currentStep < steps.length) {
+      setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
+  };
+
+  const sendNotificationEmail = async (jobData) => {
+    setIsSendingEmail(true);
+    
+    try {
+      // 이메일 전송 시뮬레이션 (실제로는 API 호출)
+      console.log('📧 이메일 전송 중...');
+      console.log('받는 사람:', jobData.contactEmail);
+      console.log('제목: 채용공고 등록 완료 알림');
+      
+      // 실제 구현 시 사용할 이메일 템플릿
+      const emailTemplate = {
+        to: jobData.contactEmail,
+        subject: '[채용공고 등록 완료] 새로운 채용공고가 등록되었습니다',
+        body: `
+          안녕하세요, 인사담당자님!
+          
+          새로운 채용공고가 성공적으로 등록되었습니다.
+          
+          📋 채용공고 정보
+          - 공고 제목: ${jobData.title || 'AI 생성 제목'}
+          - 구인 부서: ${jobData.department}
+          - 경력 구분: ${jobData.experience}
+          - 구인 인원: ${jobData.headcount}
+          - 근무지: ${jobData.locationCity} ${jobData.locationDistrict}
+          - 연봉: ${jobData.salary}
+          - 마감일: ${jobData.deadline}
+          
+          🎯 주요 업무
+          ${jobData.mainDuties}
+          
+          📞 지원 문의
+          - 이메일: ${jobData.contactEmail}
+          - 전형 절차: ${jobData.process?.join(' → ') || '서류 → 실무면접 → 최종면접 → 입사'}
+          
+          채용공고 관리 시스템에서 언제든지 수정하거나 관리할 수 있습니다.
+          
+          감사합니다.
+          채용관리팀
+        `
+      };
+      
+      // 시뮬레이션: 2초 후 완료
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
+      console.log('✅ 이메일 전송 완료');
+      alert(`📧 인사담당자(${jobData.contactEmail})에게 등록 완료 알림 이메일이 전송되었습니다.`);
+      
+    } catch (error) {
+      console.error('❌ 이메일 전송 실패:', error);
+      alert('이메일 전송 중 오류가 발생했습니다. 채용공고는 정상적으로 등록되었습니다.');
+    } finally {
+      setIsSendingEmail(false);
+    }
+  };
+
+  const handleComplete = async () => {
+    // AI 추천 문구 생성 로직
+    const aiGeneratedContent = generateAIContent(formData);
+    const completeData = { ...formData, ...aiGeneratedContent };
+    
+    // 채용공고 등록 완료 처리
+    onComplete(completeData);
+    
+    // 인사담당자에게 알림 이메일 전송
+    if (formData.contactEmail) {
+      await sendNotificationEmail(completeData);
+    }
+  };
+
+  // AI 챗봇 시작
+  // AI 채용공고 작성 도우미 시작 (메인 챗봇에서 호출됨)
   const startAIChatbot = () => {
-    console.log('AI 채용공고 작성 도우미 시작 (상태 보존)');
-    // 현재 페이지에서 재시작 시 기존 상태를 보존하고 표시만 ON
-    setAiChatbot(prev => ({ ...prev, isActive: true }));
+    // 메인 챗봇에서 AI 모드가 시작되므로 여기서는 별도 처리 불필요
+    console.log('AI 채용공고 작성 도우미가 메인 챗봇에서 시작됨');
   };
 
-  // 등록 버튼 클릭 시 제목 추천 모달 열기
-  const handleRegistration = () => {
-    console.log('등록 버튼 클릭 - 제목 추천 모달 열기');
-    setTitleRecommendationModal({
-      isOpen: true,
-      finalFormData: { ...formData }
-    });
-  };
-
-  // 제목 추천 모달에서 제목 선택
-  const handleTitleSelect = (selectedTitle) => {
-    console.log('추천 제목 선택:', selectedTitle);
-    const finalData = {
-      ...titleRecommendationModal.finalFormData,
-      title: selectedTitle
-    };
+  // AI 챗봇 응답 처리
+  const handleAIChatbotResponse = (userResponse) => {
+    const currentStep = aiChatbot.step;
     
-    // 제목 추천 모달 닫기
-    setTitleRecommendationModal({
-      isOpen: false,
-      finalFormData: null
-    });
-    
-    // 최종 등록 완료
-    onComplete(finalData);
-  };
-
-  // 제목 추천 모달에서 직접 입력
-  const handleDirectTitleInput = (customTitle) => {
-    console.log('직접 입력 제목:', customTitle);
-    const finalData = {
-      ...titleRecommendationModal.finalFormData,
-      title: customTitle
-    };
-    
-    // 제목 추천 모달 닫기
-    setTitleRecommendationModal({
-      isOpen: false,
-      finalFormData: null
-    });
-    
-    // 최종 등록 완료
-    onComplete(finalData);
-  };
-
-  // 제목 추천 모달 닫기
-  const handleTitleModalClose = () => {
-    setTitleRecommendationModal({
-      isOpen: false,
-      finalFormData: null
-    });
-  };
-
-  // 모달 완전 초기화 함수
-  const resetModalState = () => {
-    console.log('=== TextBasedRegistration 상태 초기화 ===');
-    
-    // 폼 데이터 초기화
-    setFormData({
-      department: '',
-      experience: '신입',
-      experienceYears: '',
-      headcount: '',
-      mainDuties: '',
-      workHours: '',
-      workDays: '',
-      locationCity: '',
-      salary: '',
-      contactEmail: '',
-      deadline: ''
-    });
-
-    // AI 챗봇 상태 초기화
-    setAiChatbot({
-      isActive: false,
-      currentQuestion: '',
-      step: 1
-    });
-
-    // 제목 추천 모달 초기화
-    setTitleRecommendationModal({
-      isOpen: false,
-      finalFormData: null
-    });
-
-    console.log('=== TextBasedRegistration 상태 초기화 완료 ===');
-  };
-
-  // 컴포넌트가 언마운트되거나 모달이 닫힐 때 초기화
-  useEffect(() => {
-    if (!isOpen) {
-      resetModalState();
+    // 현재 단계에 따라 폼 데이터 업데이트
+    switch (currentStep) {
+      case 1: // 구인 부서
+        setFormData(prev => ({ ...prev, department: userResponse }));
+        setAiChatbot(prev => ({
+          ...prev,
+          currentQuestion: '채용 인원은 몇 명인가요? (예: 1명, 2명, 3명)',
+          step: 2
+        }));
+        break;
+      case 2: // 채용 인원
+        setFormData(prev => ({ ...prev, headcount: userResponse }));
+        setAiChatbot(prev => ({
+          ...prev,
+          currentQuestion: '어떤 업무를 담당하게 되나요? (예: 웹 개발, 디자인, 마케팅)',
+          step: 3
+        }));
+        break;
+      case 3: // 업무 내용
+        setFormData(prev => ({ ...prev, mainDuties: userResponse }));
+        setAiChatbot(prev => ({
+          ...prev,
+          currentQuestion: '근무 시간은 어떻게 되나요? (예: 09:00-18:00, 유연근무제)',
+          step: 4
+        }));
+        break;
+      case 4: // 근무 시간
+        setFormData(prev => ({ ...prev, workHours: userResponse }));
+        setAiChatbot(prev => ({
+          ...prev,
+          currentQuestion: '근무 위치는 어디인가요? (예: 서울, 부산, 대구)',
+          step: 5
+        }));
+        break;
+      case 5: // 근무 위치
+        setFormData(prev => ({ ...prev, locationCity: userResponse }));
+        setAiChatbot(prev => ({
+          ...prev,
+          currentQuestion: '급여 조건은 어떻게 되나요? (예: 면접 후 협의, 3000만원)',
+          step: 6
+        }));
+        break;
+      case 6: // 급여 조건
+        setFormData(prev => ({ ...prev, salary: userResponse }));
+        setAiChatbot(prev => ({
+          ...prev,
+          currentQuestion: '마감일은 언제인가요? (예: 2024년 12월 31일)',
+          step: 7
+        }));
+        break;
+      case 7: // 마감일
+        setFormData(prev => ({ ...prev, deadline: userResponse }));
+        setAiChatbot(prev => ({
+          ...prev,
+          currentQuestion: '연락처 이메일을 알려주세요.',
+          step: 8
+        }));
+        break;
+      case 8: // 연락처 이메일
+        setFormData(prev => ({ ...prev, contactEmail: userResponse }));
+        setAiChatbot(prev => ({
+          ...prev,
+          isActive: false,
+          currentQuestion: '',
+          step: 1
+        }));
+        // AI 챗봇 완료 후 다음 단계로 이동
+        setTimeout(() => {
+          setCurrentStep(2);
+        }, 1000);
+        break;
+      default:
+        break;
     }
-  }, [isOpen]);
+  };
 
-  // 테스트 자동입력 처리
-  const handleTestAutoFill = (sampleData) => {
-    console.log('테스트 자동입력 시작:', sampleData);
-    
-    // 하드코딩된 테스트 값들
-    const testData = {
-      department: '개발팀',
-      experience: '2년이상',
-      experienceYears: '',
-      headcount: '0명',
-      mainDuties: '웹개발',
-      workHours: '9시부터 3시',
-      workDays: '주중',
-      locationCity: '서울특별시 강남구',
-      salary: '연봉 4,000만원 - 6,000만원',
-      contactEmail: 'test@test.com',
-      deadline: '9월 3일까지'
+  // FloatingChatbot에서 보낸 응답을 처리하는 이벤트 리스너
+
+  const handleSaveTemplate = (template) => {
+    setTemplates(prev => [...prev, template]);
+  };
+
+  const handleLoadTemplate = (templateData) => {
+    setFormData(prev => ({ ...prev, ...templateData }));
+  };
+
+  const handleDeleteTemplate = (templateId) => {
+    setTemplates(prev => prev.filter(template => template.id !== templateId));
+  };
+
+  const generateAIContent = (data) => {
+    // AI 추천 문구 생성 (실제로는 API 호출)
+    return {
+      title: `${data.department} ${data.experience} 채용`,
+      description: `저희 ${data.department}에서 함께할 ${data.experience}을 모집합니다.`,
+      requirements: `• ${data.experience} 경력\n• 관련 분야 전공자\n• 팀워크와 소통 능력`,
+      benefits: '• 건강보험, 국민연금\n• 점심식대 지원\n• 자기계발비 지원\n• 경조사 지원'
     };
+  };
 
-    // 폼 데이터 일괄 업데이트
-    setFormData(prev => ({ ...prev, ...testData }));
-    
-    console.log('테스트 자동입력 완료:', testData);
-    
-    // 사용자에게 알림
-    alert('🧪 테스트 데이터가 자동으로 입력되었습니다!');
+  const renderStep1 = () => (
+    <FormSection>
+      <SectionTitle>
+        <FiBriefcase size={18} />
+        구인 부서 및 경력 선택
+      </SectionTitle>
+      <FormGrid>
+        <FormGroup>
+          <Label>구인 부서</Label>
+          <Select name="department" value={formData.department} onChange={handleInputChange} required>
+            <option value="">부서 선택</option>
+            {organizationData.departments && organizationData.departments.length > 0 ? (
+              organizationData.departments.map((dept, index) => (
+                <option key={index} value={dept.name}>
+                  {dept.name} ({dept.count}명)
+                </option>
+              ))
+            ) : (
+              <>
+                <option value="영업">영업</option>
+                <option value="마케팅">마케팅</option>
+                <option value="기획">기획</option>
+                <option value="디자인">디자인</option>
+                <option value="개발">개발</option>
+              </>
+            )}
+          </Select>
+          {organizationData.departments && organizationData.departments.length > 0 && (
+            <div style={{ 
+              marginTop: '8px', 
+              fontSize: '12px', 
+              color: 'var(--text-secondary)',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px'
+            }}>
+              <FiUsers size={12} />
+              조직도에서 설정된 {organizationData.departments.length}개 부서 중 선택
+            </div>
+          )}
+        </FormGroup>
+        <FormGroup>
+          <Label>경력 구분</Label>
+          <RadioGroup>
+            <RadioOption className={formData.experience === '신입' ? 'selected' : ''}>
+              <RadioInput
+                type="radio"
+                name="experience"
+                value="신입"
+                checked={formData.experience === '신입'}
+                onChange={handleInputChange}
+              />
+              <RadioText>
+                <RadioTitle>신입</RadioTitle>
+                <RadioDescription>경력 없이 신입 채용</RadioDescription>
+              </RadioText>
+            </RadioOption>
+            <RadioOption className={formData.experience === '경력' ? 'selected' : ''}>
+              <RadioInput
+                type="radio"
+                name="experience"
+                value="경력"
+                checked={formData.experience === '경력'}
+                onChange={handleInputChange}
+              />
+              <RadioText>
+                <RadioTitle>경력</RadioTitle>
+                <RadioDescription>관련 경력자 채용</RadioDescription>
+              </RadioText>
+            </RadioOption>
+          </RadioGroup>
+          {formData.experience === '경력' && (
+            <div style={{ marginTop: '12px' }}>
+              <Label>경력 연도</Label>
+              <Select 
+                name="experienceYears" 
+                value={formData.experienceYears || ''} 
+                onChange={handleInputChange}
+                style={{ marginTop: '8px' }}
+              >
+                <option value="">경력 연도 선택</option>
+                <option value="2년이상">2년이상</option>
+                <option value="2~3년">2~3년</option>
+                <option value="4~5년">4~5년</option>
+                <option value="직접입력">직접입력</option>
+              </Select>
+              {formData.experienceYears === '직접입력' && (
+                <Input
+                  type="text"
+                  name="experienceYearsCustom"
+                  value={formData.experienceYearsCustom || ''}
+                  onChange={(e) => setFormData(prev => ({ 
+                    ...prev, 
+                    experienceYears: e.target.value 
+                  }))}
+                  placeholder="예: 3년 이상"
+                  style={{ marginTop: '8px' }}
+                />
+              )}
+            </div>
+          )}
+        </FormGroup>
+      </FormGrid>
+    </FormSection>
+    );
+
+  const renderStep2 = () => (
+    <FormSection>
+      <SectionTitle>
+        <FiFileText size={18} />
+        구인 정보
+      </SectionTitle>
+      <FormGrid>
+        <FormGroup>
+          <Label>구인 인원수</Label>
+          <Select name="headcount" value={formData.headcount} onChange={handleInputChange} required>
+            <option value="">인원 선택</option>
+            <option value="1명">1명</option>
+            <option value="2명">2명</option>
+            <option value="3명">3명</option>
+            <option value="4명">4명</option>
+            <option value="5명 이상">5명 이상</option>
+          </Select>
+        </FormGroup>
+        <FormGroup>
+          <Label>주요 업무</Label>
+          <TextArea
+            name="mainDuties"
+            value={formData.mainDuties}
+            onChange={handleInputChange}
+            placeholder="담당할 주요 업무를 입력해주세요"
+            required
+          />
+        </FormGroup>
+      </FormGrid>
+    </FormSection>
+  );
+
+  const renderStep3 = () => (
+    <FormSection>
+      <SectionTitle>
+        <FiClock size={18} />
+        근무 조건
+      </SectionTitle>
+      <FormGrid>
+        <FormGroup>
+          <Label>근무 시간</Label>
+          <Select name="workHours" value={formData.workHours} onChange={handleInputChange} required>
+            <option value="">근무시간 선택</option>
+            <option value="09:00 ~ 18:00">09:00 ~ 18:00</option>
+            <option value="10:00 ~ 19:00">10:00 ~ 19:00</option>
+            <option value="직접 입력">직접 입력</option>
+          </Select>
+          {formData.workHours === '직접 입력' && (
+            <Input
+              type="text"
+              name="workHoursCustom"
+              value={formData.workHoursCustom || ''}
+              onChange={(e) => setFormData(prev => ({ ...prev, workHours: e.target.value }))}
+              placeholder="예: 08:30 ~ 17:30"
+              style={{ marginTop: '8px' }}
+            />
+          )}
+        </FormGroup>
+        <FormGroup>
+          <Label>근무 요일</Label>
+          <Select name="workDays" value={formData.workDays} onChange={handleInputChange} required>
+            <option value="">요일 선택</option>
+            <option value="월~금">월~금</option>
+            <option value="월~토">월~토</option>
+            <option value="유연근무">유연근무</option>
+          </Select>
+        </FormGroup>
+        <FormGroup>
+          <Label>근무지</Label>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <Select 
+              name="locationCity" 
+              value={formData.locationCity || ''} 
+              onChange={(e) => {
+                setFormData(prev => ({ 
+                  ...prev, 
+                  locationCity: e.target.value,
+                  locationDistrict: '' // 시가 변경되면 구 초기화
+                }));
+              }}
+              style={{ flex: 1 }}
+              required
+            >
+              <option value="">시 선택</option>
+              <option value="서울특별시">서울특별시</option>
+              <option value="부산광역시">부산광역시</option>
+              <option value="대구광역시">대구광역시</option>
+              <option value="인천광역시">인천광역시</option>
+              <option value="광주광역시">광주광역시</option>
+              <option value="대전광역시">대전광역시</option>
+              <option value="울산광역시">울산광역시</option>
+              <option value="세종특별자치시">세종특별자치시</option>
+              <option value="경기도">경기도</option>
+              <option value="강원도">강원도</option>
+              <option value="충청북도">충청북도</option>
+              <option value="충청남도">충청남도</option>
+              <option value="전라북도">전라북도</option>
+              <option value="전라남도">전라남도</option>
+              <option value="경상북도">경상북도</option>
+              <option value="경상남도">경상남도</option>
+              <option value="제주특별자치도">제주특별자치도</option>
+            </Select>
+            <Select 
+              name="locationDistrict" 
+              value={formData.locationDistrict || ''} 
+              onChange={(e) => setFormData(prev => ({ ...prev, locationDistrict: e.target.value }))}
+              style={{ flex: 1 }}
+              required
+              disabled={!formData.locationCity}
+            >
+              <option value="">구 선택</option>
+              {formData.locationCity === '서울특별시' && (
+                <>
+                  <option value="강남구">강남구</option>
+                  <option value="강동구">강동구</option>
+                  <option value="강북구">강북구</option>
+                  <option value="강서구">강서구</option>
+                  <option value="관악구">관악구</option>
+                  <option value="광진구">광진구</option>
+                  <option value="구로구">구로구</option>
+                  <option value="금천구">금천구</option>
+                  <option value="노원구">노원구</option>
+                  <option value="도봉구">도봉구</option>
+                  <option value="동대문구">동대문구</option>
+                  <option value="동작구">동작구</option>
+                  <option value="마포구">마포구</option>
+                  <option value="서대문구">서대문구</option>
+                  <option value="서초구">서초구</option>
+                  <option value="성동구">성동구</option>
+                  <option value="성북구">성북구</option>
+                  <option value="송파구">송파구</option>
+                  <option value="양천구">양천구</option>
+                  <option value="영등포구">영등포구</option>
+                  <option value="용산구">용산구</option>
+                  <option value="은평구">은평구</option>
+                  <option value="종로구">종로구</option>
+                  <option value="중구">중구</option>
+                  <option value="중랑구">중랑구</option>
+                </>
+              )}
+              {formData.locationCity === '부산광역시' && (
+                <>
+                  <option value="강서구">강서구</option>
+                  <option value="금정구">금정구</option>
+                  <option value="남구">남구</option>
+                  <option value="동구">동구</option>
+                  <option value="동래구">동래구</option>
+                  <option value="부산진구">부산진구</option>
+                  <option value="북구">북구</option>
+                  <option value="사상구">사상구</option>
+                  <option value="사하구">사하구</option>
+                  <option value="서구">서구</option>
+                  <option value="수영구">수영구</option>
+                  <option value="연제구">연제구</option>
+                  <option value="영도구">영도구</option>
+                  <option value="중구">중구</option>
+                  <option value="해운대구">해운대구</option>
+                  <option value="기장군">기장군</option>
+                </>
+              )}
+              {formData.locationCity === '대구광역시' && (
+                <>
+                  <option value="남구">남구</option>
+                  <option value="달서구">달서구</option>
+                  <option value="달성군">달성군</option>
+                  <option value="동구">동구</option>
+                  <option value="북구">북구</option>
+                  <option value="서구">서구</option>
+                  <option value="수성구">수성구</option>
+                  <option value="중구">중구</option>
+                </>
+              )}
+              {formData.locationCity === '인천광역시' && (
+                <>
+                  <option value="계양구">계양구</option>
+                  <option value="남구">남구</option>
+                  <option value="남동구">남동구</option>
+                  <option value="동구">동구</option>
+                  <option value="부평구">부평구</option>
+                  <option value="서구">서구</option>
+                  <option value="연수구">연수구</option>
+                  <option value="중구">중구</option>
+                  <option value="강화군">강화군</option>
+                  <option value="옹진군">옹진군</option>
+                </>
+              )}
+              {formData.locationCity === '광주광역시' && (
+                <>
+                  <option value="광산구">광산구</option>
+                  <option value="남구">남구</option>
+                  <option value="동구">동구</option>
+                  <option value="북구">북구</option>
+                  <option value="서구">서구</option>
+                </>
+              )}
+              {formData.locationCity === '대전광역시' && (
+                <>
+                  <option value="대덕구">대덕구</option>
+                  <option value="동구">동구</option>
+                  <option value="서구">서구</option>
+                  <option value="유성구">유성구</option>
+                  <option value="중구">중구</option>
+                </>
+              )}
+              {formData.locationCity === '울산광역시' && (
+                <>
+                  <option value="남구">남구</option>
+                  <option value="동구">동구</option>
+                  <option value="북구">북구</option>
+                  <option value="울주군">울주군</option>
+                  <option value="중구">중구</option>
+                </>
+              )}
+              {formData.locationCity === '경기도' && (
+                <>
+                  <option value="수원시">수원시</option>
+                  <option value="성남시">성남시</option>
+                  <option value="의정부시">의정부시</option>
+                  <option value="안양시">안양시</option>
+                  <option value="부천시">부천시</option>
+                  <option value="광명시">광명시</option>
+                  <option value="평택시">평택시</option>
+                  <option value="동두천시">동두천시</option>
+                  <option value="안산시">안산시</option>
+                  <option value="고양시">고양시</option>
+                  <option value="과천시">과천시</option>
+                  <option value="구리시">구리시</option>
+                  <option value="남양주시">남양주시</option>
+                  <option value="오산시">오산시</option>
+                  <option value="시흥시">시흥시</option>
+                  <option value="군포시">군포시</option>
+                  <option value="의왕시">의왕시</option>
+                  <option value="하남시">하남시</option>
+                  <option value="용인시">용인시</option>
+                  <option value="파주시">파주시</option>
+                  <option value="이천시">이천시</option>
+                  <option value="안성시">안성시</option>
+                  <option value="김포시">김포시</option>
+                  <option value="화성시">화성시</option>
+                  <option value="광주시">광주시</option>
+                  <option value="여주시">여주시</option>
+                  <option value="양평군">양평군</option>
+                  <option value="고양군">고양군</option>
+                  <option value="연천군">연천군</option>
+                  <option value="가평군">가평군</option>
+                </>
+              )}
+            </Select>
+          </div>
+        </FormGroup>
+        <FormGroup>
+          <Label>연봉</Label>
+          <Input
+            type="text"
+            name="salary"
+            value={formData.salary}
+            onChange={handleInputChange}
+            placeholder="예: 3,000만원 ~ 5,000만원"
+          />
+        </FormGroup>
+      </FormGrid>
+    </FormSection>
+  );
+
+  const renderStep4 = () => (
+    <FormSection>
+      <SectionTitle>
+        <FiAward size={18} />
+        전형 절차
+      </SectionTitle>
+      <FormGroup>
+        <Label>전형 절차 (기본값: 서류 → 실무면접 → 최종면접 → 입사)</Label>
+        <TextArea
+          name="process"
+          value={formData.process.join(' → ')}
+          onChange={(e) => setFormData(prev => ({ ...prev, process: e.target.value.split(' → ') }))}
+          placeholder="서류 → 실무면접 → 최종면접 → 입사"
+        />
+      </FormGroup>
+    </FormSection>
+  );
+
+  const renderStep5 = () => (
+    <FormSection>
+      <SectionTitle>
+        <FiMail size={18} />
+        지원 방법
+      </SectionTitle>
+      <FormGrid>
+        <FormGroup>
+          <Label>연락처 이메일</Label>
+          <Input
+            type="email"
+            name="contactEmail"
+            value={formData.contactEmail}
+            onChange={handleInputChange}
+            placeholder="인사담당자 이메일"
+            required
+          />
+        </FormGroup>
+        <FormGroup>
+          <Label>마감일</Label>
+          <Input
+            type="date"
+            name="deadline"
+            value={formData.deadline}
+            onChange={handleInputChange}
+            required
+          />
+        </FormGroup>
+      </FormGrid>
+    </FormSection>
+  );
+
+  const renderCurrentStep = () => {
+    switch (currentStep) {
+      case 1: return renderStep1();
+      case 2: return renderStep2();
+      case 3: return renderStep3();
+      case 4: return renderStep4();
+      case 5: return renderStep5();
+      default: return null;
+    }
   };
 
   return (
     <AnimatePresence>
       {isOpen && (
         <Overlay
-          key="text-based-overlay"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
@@ -664,334 +1135,86 @@ const TextBasedRegistration = ({
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}
             onClick={(e) => e.stopPropagation()}
-            aiActive={aiChatbot.isActive}
           >
             <Header>
-              <Title>🤖 AI 채용공고 등록 도우미</Title>
-              <div style={{ display: 'flex', alignItems: 'center' }}>
-                <TestAutoFillButton onAutoFill={handleTestAutoFill} />
-                <CloseButton onClick={onClose}>
-                  <FiX />
-                </CloseButton>
-              </div>
+              <Title>텍스트 기반 채용공고 등록</Title>
+              <CloseButton onClick={onClose}>
+                <FiX />
+              </CloseButton>
             </Header>
 
-            <Content aiActive={aiChatbot.isActive}>
-              <AINotice>
-                <FiSettings size={20} />
-                AI 도우미가 단계별로 질문하여 자동으로 입력해드립니다!
-              </AINotice>
+            <Content>
+              <ProgressBar>
+                <ProgressFill progress={progress} />
+              </ProgressBar>
 
-    <FormSection>
-      <SectionTitle>
-                  <FiUsers size={18} />
-                  구인 정보
-      </SectionTitle>
-      <FormGrid>
-                  <div className="custom-form-group">
-                    <label className="custom-label">구인 부서</label>
-                    <input
-                      type="text"
-                      name="department" 
-                      value={formData.department || ''} 
-                      onChange={handleInputChange}
-                      placeholder="예: 개발팀, 기획팀, 마케팅팀"
-                      required
-                      className="custom-input"
-                      style={{
-                        borderColor: formData.department ? '#667eea' : '#cbd5e0',
-                        boxShadow: formData.department ? '0 0 0 3px rgba(102, 126, 234, 0.2)' : 'none'
-                      }}
-                    />
-                    {formData.department && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
-                        marginTop: '4px',
-                        fontWeight: 'bold'
-                      }}>
-                        ✅ 입력됨: {formData.department}
-                      </div>
-                    )}
-                  </div>
-                  <div className="custom-form-group">
-                    <label className="custom-label">구인 인원수</label>
-                    <input
-                      type="text"
-                      name="headcount" 
-                      value={formData.headcount || ''} 
-                      onChange={handleInputChange} 
-                      placeholder="예: 1명, 2명, 3명"
-                      required 
-                      className="custom-input"
-                      style={{
-                        borderColor: formData.headcount ? '#667eea' : '#cbd5e0',
-                        boxShadow: formData.headcount ? '0 0 0 3px rgba(102, 126, 234, 0.2)' : 'none'
-                      }}
-                    />
-                    {formData.headcount && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
-                        marginTop: '4px',
-                        fontWeight: 'bold'
-                      }}>
-                        ✅ 입력됨: {formData.headcount}
-                      </div>
-                    )}
-                  </div>
-                  <div className="custom-form-group">
-                    <label className="custom-label">주요 업무</label>
-                    <textarea
-                      name="mainDuties"
-                      value={formData.mainDuties || ''}
-                      onChange={handleInputChange}
-                      placeholder="담당할 주요 업무를 입력해주세요"
-                      required
-                      className="custom-textarea"
-                      style={{
-                        borderColor: formData.mainDuties ? '#667eea' : '#cbd5e0',
-                        boxShadow: formData.mainDuties ? '0 0 0 3px rgba(102, 126, 234, 0.2)' : 'none'
-                      }}
-                    />
-                    {formData.mainDuties && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
-                        marginTop: '4px',
-                        fontWeight: 'bold'
-                      }}>
-                        ✅ 입력됨: {formData.mainDuties.length}자
-                      </div>
-                    )}
-                  </div>
-                  <div className="custom-form-group">
-                    <label className="custom-label">근무 시간</label>
-                    <input
-                      type="text"
-                      name="workHours" 
-                      value={formData.workHours || ''} 
-                      onChange={handleInputChange} 
-                      placeholder="예: 09:00 ~ 18:00, 유연근무제"
-                      required 
-                      className="custom-input"
-                      style={{
-                        borderColor: formData.workHours ? '#667eea' : '#cbd5e0',
-                        boxShadow: formData.workHours ? '0 0 0 3px rgba(102, 126, 234, 0.2)' : 'none'
-                      }}
-                    />
-                    {formData.workHours && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
-                        marginTop: '4px',
-                        fontWeight: 'bold'
-                      }}>
-                        ✅ 입력됨: {formData.workHours}
-                      </div>
-                    )}
-                  </div>
-                  <div className="custom-form-group">
-                    <label className="custom-label">근무 요일</label>
-                    <input
-                      type="text"
-                      name="workDays" 
-                      value={formData.workDays || ''} 
-                      onChange={handleInputChange} 
-                      placeholder="예: 월~금, 월~토, 유연근무"
-                      required 
-                      className="custom-input"
-                      style={{
-                        borderColor: formData.workDays ? '#667eea' : '#cbd5e0',
-                        boxShadow: formData.workDays ? '0 0 0 3px rgba(102, 126, 234, 0.2)' : 'none'
-                      }}
-                    />
-                    {formData.workDays && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
-                        marginTop: '4px',
-                        fontWeight: 'bold'
-                      }}>
-                        ✅ 입력됨: {formData.workDays}
-                      </div>
-                    )}
-                  </div>
-                  <div className="custom-form-group">
-                    <label className="custom-label">연봉</label>
-                    <div style={{ position: 'relative' }}>
-                      <input
-                        type="text"
-                        name="salary"
-                        value={formData.salary || ''}
-                        onChange={handleInputChange}
-                        placeholder="예: 3000~5000, 4000, 연봉 협의"
-                        className="custom-input"
-                        style={{
-                          borderColor: formData.salary ? '#667eea' : '#cbd5e0',
-                          boxShadow: formData.salary ? '0 0 0 3px rgba(102, 126, 234, 0.2)' : 'none',
-                          paddingRight: '50px'
-                        }}
-                      />
-                      {formData.salary && /^\d+([,\d~\-]*)?$/.test(formData.salary.trim()) && (
-                        <span style={{
-                          position: 'absolute',
-                          right: '12px',
-                          top: '50%',
-                          transform: 'translateY(-50%)',
-                          color: '#667eea',
-                          fontSize: '14px',
-                          fontWeight: '500',
-                          pointerEvents: 'none'
-                        }}>
-                          만원
-                        </span>
-                      )}
-                    </div>
-                    {formData.salary && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
-                        marginTop: '4px',
-                        fontWeight: 'bold'
-                      }}>
-                        ✅ 입력됨: {formatSalaryDisplay(formData.salary)}
-                      </div>
-                    )}
-                  </div>
-                  <div className="custom-form-group">
-                    <label className="custom-label">연락처 이메일</label>
-                    <input
-                      type="email"
-                      name="contactEmail"
-                      value={formData.contactEmail || ''}
-                      onChange={handleInputChange}
-                      placeholder="인사담당자 이메일"
-                      required
-                      className="custom-input"
-                      style={{
-                        borderColor: formData.contactEmail ? '#667eea' : '#cbd5e0',
-                        boxShadow: formData.contactEmail ? '0 0 0 3px rgba(102, 126, 234, 0.2)' : 'none'
-                      }}
-                    />
-                    {formData.contactEmail && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
-                        marginTop: '4px',
-                        fontWeight: 'bold'
-                      }}>
-                        ✅ 입력됨: {formData.contactEmail}
-                      </div>
-                    )}
-                  </div>
-                  <div className="custom-form-group">
-                    <label className="custom-label">마감일</label>
-                    <input
-                      type="date"
-                      name="deadline"
-                      value={formData.deadline || ''}
-                      onChange={handleInputChange}
-                      required
-                      className="custom-input"
-                      style={{
-                        borderColor: formData.deadline ? '#667eea' : '#cbd5e0',
-                        boxShadow: formData.deadline ? '0 0 0 3px rgba(102, 126, 234, 0.2)' : 'none'
-                      }}
-                    />
-                    {formData.deadline && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
-                        marginTop: '4px',
-                        fontWeight: 'bold'
-                      }}>
-                        ✅ 입력됨: {formData.deadline}
-                      </div>
-                    )}
-                  </div>
-                  <div className="custom-form-group">
-                    <label className="custom-label">경력 요건</label>
-                    <input
-                      type="text"
-                      name="experience"
-                      value={formData.experience || ''}
-                      onChange={handleInputChange}
-                      placeholder="예: 신입, 경력 3년 이상, 경력 무관"
-                      className="custom-input"
-                      style={{
-                        borderColor: formData.experience ? '#667eea' : '#cbd5e0',
-                        boxShadow: formData.experience ? '0 0 0 3px rgba(102, 126, 234, 0.2)' : 'none'
-                      }}
-                    />
-                    {formData.experience && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
-                        marginTop: '4px',
-                        fontWeight: 'bold'
-                      }}>
-                        ✅ 입력됨: {formData.experience}
-                      </div>
-                    )}
-                  </div>
-                  <div className="custom-form-group">
-                    <label className="custom-label">기타 항목</label>
-                    <textarea
-                      name="additionalInfo"
-                      value={formData.additionalInfo || ''}
-                      onChange={handleInputChange}
-                      placeholder="주말보장, 원격근무, 유연근무제, 복리후생 등 추가 정보를 입력해주세요"
-                      className="custom-textarea"
-                      style={{
-                        borderColor: formData.additionalInfo ? '#667eea' : '#cbd5e0',
-                        boxShadow: formData.additionalInfo ? '0 0 0 3px rgba(102, 126, 234, 0.2)' : 'none'
-                      }}
-                    />
-                    {formData.additionalInfo && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
-                        marginTop: '4px',
-                        fontWeight: 'bold'
-                      }}>
-                        ✅ 입력됨: {formData.additionalInfo.length}자
-                      </div>
-                    )}
-                    <div style={{ 
-                      fontSize: '0.75em', 
-                      color: '#666', 
-                      marginTop: '8px',
-                      fontStyle: 'italic'
-                    }}>
-                      💡 제안: 주말보장, 원격근무, 유연근무제, 식대지원, 교통비지원, 연차휴가, 교육지원, 동호회 등
-                    </div>
-                  </div>
-      </FormGrid>
-    </FormSection>
+              <StepIndicator>
+                {steps.map((step) => (
+                  <Step key={step.number}>
+                    <StepNumber 
+                      active={currentStep === step.number}
+                      completed={currentStep > step.number}
+                    >
+                      {currentStep > step.number ? <FiCheck size={16} /> : step.number}
+                    </StepNumber>
+                    <StepLabel 
+                      active={currentStep === step.number}
+                      completed={currentStep > step.number}
+                    >
+                      {step.label}
+                    </StepLabel>
+                  </Step>
+                ))}
+              </StepIndicator>
+
+              {renderCurrentStep()}
 
               <ButtonGroup>
-                <Button className="secondary" onClick={onClose}>
+                <Button 
+                  className="secondary" 
+                  onClick={currentStep === 1 ? onClose : handlePrev}
+                >
                   <FiArrowLeft size={16} />
-                  취소
+                  {currentStep === 1 ? '취소' : '이전'}
                 </Button>
-                <Button className="secondary" onClick={() => {}}>
+                {currentStep === 1 && (
+                  <>
+                    <Button 
+                      className="secondary" 
+                      onClick={() => setShowTemplateModal(true)}
+                    >
                       <FiFolder size={16} />
                       템플릿
                     </Button>
-                <Button className="ai" onClick={startAIChatbot}>
-                  🤖 AI 도우미 재시작
+                    <Button 
+                      className="primary" 
+                      onClick={startAIChatbot}
+                      style={{ background: 'linear-gradient(135deg, #ff6b6b, #ee5a52)' }}
+                    >
+                      🤖 AI 도우미
                     </Button>
+                  </>
+                )}
                 <Button 
-                  className="ai" 
-                  onClick={testLangGraphAgent}
-                  style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}
+                  className="primary" 
+                  onClick={currentStep === steps.length ? handleComplete : handleNext}
+                  disabled={currentStep === steps.length && isSendingEmail}
                 >
-                  🚀 랭그래프 Agent 테스트
-                    </Button>
-                <Button className="primary" onClick={handleRegistration}>
-                  <FiCheck size={16} />
-                  등록 완료
+                  {currentStep === steps.length ? (
+                    isSendingEmail ? (
+                      <>
+                        <FiRefreshCw size={16} style={{ animation: 'spin 1s linear infinite' }} />
+                        이메일 전송 중...
+                      </>
+                    ) : (
+                      '완료'
+                    )
+                  ) : (
+                    <>
+                      다음
+                      <FiArrowRight size={16} />
+                    </>
+                  )}
                 </Button>
               </ButtonGroup>
             </Content>
@@ -999,78 +1222,60 @@ const TextBasedRegistration = ({
         </Overlay>
       )}
 
-      {/* AI 챗봇은 항상 마운트하여 상태를 보존하고, isOpen 으로 표시만 제어 */}
-              <EnhancedModalChatbot
-        key="enhanced-modal-chatbot"
-        isOpen={aiChatbot.isActive}
-        onClose={() => setAiChatbot(prev => ({ ...prev, isActive: false }))}
-        onTitleRecommendation={(data) => {
-          console.log('AI 챗봇에서 제목 추천 요청:', data);
-          setFormData(prev => ({ ...prev, ...data }));
-          setAiChatbot(prev => ({ ...prev, isActive: false }));
-          setTitleRecommendationModal({
-            isOpen: true,
-            finalFormData: { ...formData, ...data }
-          });
-        }}
-        onFieldUpdate={(field, value) => {
-             console.log('=== TextBasedRegistration - 필드 업데이트 콜백 ===');
-             console.log('필드:', field);
-             console.log('값:', value);
-             console.log('업데이트 전 formData:', formData);
-             
-             // 필드 업데이트 로직 개선
-             setFormData(prev => {
-               const newFormData = { ...prev, [field]: value };
-               console.log('업데이트 후 formData:', newFormData);
-               
-               // 추가: 필드 업데이트 후 즉시 시각적 피드백
-               setTimeout(() => {
-                 const fieldElement = document.querySelector(`[name="${field}"]`);
-                 if (fieldElement) {
-                   fieldElement.style.transition = 'all 0.3s ease';
-                   fieldElement.style.borderColor = '#667eea';
-                   fieldElement.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.2)';
-                   fieldElement.style.transform = 'scale(1.02)';
-                   
-                   setTimeout(() => {
-                     fieldElement.style.borderColor = '#e5e7eb';
-                     fieldElement.style.boxShadow = 'none';
-                     fieldElement.style.transform = 'scale(1)';
-                   }, 1000);
-                 }
-               }, 100);
-               
-               return newFormData;
-             });
-             
-             // 추가: 성공 알림
-             console.log(`✅ ${field} 필드에 "${value}" 값이 성공적으로 입력되었습니다!`);
-           }}
-           onComplete={(data) => {
-             console.log('AI 챗봇 완료:', data);
-             setFormData(prev => ({ ...prev, ...data }));
-              setAiChatbot(prev => ({ ...prev, isActive: false }));
-           }}
-            formData={formData}
-            fields={[
-              { key: 'department', label: '구인 부서', type: 'text' },
-              { key: 'headcount', label: '채용 인원', type: 'text' },
-              { key: 'mainDuties', label: '주요 업무', type: 'textarea' },
-              { key: 'workHours', label: '근무 시간', type: 'text' },
-              { key: 'salary', label: '급여 조건', type: 'text' },
-              { key: 'contactEmail', label: '연락처 이메일', type: 'email' },
-              { key: 'experience', label: '경력 요건', type: 'text' }
-            ]}
-          />
+      {/* AI 챗봇이 활성화될 때 EnhancedModalChatbot 표시 */}
+      {aiChatbot.isActive && (
+        <EnhancedModalChatbot
+          isOpen={aiChatbot.isActive}
+          onClose={() => setAiChatbot({ isActive: false, currentQuestion: '', step: 1 })}
+          title="AI 채용공고 작성 도우미"
+          onFieldUpdate={(field, value) => {
+            console.log('AI 챗봇에서 필드 업데이트:', field, value);
+            setFormData(prev => ({
+              ...prev,
+              [field]: value
+            }));
+          }}
+          onComplete={(data) => {
+            console.log('AI 챗봇 완료:', data);
+            setFormData(prev => ({ ...prev, ...data }));
+            setAiChatbot({ isActive: false, currentQuestion: '', step: 1 });
+          }}
+          fields={[
+            { key: 'department', label: '구인 부서', type: 'text' },
+            { key: 'headcount', label: '채용 인원', type: 'text' },
+            { key: 'mainDuties', label: '주요 업무', type: 'textarea' },
+            { key: 'workHours', label: '근무 시간', type: 'text' },
+            { key: 'locationCity', label: '근무 위치', type: 'text' },
+            { key: 'salary', label: '급여 조건', type: 'text' },
+            { key: 'deadline', label: '마감일', type: 'date' },
+            { key: 'contactEmail', label: '연락처 이메일', type: 'email' }
+          ]}
+          aiAssistant={true}
+        >
+          <div>
+            <h3>현재 입력된 정보</h3>
+            <div style={{ fontSize: '14px', color: '#666' }}>
+              <p><strong>구인 부서:</strong> {formData.department || '미입력'}</p>
+              <p><strong>채용 인원:</strong> {formData.headcount || '미입력'}</p>
+              <p><strong>주요 업무:</strong> {formData.mainDuties || '미입력'}</p>
+              <p><strong>근무 시간:</strong> {formData.workHours || '미입력'}</p>
+              <p><strong>근무 위치:</strong> {formData.locationCity || '미입력'}</p>
+              <p><strong>급여 조건:</strong> {formData.salary || '미입력'}</p>
+              <p><strong>마감일:</strong> {formData.deadline || '미입력'}</p>
+              <p><strong>연락처:</strong> {formData.contactEmail || '미입력'}</p>
+            </div>
+          </div>
+        </EnhancedModalChatbot>
+      )}
 
-      {/* 제목 추천 모달 */}
-      <TitleRecommendationModal
-        isOpen={titleRecommendationModal.isOpen}
-        onClose={handleTitleModalClose}
-        formData={titleRecommendationModal.finalFormData}
-        onTitleSelect={handleTitleSelect}
-        onDirectInput={handleDirectTitleInput}
+      <TemplateModal
+        isOpen={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        onSaveTemplate={handleSaveTemplate}
+        onLoadTemplate={handleLoadTemplate}
+        onDeleteTemplate={handleDeleteTemplate}
+        templates={templates}
+        currentData={formData}
       />
     </AnimatePresence>
   );
