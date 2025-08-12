@@ -400,7 +400,7 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
         repo_data = input_data["repo_data"]
         prompt = f"""당신은 GitHub 레포지토리를 분석하여 채용 담당자가 이해하기 쉬운 형태로 요약하는 전문가입니다.
 
-다음 레포지토리 데이터를 분석하여 '주제', '기술 스택', '주요 기능', '레포 주소'를 추출해주세요:
+다음 레포지토리 데이터를 분석하여 '주제', '기술 스택', '주요 기능', '레포 주소', '아키텍처 구조', '외부 라이브러리', 'LLM 모델 정보'를 추출해주세요:
 
 **레포지토리 정보**
 - 이름: {repo_data.get('name', repo_name)}
@@ -429,19 +429,26 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
 - 예: "MongoDB", "PostgreSQL", "MySQL" → "Database"
 - 예: "Docker", "Kubernetes" → "Containerization"
 
+- 아키텍처 구조는 전체 앱의 흐름과 주요 컴포넌트 간 관계를 설명하세요
+- 외부 라이브러리는 사용된 주요 라이브러리와 API, 버전 정보를 포함하세요
+- LLM 모델 정보는 사용된 LLM 종류와 호출 방식을 설명하세요
+
 다음 JSON 형식으로 응답해주세요:
 {{
   "주제": "프로젝트의 핵심 목적과 특징을 간결하게 설명",
   "기술 스택": ["언어1", "프레임워크1", "라이브러리1"],
   "주요 기능": ["기능1", "기능2", "기능3"],
-  "레포 주소": "{repo_data.get('html_url', f'https://github.com/{username}/{repo_name}')}"
+  "레포 주소": "{repo_data.get('html_url', f'https://github.com/{username}/{repo_name}')}",
+  "아키텍처 구조": "전체 앱의 흐름과 주요 컴포넌트 간 관계 설명",
+  "외부 라이브러리": ["라이브러리1 (버전)", "API1", "라이브러리2 (버전)"],
+  "LLM 모델 정보": "사용된 LLM 종류와 호출 방식 설명"
 }}"""
     
     elif input_data["analysis_type"] == "profile_readme":
         readme_text = input_data["readme_text"]
         prompt = f"""당신은 GitHub 사용자 프로필 README를 분석하여 채용 담당자가 이해하기 쉬운 형태로 요약하는 전문가입니다.
 
-다음 프로필 README 내용을 분석하여 '주제', '기술 스택', '주요 기능', '레포 주소'를 추출해주세요:
+다음 프로필 README 내용을 분석하여 '주제', '기술 스택', '주요 기능', '레포 주소', '아키텍처 구조', '외부 라이브러리', 'LLM 모델 정보'를 추출해주세요:
 
 **프로필 README 내용:**
 {readme_text}
@@ -453,12 +460,19 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
 - 예: "MongoDB", "PostgreSQL", "MySQL" → "Database"
 - 예: "Docker", "Kubernetes" → "Containerization"
 
+- 아키텍처 구조는 전체 앱의 흐름과 주요 컴포넌트 간 관계를 설명하세요
+- 외부 라이브러리는 사용된 주요 라이브러리와 API, 버전 정보를 포함하세요
+- LLM 모델 정보는 사용된 LLM 종류와 호출 방식을 설명하세요
+
 다음 JSON 형식으로 응답해주세요:
 {{
   "주제": "사용자의 전반적인 기술적 관심사와 전문 분야를 간결하게 설명",
   "기술 스택": ["언어1", "프레임워크1", "라이브러리1"],
   "주요 기능": ["주요 프로젝트1", "주요 프로젝트2", "주요 프로젝트3"],
-  "레포 주소": "{input_data['profile_url']}"
+  "레포 주소": "{input_data['profile_url']}",
+  "아키텍처 구조": "전체 앱의 흐름과 주요 컴포넌트 간 관계 설명",
+  "외부 라이브러리": ["라이브러리1 (버전)", "API1", "라이브러리2 (버전)"],
+  "LLM 모델 정보": "사용된 LLM 종류와 호출 방식 설명"
 }}"""
     
     else:  # multiple_repos
@@ -477,7 +491,7 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
         
         prompt = f"""당신은 GitHub 사용자의 여러 레포지토리를 분석하여 각각을 개별적으로 요약하는 전문가입니다.
 
-다음 {len(repos)}개의 레포지토리 데이터를 분석하여 각 레포지토리별로 '주제', '기술 스택', '주요 기능', '레포 주소'를 추출해주세요:
+다음 {len(repos)}개의 레포지토리 데이터를 분석하여 각 레포지토리별로 '주제', '기술 스택', '주요 기능', '레포 주소', '아키텍처 구조', '외부 라이브러리', 'LLM 모델 정보'를 추출해주세요:
 
 **레포지토리 목록:**
 {json.dumps(repos_info, indent=2, ensure_ascii=False)}
@@ -489,6 +503,10 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
 - 예: "MongoDB", "PostgreSQL", "MySQL" → "Database"
 - 예: "Docker", "Kubernetes" → "Containerization"
 
+- 아키텍처 구조는 전체 앱의 흐름과 주요 컴포넌트 간 관계를 설명하세요
+- 외부 라이브러리는 사용된 주요 라이브러리와 API, 버전 정보를 포함하세요
+- LLM 모델 정보는 사용된 LLM 종류와 호출 방식을 설명하세요
+
 다음 JSON 형식으로 응답해주세요:
 {{
   "repositories": [
@@ -497,7 +515,10 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
       "주제": "프로젝트의 핵심 목적과 특징을 간결하게 설명",
       "기술 스택": ["언어1", "프레임워크1", "라이브러리1"],
       "주요 기능": ["기능1", "기능2", "기능3"],
-      "레포 주소": "https://github.com/user/repo"
+      "레포 주소": "https://github.com/user/repo",
+      "아키텍처 구조": "전체 앱의 흐름과 주요 컴포넌트 간 관계 설명",
+      "외부 라이브러리": ["라이브러리1 (버전)", "API1", "라이브러리2 (버전)"],
+      "LLM 모델 정보": "사용된 LLM 종류와 호출 방식 설명"
     }},
     ...
   ]
@@ -551,7 +572,7 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
                 repositories = result.get("repositories", [])
                 filtered_repos = []
                 for repo in repositories:
-                    # 정보가 충분한지 확인
+                    # 정보가 충분한지 확인 (기본 필드만 필수, 새로운 필드는 선택사항)
                     has_sufficient_info = (
                         repo.get('주제') and 
                         repo.get('주제') != '설명이 부족하여 주제를 특정할 수 없음' and
@@ -574,6 +595,9 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
                 "기술 스택": ["분석 중"],
                 "주요 기능": ["분석 중"],
                 "레포 주소": input_data["profile_url"],
+                "아키텍처 구조": "분석 중",
+                "외부 라이브러리": ["분석 중"],
+                "LLM 모델 정보": "분석 중",
                 "raw_response": response_text
             }]
 
