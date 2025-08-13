@@ -27,6 +27,9 @@ pydantic-settings==2.1.0
 google-generativeai==0.3.2
 google-ai-generativelanguage==0.4.0
 openai==1.58.1
+pinecone-client==5.0.1
+sentence-transformers==2.2.2
+groq==0.4.2
 requests==2.31.0
 
 # 음성 및 오디오 처리
@@ -39,6 +42,18 @@ gTTS==2.5.4
 # 한국어 처리
 konlpy==0.6.0
 kiwipiepy==0.21.0
+
+# PDF 및 문서 처리
+PyMuPDF==1.23.18
+pdfplumber==0.10.3
+pdf2image==1.17.0
+pytesseract==0.3.10
+
+# 이미지 처리
+Pillow==10.1.0
+opencv-python==4.8.1.78
+numpy==1.24.3
+scipy==1.11.4
 
 # 유틸리티
 colorama==0.4.6
