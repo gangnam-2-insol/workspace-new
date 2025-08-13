@@ -22,9 +22,13 @@ import {
   FiCode,
   FiGrid,
   FiList,
-  FiBarChart2
+  FiBarChart2,
+  FiGitBranch,
+  FiArrowLeft
 } from 'react-icons/fi';
 import DetailedAnalysisModal from '../components/DetailedAnalysisModal';
+import GithubSummaryPanel from './PortfolioSummary/GithubSummaryPanel';
+import PortfolioSummaryPanel from './PortfolioSummary/PortfolioSummaryPanel';
 
 // API 서비스 추가
 const API_BASE_URL = 'http://localhost:8000';
@@ -1695,6 +1699,67 @@ const DocumentModalTitle = styled.h2`
   color: var(--text-primary);
 `;
 
+// 포트폴리오 뷰 선택 UI 스타일
+const SelectionGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-top: 8px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const SelectionCard = styled(motion.div)`
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  padding: 24px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  background: white;
+
+  &:hover {
+    border-color: var(--primary-color);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 200, 81, 0.1);
+  }
+`;
+
+const SelectionIcon = styled.div`
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  font-size: 22px;
+  color: white;
+
+  &.github {
+    background: linear-gradient(135deg, #24292e, #57606a);
+  }
+
+  &.portfolio {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+  }
+`;
+
+const SelectionTitle = styled.h3`
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+`;
+
+const SelectionDesc = styled.p`
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+`;
+
 const DocumentCloseButton = styled.button`
   background: none;
   border: none;
@@ -2141,6 +2206,8 @@ const ApplicantManagement = () => {
   const [selectedApplicant, setSelectedApplicant] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [documentModal, setDocumentModal] = useState({ isOpen: false, type: '', applicant: null, isOriginal: false, similarityData: null, isLoadingSimilarity: false });
+  // 포트폴리오 모달 내 뷰 선택 상태: 'select' | 'github' | 'portfolio'
+  const [portfolioView, setPortfolioView] = useState('select');
   const [filterModal, setFilterModal] = useState(false);
   const [selectedJobs, setSelectedJobs] = useState([]);
   const [selectedExperience, setSelectedExperience] = useState([]);
@@ -2361,6 +2428,9 @@ const ApplicantManagement = () => {
   const handleDocumentClick = async (type, applicant) => {
     // 모달 먼저 열기
     setDocumentModal({ isOpen: true, type, applicant, isOriginal: false, similarityData: null, isLoadingSimilarity: false });
+    if (type === 'portfolio') {
+      setPortfolioView('select');
+    }
     
     // 이력서 타입일 때만 유사도 체크 실행
     if (type === 'resume') {
@@ -2400,6 +2470,7 @@ const ApplicantManagement = () => {
 
   const handleCloseDocumentModal = () => {
     setDocumentModal({ isOpen: false, type: '', applicant: null, isOriginal: false, similarityData: null, isLoadingSimilarity: false });
+    setPortfolioView('select');
   };
 
   const handleFilterClick = () => {
@@ -3188,6 +3259,90 @@ const ApplicantManagement = () => {
               </DocumentModalHeader>
 
               <DocumentContent>
+                {/* 포트폴리오: 선택 화면 */}
+                {documentModal.type === 'portfolio' && portfolioView === 'select' && (
+                  <>
+                    <DocumentSection>
+                      <DocumentSectionTitle>포트폴리오 요약 방법 선택</DocumentSectionTitle>
+                      <SelectionGrid>
+                        <SelectionCard
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => setPortfolioView('github')}
+                        >
+                          <SelectionIcon className="github">
+                            <FiGitBranch />
+                          </SelectionIcon>
+                          <SelectionTitle>깃헙 요약</SelectionTitle>
+                          <SelectionDesc>GitHub URL/아이디로 레포 분석 요약 보기</SelectionDesc>
+                        </SelectionCard>
+                        <SelectionCard
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => setPortfolioView('portfolio')}
+                        >
+                          <SelectionIcon className="portfolio">
+                            <FiCode />
+                          </SelectionIcon>
+                          <SelectionTitle>포트폴리오 요약</SelectionTitle>
+                          <SelectionDesc>등록된 포트폴리오 정보 기반 요약 보기</SelectionDesc>
+                        </SelectionCard>
+                      </SelectionGrid>
+                    </DocumentSection>
+                  </>
+                )}
+
+                {/* 포트폴리오: 깃헙 요약 화면 */}
+                {documentModal.type === 'portfolio' && portfolioView === 'github' && (
+                  <>
+                    <DocumentSection>
+                      <DocumentSectionTitle>
+                        <button 
+                          onClick={() => setPortfolioView('select')} 
+                          style={{ 
+                            background: 'transparent', 
+                            border: 'none', 
+                            cursor: 'pointer', 
+                            marginRight: 8, 
+                            color: 'var(--text-secondary)'
+                          }}
+                          aria-label="뒤로"
+                        >
+                          <FiArrowLeft />
+                        </button>
+                        깃헙 요약
+                      </DocumentSectionTitle>
+                      <GithubSummaryPanel />
+                    </DocumentSection>
+                  </>
+                )}
+
+                {/* 포트폴리오: 기존 포트폴리오 상세 */}
+                {documentModal.type === 'portfolio' && portfolioView === 'portfolio' && documentModal.applicant.documents?.portfolio && (
+                  <>
+                    <DocumentSection>
+                      <DocumentSectionTitle>
+                        <button 
+                          onClick={() => setPortfolioView('select')} 
+                          style={{ 
+                            background: 'transparent', 
+                            border: 'none', 
+                            cursor: 'pointer', 
+                            marginRight: 8, 
+                            color: 'var(--text-secondary)'
+                          }}
+                          aria-label="뒤로"
+                        >
+                          <FiArrowLeft />
+                        </button>
+                        포트폴리오
+                      </DocumentSectionTitle>
+                      <PortfolioSummaryPanel portfolio={documentModal.applicant.documents.portfolio} />
+                    </DocumentSection>
+                  </>
+                )}
+
+                {/* 이력서/자소서 기존 로직 */}
                 {documentModal.type === 'resume' && documentModal.isOriginal && (
                   <>
                     <DocumentSection>
