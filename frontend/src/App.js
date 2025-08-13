@@ -14,6 +14,7 @@ import UserManagement from './pages/UserManagement/UserManagement';
 import Settings from './pages/Settings/Settings';
 import FloatingChatbot from './chatbot/components/FloatingChatbot';
 import AITooltip from './components/AITooltip';
+import TestGithubSummary from './pages/TestGithubSummary';
 
 
 
@@ -151,6 +152,7 @@ function App() {
           <Route path="/talent" element={<TalentRecommendation />} />
           <Route path="/users" element={<UserManagement />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/github-test" element={<TestGithubSummary />} />
         </Routes>
       </Layout>
 
