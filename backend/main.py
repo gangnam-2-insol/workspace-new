@@ -308,6 +308,67 @@ async def analyze_cover_letter_with_llm(text: str, job_description: str = "") ->
         print(f"Gemini 분석 실패, 기본 분석으로 대체: {e}")
         return await analyze_cover_letter_basic(text, job_description)
 
+def calculate_text_similarity_simple(resume_a: Dict[str, Any], resume_b: Dict[str, Any]) -> float:
+    """
+    두 이력서 간의 간단한 텍스트 유사도를 계산합니다.
+    """
+    try:
+        # 필드별 가중치 정의
+        field_weights = {
+            'growthBackground': 0.4,   # 성장배경 (가장 중요)
+            'motivation': 0.35,        # 지원동기 
+            'careerHistory': 0.25,     # 경력사항
+        }
+        
+        total_similarity = 0.0
+        total_weight = 0.0
+        
+        # 각 필드별 유사도 계산
+        for field, weight in field_weights.items():
+            value_a = resume_a.get(field, "").strip().lower()
+            value_b = resume_b.get(field, "").strip().lower()
+            
+            if value_a and value_b and len(value_a) > 2 and len(value_b) > 2:
+                # 필드별 유사도 계산
+                field_similarity = calculate_field_similarity_simple(value_a, value_b)
+                total_similarity += field_similarity * weight
+                total_weight += weight
+        
+        # 전체 유사도 계산
+        if total_weight > 0:
+            return total_similarity / total_weight
+        else:
+            return 0.0
+            
+    except Exception as e:
+        print(f"텍스트 유사도 계산 중 오류: {str(e)}")
+        return 0.0
+
+def calculate_field_similarity_simple(text_a: str, text_b: str) -> float:
+    """
+    두 텍스트 간의 간단한 Jaccard 유사도를 계산합니다.
+    """
+    try:
+        if not text_a or not text_b:
+            return 0.0
+        
+        # 텍스트를 단어로 분할
+        words_a = set(text_a.lower().split())
+        words_b = set(text_b.lower().split())
+        
+        if not words_a or not words_b:
+            return 0.0
+        
+        # Jaccard 유사도 계산
+        intersection = len(words_a.intersection(words_b))
+        union = len(words_a.union(words_b))
+        
+        return intersection / union if union > 0 else 0.0
+        
+    except Exception as e:
+        print(f"필드 유사도 계산 중 오류: {str(e)}")
+        return 0.0
+
 def calculate_overall_score(summary_result: Dict, star_result: List, job_fit_result: Dict, improvement_result: List, grammar_result: List) -> int:
     """종합 점수 계산 (0-100)"""
     score = 0
@@ -1236,25 +1297,19 @@ async def check_resume_similarity(resume_id: str):
             try:
                 print(f"💫 이력서 간 유사도 계산 시작: {resume_id} vs {other_id}")
                 
-                # SimilarityService의 텍스트 유사도 계산 메서드 직접 호출 (현재 사용하지 않음)
-                # text_similarity = similarity_service._calculate_text_similarity(current_resume, other_resume)
-                # overall_similarity = text_similarity if text_similarity is not None else 0.0
-                
-                # 임시로 랜덤 값 사용
-                overall_similarity = random.uniform(0.1, 0.9)
+                # 실제 텍스트 유사도 계산
+                overall_similarity = calculate_text_similarity_simple(current_resume, other_resume)
                 
                 print(f"📊 텍스트 유사도 결과: {overall_similarity:.3f}")
                 
-                # 필드별 유사도 계산 (임시로 랜덤 값 사용)
+                # 필드별 유사도 계산
                 field_similarities = {}
                 for field_name in current_fields.keys():
                     if current_fields[field_name] and other_fields[field_name]:
-                        # 필드별 개별 텍스트 유사도 계산 (임시로 랜덤 값 사용)
-                        # field_sim = similarity_service._calculate_text_similarity(
-                        #     {field_name: current_fields[field_name]},
-                        #     {field_name: other_fields[field_name]}
-                        # )
-                        field_similarities[field_name] = random.uniform(0.0, 1.0)
+                        # 필드별 개별 텍스트 유사도 계산
+                        field_similarities[field_name] = calculate_field_similarity_simple(
+                            current_fields[field_name], other_fields[field_name]
+                        )
                         print(f"📋 {field_name} 유사도: {field_similarities[field_name]:.3f}")
                     else:
                         field_similarities[field_name] = 0.0
@@ -1265,13 +1320,10 @@ async def check_resume_similarity(resume_id: str):
                 traceback.print_exc()
                 
                 # 오류 시 기본값 사용
-                overall_similarity = random.uniform(0.1, 0.9)
+                overall_similarity = 0.0
                 field_similarities = {}
                 for field_name in current_fields.keys():
-                    if current_fields[field_name] and other_fields[field_name]:
-                        field_similarities[field_name] = random.uniform(0.0, 1.0)
-                    else:
-                        field_similarities[field_name] = 0.0
+                    field_similarities[field_name] = 0.0
             
             similarity_result = {
                 "resume_id": other_id,
