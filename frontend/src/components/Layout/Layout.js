@@ -17,7 +17,8 @@ import {
   FiBell,
   FiSearch,
   FiBriefcase,
-  FiUserCheck
+  FiUserCheck,
+  FiGitBranch
 } from 'react-icons/fi';
 
 const LayoutContainer = styled.div`
@@ -186,6 +187,12 @@ const navigationItems = [
     items: [
       { name: '사용자 관리', path: '/users', icon: FiUser },
       { name: '설정', path: '/settings', icon: FiSettings }
+    ]
+  },
+  {
+    title: '개발 도구',
+    items: [
+      { name: 'GitHub 테스트', path: '/github-test', icon: FiGitBranch }
     ]
   }
 ];
