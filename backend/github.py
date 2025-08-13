@@ -41,7 +41,7 @@ async def fetch_github(url: str, token: Optional[str] = None) -> Dict:
     if token:
         headers['Authorization'] = f'Bearer {token}'
     
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(30.0)) as client:
         response = await client.get(url, headers=headers)
         response.raise_for_status()
         return response.json()
@@ -539,7 +539,7 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
         }
     }
     
-    async with httpx.AsyncClient() as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
         response = await client.post(endpoint, json=payload, headers={'Content-Type': 'application/json'})
         response.raise_for_status()
         data = response.json()
@@ -749,6 +749,12 @@ async def github_summary(request: GithubSummaryRequest):
         
     except HTTPException:
         raise
+    except httpx.ReadTimeout:
+        print("GitHub API 요청 타임아웃 발생")
+        raise HTTPException(status_code=408, detail="요청이 시간 초과되었습니다. 잠시 후 다시 시도해주세요.")
+    except httpx.ConnectTimeout:
+        print("GitHub API 연결 타임아웃 발생")
+        raise HTTPException(status_code=408, detail="연결이 시간 초과되었습니다. 네트워크 상태를 확인해주세요.")
     except Exception as error:
         import traceback
         print(f"GitHub 요약 오류: {error}")
@@ -812,6 +818,12 @@ async def github_repo_analysis(request: GithubSummaryRequest):
         if e.response.status_code == 404:
             raise HTTPException(status_code=404, detail=f"저장소 '{request.repo_name}'을 찾을 수 없습니다.")
         raise
+    except httpx.ReadTimeout:
+        print("GitHub API 요청 타임아웃 발생")
+        raise HTTPException(status_code=408, detail="요청이 시간 초과되었습니다. 잠시 후 다시 시도해주세요.")
+    except httpx.ConnectTimeout:
+        print("GitHub API 연결 타임아웃 발생")
+        raise HTTPException(status_code=408, detail="연결이 시간 초과되었습니다. 네트워크 상태를 확인해주세요.")
     except Exception as error:
         import traceback
         print(f"GitHub 저장소 분석 오류: {error}")
