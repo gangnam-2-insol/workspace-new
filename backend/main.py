@@ -17,7 +17,10 @@ import csv
 from chatbot import chatbot_router, langgraph_router
 from github import router as github_router
 from routers.upload import router as upload_router
+
 from routers.pdf_ocr import router as pdf_ocr_router
+
+
 from similarity_service import SimilarityService
 from embedding_service import EmbeddingService
 from vector_service import VectorService
@@ -65,7 +68,9 @@ app.include_router(chatbot_router, prefix="/api/chatbot", tags=["chatbot"])
 app.include_router(langgraph_router, prefix="/api/langgraph", tags=["langgraph"])
 app.include_router(github_router, prefix="/api", tags=["github"])
 app.include_router(upload_router, tags=["upload"])
+
 app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
+
 
 # MongoDB 연결
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/hireme")

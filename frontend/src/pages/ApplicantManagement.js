@@ -24,8 +24,12 @@ import {
   FiList,
   FiBarChart2,
   FiGitBranch,
+
   FiArrowLeft,
-  FiCamera
+  FiCamera,
+
+  FiArrowLeft
+
 } from 'react-icons/fi';
 import DetailedAnalysisModal from '../components/DetailedAnalysisModal';
 import GithubSummaryPanel from './PortfolioSummary/GithubSummaryPanel';

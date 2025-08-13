@@ -1142,6 +1142,7 @@ MIT License
 
 **마지막 업데이트**: 2024년 8월 9일  
 **버전**: v2.0  
+
 **메인테이너**: AI Development Team 
 
 ---
@@ -1208,3 +1209,6 @@ curl -F "file=@sample.pdf" http://localhost:8000/api/pdf-ocr/upload-pdf
 - 프론트 실행 시 루트에서 `npm start` 오류(ENOENT) → `cd frontend && npm start`로 실행
 - ESLint 경고로 개발서버 중단 시 (원인 환경에 따라)
   - Windows PowerShell: `set "ESLINT_NO_DEV_ERRORS=true" && npm start`
+
+**메인테이너**: AI Development Team 
+
