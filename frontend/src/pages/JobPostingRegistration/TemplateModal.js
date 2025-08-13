@@ -496,16 +496,20 @@ const TemplateModal = ({
     </div>
   );
 
+  console.log('[TemplateModal] 렌더링, isOpen:', isOpen);
+  
   return (
     <AnimatePresence>
       {isOpen && (
         <Overlay
+          key="template-overlay"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
         >
           <Modal
+            key="template-modal"
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}

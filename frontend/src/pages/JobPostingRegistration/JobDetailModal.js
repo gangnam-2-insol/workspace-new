@@ -435,12 +435,14 @@ const JobDetailModal = ({
     <AnimatePresence>
       {isOpen && (
         <Overlay
+          key="jobdetail-overlay"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           onClick={onClose}
         >
           <Modal
+            key="jobdetail-modal"
             initial={{ scale: 0.9, opacity: 0 }}
             animate={{ scale: 1, opacity: 1 }}
             exit={{ scale: 0.9, opacity: 0 }}

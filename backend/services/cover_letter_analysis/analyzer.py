@@ -15,8 +15,6 @@ from ...models.cover_letter_models import (
 )
 from ...utils.text_extractor import extract_text_from_file, validate_upload_file
 from ...services.llm_providers.base_provider import LLMProviderFactory, LLMResponse
-# 팩토리 등록을 위해 Gemini 프로바이더 모듈 임포트
-from ...services.llm_providers import gemini_provider  # noqa: F401
 from .prompts import get_analysis_prompt
 
 logger = logging.getLogger(__name__)
@@ -33,7 +31,7 @@ class CoverLetterAnalyzer:
     def _initialize_llm_provider(self) -> None:
         """LLM 프로바이더 초기화"""
         try:
-            provider_name = self.llm_config.get("provider", "gemini")
+            provider_name = self.llm_config.get("provider", "openai")
             self.llm_provider = LLMProviderFactory.create_provider(provider_name, self.llm_config)
             
             if self.llm_provider and self.llm_provider.is_healthy():
@@ -124,7 +122,7 @@ class CoverLetterAnalyzer:
             
             if response:
                 try:
-                    result = json.loads(response.content)
+                    result = json.loads(response)
                     return result.get("masked_text", text)
                 except json.JSONDecodeError:
                     logger.warning("개인정보 마스킹 응답 파싱 실패, 원본 텍스트 사용")
@@ -161,11 +159,11 @@ class CoverLetterAnalyzer:
             
             # JSON 파싱
             try:
-                result = json.loads(response.content)
+                result = json.loads(response)
                 return result
             except json.JSONDecodeError as e:
                 logger.error(f"LLM 응답 JSON 파싱 실패: {str(e)}")
-                logger.error(f"응답 내용: {response.content[:500]}...")
+                logger.error(f"응답 내용: {response[:500]}...")
                 raise ValueError("LLM 응답을 JSON으로 파싱할 수 없습니다.")
                 
         except Exception as e:

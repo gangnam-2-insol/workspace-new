@@ -22,12 +22,17 @@ import {
   FiCode,
   FiGrid,
   FiList,
-  FiBarChart2
+  FiBarChart2,
+  FiGitBranch,
+  FiArrowLeft,
+  FiCamera
 } from 'react-icons/fi';
 import DetailedAnalysisModal from '../components/DetailedAnalysisModal';
+import GithubSummaryPanel from './PortfolioSummary/GithubSummaryPanel';
+import PortfolioSummaryPanel from './PortfolioSummary/PortfolioSummaryPanel';
 
 // API 서비스 추가
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 const api = {
   // 모든 지원자 조회 (페이지네이션 지원)
@@ -54,30 +59,7 @@ const api = {
       
       const data = await response.json();
       console.log('✅ API 응답 데이터:', data);
-
-      // UI 스키마로 정규화
-      const normalizeApplicant = (a) => ({
-        id: a._id || a.id || String(a.id || ''),
-        name: a.name || '',
-        position: a.position || '',
-        department: a.department || '',
-        email: a.email || '',
-        phone: a.phone || '',
-        appliedDate: a.applied_date || a.appliedDate || '',
-        status: a.status || '지원',
-        experience: a.experience || '',
-        skills: Array.isArray(a.skills)
-          ? a.skills
-          : (typeof a.skills === 'string' ? a.skills.split(',').map(s => s.trim()).filter(Boolean) : []),
-        rating: typeof a.rating === 'number' ? a.rating : 0,
-        summary: a.summary || '',
-        aiSuitability: (a.ai_suitability ?? a.aiSuitability ?? 0),
-        aiScores: a.ai_scores ?? a.aiScores ?? null,
-        documents: a.documents || {},
-        created_at: a.created_at || a.createdAt || null,
-      });
-
-      return Array.isArray(data) ? data.map(normalizeApplicant) : [];
+      return data.applicants || [];
     } catch (error) {
       console.error('❌ 지원자 데이터 조회 오류:', error);
       throw error;
@@ -897,6 +879,44 @@ const ResumeAnalysisScore = styled.span`
   }};
 `;
 
+const AnalysisScoreDisplay = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  padding: 16px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 8px;
+  color: white;
+`;
+
+const AnalysisScoreCircle = styled.div`
+  width: 50px;
+  height: 50px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+  font-weight: 700;
+`;
+
+const AnalysisScoreInfo = styled.div`
+  flex: 1;
+`;
+
+const AnalysisScoreLabel = styled.div`
+  font-size: 14px;
+  opacity: 0.9;
+  margin-bottom: 4px;
+`;
+
+const AnalysisScoreValue = styled.div`
+  font-size: 20px;
+  font-weight: 700;
+`;
+
 const ResumeAnalysisSkills = styled.div`
   display: flex;
   flex-wrap: wrap;
@@ -1680,6 +1700,67 @@ const DocumentModalTitle = styled.h2`
   color: var(--text-primary);
 `;
 
+// 포트폴리오 뷰 선택 UI 스타일
+const SelectionGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-top: 8px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const SelectionCard = styled(motion.div)`
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  padding: 24px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  background: white;
+
+  &:hover {
+    border-color: var(--primary-color);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 200, 81, 0.1);
+  }
+`;
+
+const SelectionIcon = styled.div`
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  font-size: 22px;
+  color: white;
+
+  &.github {
+    background: linear-gradient(135deg, #24292e, #57606a);
+  }
+
+  &.portfolio {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+  }
+`;
+
+const SelectionTitle = styled.h3`
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+`;
+
+const SelectionDesc = styled.p`
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+`;
+
 const DocumentCloseButton = styled.button`
   background: none;
   border: none;
@@ -2020,214 +2101,10 @@ const RankBadge = styled.span`
   color: white;
 `;
 
-const sampleApplicants = [
-  {
-    id: 1,
-    name: '김지원',
-    position: '프론트엔드 개발자',
-    department: '개발팀',
-    email: 'kim.jiwon@email.com',
-    phone: '010-1234-5678',
-    appliedDate: '2024-01-15',
-    status: '지원',
-    experience: '3년',
-    skills: ['React', 'TypeScript', 'JavaScript'],
-    rating: 4.5,
-    summary: 'React와 TypeScript에 능숙하며, 사용자 경험을 중시하는 프론트엔드 개발자입니다. 팀 프로젝트에서 리더 역할을 수행한 경험이 있고, 새로운 기술 학습에 적극적입니다.',
-    documents: {
-      resume: {
-        personalInfo: {
-          name: '김지원',
-          email: 'kim.jiwon@email.com',
-          phone: '010-1234-5678',
-          address: '서울시 강남구',
-          birth: '1995.03.15'
-        },
-        education: [
-          {
-            school: '서울대학교',
-            major: '컴퓨터공학과',
-            degree: '학사',
-            period: '2014.03 - 2018.02',
-            gpa: '4.2/4.5'
-          }
-        ],
-        experience: [
-          {
-            company: '테크스타트업',
-            position: '프론트엔드 개발자',
-            period: '2021.03 - 현재',
-            description: 'React와 TypeScript를 활용한 웹 애플리케이션 개발, 사용자 경험 개선 프로젝트 리드'
-          },
-          {
-            company: 'IT컨설팅',
-            position: '웹 개발자',
-            period: '2018.03 - 2021.02',
-            description: 'JavaScript 기반 웹사이트 개발, 반응형 디자인 구현'
-          }
-        ],
-        skills: {
-          programming: ['JavaScript', 'TypeScript', 'React', 'Vue.js', 'HTML/CSS'],
-          tools: ['Git', 'Webpack', 'VS Code', 'Figma'],
-          languages: ['한국어', '영어']
-        }
-      },
-      coverLetter: {
-        motivation: '사용자 중심의 웹 애플리케이션을 개발하여 더 나은 디지털 경험을 제공하고 싶습니다. React 생태계에 대한 깊은 이해와 팀 협업 경험을 바탕으로 혁신적인 제품 개발에 기여하고자 합니다.',
-        strengths: [
-          '사용자 경험을 중시하는 개발 철학',
-          '새로운 기술 학습에 대한 적극적인 자세',
-          '팀 프로젝트에서의 리더십 경험',
-          '문제 해결 능력과 창의적 사고'
-        ],
-        goals: '3년 내에 프론트엔드 아키텍트로 성장하여 팀의 기술적 방향을 이끌고, 사용자에게 최고의 경험을 제공하는 제품을 만들어가고 싶습니다.'
-      },
-      portfolio: {
-        projects: [
-          {
-            title: 'E-커머스 플랫폼',
-            description: 'React와 TypeScript를 활용한 온라인 쇼핑몰 개발',
-            technologies: ['React', 'TypeScript', 'Redux', 'Styled-components'],
-            features: ['반응형 디자인', '장바구니 기능', '결제 시스템 연동', '관리자 대시보드'],
-            github: 'https://github.com/kimjiwon/ecommerce',
-            demo: 'https://ecommerce-demo.com'
-          },
-          {
-            title: '실시간 채팅 앱',
-            description: 'Socket.io를 활용한 실시간 메신저 애플리케이션',
-            technologies: ['React', 'Socket.io', 'Node.js', 'MongoDB'],
-            features: ['실시간 메시징', '파일 공유', '그룹 채팅', '이모지 지원'],
-            github: 'https://github.com/kimjiwon/chat-app',
-            demo: 'https://chat-app-demo.com'
-          },
-          {
-            title: '날씨 정보 앱',
-            description: 'OpenWeather API를 활용한 날씨 정보 제공 애플리케이션',
-            technologies: ['React', 'OpenWeather API', 'Chart.js', 'PWA'],
-            features: ['실시간 날씨 정보', '5일 예보', '위치 기반 서비스', '오프라인 지원'],
-            github: 'https://github.com/kimjiwon/weather-app',
-            demo: 'https://weather-app-demo.com'
-          }
-        ],
-        achievements: [
-          '2023년 개발자 컨퍼런스 발표자 선정',
-          '오픈소스 프로젝트 50+ 기여',
-          'GitHub 스타 200+ 획득',
-          '개발 블로그 월 10,000+ 방문자'
-        ]
-      }
-    },
-    aiSuitability: 92,
-    aiScores: {
-      resume: 88,
-      coverLetter: 92,
-      portfolio: 95
-    }
-  },
-  {
-    id: 2,
-    name: '박민수',
-    position: '백엔드 개발자',
-    department: '개발팀',
-    email: 'park.minsu@email.com',
-    phone: '010-2345-6789',
-    appliedDate: '2024-01-14',
-    status: '지원',
-    experience: '5년',
-    skills: ['Java', 'Spring', 'MySQL'],
-    rating: 4.8,
-    summary: 'Spring Framework와 Java 개발에 전문성을 가지고 있으며, 대용량 데이터 처리와 시스템 아키텍처 설계 경험이 풍부합니다. 마이크로서비스 아키텍처 구축 경험이 있습니다.',
-    aiSuitability: 88,
-    aiScores: {
-      resume: 85,
-      coverLetter: 88,
-      portfolio: 90
-    }
-  },
-  {
-    id: 3,
-    name: '이서연',
-    position: 'UI/UX 디자이너',
-    department: '디자인팀',
-    email: 'lee.seoyeon@email.com',
-    phone: '010-3456-7890',
-    appliedDate: '2024-01-13',
-    status: '지원',
-    experience: '2년',
-    skills: ['Figma', 'Adobe XD', 'Photoshop'],
-    rating: 3.9,
-    summary: '사용자 중심의 디자인을 추구하며, 프로토타이핑과 사용자 테스트를 통한 디자인 검증 경험이 있습니다. 브랜드 아이덴티티 디자인에도 관심이 많습니다.',
-    aiSuitability: 75,
-    aiScores: {
-      resume: 72,
-      coverLetter: 75,
-      portfolio: 78
-    }
-  },
-  {
-    id: 4,
-    name: '정현우',
-    position: 'DevOps 엔지니어',
-    department: '인프라팀',
-    email: 'jung.hyunwoo@email.com',
-    phone: '010-4567-8901',
-    appliedDate: '2024-01-12',
-    status: '지원',
-    experience: '4년',
-    skills: ['Docker', 'Kubernetes', 'AWS'],
-    rating: 4.7,
-    summary: '클라우드 인프라 구축과 컨테이너 오케스트레이션에 전문성을 가지고 있으며, CI/CD 파이프라인 구축과 모니터링 시스템 설계 경험이 풍부합니다.',
-    aiSuitability: 95,
-    aiScores: {
-      resume: 92,
-      coverLetter: 95,
-      portfolio: 98
-    }
-  },
-  {
-    id: 5,
-    name: '최수진',
-    position: '데이터 분석가',
-    department: '데이터팀',
-    email: 'choi.sujin@email.com',
-    phone: '010-5678-9012',
-    appliedDate: '2024-01-11',
-    status: '지원',
-    experience: '3년',
-    skills: ['Python', 'SQL', 'Tableau'],
-    rating: 4.2,
-    summary: '데이터 분석과 시각화에 전문성을 가지고 있으며, 비즈니스 인사이트 도출을 통한 의사결정 지원 경험이 풍부합니다. 머신러닝 모델 개발 경험도 있습니다.',
-    aiSuitability: 82,
-    aiScores: {
-      resume: 80,
-      coverLetter: 82,
-      portfolio: 85
-    }
-  },
-  {
-    id: 6,
-    name: '강동현',
-    position: '모바일 개발자',
-    department: '개발팀',
-    email: 'kang.donghyun@email.com',
-    phone: '010-6789-0123',
-    appliedDate: '2024-01-10',
-    status: '지원',
-    experience: '6년',
-    skills: ['iOS', 'Swift', 'Android'],
-    rating: 4.6,
-    summary: 'iOS와 Android 플랫폼 모두에서 앱 개발 경험이 풍부하며, 네이티브 앱과 크로스 플랫폼 개발 모두 가능합니다. 사용자 경험을 중시하는 앱 개발에 특화되어 있습니다.',
-    aiSuitability: 89,
-    aiScores: {
-      resume: 87,
-      coverLetter: 89,
-      portfolio: 92
-    }
-  }
-];
+// 샘플 데이터 제거됨 - 이제 MongoDB에서만 데이터를 가져옵니다
 
 // 메모이제이션된 지원자 카드 컴포넌트
-const MemoizedApplicantCard = React.memo(({ applicant, onCardClick, onStatusUpdate }) => {
+const MemoizedApplicantCard = React.memo(({ applicant, onCardClick, onStatusUpdate, getStatusText }) => {
   const handleStatusUpdate = useCallback(async (newStatus) => {
     try {
       await onStatusUpdate(applicant.id, newStatus);
@@ -2248,7 +2125,7 @@ const MemoizedApplicantCard = React.memo(({ applicant, onCardClick, onStatusUpda
           <ApplicantPosition>{applicant.position}</ApplicantPosition>
         </ApplicantInfo>
         <StatusBadge status={applicant.status}>
-          {applicant.status}
+          {getStatusText(applicant.status)}
         </StatusBadge>
       </CardHeader>
       
@@ -2267,7 +2144,7 @@ const MemoizedApplicantCard = React.memo(({ applicant, onCardClick, onStatusUpda
         </InfoRow>
         <InfoRow>
           <FiCode />
-          <span>{applicant.skills.join(', ')}</span>
+          <span>{applicant.skills || '기술 정보 없음'}</span>
         </InfoRow>
       </CardContent>
       
@@ -2310,12 +2187,28 @@ const MemoizedApplicantCard = React.memo(({ applicant, onCardClick, onStatusUpda
 MemoizedApplicantCard.displayName = 'MemoizedApplicantCard';
 
 const ApplicantManagement = () => {
+  // Status 매핑 함수
+  const getStatusText = (status) => {
+    const statusMap = {
+      'pending': '보류',
+      'approved': '승인',
+      'rejected': '거절',
+      '서류합격': '서류합격',
+      '최종합격': '최종합격', 
+      '서류불합격': '서류불합격',
+      '보류': '보류'
+    };
+    return statusMap[status] || status;
+  };
+
   const [applicants, setApplicants] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('전체');
   const [selectedApplicant, setSelectedApplicant] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [documentModal, setDocumentModal] = useState({ isOpen: false, type: '', applicant: null });
+  const [documentModal, setDocumentModal] = useState({ isOpen: false, type: '', applicant: null, isOriginal: false, similarityData: null, isLoadingSimilarity: false });
+  // 포트폴리오 모달 내 뷰 선택 상태: 'select' | 'github' | 'portfolio'
+  const [portfolioView, setPortfolioView] = useState('select');
   const [filterModal, setFilterModal] = useState(false);
   const [selectedJobs, setSelectedJobs] = useState([]);
   const [selectedExperience, setSelectedExperience] = useState([]);
@@ -2355,30 +2248,33 @@ const ApplicantManagement = () => {
 
   // 메모이제이션된 필터링된 지원자 목록
   const filteredApplicants = useMemo(() => {
-    // 검색/필터가 비었으면 전체 반환
-    const noSearch = !searchTerm || searchTerm.trim() === '';
-    const noStatus = filterStatus === '전체';
-    const noJobs = selectedJobs.length === 0;
-    const noExp = selectedExperience.length === 0;
-    if (noSearch && noStatus && noJobs && noExp) return applicants;
-
-    return applicants.filter(applicant => {
-      const searchLower = (searchTerm || '').toLowerCase();
-      const skillsArr = Array.isArray(applicant.skills) ? applicant.skills : [];
+    return (applicants || []).filter(applicant => {
+      const searchLower = searchTerm.toLowerCase();
       
+      // 검색 필터링 (null/undefined 체크 추가)
       const matchesSearch = (applicant.name || '').toLowerCase().includes(searchLower) ||
                           (applicant.position || '').toLowerCase().includes(searchLower) ||
                           (applicant.email || '').toLowerCase().includes(searchLower) ||
-                          skillsArr.some(skill => (skill || '').toLowerCase().includes(searchLower));
+                          (applicant.skills || '').toLowerCase().includes(searchLower);
       
-      const matchesStatus = filterStatus === '전체' || applicant.status === filterStatus;
+      // 상태 필터링 (한국어 필터를 영어 상태와 매칭)
+      const matchesStatus = filterStatus === '전체' || 
+                           getStatusText(applicant.status) === filterStatus ||
+                           applicant.status === filterStatus;
+      
+      // 직무 필터링
       const matchesJob = selectedJobs.length === 0 || 
-                        selectedJobs.some(job => (applicant.position || '').includes(job));
+                        selectedJobs.some(job => applicant.position.includes(job));
       
-      // 경험 필터는 엄격 매칭 대신 포함 여부 완화
-      const expStr = (applicant.experience || '').toString();
+      // 경력 필터링
       const matchesExperience = selectedExperience.length === 0 || 
-                              selectedExperience.some(exp => expStr.includes(exp.replace(/\s+/g, '')));
+                              selectedExperience.some(exp => {
+                                if (exp === '신입') return applicant.experience.includes('신입') || applicant.experience.includes('0년');
+                                if (exp === '1-3년') return applicant.experience.includes('1년') || applicant.experience.includes('2년') || applicant.experience.includes('3년');
+                                if (exp === '3-5년') return applicant.experience.includes('4년') || applicant.experience.includes('5년');
+                                if (exp === '5년이상') return applicant.experience.includes('6년') || applicant.experience.includes('7년') || applicant.experience.includes('8년') || applicant.experience.includes('9년') || applicant.experience.includes('10년');
+                                return false;
+                              });
       
       return matchesSearch && matchesStatus && matchesJob && matchesExperience;
     });
@@ -2386,10 +2282,9 @@ const ApplicantManagement = () => {
 
   // 메모이제이션된 페이지네이션된 지원자 목록
   const paginatedApplicants = useMemo(() => {
-    const src = filteredApplicants.length > 0 ? filteredApplicants : applicants;
     const startIndex = currentPage * pageSize;
-    return src.slice(startIndex, startIndex + pageSize);
-  }, [filteredApplicants, applicants, currentPage, pageSize]);
+    return filteredApplicants.slice(startIndex, startIndex + pageSize);
+  }, [filteredApplicants, currentPage, pageSize]);
 
   // 초기 데이터 로드
   useEffect(() => {
@@ -2410,51 +2305,31 @@ const ApplicantManagement = () => {
       
       const skip = page * pageSize;
       const apiApplicants = await api.getAllApplicants(skip, pageSize);
-
-      let merged = apiApplicants || [];
-
-      // API가 비어있거나 최소 보장을 위해 OCR 문서를 지원자 형태로 병합
-      try {
-        const ocrRes = await fetch(`${API_BASE_URL}/api/pdf/documents/applicants`);
-        if (ocrRes.ok) {
-          const ocrApplicants = await ocrRes.json();
-          if (Array.isArray(ocrApplicants) && ocrApplicants.length > 0) {
-            // _id 기준 중복 제거하여 병합
-            const byId = new Map();
-            for (const a of merged) byId.set(a._id, a);
-            for (const b of ocrApplicants) if (!byId.has(b._id)) byId.set(b._id, b);
-            merged = Array.from(byId.values());
-          }
-        }
-      } catch (e) {
-        console.warn('OCR 문서 병합 실패(무시):', e);
-      }
       
-      if (merged && merged.length > 0) {
-        console.log(`✅ 총 ${merged.length}명의 지원자 데이터를 로드/병합했습니다.`);
+      if (apiApplicants && apiApplicants.length > 0) {
+        console.log(`✅ API에서 ${apiApplicants.length}명의 지원자 데이터를 성공적으로 로드했습니다.`);
+        
         if (append) {
-          setApplicants(prev => {
-            const map = new Map(prev.map(a => [a._id, a]));
-            for (const m of merged) map.set(m._id, m);
-            return Array.from(map.values());
-          });
+          setApplicants(prev => [...prev, ...apiApplicants]);
         } else {
-          setApplicants(merged);
+          setApplicants(apiApplicants);
         }
-        setHasMore(apiApplicants && apiApplicants.length === pageSize);
+        
+        setHasMore(apiApplicants.length === pageSize);
       } else {
-        console.log('⚠️ API/OCR 모두 데이터가 없어 빈 배열을 유지합니다.');
+        console.log('⚠️ API에서 데이터를 찾을 수 없습니다.');
         setApplicants([]);
         setHasMore(false);
       }
     } catch (error) {
       console.error('❌ API 연결 실패:', error);
+      console.log('🔄 백엔드 서버 연결을 확인해주세요.');
       setApplicants([]);
       setHasMore(false);
     } finally {
       setIsLoading(false);
     }
-  }, [API_BASE_URL, pageSize]);
+  }, [pageSize]);
 
   // 통계 데이터 로드
   const loadStats = useCallback(async () => {
@@ -2471,10 +2346,10 @@ const ApplicantManagement = () => {
   // 로컬 통계 업데이트
   const updateLocalStats = useCallback(() => {
     const currentStats = {
-      total: applicants.length,
-      passed: applicants.filter(a => a.status === '서류합격' || a.status === '최종합격').length,
-      waiting: applicants.filter(a => a.status === '보류').length,
-      rejected: applicants.filter(a => a.status === '서류불합격').length
+      total: (applicants || []).length,
+      passed: (applicants || []).filter(a => a.status === '서류합격' || a.status === '최종합격').length,
+      waiting: (applicants || []).filter(a => a.status === '보류').length,
+      rejected: (applicants || []).filter(a => a.status === '서류불합격').length
     };
     setStats(currentStats);
   }, [applicants]);
@@ -2498,7 +2373,7 @@ const ApplicantManagement = () => {
       
       // 로컬 상태 업데이트 및 통계 즉시 계산
       setApplicants(prev => {
-        const updatedApplicants = prev.map(applicant => 
+        const updatedApplicants = (prev || []).map(applicant => 
           applicant.id === applicantId 
             ? { ...applicant, status: newStatus }
             : applicant
@@ -2551,12 +2426,52 @@ const ApplicantManagement = () => {
     setSelectedApplicant(null);
   };
 
-  const handleDocumentClick = (type, applicant) => {
-    setDocumentModal({ isOpen: true, type, applicant });
+  const handleDocumentClick = async (type, applicant) => {
+    // 모달 먼저 열기
+    setDocumentModal({ isOpen: true, type, applicant, isOriginal: false, similarityData: null, isLoadingSimilarity: false });
+    if (type === 'portfolio') {
+      setPortfolioView('select');
+    }
+    
+    // 이력서 타입일 때만 유사도 체크 실행
+    if (type === 'resume') {
+      setDocumentModal(prev => ({ ...prev, isLoadingSimilarity: true }));
+      
+      try {
+      const response = await fetch(`${API_BASE_URL}/api/resume/similarity-check/${applicant.id}`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          }
+        });
+        
+        if (response.ok) {
+          const similarityData = await response.json();
+          console.log('✅ 유사도 체크 완료:', similarityData);
+          
+          setDocumentModal(prev => ({ 
+            ...prev, 
+            similarityData, 
+            isLoadingSimilarity: false 
+          }));
+        } else {
+          console.error('❌ 유사도 체크 실패:', response.status);
+          setDocumentModal(prev => ({ ...prev, isLoadingSimilarity: false }));
+        }
+      } catch (error) {
+        console.error('❌ 유사도 체크 오류:', error);
+        setDocumentModal(prev => ({ ...prev, isLoadingSimilarity: false }));
+      }
+    }
+  };
+
+  const handleOriginalClick = () => {
+    setDocumentModal(prev => ({ ...prev, isOriginal: !prev.isOriginal }));
   };
 
   const handleCloseDocumentModal = () => {
-    setDocumentModal({ isOpen: false, type: '', applicant: null });
+    setDocumentModal({ isOpen: false, type: '', applicant: null, isOriginal: false, similarityData: null, isLoadingSimilarity: false });
+    setPortfolioView('select');
   };
 
   const handleFilterClick = () => {
@@ -2604,7 +2519,7 @@ const ApplicantManagement = () => {
       setSelectedApplicants([]);
       setSelectAll(false);
     } else {
-      setSelectedApplicants(paginatedApplicants.map(applicant => applicant.id));
+      setSelectedApplicants((paginatedApplicants || []).map(applicant => applicant.id));
       setSelectAll(true);
     }
   };
@@ -2653,8 +2568,8 @@ const ApplicantManagement = () => {
     const filters = [];
     if (searchTerm) filters.push(`검색: "${searchTerm}"`);
     if (filterStatus !== '전체') filters.push(`상태: ${filterStatus}`);
-    if (selectedJobs.length > 0) filters.push(`직무: ${selectedJobs.join(', ')}`);
-    if (selectedExperience.length > 0) filters.push(`경력: ${selectedExperience.join(', ')}`);
+    if ((selectedJobs || []).length > 0) filters.push(`직무: ${(selectedJobs || []).join(', ')}`);
+    if ((selectedExperience || []).length > 0) filters.push(`경력: ${(selectedExperience || []).join(', ')}`);
     return filters.join(' | ');
   };
 
@@ -2747,46 +2662,49 @@ const ApplicantManagement = () => {
       setIsAnalyzing(true);
       setAnalysisResult(null);
 
-      // FormData 생성 - PDF OCR/Index API 사용
+      // FormData 생성 - 상세 분석 API 사용
       const formData = new FormData();
       formData.append('file', resumeFile);
+      formData.append('document_type', documentType.toLowerCase()); // resume, cover_letter, portfolio
 
-      // PDF OCR 업로드 호출 (백엔드에서 MongoDB 저장 + VectorDB 인덱싱 + 지원자 생성)
-      const response = await fetch('http://localhost:8000/api/pdf/upload', {
+      // 상세 분석 API 호출
+      const response = await fetch(`${API_BASE_URL}/api/upload/analyze`, {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(errorData.detail || '파일 처리에 실패했습니다.');
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '파일 분석에 실패했습니다.');
       }
 
       const result = await response.json();
-
-      // 간단한 분석 요약을 화면에 표시(기존 UI 유지)
+      
+      // 상세 분석 결과 처리
+      const analysisData = result.analysis_result;
+      
+      // 이력서 분석 결과 생성
       const analysisResult = {
-        documentType: '이력서',
-        fileName: result.file_name || resumeFile.name,
+        documentType: documentType,
+        fileName: result.filename,
         analysisDate: new Date().toLocaleString(),
-        summary: result.summary || '분석 요약 없음',
-        skills: [],
-        experience: [],
-        education: [],
-        recommendations: [],
-        score: 0,
-        processingTime: 0,
-        extractedTextLength: 0,
-        detailedAnalysis: {},
+        summary: `AI 상세 분석 완료 - 총점: ${analysisData.overall_summary.total_score}/10`,
+        skills: extractSkillsFromAnalysis(analysisData, documentType),
+        experience: extractExperienceFromAnalysis(analysisData, documentType),
+        education: extractEducationFromAnalysis(analysisData, documentType),
+        recommendations: extractRecommendationsFromAnalysis(analysisData, documentType),
+        score: analysisData.overall_summary.total_score * 10, // 0-100 점수로 변환
+        processingTime: result.processing_time || 0,
+        extractedTextLength: result.extracted_text_length,
+        detailedAnalysis: analysisData // 상세 분석 데이터 추가
       };
 
       setAnalysisResult(analysisResult);
       setIsAnalyzing(false);
 
-      // 신규 지원자 반영을 위해 목록 갱신
-      await loadApplicants(0, false);
-
-      alert('PDF 처리 및 인덱싱이 완료되었습니다. 지원자 목록에 반영되었습니다.');
+      // 성공 메시지
+      alert(`${documentType} 상세 분석이 완료되었습니다!`);
+      
     } catch (error) {
       console.error('이력서 분석 실패:', error);
       alert(`이력서 분석에 실패했습니다: ${error.message}`);
@@ -2884,6 +2802,10 @@ const ApplicantManagement = () => {
             <NewResumeButton onClick={handleResumeModalOpen}>
               <FiFileText size={16} />
               새 이력서 등록
+            </NewResumeButton>
+            <NewResumeButton onClick={() => window.open('/pdf-ocr', '_blank')} style={{ marginLeft: '10px', backgroundColor: '#8B5CF6' }}>
+              <FiCamera size={16} />
+              PDF OCR
             </NewResumeButton>
           </HeaderRight>
         </HeaderContent>
@@ -3056,10 +2978,11 @@ const ApplicantManagement = () => {
           {paginatedApplicants.length > 0 ? (
             paginatedApplicants.map((applicant, index) => (
               <MemoizedApplicantCard
-                key={applicant._id || applicant.id || `${index}`}
+                key={applicant.id}
                 applicant={applicant}
                 onCardClick={handleCardClick}
                 onStatusUpdate={handleUpdateStatus}
+                getStatusText={getStatusText}
               />
             ))
           ) : (
@@ -3075,7 +2998,7 @@ const ApplicantManagement = () => {
             {paginatedApplicants.length > 0 ? (
               paginatedApplicants.map((applicant, index) => (
                 <ApplicantCardBoard
-                  key={applicant._id || applicant.id || `${index}`}
+                  key={applicant.id}
                   initial={{ opacity: 0, y: 10 }}
                   animate={{ opacity: 1, y: 0 }}
                   transition={{ delay: index * 0.05, duration: 0.1 }}
@@ -3117,9 +3040,9 @@ const ApplicantManagement = () => {
                       </ContactItem>
                     </ApplicantPhoneBoard>
                     <ApplicantSkillsBoard>
-                      {applicant.skills.slice(0, 3).map((skill, skillIndex) => (
+                      {(applicant.skills || '').split(',').slice(0, 3).map((skill, skillIndex) => (
                         <SkillTagBoard key={skillIndex}>
-                          {skill}
+                          {skill.trim()}
                         </SkillTagBoard>
                       ))}
                       {applicant.skills.length > 3 && (
@@ -3161,7 +3084,7 @@ const ApplicantManagement = () => {
                         animate={{ opacity: 1, scale: 1 }}
                         transition={{ duration: 0.08, ease: "easeOut" }}
                       >
-                        {applicant.status}
+                        {getStatusText(applicant.status)}
                       </StatusBadge>
                       </StatusColumnWrapper>
                     )}
@@ -3234,30 +3157,6 @@ const ApplicantManagement = () => {
                     <ProfileLabel>희망직책</ProfileLabel>
                     <ProfileValue>{selectedApplicant.position}</ProfileValue>
                   </ProfileItem>
-                  {selectedApplicant?.documents?.ocr_fields && (
-                    <>
-                      <ProfileItem>
-                        <ProfileLabel>이메일(추출)</ProfileLabel>
-                        <ProfileValue>
-                          {(selectedApplicant.documents.ocr_fields.email || []).join(', ')}
-                        </ProfileValue>
-                      </ProfileItem>
-                      <ProfileItem>
-                        <ProfileLabel>전화번호(추출)</ProfileLabel>
-                        <ProfileValue>
-                          {(selectedApplicant.documents.ocr_fields.phone || []).join(', ')}
-                        </ProfileValue>
-                      </ProfileItem>
-                      {selectedApplicant.documents.ocr_fields.periods?.length > 0 && (
-                        <ProfileItem>
-                          <ProfileLabel>경력기간(추정)</ProfileLabel>
-                          <ProfileValue>
-                            {selectedApplicant.documents.ocr_fields.periods.join(', ')}
-                          </ProfileValue>
-                        </ProfileItem>
-                      )}
-                    </>
-                  )}
                 </ProfileGrid>
               </ProfileSection>
 
@@ -3267,9 +3166,9 @@ const ApplicantManagement = () => {
                   기술스택
                 </SkillsTitle>
                 <SkillsGrid>
-                  {selectedApplicant.skills.map((skill, index) => (
+                  {(selectedApplicant.skills || '').split(',').map((skill, index) => (
                     <SkillTag key={index}>
-                      {skill}
+                      {skill.trim()}
                     </SkillTag>
                   ))}
                 </SkillsGrid>
@@ -3280,6 +3179,19 @@ const ApplicantManagement = () => {
                   <FiFile size={20} />
                   AI 분석 요약
                 </SummaryTitle>
+                
+                {selectedApplicant.analysisScore && (
+                  <AnalysisScoreDisplay>
+                    <AnalysisScoreCircle>
+                      {selectedApplicant.analysisScore}
+                    </AnalysisScoreCircle>
+                    <AnalysisScoreInfo>
+                      <AnalysisScoreLabel>AI 분석 점수</AnalysisScoreLabel>
+                      <AnalysisScoreValue>{selectedApplicant.analysisScore}점</AnalysisScoreValue>
+                    </AnalysisScoreInfo>
+                  </AnalysisScoreDisplay>
+                )}
+                
                 <SummaryText>
                   {selectedApplicant.summary}
                 </SummaryText>
@@ -3327,15 +3239,163 @@ const ApplicantManagement = () => {
                   - {documentModal.applicant.name}
                 </DocumentModalTitle>
                 <DocumentHeaderActions>
-                  <DocumentOriginalButton>
-                    원본보기
+                  <DocumentOriginalButton onClick={handleOriginalClick}>
+                    {documentModal.isOriginal ? '요약보기' : '원본보기'}
                   </DocumentOriginalButton>
                   <DocumentCloseButton onClick={handleCloseDocumentModal}>&times;</DocumentCloseButton>
                 </DocumentHeaderActions>
               </DocumentModalHeader>
 
               <DocumentContent>
-                {documentModal.type === 'resume' && documentModal.applicant.documents?.resume && (
+                {/* 포트폴리오: 선택 화면 */}
+                {documentModal.type === 'portfolio' && portfolioView === 'select' && (
+                  <>
+                    <DocumentSection>
+                      <DocumentSectionTitle>포트폴리오 요약 방법 선택</DocumentSectionTitle>
+                      <SelectionGrid>
+                        <SelectionCard
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => setPortfolioView('github')}
+                        >
+                          <SelectionIcon className="github">
+                            <FiGitBranch />
+                          </SelectionIcon>
+                          <SelectionTitle>깃헙 요약</SelectionTitle>
+                          <SelectionDesc>GitHub URL/아이디로 레포 분석 요약 보기</SelectionDesc>
+                        </SelectionCard>
+                        <SelectionCard
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => setPortfolioView('portfolio')}
+                        >
+                          <SelectionIcon className="portfolio">
+                            <FiCode />
+                          </SelectionIcon>
+                          <SelectionTitle>포트폴리오 요약</SelectionTitle>
+                          <SelectionDesc>등록된 포트폴리오 정보 기반 요약 보기</SelectionDesc>
+                        </SelectionCard>
+                      </SelectionGrid>
+                    </DocumentSection>
+                  </>
+                )}
+
+                {/* 포트폴리오: 깃헙 요약 화면 */}
+                {documentModal.type === 'portfolio' && portfolioView === 'github' && (
+                  <>
+                    <DocumentSection>
+                      <DocumentSectionTitle>
+                        <button 
+                          onClick={() => setPortfolioView('select')} 
+                          style={{ 
+                            background: 'transparent', 
+                            border: 'none', 
+                            cursor: 'pointer', 
+                            marginRight: 8, 
+                            color: 'var(--text-secondary)'
+                          }}
+                          aria-label="뒤로"
+                        >
+                          <FiArrowLeft />
+                        </button>
+                        깃헙 요약
+                      </DocumentSectionTitle>
+                      <GithubSummaryPanel />
+                    </DocumentSection>
+                  </>
+                )}
+
+                {/* 포트폴리오: 기존 포트폴리오 상세 */}
+                {documentModal.type === 'portfolio' && portfolioView === 'portfolio' && documentModal.applicant.documents?.portfolio && (
+                  <>
+                    <DocumentSection>
+                      <DocumentSectionTitle>
+                        <button 
+                          onClick={() => setPortfolioView('select')} 
+                          style={{ 
+                            background: 'transparent', 
+                            border: 'none', 
+                            cursor: 'pointer', 
+                            marginRight: 8, 
+                            color: 'var(--text-secondary)'
+                          }}
+                          aria-label="뒤로"
+                        >
+                          <FiArrowLeft />
+                        </button>
+                        포트폴리오
+                      </DocumentSectionTitle>
+                      <PortfolioSummaryPanel portfolio={documentModal.applicant.documents.portfolio} />
+                    </DocumentSection>
+                  </>
+                )}
+
+                {/* 이력서/자소서 기존 로직 */}
+                {documentModal.type === 'resume' && documentModal.isOriginal && (
+                  <>
+                    <DocumentSection>
+                      <DocumentSectionTitle>지원자 기본정보</DocumentSectionTitle>
+                      <DocumentGrid>
+                        <DocumentCard>
+                          <DocumentCardTitle>이름</DocumentCardTitle>
+                          <DocumentCardText>{documentModal.applicant.name || 'N/A'}</DocumentCardText>
+                        </DocumentCard>
+                        <DocumentCard>
+                          <DocumentCardTitle>지원 직무</DocumentCardTitle>
+                          <DocumentCardText>{documentModal.applicant.position || 'N/A'}</DocumentCardText>
+                        </DocumentCard>
+                        <DocumentCard>
+                          <DocumentCardTitle>부서</DocumentCardTitle>
+                          <DocumentCardText>{documentModal.applicant.department || 'N/A'}</DocumentCardText>
+                        </DocumentCard>
+                        <DocumentCard>
+                          <DocumentCardTitle>경력</DocumentCardTitle>
+                          <DocumentCardText>{documentModal.applicant.experience || 'N/A'}</DocumentCardText>
+                        </DocumentCard>
+                        <DocumentCard>
+                          <DocumentCardTitle>기술스택</DocumentCardTitle>
+                          <DocumentCardText>{documentModal.applicant.skills || '정보 없음'}</DocumentCardText>
+                        </DocumentCard>
+                        <DocumentCard>
+                          <DocumentCardTitle>상태</DocumentCardTitle>
+                          <DocumentCardText>{getStatusText(documentModal.applicant.status)}</DocumentCardText>
+                        </DocumentCard>
+                      </DocumentGrid>
+                    </DocumentSection>
+
+                    <DocumentSection>
+                      <DocumentSectionTitle>평가 정보</DocumentSectionTitle>
+                      <DocumentGrid>
+                        <DocumentCard>
+                          <DocumentCardTitle>성장배경</DocumentCardTitle>
+                          <DocumentCardText>{documentModal.applicant.growthBackground || 'N/A'}</DocumentCardText>
+                        </DocumentCard>
+                        <DocumentCard>
+                          <DocumentCardTitle>지원동기</DocumentCardTitle>
+                          <DocumentCardText>{documentModal.applicant.motivation || 'N/A'}</DocumentCardText>
+                        </DocumentCard>
+                        <DocumentCard>
+                          <DocumentCardTitle>경력사항</DocumentCardTitle>
+                          <DocumentCardText>{documentModal.applicant.careerHistory || 'N/A'}</DocumentCardText>
+                        </DocumentCard>
+                        <DocumentCard>
+                          <DocumentCardTitle>종합 점수</DocumentCardTitle>
+                          <DocumentCardText>{documentModal.applicant.analysisScore || 0}점</DocumentCardText>
+                        </DocumentCard>
+                        <DocumentCard>
+                          <DocumentCardTitle>분석 결과</DocumentCardTitle>
+                          <DocumentCardText>{documentModal.applicant.analysisResult || '분석 결과 없음'}</DocumentCardText>
+                        </DocumentCard>
+                        <DocumentCard>
+                          <DocumentCardTitle>지원일시</DocumentCardTitle>
+                          <DocumentCardText>{documentModal.applicant.created_at ? new Date(documentModal.applicant.created_at).toLocaleString() : 'N/A'}</DocumentCardText>
+                        </DocumentCard>
+                      </DocumentGrid>
+                    </DocumentSection>
+                  </>
+                )}
+
+                {documentModal.type === 'resume' && !documentModal.isOriginal && documentModal.applicant.documents?.resume && (
                   <>
                     <DocumentSection>
                       <DocumentSectionTitle>개인정보</DocumentSectionTitle>
@@ -3361,7 +3421,7 @@ const ApplicantManagement = () => {
 
                     <DocumentSection>
                       <DocumentSectionTitle>학력사항</DocumentSectionTitle>
-                      {documentModal.applicant.documents.resume.education.map((edu, index) => (
+                      {(documentModal.applicant.documents.resume.education || []).map((edu, index) => (
                         <DocumentCard key={index}>
                           <DocumentCardTitle>{edu.school}</DocumentCardTitle>
                           <DocumentCardText>{edu.major} ({edu.degree})</DocumentCardText>
@@ -3373,7 +3433,7 @@ const ApplicantManagement = () => {
 
                     <DocumentSection>
                       <DocumentSectionTitle>경력사항</DocumentSectionTitle>
-                      {documentModal.applicant.documents.resume.experience.map((exp, index) => (
+                      {(documentModal.applicant.documents.resume.experience || []).map((exp, index) => (
                         <DocumentCard key={index}>
                           <DocumentCardTitle>{exp.company} - {exp.position}</DocumentCardTitle>
                           <DocumentCardText>기간: {exp.period}</DocumentCardText>
@@ -3387,15 +3447,15 @@ const ApplicantManagement = () => {
                       <DocumentGrid>
                         <DocumentCard>
                           <DocumentCardTitle>프로그래밍 언어</DocumentCardTitle>
-                          <DocumentCardText>{documentModal.applicant.documents.resume.skills.programming.join(', ')}</DocumentCardText>
+                          <DocumentCardText>{(documentModal.applicant.documents.resume.skills.programming || []).join(', ')}</DocumentCardText>
                         </DocumentCard>
                         <DocumentCard>
                           <DocumentCardTitle>개발 도구</DocumentCardTitle>
-                          <DocumentCardText>{documentModal.applicant.documents.resume.skills.tools.join(', ')}</DocumentCardText>
+                          <DocumentCardText>{(documentModal.applicant.documents.resume.skills.tools || []).join(', ')}</DocumentCardText>
                         </DocumentCard>
                         <DocumentCard>
                           <DocumentCardTitle>언어</DocumentCardTitle>
-                          <DocumentCardText>{documentModal.applicant.documents.resume.skills.languages.join(', ')}</DocumentCardText>
+                          <DocumentCardText>{(documentModal.applicant.documents.resume.skills.languages || []).join(', ')}</DocumentCardText>
                         </DocumentCard>
                       </DocumentGrid>
                     </DocumentSection>
@@ -3412,7 +3472,7 @@ const ApplicantManagement = () => {
                     <DocumentSection>
                       <DocumentSectionTitle>나의 강점</DocumentSectionTitle>
                       <DocumentList>
-                        {documentModal.applicant.documents.coverLetter.strengths.map((strength, index) => (
+                        {(documentModal.applicant.documents.coverLetter.strengths || []).map((strength, index) => (
                           <DocumentListItem key={index}>{strength}</DocumentListItem>
                         ))}
                       </DocumentList>
@@ -3429,14 +3489,14 @@ const ApplicantManagement = () => {
                   <>
                     <DocumentSection>
                       <DocumentSectionTitle>프로젝트</DocumentSectionTitle>
-                      {documentModal.applicant.documents.portfolio.projects.map((project, index) => (
+                      {(documentModal.applicant.documents.portfolio.projects || []).map((project, index) => (
                         <DocumentCard key={index}>
                           <DocumentCardTitle>{project.title}</DocumentCardTitle>
                           <DocumentCardText>{project.description}</DocumentCardText>
-                          <DocumentCardText><strong>기술스택:</strong> {project.technologies.join(', ')}</DocumentCardText>
+                          <DocumentCardText><strong>기술스택:</strong> {(project.technologies || []).join(', ')}</DocumentCardText>
                           <DocumentCardText><strong>주요 기능:</strong></DocumentCardText>
                           <DocumentList>
-                            {project.features.map((feature, idx) => (
+                            {(project.features || []).map((feature, idx) => (
                               <DocumentListItem key={idx}>{feature}</DocumentListItem>
                             ))}
                           </DocumentList>
@@ -3449,11 +3509,102 @@ const ApplicantManagement = () => {
                     <DocumentSection>
                       <DocumentSectionTitle>성과 및 수상</DocumentSectionTitle>
                       <DocumentList>
-                        {documentModal.applicant.documents.portfolio.achievements.map((achievement, index) => (
+                        {(documentModal.applicant.documents.portfolio.achievements || []).map((achievement, index) => (
                           <DocumentListItem key={index}>{achievement}</DocumentListItem>
                         ))}
                       </DocumentList>
                     </DocumentSection>
+                  </>
+                )}
+
+                {documentModal.type === 'resume' && !documentModal.isOriginal && (
+                  <>
+                    {/* 유사도 체크 결과 섹션 */}
+                    <DocumentSection>
+                      <DocumentSectionTitle>🔍 유사도 체크 결과</DocumentSectionTitle>
+                      
+                      {documentModal.isLoadingSimilarity && (
+                        <DocumentCard>
+                          <DocumentCardText>
+                            📊 다른 이력서들과의 유사도를 분석 중입니다...
+                          </DocumentCardText>
+                        </DocumentCard>
+                      )}
+
+                      {!documentModal.isLoadingSimilarity && documentModal.similarityData && (
+                        <>
+                          {/* 통계 정보 */}
+                          <DocumentCard>
+                            <DocumentCardTitle>📈 유사도 분석 통계</DocumentCardTitle>
+                            <DocumentGrid style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px'}}>
+                              <div>
+                                <strong>비교 대상:</strong> {documentModal.similarityData.statistics.total_compared}명
+                              </div>
+                              <div>
+                                <strong>평균 유사도:</strong> {(documentModal.similarityData.statistics.average_similarity * 100).toFixed(1)}%
+                              </div>
+                              <div>
+                                <strong>높은 유사도:</strong> {documentModal.similarityData.statistics.high_similarity_count}명 (70% 이상)
+                              </div>
+                              <div>
+                                <strong>중간 유사도:</strong> {documentModal.similarityData.statistics.moderate_similarity_count}명 (40-70%)
+                              </div>
+                            </DocumentGrid>
+                          </DocumentCard>
+
+                          {/* 상위 유사 이력서들 */}
+                          {documentModal.similarityData.top_similar.length > 0 && (
+                            <DocumentCard>
+                              <DocumentCardTitle>🎯 가장 유사한 이력서 TOP 5</DocumentCardTitle>
+                              {documentModal.similarityData.top_similar.map((similar, index) => (
+                                <div key={similar.resume_id} style={{
+                                  padding: '12px',
+                                  margin: '8px 0',
+                                  border: `2px solid ${similar.is_high_similarity ? '#ff4757' : similar.is_moderate_similarity ? '#ffa502' : '#2ed573'}`,
+                                  borderRadius: '8px',
+                                  backgroundColor: similar.is_high_similarity ? '#fff5f5' : similar.is_moderate_similarity ? '#fffbf0' : '#f0fff4'
+                                }}>
+                                  <div style={{fontWeight: 'bold', marginBottom: '4px'}}>
+                                    #{index + 1}. {similar.applicant_name} ({similar.position})
+                                  </div>
+                                  <div style={{fontSize: '14px', color: '#666'}}>
+                                    전체 유사도: <strong style={{color: similar.is_high_similarity ? '#ff4757' : similar.is_moderate_similarity ? '#ffa502' : '#2ed573'}}>
+                                      {(similar.overall_similarity * 100).toFixed(1)}%
+                                    </strong>
+                                  </div>
+                                  <div style={{fontSize: '12px', color: '#888', marginTop: '4px'}}>
+                                    성장배경: {(similar.field_similarities.growthBackground * 100).toFixed(1)}% | 
+                                    지원동기: {(similar.field_similarities.motivation * 100).toFixed(1)}% | 
+                                    경력사항: {(similar.field_similarities.careerHistory * 100).toFixed(1)}%
+                                  </div>
+                                </div>
+                              ))}
+                            </DocumentCard>
+                          )}
+                        </>
+                      )}
+
+                      {!documentModal.isLoadingSimilarity && !documentModal.similarityData && (
+                        <DocumentCard>
+                          <DocumentCardText>
+                            유사도 체크 중 오류가 발생했습니다. 다시 시도해주세요.
+                          </DocumentCardText>
+                        </DocumentCard>
+                      )}
+                    </DocumentSection>
+
+                    {/* 기존 이력서 요약 섹션 */}
+                    {!documentModal.applicant.documents?.resume && (
+                      <DocumentSection>
+                        <DocumentSectionTitle>이력서 요약</DocumentSectionTitle>
+                        <DocumentCard>
+                          <DocumentCardText>
+                            현재 이 지원자의 상세 이력서 정보는 등록되지 않았습니다.<br/>
+                            <strong>원본보기</strong> 버튼을 클릭하면 DB에 저장된 지원자의 모든 정보를 확인할 수 있습니다.
+                          </DocumentCardText>
+                        </DocumentCard>
+                      </DocumentSection>
+                    )}
                   </>
                 )}
               </DocumentContent>
@@ -3719,10 +3870,18 @@ const ApplicantManagement = () => {
                         {analysisResult.score}점
                       </ResumeAnalysisScore>
                     </ResumeAnalysisItem>
+                    {selectedApplicant?.analysisScore && (
+                      <ResumeAnalysisItem>
+                        <ResumeAnalysisLabel>AI 분석 점수:</ResumeAnalysisLabel>
+                        <ResumeAnalysisScore score={selectedApplicant.analysisScore}>
+                          {selectedApplicant.analysisScore}점
+                        </ResumeAnalysisScore>
+                      </ResumeAnalysisItem>
+                    )}
                     <ResumeAnalysisItem>
                       <ResumeAnalysisLabel>추출된 기술:</ResumeAnalysisLabel>
                       <ResumeAnalysisSkills>
-                        {analysisResult.skills.map((skill, index) => (
+                        {(analysisResult.skills || []).map((skill, index) => (
                           <ResumeSkillTag key={index}>{skill}</ResumeSkillTag>
                         ))}
                       </ResumeAnalysisSkills>
@@ -3730,7 +3889,7 @@ const ApplicantManagement = () => {
                     <ResumeAnalysisItem>
                       <ResumeAnalysisLabel>추천 사항:</ResumeAnalysisLabel>
                       <ResumeAnalysisRecommendations>
-                        {analysisResult.recommendations.map((rec, index) => (
+                        {(analysisResult.recommendations || []).map((rec, index) => (
                           <ResumeRecommendationItem key={index}>• {rec}</ResumeRecommendationItem>
                         ))}
                       </ResumeAnalysisRecommendations>
@@ -3767,7 +3926,10 @@ const ApplicantManagement = () => {
       <DetailedAnalysisModal
         isOpen={showDetailedAnalysis}
         onClose={() => setShowDetailedAnalysis(false)}
-        analysisData={analysisResult}
+        analysisData={{
+          ...analysisResult,
+          analysisScore: selectedApplicant?.analysisScore
+        }}
       />
     </Container>
   );

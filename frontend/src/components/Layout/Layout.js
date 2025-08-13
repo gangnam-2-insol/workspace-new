@@ -17,7 +17,8 @@ import {
   FiBell,
   FiSearch,
   FiBriefcase,
-  FiUserCheck
+  FiUserCheck,
+  FiGitBranch
 } from 'react-icons/fi';
 
 const LayoutContainer = styled.div`
@@ -179,10 +180,6 @@ const navigationItems = [
     items: [
       { name: '채용공고 등록', path: '/job-posting', icon: FiBriefcase },
       { name: '지원자 관리', path: '/applicants', icon: FiUserCheck },
-      // 면접 관리 기능 - 현재 비활성화됨
-      // { name: '면접 관리', path: '/interview', icon: FiVideo },
-      // 캘린더 기능 - 현재 비활성화됨
-      // { name: '캘린더', path: '/interview-calendar', icon: FiCalendar },
     ]
   },
   {
@@ -190,6 +187,12 @@ const navigationItems = [
     items: [
       { name: '사용자 관리', path: '/users', icon: FiUser },
       { name: '설정', path: '/settings', icon: FiSettings }
+    ]
+  },
+  {
+    title: '개발 도구',
+    items: [
+      { name: 'GitHub 테스트', path: '/github-test', icon: FiGitBranch }
     ]
   }
 ];

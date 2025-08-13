@@ -285,21 +285,27 @@ const DetailedAnalysisModal = ({ isOpen, onClose, analysisData }) => {
               <Subtitle>{analysisData.fileName} - {analysisData.analysisDate}</Subtitle>
             </Header>
 
-            {(() => {
-              const overall = (detailedAnalysis && detailedAnalysis.overall_summary) || { total_score: 0 };
-              const total = typeof overall.total_score === 'number' ? overall.total_score : 0;
-              return (
-                <OverallScore>
-                  <ScoreCircle>
-                    {total}
-                  </ScoreCircle>
-                  <ScoreInfo>
-                    <ScoreLabel>전체 평가 점수</ScoreLabel>
-                    <ScoreValue>{total}/10</ScoreValue>
-                  </ScoreInfo>
-                </OverallScore>
-              );
-            })()}
+            <OverallScore>
+              <ScoreCircle>
+                {detailedAnalysis.overall_summary.total_score}
+              </ScoreCircle>
+              <ScoreInfo>
+                <ScoreLabel>전체 평가 점수</ScoreLabel>
+                <ScoreValue>{detailedAnalysis.overall_summary.total_score}/10</ScoreValue>
+              </ScoreInfo>
+            </OverallScore>
+
+            {analysisData.analysisScore && (
+              <OverallScore style={{ background: 'linear-gradient(135deg, #28a745 0%, #20c997 100%)' }}>
+                <ScoreCircle>
+                  {analysisData.analysisScore}
+                </ScoreCircle>
+                <ScoreInfo>
+                  <ScoreLabel>AI 분석 점수</ScoreLabel>
+                  <ScoreValue>{analysisData.analysisScore}점</ScoreValue>
+                </ScoreInfo>
+              </OverallScore>
+            )}
 
             {/* 문서 타입에 따라 해당하는 분석 결과만 표시 */}
             {detailedAnalysis.resume_analysis && Object.keys(detailedAnalysis.resume_analysis).length > 0 && 

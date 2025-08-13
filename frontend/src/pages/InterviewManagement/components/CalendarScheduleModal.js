@@ -16,7 +16,7 @@ const CalendarScheduleModal = ({
   if (!isOpen) return null;
 
   return (
-    <div className="modal-overlay" onClick={onClose}>
+    <div className="modal-overlay" onClick={() => {}}>  {/* 배경 클릭 시 닫기 방지 */}
       <div className="modal-content schedule-modal" onClick={(e) => e.stopPropagation()}>
         <div className="modal-header">
           <h2>{selectedDate} 면접 일정 추가</h2>
@@ -31,8 +31,10 @@ const CalendarScheduleModal = ({
           <div className="schedule-form">
             <div className="form-row">
               <div className="form-group">
-                <label>지원자 이름 *</label>
+                <label htmlFor="schedule_name">지원자 이름 *</label>
                 <input
+                  id="schedule_name"
+                  name="name"
                   type="text"
                   value={newSchedule.name}
                   onChange={(e) => setNewSchedule(prev => ({ ...prev, name: e.target.value }))}
@@ -40,8 +42,10 @@ const CalendarScheduleModal = ({
                 />
               </div>
               <div className="form-group">
-                <label>지원 직무 *</label>
+                <label htmlFor="schedule_position">지원 직무 *</label>
                 <input
+                  id="schedule_position"
+                  name="position"
                   type="text"
                   value={newSchedule.position}
                   onChange={(e) => setNewSchedule(prev => ({ ...prev, position: e.target.value }))}
@@ -51,8 +55,10 @@ const CalendarScheduleModal = ({
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label>이메일 *</label>
+                <label htmlFor="schedule_email">이메일 *</label>
                 <input
+                  id="schedule_email"
+                  name="email"
                   type="email"
                   value={newSchedule.email}
                   onChange={(e) => setNewSchedule(prev => ({ ...prev, email: e.target.value }))}
@@ -60,8 +66,10 @@ const CalendarScheduleModal = ({
                 />
               </div>
               <div className="form-group">
-                <label>연락처 *</label>
+                <label htmlFor="schedule_phone">연락처 *</label>
                 <input
+                  id="schedule_phone"
+                  name="phone"
                   type="tel"
                   value={newSchedule.phone}
                   onChange={(e) => setNewSchedule(prev => ({ ...prev, phone: e.target.value }))}
@@ -71,8 +79,10 @@ const CalendarScheduleModal = ({
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label>면접 날짜</label>
+                <label htmlFor="schedule_date">면접 날짜</label>
                 <input
+                  id="schedule_date"
+                  name="interviewDate"
                   type="date"
                   value={newSchedule.interviewDate}
                   onChange={(e) => setNewSchedule(prev => ({ ...prev, interviewDate: e.target.value }))}
@@ -81,8 +91,10 @@ const CalendarScheduleModal = ({
                 />
               </div>
               <div className="form-group">
-                <label>면접 시간 *</label>
+                <label htmlFor="schedule_time">면접 시간 *</label>
                 <input
+                  id="schedule_time"
+                  name="interviewTime"
                   type="time"
                   value={newSchedule.interviewTime}
                   onChange={(e) => setNewSchedule(prev => ({ ...prev, interviewTime: e.target.value }))}
@@ -91,8 +103,10 @@ const CalendarScheduleModal = ({
             </div>
             <div className="form-row">
               <div className="form-group">
-                <label>소요 시간</label>
+                <label htmlFor="schedule_duration">소요 시간</label>
                 <select
+                  id="schedule_duration"
+                  name="duration"
                   value={newSchedule.duration}
                   onChange={(e) => setNewSchedule(prev => ({ ...prev, duration: e.target.value }))}
                 >
@@ -103,8 +117,10 @@ const CalendarScheduleModal = ({
                 </select>
               </div>
               <div className="form-group">
-                <label>면접 유형</label>
+                <label htmlFor="schedule_type">면접 유형</label>
                 <select
+                  id="schedule_type"
+                  name="type"
                   value={newSchedule.type}
                   onChange={(e) => setNewSchedule(prev => ({ ...prev, type: e.target.value }))}
                 >
@@ -113,8 +129,10 @@ const CalendarScheduleModal = ({
               </div>
             </div>
             <div className="form-group">
-              <label>플랫폼/장소</label>
+              <label htmlFor="schedule_platform">플랫폼/장소</label>
               <input
+                id="schedule_platform"
+                name="platform"
                 type="text"
                 value={newSchedule.platform}
                 onChange={(e) => setNewSchedule(prev => ({ ...prev, platform: e.target.value }))}

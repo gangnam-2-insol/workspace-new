@@ -593,11 +593,13 @@ const OrganizationModal = ({
     <AnimatePresence>
       {isOpen && (
         <Overlay
+          key="organization-overlay"
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
         >
           <Modal
+            key="organization-modal"
             initial={{ opacity: 0, scale: 0.9, y: 20 }}
             animate={{ opacity: 1, scale: 1, y: 0 }}
             exit={{ opacity: 0, scale: 0.9, y: 20 }}

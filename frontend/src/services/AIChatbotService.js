@@ -9,7 +9,7 @@ class AIChatbotService {
       const response = await fetch(`${this.baseURL}/api/chatbot/start`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
         },
         body: JSON.stringify({
           page,
@@ -35,7 +35,7 @@ class AIChatbotService {
       const response = await fetch(`${this.baseURL}/api/chatbot/ask`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
         },
         body: JSON.stringify({
           session_id: sessionId,
@@ -63,7 +63,7 @@ class AIChatbotService {
       const response = await fetch(`${this.baseURL}/api/chatbot/conversation`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json',
+          'Content-Type': 'application/json; charset=utf-8',
         },
         body: JSON.stringify({
           session_id: sessionId,
