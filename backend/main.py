@@ -893,4 +893,4 @@ async def check_resume_similarity(resume_id: str):
         raise HTTPException(status_code=500, detail=f"유사도 체크 실패: {str(e)}")
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8010)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

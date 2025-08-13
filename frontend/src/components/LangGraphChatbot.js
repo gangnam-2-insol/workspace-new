@@ -220,7 +220,7 @@ const LangGraphChatbot = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [systemInfo, setSystemInfo] = useState(null);
 
-  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8010';
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
   // 시스템 정보 가져오기
   useEffect(() => {

@@ -16,7 +16,7 @@ const TestGithubSummary = () => {
     }
     setLoading(true);
     try {
-      const res = await fetch((process.env.REACT_APP_API_URL || 'http://localhost:8010') + '/api/github/summary', {
+      const res = await fetch((process.env.REACT_APP_API_URL || 'http://localhost:8000') + '/api/github/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ username: username.trim() })

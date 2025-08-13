@@ -27,7 +27,7 @@ import {
 import DetailedAnalysisModal from '../components/DetailedAnalysisModal';
 
 // API 서비스 추가
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8010';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 const api = {
   // 모든 지원자 조회 (페이지네이션 지원)

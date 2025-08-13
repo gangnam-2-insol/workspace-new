@@ -1914,7 +1914,7 @@ const FloatingChatbot = ({ page, onFieldUpdate, onComplete, onPageAction }) => {
     const encoder = new TextEncoder();
     const encodedBody = encoder.encode(requestBodyString);
 
-   const response = await fetch((process.env.REACT_APP_API_URL || 'http://localhost:8010') + '/api/chatbot/chat', {
+   const response = await fetch((process.env.REACT_APP_API_URL || 'http://localhost:8000') + '/api/chatbot/chat', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json; charset=utf-8',

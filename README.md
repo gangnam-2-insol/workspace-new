@@ -923,7 +923,7 @@ cd admin
 # admin/backend/.env 파일 생성
 GOOGLE_API_KEY=your_gemini_api_key_here
 MONGODB_URL=mongodb://localhost:27017
-REACT_APP_API_URL=http://localhost:8010
+REACT_APP_API_URL=http://localhost:8000
 ```
 
 ### 3. 백엔드 서버 실행
@@ -931,9 +931,9 @@ REACT_APP_API_URL=http://localhost:8010
 # 의존성 설치
 pip install fastapi uvicorn python-multipart google-generativeai motor pymongo langgraph langchain langchain-openai langchain-google-genai requests
 
-# 서버 실행 (포트 8010)
+# 서버 실행 (포트 8000)
 cd admin/backend
-python -m uvicorn main:app --host 0.0.0.0 --port 8010 --reload
+python -m uvicorn main:app --host 0.0.0.0 --port 8000 --reload
 ```
 
 ### 4. 프론트엔드 실행
@@ -942,7 +942,7 @@ python -m uvicorn main:app --host 0.0.0.0 --port 8010 --reload
 cd admin/frontend
 npm install
 
-# 개발 서버 실행 (포트 3010)
+# 개발 서버 실행 (포트 3001)
 npm start
 ```
 
@@ -952,9 +952,9 @@ docker run -d --name mongodb -p 27017:27017 mongo:6.0
 ```
 
 ### 🎯 실행 후 접속
-- **프론트엔드**: http://localhost:3010
-- **백엔드 API**: http://localhost:8010
-- **API 문서**: http://localhost:8010/docs
+- **프론트엔드**: http://localhost:3001
+- **백엔드 API**: http://localhost:8000
+- **API 문서**: http://localhost:8000/docs
 
 ## 📊 테스트
 
