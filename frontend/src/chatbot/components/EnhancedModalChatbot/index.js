@@ -23,7 +23,7 @@ const EnhancedModalChatbot = ({
   closeOnBackdropClick = false  // 배경 클릭 시 닫기 여부 (기본값: false)
 }) => {
   // API URL 설정 - 환경 변수 또는 기본값 사용
-  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8010';
   
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');

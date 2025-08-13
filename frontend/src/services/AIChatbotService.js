@@ -1,6 +1,6 @@
 class AIChatbotService {
   constructor() {
-    this.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+    this.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8010';
   }
 
   // AI 챗봇 세션 시작
