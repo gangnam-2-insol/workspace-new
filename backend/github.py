@@ -817,3 +817,4 @@ async def github_repo_analysis(request: GithubSummaryRequest):
         print(f"GitHub 저장소 분석 오류: {error}")
         print(f"오류 상세: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"저장소 분석 중 오류가 발생했습니다: {str(error)}")
+ 
