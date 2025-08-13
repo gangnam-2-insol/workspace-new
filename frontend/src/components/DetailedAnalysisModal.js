@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiX, FiCheck, FiAlertCircle, FiStar, FiTrendingUp, FiTrendingDown, FiFileText, FiMessageSquare, FiCode } from 'react-icons/fi';
@@ -206,7 +206,6 @@ const getScoreColor = (score) => {
 };
 
 const DetailedAnalysisModal = ({ isOpen, onClose, analysisData }) => {
-  const [showRaw, setShowRaw] = useState(false);
   if (!isOpen || !analysisData) return null;
 
   const { detailedAnalysis } = analysisData;
@@ -284,28 +283,15 @@ const DetailedAnalysisModal = ({ isOpen, onClose, analysisData }) => {
             <Header>
               <Title>AI 상세 분석 결과</Title>
               <Subtitle>{analysisData.fileName} - {analysisData.analysisDate}</Subtitle>
-              <div style={{position:'absolute', top: 20, right: 52}}>
-                <button
-                  onClick={() => setShowRaw(v => !v)}
-                  style={{
-                    padding: '6px 10px', borderRadius: 6, border: '1px solid #e5e7eb',
-                    background: showRaw ? '#f3f4f6' : 'white', cursor: 'pointer', fontSize: 12
-                  }}
-                >{showRaw ? '원본 JSON 숨기기' : '원본 JSON 보기'}</button>
-              </div>
             </Header>
 
             <OverallScore>
               <ScoreCircle>
-                {(detailedAnalysis?.overall_summary?.total_score ??
-                  (typeof detailedAnalysis?.overall_score === 'number' ? detailedAnalysis.overall_score / 10 : 0))}
+                {detailedAnalysis.overall_summary.total_score}
               </ScoreCircle>
               <ScoreInfo>
                 <ScoreLabel>전체 평가 점수</ScoreLabel>
-                <ScoreValue>
-                  {(detailedAnalysis?.overall_summary?.total_score ??
-                    (typeof detailedAnalysis?.overall_score === 'number' ? detailedAnalysis.overall_score / 10 : 0))}/10
-                </ScoreValue>
+                <ScoreValue>{detailedAnalysis.overall_summary.total_score}/10</ScoreValue>
               </ScoreInfo>
             </OverallScore>
 
@@ -329,17 +315,6 @@ const DetailedAnalysisModal = ({ isOpen, onClose, analysisData }) => {
             {detailedAnalysis.portfolio_analysis && Object.keys(detailedAnalysis.portfolio_analysis).length > 0 && 
               renderAnalysisSection('포트폴리오 분석', detailedAnalysis.portfolio_analysis, <FiCode />)}
 
-            {showRaw && (
-              <div style={{marginTop: 16}}>
-                <RecommendationSection>
-                  <RecommendationTitle>원본 JSON</RecommendationTitle>
-                  <pre style={{whiteSpace:'pre-wrap', wordBreak:'break-word', fontSize:12, margin:0}}>
-{JSON.stringify(detailedAnalysis, null, 2)}
-                  </pre>
-                </RecommendationSection>
-              </div>
-            )}
-
             <RecommendationSection>
               <RecommendationTitle>
                 <FiStar /> 선택한 항목 요약
@@ -351,9 +326,9 @@ const DetailedAnalysisModal = ({ isOpen, onClose, analysisData }) => {
                     return (
                       <RecommendationItem>
                         이력서 분석 결과: 총 {Object.keys(detailedAnalysis.resume_analysis).length}개 항목을 분석했습니다. 
-                        평균 점수는 {(detailedAnalysis?.overall_summary?.total_score ?? (typeof detailedAnalysis?.overall_score === 'number' ? detailedAnalysis.overall_score / 10 : 0))}/10점이며, 
-                        {(detailedAnalysis?.overall_summary?.total_score ?? (typeof detailedAnalysis?.overall_score === 'number' ? detailedAnalysis.overall_score / 10 : 0)) >= 8 ? '전반적으로 우수한 수준' : 
-                         (detailedAnalysis?.overall_summary?.total_score ?? (typeof detailedAnalysis?.overall_score === 'number' ? detailedAnalysis.overall_score / 10 : 0)) >= 6 ? '양호한 수준이지만 개선점이 있음' : 
+                        평균 점수는 {detailedAnalysis.overall_summary.total_score}/10점이며, 
+                        {detailedAnalysis.overall_summary.total_score >= 8 ? '전반적으로 우수한 수준' : 
+                         detailedAnalysis.overall_summary.total_score >= 6 ? '양호한 수준이지만 개선점이 있음' : 
                          '전반적인 개선이 필요함'}입니다.
                       </RecommendationItem>
                     );
@@ -361,9 +336,9 @@ const DetailedAnalysisModal = ({ isOpen, onClose, analysisData }) => {
                     return (
                       <RecommendationItem>
                         자기소개서 분석 결과: 총 {Object.keys(detailedAnalysis.cover_letter_analysis).length}개 항목을 분석했습니다. 
-                        평균 점수는 {(detailedAnalysis?.overall_summary?.total_score ?? (typeof detailedAnalysis?.overall_score === 'number' ? detailedAnalysis.overall_score / 10 : 0))}/10점이며, 
-                        {(detailedAnalysis?.overall_summary?.total_score ?? (typeof detailedAnalysis?.overall_score === 'number' ? detailedAnalysis.overall_score / 10 : 0)) >= 8 ? '매우 우수한 수준' : 
-                         (detailedAnalysis?.overall_summary?.total_score ?? (typeof detailedAnalysis?.overall_score === 'number' ? detailedAnalysis.overall_score / 10 : 0)) >= 6 ? '양호한 수준이지만 개선점이 있음' : 
+                        평균 점수는 {detailedAnalysis.overall_summary.total_score}/10점이며, 
+                        {detailedAnalysis.overall_summary.total_score >= 8 ? '매우 우수한 수준' : 
+                         detailedAnalysis.overall_summary.total_score >= 6 ? '양호한 수준이지만 개선점이 있음' : 
                          '전반적인 개선이 필요함'}입니다.
                       </RecommendationItem>
                     );
@@ -371,9 +346,9 @@ const DetailedAnalysisModal = ({ isOpen, onClose, analysisData }) => {
                     return (
                       <RecommendationItem>
                         포트폴리오 분석 결과: 총 {Object.keys(detailedAnalysis.portfolio_analysis).length}개 항목을 분석했습니다. 
-                        평균 점수는 {(detailedAnalysis?.overall_summary?.total_score ?? (typeof detailedAnalysis?.overall_score === 'number' ? detailedAnalysis.overall_score / 10 : 0))}/10점이며, 
-                        {(detailedAnalysis?.overall_summary?.total_score ?? (typeof detailedAnalysis?.overall_score === 'number' ? detailedAnalysis.overall_score / 10 : 0)) >= 8 ? '매우 우수한 수준' : 
-                         (detailedAnalysis?.overall_summary?.total_score ?? (typeof detailedAnalysis?.overall_score === 'number' ? detailedAnalysis.overall_score / 10 : 0)) >= 6 ? '양호한 수준이지만 개선점이 있음' : 
+                        평균 점수는 {detailedAnalysis.overall_summary.total_score}/10점이며, 
+                        {detailedAnalysis.overall_summary.total_score >= 8 ? '매우 우수한 수준' : 
+                         detailedAnalysis.overall_summary.total_score >= 6 ? '양호한 수준이지만 개선점이 있음' : 
                          '전반적인 개선이 필요함'}입니다.
                       </RecommendationItem>
                     );

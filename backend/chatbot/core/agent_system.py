@@ -86,8 +86,8 @@ class IntentDetectionNode:
             
             # 기존 컨텍스트 분류기 사용
             context_result = self.context_classifier.classify_context(user_input)
-            context_score = context_result['score']
-            context_confidence = context_result['confidence']
+            context_score = context_result.total_score
+            context_confidence = context_result.confidence
             
             print(f"🎯 [의도 감지] 컨텍스트 분류 결과: 점수={context_score}, 신뢰도={context_confidence}")
             

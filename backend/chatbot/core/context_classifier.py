@@ -140,6 +140,10 @@ class FlexibleContextClassifier:
         
         return bonus
     
+    def classify_context(self, text: str) -> ContextScore:
+        """맥락 분류 (외부 인터페이스용)"""
+        return self.analyze_recruitment_context(text)
+    
     def analyze_recruitment_context(self, text: str) -> ContextScore:
         """채용 맥락 분석"""
         logger.info(f"🔍 맥락 분석 시작: {text[:50]}...")
