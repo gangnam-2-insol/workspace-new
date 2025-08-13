@@ -67,13 +67,19 @@ async def fetch_github_readme(owner: str, repo: str, token: Optional[str] = None
     return None
 
 def resolve_username(input_str: str) -> str:
-    """사용자명 추출"""
+    """사용자명 추출 - parse_github_url과 일관된 로직 사용"""
     if not input_str:
         return ''
     
     trimmed = input_str.strip()
     
-    # URL에서 사용자명 추출
+    # GitHub URL인 경우 parse_github_url 함수 사용
+    if trimmed.startswith('https://github.com/'):
+        parsed = parse_github_url(trimmed)
+        if parsed:
+            return parsed[0]  # username 반환
+    
+    # 다른 URL 형식 처리
     if trimmed.startswith(('http://', 'https://')):
         try:
             from urllib.parse import urlparse
@@ -133,6 +139,79 @@ async def fetch_repo_top_level_files(owner: str, repo: str, token: Optional[str]
                 for item in items][:20]
     except:
         return []
+
+async def fetch_repo_file(owner: str, repo: str, path: str, token: Optional[str] = None) -> Optional[str]:
+    """특정 경로의 파일 원문 가져오기 (base64 디코딩 포함)
+    - 최상위 파일 위주로 사용 (package.json, requirements.txt 등)
+    """
+    try:
+        data = await fetch_github(f'{GITHUB_API_BASE}/repos/{owner}/{repo}/contents/{path}', token)
+        content = data.get('content', '')
+        encoding = data.get('encoding', 'base64')
+        if encoding == 'base64' and content:
+            return base64.b64decode(content).decode('utf-8', errors='ignore')
+        return None
+    except Exception:
+        return None
+
+def _parse_dependencies_from_package_json(content: str) -> List[str]:
+    try:
+        import json as _json
+        data = _json.loads(content)
+        deps = []
+        for key in ['dependencies', 'devDependencies', 'peerDependencies', 'optionalDependencies']:
+            if isinstance(data.get(key), dict):
+                deps.extend(list(data[key].keys()))
+        return list(sorted(set(deps)))
+    except Exception:
+        return []
+
+def _parse_dependencies_from_requirements(content: str) -> List[str]:
+    deps = []
+    for line in content.splitlines():
+        line = line.strip()
+        if not line or line.startswith('#'):
+            continue
+        # 패키지명만 추출 (버전 제약 제거)
+        name = line.split('==')[0].split('>=')[0].split('<=')[0].split('~=')[0].split('>')[0].split('<')[0].strip()
+        if name:
+            deps.append(name)
+    return list(sorted(set(deps)))
+
+async def collect_dependency_hints(owner: str, repo: str, top_level_files: List[Dict], token: Optional[str]) -> Dict[str, List[str]]:
+    """의존성 파일을 읽어 외부 라이브러리 및 LLM 관련 힌트를 수집한다."""
+    file_names = [f.get('name', '').lower() for f in (top_level_files or [])]
+    hints: Dict[str, List[str]] = {
+        'external_libraries': [],
+        'llm_hints': []
+    }
+
+    # package.json
+    if 'package.json' in file_names:
+        content = await fetch_repo_file(owner, repo, 'package.json', token)
+        pkgs = _parse_dependencies_from_package_json(content or '') if content else []
+        if pkgs:
+            hints['external_libraries'].extend(pkgs)
+
+    # requirements.txt / pipfile / pyproject.toml 간단 처리
+    if 'requirements.txt' in file_names:
+        content = await fetch_repo_file(owner, repo, 'requirements.txt', token)
+        reqs = _parse_dependencies_from_requirements(content or '') if content else []
+        if reqs:
+            hints['external_libraries'].extend(reqs)
+
+    # 간단한 LLM 라이브러리 키워드 매핑
+    llm_keywords = ['openai', 'google-generativeai', 'google.generativeai', 'vertexai', 'anthropic', 'langchain', 'llama-index', 'transformers', 'cohere', 'groq', 'mcp']
+    for lib in list(hints['external_libraries']):
+        lower = lib.lower()
+        if any(k in lower for k in llm_keywords):
+            hints['llm_hints'].append(lib)
+
+    # 중복 제거
+    hints['external_libraries'] = list(sorted(set(hints['external_libraries'])))
+    hints['llm_hints'] = list(sorted(set(hints['llm_hints'])))
+
+    return hints
 
 async def fetch_repo_commits(owner: str, repo: str, token: Optional[str] = None) -> List[Dict]:
     """리포지토리 커밋 기록 가져오기"""
@@ -409,9 +488,10 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
 - 스타: {repo_data.get('stargazers_count', 0)}, 포크: {repo_data.get('forks_count', 0)}
 - URL: {repo_data.get('html_url', f'https://github.com/{username}/{repo_name}')}
 
-**기술 스택 정보**
-- 사용 언어: {repo_data.get('languages', {})}
-- 프레임워크: {repo_data.get('frameworks', [])}
+        **기술 스택 정보**
+        - 사용 언어: {repo_data.get('languages', {})}
+        - 프레임워크: {repo_data.get('frameworks', [])}
+        - 상단 파일 목록: {repo_data.get('toplevel_files', [])}
 
 **주요 기능**
 {repo_data.get('main_features', '기능 정보 없음')}
@@ -422,16 +502,14 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
 **개발자 활동**
 {repo_data.get('developer_activity', '활동 정보 없음')}
 
-**중요한 지침:**
-- 기술 스택은 구체적인 라이브러리나 도구명 대신 카테고리별로 간단하게 표시하세요
-- 예: "Naver Search MCP", "Exa Search MCP" → "MCP"
-- 예: "React", "Vue.js", "Angular" → "Frontend Framework"
-- 예: "MongoDB", "PostgreSQL", "MySQL" → "Database"
-- 예: "Docker", "Kubernetes" → "Containerization"
-
-- 아키텍처 구조는 전체 앱의 흐름과 주요 컴포넌트 간 관계를 설명하세요
-- 외부 라이브러리는 사용된 주요 라이브러리와 API, 버전 정보를 포함하세요
-- LLM 모델 정보는 사용된 LLM 종류와 호출 방식을 설명하세요
+        **중요한 지침:**
+        - 기술 스택은 카테고리로 요약하되, 외부 라이브러리/LLM 항목은 구체 명칭으로 작성하세요.
+        - README 정보가 부실하거나 모호하면 다음 힌트를 참고하여 보완하세요:
+          - toplevel_files: 프레임워크/배포 방식 추정
+          - external_libraries_hint: 의존성 파일에서 수집된 라이브러리 후보
+          - llm_hints: LLM 관련 라이브러리 후보
+        - 외부 라이브러리는 위 힌트를 활용해 구체적인 라이브러리명/서비스명을 기입하세요.
+        - LLM 모델 정보는 라이브러리/플랫폼과 호출 방식을 근거와 함께 요약하세요.
 
 다음 JSON 형식으로 응답해주세요:
 {{
@@ -486,7 +564,10 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
                 "stars": repo.get('stargazers_count', 0),
                 "forks": repo.get('forks_count', 0),
                 "url": repo.get('html_url', ''),
-                "readme_excerpt": repo.get('readme_excerpt', '')[:500] if repo.get('readme_excerpt') else ''
+                "readme_excerpt": repo.get('readme_excerpt', '')[:500] if repo.get('readme_excerpt') else '',
+                "toplevel_files": repo.get('toplevel_files', []),
+                "external_libraries_hint": repo.get('external_libraries_hint', []),
+                "llm_hints": repo.get('llm_hints', [])
             })
         
         prompt = f"""당신은 GitHub 사용자의 여러 레포지토리를 분석하여 각각을 개별적으로 요약하는 전문가입니다.
@@ -503,9 +584,13 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
 - 예: "MongoDB", "PostgreSQL", "MySQL" → "Database"
 - 예: "Docker", "Kubernetes" → "Containerization"
 
-- 아키텍처 구조는 전체 앱의 흐름과 주요 컴포넌트 간 관계를 설명하세요
-- 외부 라이브러리는 사용된 주요 라이브러리와 API, 버전 정보를 포함하세요
-- LLM 모델 정보는 사용된 LLM 종류와 호출 방식을 설명하세요
+        - 아키텍처 구조는 전체 앱의 흐름과 주요 컴포넌트 간 관계를 설명하세요
+        - README 정보가 부실하거나 모호하면 다음 힌트를 참고하여 보완하세요:
+          - toplevel_files: 상단 파일 목록으로 프레임워크/배포 방식을 유추
+          - external_libraries_hint: package.json/requirements.txt에서 수집한 의존성 후보
+          - llm_hints: LLM 관련 라이브러리 후보 (예: openai, google-generativeai, langchain 등)
+        - 외부 라이브러리는 위 힌트를 활용해 구체적인 라이브러리명/서비스명으로 작성하세요
+        - LLM 모델 정보는 라이브러리/플랫폼과 호출 방식을 근거와 함께 요약하세요
 
 다음 JSON 형식으로 응답해주세요:
 {{
@@ -630,75 +715,110 @@ async def summarize_with_llm(text: str, lines: int = 7) -> List[Dict]:
 async def github_summary(request: GithubSummaryRequest):
     """GitHub 사용자 요약"""
     try:
-        # GitHub URL이 입력된 경우 파싱
+        print(f"=== GitHub 검색 요청 시작 ===")
+        print(f"원본 입력: {request.username}")
+        print(f"원본 repo_name: {request.repo_name}")
+        
+        # 통일된 파싱 로직: URL과 유저이름 모두 동일한 방식으로 처리
         if request.username.startswith('https://github.com/'):
+            # GitHub URL 파싱
             parsed = parse_github_url(request.username)
             if parsed:
                 username, repo_name = parsed
+                print(f"URL 파싱 결과 - username: {username}, repo_name: {repo_name}")
                 # repo_name이 None이 아닌 경우에만 request.repo_name 설정
                 if repo_name and not request.repo_name:
                     request.repo_name = repo_name
+                    print(f"repo_name 설정됨: {request.repo_name}")
             else:
                 raise HTTPException(status_code=400, detail="올바른 GitHub URL 형식이 아닙니다.")
         else:
+            # 일반 유저이름 파싱
             username = resolve_username(request.username)
             if not username:
                 raise HTTPException(status_code=400, detail="username이 필요합니다.")
             repo_name = request.repo_name
+            print(f"유저이름 파싱 결과 - username: {username}, repo_name: {repo_name}")
+        
+        # 최종 검증: username이 동일한지 확인
+        print(f"최종 검증 - username: {username}, repo_name: {request.repo_name}")
         
         github_token = os.getenv('GITHUB_TOKEN') or os.getenv('GH_TOKEN') or ''
         profile_url = f"https://github.com/{username}"
         profile_api_url = f"https://api.github.com/users/{username}"
         
-        # 특정 저장소 분석
+        print(f"최종 처리 - username: {username}, repo_name: {request.repo_name}")
+        
+        # 통일된 검색 로직: 항상 동일한 우선순위로 분석 수행
+        # 1. 특정 저장소가 지정된 경우에도 '전체 레포 분석 파이프라인'을 재사용하여 일관된 결과 생성
         if request.repo_name:
+            print(f"1단계: 특정 저장소 분석(멀티 파이프라인 재사용) - {username}/{request.repo_name}")
             try:
-                # 저장소 정보 가져오기
-                repo_data = await fetch_github(f'{GITHUB_API_BASE}/repos/{username}/{request.repo_name}', github_token)
-                
-                # 병렬로 모든 데이터 수집
-                languages, files, commits, issues, pulls, readme = await asyncio.gather(
-                    fetch_repo_languages(username, request.repo_name, github_token),
-                    fetch_repo_top_level_files(username, request.repo_name, github_token),
-                    fetch_repo_commits(username, request.repo_name, github_token),
-                    fetch_repo_issues(username, request.repo_name, github_token),
-                    fetch_repo_pulls(username, request.repo_name, github_token),
-                    fetch_github_readme(username, request.repo_name, github_token),
+                # 전체 레포 목록에서 대상 레포 탐색 후, 다중 레포 분석 입력 형식으로 단일 레포 분석
+                print("특정 저장소 분석 전: 전체 레포 목록 조회")
+                repos_list = await fetch_user_repos(username, github_token)
+                if not repos_list:
+                    raise HTTPException(status_code=404, detail="공개 리포지토리를 찾을 수 없습니다.")
+
+                target_repo_meta = None
+                target_repo_name_lower = request.repo_name.lower()
+                for r in repos_list:
+                    name = r.get('name', '')
+                    full_name = r.get('full_name', '')
+                    if name.lower() == target_repo_name_lower or full_name.lower().endswith(f"/{target_repo_name_lower}"):
+                        target_repo_meta = r
+                        break
+
+                if not target_repo_meta:
+                    raise HTTPException(status_code=404, detail=f"저장소 '{request.repo_name}'을 찾을 수 없습니다.")
+
+                owner_login = target_repo_meta.get('owner', {}).get('login', username)
+
+                # 다중 레포 분석 경로에서 사용하던 입력 데이터 수집(README 발췌 포함)
+                languages, top_level_files, repo_readme = await asyncio.gather(
+                    fetch_repo_languages(owner_login, request.repo_name, github_token),
+                    fetch_repo_top_level_files(owner_login, request.repo_name, github_token),
+                    fetch_github_readme(owner_login, request.repo_name, github_token),
                     return_exceptions=True
                 )
-                
-                # 예외 처리
-                languages = languages if not isinstance(languages, Exception) else {}
-                files = files if not isinstance(files, Exception) else []
-                commits = commits if not isinstance(commits, Exception) else []
-                issues = issues if not isinstance(issues, Exception) else []
-                pulls = pulls if not isinstance(pulls, Exception) else []
-                readme_text = readme['text'] if readme and not isinstance(readme, Exception) else ''
-                
-                # 상세 분석 생성
-                detailed_analysis = await generate_detailed_analysis(
-                    repo_data, languages, files, commits, issues, pulls, readme_text
-                )
-                
-                # 통합 요약 생성
-                summaries = await generate_unified_summary(username, request.repo_name, None, [detailed_analysis])
-                
+
+                # README가 부실한 경우를 대비해 의존성 힌트 수집
+                dep_hints = await collect_dependency_hints(owner_login, request.repo_name, (top_level_files if not isinstance(top_level_files, Exception) else []), github_token)
+
+                analysis_item = {
+                    'name': target_repo_meta.get('name', request.repo_name),
+                    'description': target_repo_meta.get('description', ''),
+                    'html_url': target_repo_meta.get('html_url', f'https://github.com/{username}/{request.repo_name}'),
+                    'stargazers_count': target_repo_meta.get('stargazers_count', 0),
+                    'forks_count': target_repo_meta.get('forks_count', 0),
+                    'language': target_repo_meta.get('language', '정보 없음'),
+                    'languages': languages if not isinstance(languages, Exception) else {},
+                    'toplevel_files': top_level_files if not isinstance(top_level_files, Exception) else [],
+                    'readme_excerpt': (repo_readme['text'][:3000] if (repo_readme and not isinstance(repo_readme, Exception) and repo_readme.get('text')) else ''),
+                    'external_libraries_hint': dep_hints.get('external_libraries', []),
+                    'llm_hints': dep_hints.get('llm_hints', [])
+                }
+
+                # 멀티 레포 분석 프롬프트를 사용하되, 대상 레포만 전달하여 동일한 추출 품질 확보
+                summaries = await generate_unified_summary(username, None, None, [analysis_item])
+
                 return GithubSummaryResponse(
                     profileUrl=profile_url,
                     profileApiUrl=profile_api_url,
-                    source=f'repo_analysis_{request.repo_name}',
-                    summary=json.dumps(summaries, ensure_ascii=False),
-                    detailed_analysis=detailed_analysis
+                    source=f'repos_meta_filtered_{request.repo_name}',
+                    summary=json.dumps(summaries, ensure_ascii=False)
                 )
-                
+
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 404:
                     raise HTTPException(status_code=404, detail=f"저장소 '{request.repo_name}'을 찾을 수 없습니다.")
                 raise
         
-        # 프로필 README 분석
+        # 2. 프로필 README 분석 (저장소가 지정되지 않은 경우)
+        print(f"2단계: 프로필 README 분석 시도 - {username}")
         profile_readme = await fetch_github_readme(username, username, github_token)
         if profile_readme and profile_readme['text']:
+            print(f"프로필 README 발견 - 분석 진행")
             summaries = await generate_unified_summary(username, None, profile_readme, None)
             return GithubSummaryResponse(
                 profileUrl=profile_url,
@@ -707,13 +827,16 @@ async def github_summary(request: GithubSummaryRequest):
                 summary=json.dumps(summaries, ensure_ascii=False)
             )
         
-        # 리포지토리 메타데이터 분석
+        # 3. 리포지토리 메타데이터 분석 (프로필 README가 없는 경우)
+        print(f"3단계: 리포지토리 메타데이터 분석 - {username}")
         repos = await fetch_user_repos(username, github_token)
         if not repos:
             raise HTTPException(status_code=404, detail="공개 리포지토리를 찾을 수 없습니다.")
         
+        print(f"발견된 리포지토리 수: {len(repos)}")
         # 상위 5개 리포 분석
         top_repos = [r for r in repos if not r.get('fork')][:5]
+        print(f"분석할 상위 리포지토리 수: {len(top_repos)}")
         
         analyses = []
         for repo in top_repos:
@@ -776,17 +899,34 @@ async def github_repo_analysis(request: GithubSummaryRequest):
         profile_url = f"https://github.com/{username}"
         profile_api_url = f"https://api.github.com/users/{username}"
         
-        # 저장소 정보 가져오기
-        repo_data = await fetch_github(f'{GITHUB_API_BASE}/repos/{username}/{request.repo_name}', github_token)
-        
-        # 병렬로 모든 데이터 수집
+        # 전체 레포 목록에서 대상 레포 탐색 후 분석
+        repos_list = await fetch_user_repos(username, github_token)
+        if not repos_list:
+            raise HTTPException(status_code=404, detail="공개 리포지토리를 찾을 수 없습니다.")
+
+        target_repo_meta = None
+        target_repo_name_lower = request.repo_name.lower()
+        for r in repos_list:
+            name = r.get('name', '')
+            full_name = r.get('full_name', '')
+            if name.lower() == target_repo_name_lower or full_name.lower().endswith(f"/{target_repo_name_lower}"):
+                target_repo_meta = r
+                break
+
+        if not target_repo_meta:
+            raise HTTPException(status_code=404, detail=f"저장소 '{request.repo_name}'을 찾을 수 없습니다.")
+
+        owner_login = target_repo_meta.get('owner', {}).get('login', username)
+        repo_data = target_repo_meta
+
+        # 병렬로 모든 데이터 수집 (owner_login 기준)
         languages, files, commits, issues, pulls, readme = await asyncio.gather(
-            fetch_repo_languages(username, request.repo_name, github_token),
-            fetch_repo_top_level_files(username, request.repo_name, github_token),
-            fetch_repo_commits(username, request.repo_name, github_token),
-            fetch_repo_issues(username, request.repo_name, github_token),
-            fetch_repo_pulls(username, request.repo_name, github_token),
-            fetch_github_readme(username, request.repo_name, github_token),
+            fetch_repo_languages(owner_login, request.repo_name, github_token),
+            fetch_repo_top_level_files(owner_login, request.repo_name, github_token),
+            fetch_repo_commits(owner_login, request.repo_name, github_token),
+            fetch_repo_issues(owner_login, request.repo_name, github_token),
+            fetch_repo_pulls(owner_login, request.repo_name, github_token),
+            fetch_github_readme(owner_login, request.repo_name, github_token),
             return_exceptions=True
         )
         
