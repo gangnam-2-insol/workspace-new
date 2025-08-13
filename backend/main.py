@@ -213,7 +213,7 @@ async def seed_applicants_from_csv_if_empty() -> None:
             new_count = await db.resumes.count_documents({})
             print(f"📥 CSV에서 {len(documents_to_insert)}건 임포트 완료 → 현재 총 문서 수: {new_count}")
     except Exception as seed_error:
-        print(f"❌ CSV 임포트 실패: {seed_error}")
+                    print(f"[ERROR] CSV 임포트 실패: {seed_error}")
 
 
 def load_applicants_from_csv() -> List[Dict[str, Any]]:
@@ -763,19 +763,19 @@ async def get_similarity_metrics():
 async def check_resume_similarity(resume_id: str):
     """특정 이력서의 유사도 체크 (다른 모든 이력서와 비교)"""
     try:
-        print(f"🔍 유사도 체크 요청 - resume_id: {resume_id}")
+        print(f"[INFO] 유사도 체크 요청 - resume_id: {resume_id}")
         
         # ObjectId 변환 시도
         try:
             object_id = ObjectId(resume_id)
-            print(f"✅ ObjectId 변환 성공: {object_id}")
+            print(f"[SUCCESS] ObjectId 변환 성공: {object_id}")
         except Exception as oid_error:
-            print(f"❌ ObjectId 변환 실패: {oid_error}")
+            print(f"[ERROR] ObjectId 변환 실패: {oid_error}")
             raise HTTPException(status_code=400, detail=f"잘못된 resume_id 형식: {resume_id}")
         
         # 현재 이력서 정보 조회
         current_resume = await db.resumes.find_one({"_id": object_id})
-        print(f"🔍 데이터베이스 조회 결과: {current_resume is not None}")
+        print(f"[INFO] 데이터베이스 조회 결과: {current_resume is not None}")
         
         if not current_resume:
             # 데이터베이스에 있는 모든 resume ID들 확인
@@ -837,7 +837,7 @@ async def check_resume_similarity(resume_id: str):
                         field_similarities[field_name] = 0.0
                         
             except Exception as e:
-                print(f"❌ 유사도 계산 중 오류 발생: {e}")
+                print(f"[ERROR] 유사도 계산 중 오류 발생: {e}")
                 import traceback
                 traceback.print_exc()
                 

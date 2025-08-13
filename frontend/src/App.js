@@ -13,6 +13,7 @@ import TalentRecommendation from './pages/TalentRecommendation/TalentRecommendat
 import UserManagement from './pages/UserManagement/UserManagement';
 import Settings from './pages/Settings/Settings';
 import TestGithubSummary from './pages/TestGithubSummary';
+import PDFOCRPage from './pages/PDFOCRPage/PDFOCRPage';
 import FloatingChatbot from './chatbot/components/FloatingChatbot';
 import AITooltip from './components/AITooltip';
 
@@ -153,6 +154,7 @@ function App() {
           <Route path="/users" element={<UserManagement />} />
           <Route path="/settings" element={<Settings />} />
           <Route path="/github-test" element={<TestGithubSummary />} />
+          <Route path="/pdf-ocr" element={<PDFOCRPage />} />
           <Route path="*" element={<div style={{ padding: '20px', textAlign: 'center' }}>페이지를 찾을 수 없습니다.</div>} />
         </Routes>
       </Layout>

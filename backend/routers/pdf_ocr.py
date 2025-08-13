@@ -7,6 +7,8 @@ from typing import Dict, Any
 import logging
 
 from pdf_ocr_module.main import process_pdf
+from pdf_ocr_module.config import Settings
+from pdf_ocr_module.ai_analyzer import analyze_text
 
 router = APIRouter()
 
@@ -30,16 +32,25 @@ async def upload_and_process_pdf(file: UploadFile = File(...)) -> Dict[str, Any]
             # PDF 처리
             result = process_pdf(temp_file_path)
             
+            # AI 분석 결과 가져오기
+            settings = Settings()
+            ai_analysis = analyze_text(result.get("full_text", ""), settings)
+            
             # 결과에서 필요한 정보만 추출
             processed_result = {
                 "success": True,
                 "filename": file.filename,
-                "extracted_text": result.get("full_text", ""),
-                "summary": result.get("analysis", {}).get("summary", ""),
-                "keywords": result.get("analysis", {}).get("keywords", []),
-                "pages": len(result.get("page_texts", [])),
-                "document_id": result.get("document_id", ""),
-                "processing_time": result.get("processing_time", 0)
+                "extracted_text": result.get("full_text", ""),  # full_text 사용
+                "summary": ai_analysis.get("summary", ""),
+                "keywords": ai_analysis.get("keywords", []),
+                "pages": result.get("num_pages", 0),
+                "document_id": result.get("mongo_id", ""),
+                "processing_time": 0,
+                # AI 분석 결과 추가
+                "document_type": ai_analysis.get("structured_data", {}).get("document_type", "general"),
+                "sections": ai_analysis.get("structured_data", {}).get("sections", {}),
+                "entities": ai_analysis.get("structured_data", {}).get("entities", {}),
+                "basic_info": ai_analysis.get("basic_info", {})
             }
             
             return JSONResponse(content=processed_result)
