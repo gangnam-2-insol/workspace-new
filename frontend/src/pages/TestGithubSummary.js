@@ -6,6 +6,28 @@ const TestGithubSummary = () => {
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
 
+  // GitHub URL 파싱 함수 (백엔드와 동일한 로직)
+  const parseGithubUrl = (url) => {
+    if (!url || !url.startsWith('https://github.com/')) {
+      return null;
+    }
+    
+    try {
+      const parsed = new URL(url);
+      const parts = parsed.pathname.split('/').filter(p => p);
+      
+      if (parts.length >= 2) {
+        return { username: parts[0], repo_name: parts[1] };
+      } else if (parts.length === 1) {
+        return { username: parts[0], repo_name: null };
+      }
+    } catch (error) {
+      console.error('URL 파싱 오류:', error);
+    }
+    
+    return null;
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setError('');
@@ -16,10 +38,23 @@ const TestGithubSummary = () => {
     }
     setLoading(true);
     try {
+      // URL 파싱하여 요청 데이터 구성
+      let requestData = { username: username.trim() };
+      
+      if (username.trim().startsWith('https://github.com/')) {
+        const parsed = parseGithubUrl(username.trim());
+        if (parsed) {
+          requestData.username = parsed.username;
+          if (parsed.repo_name) {
+            requestData.repo_name = parsed.repo_name;
+          }
+        }
+      }
+      
       const res = await fetch((process.env.REACT_APP_API_URL || 'http://localhost:8000') + '/api/github/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username: username.trim() })
+        body: JSON.stringify(requestData)
       });
       const data = await res.json();
       if (!res.ok) {
@@ -156,7 +191,13 @@ const TestGithubSummary = () => {
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>📊 분석 소스</div>
-              <div style={{ fontWeight: 'bold', color: '#333' }}>{result.source}</div>
+              <div style={{ fontWeight: 'bold', color: '#333' }}>
+                {result.source === 'profile_readme' && '프로필 README 분석'}
+                {result.source === 'repos_meta' && '전체 레포지토리 분석'}
+                {result.source?.startsWith('repos_meta_filtered_') && `특정 레포지토리 분석 (${result.source.replace('repos_meta_filtered_', '')})`}
+                {result.source?.startsWith('repo_analysis_') && `특정 레포지토리 분석 (${result.source.replace('repo_analysis_', '')})`}
+                {!result.source?.includes('profile_readme') && !result.source?.includes('repos_meta') && !result.source?.startsWith('repo_analysis_') && !result.source?.startsWith('repos_meta_filtered_') && result.source}
+              </div>
             </div>
           </div>
           
