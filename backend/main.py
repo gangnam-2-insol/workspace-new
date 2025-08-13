@@ -93,12 +93,16 @@ async def add_charset_header(request, call_next):
 # app.include_router(langgraph_router, prefix="/api/langgraph", tags=["langgraph"])
 
 # Upload 라우터 등록
-from routers.upload import router as upload_router
-app.include_router(upload_router, prefix="/api/upload", tags=["upload"])
+# from routers.upload import router as upload_router
+# app.include_router(upload_router, prefix="/api/upload", tags=["upload"])
 
 # GitHub 요약 라우터 등록
 from github import router as github_router
 app.include_router(github_router, prefix="/api", tags=["github"])
+
+# 자소서 분석 라우터 등록
+from routers.cover_letter_analysis import router as cover_letter_router
+app.include_router(cover_letter_router, prefix="/api/cover-letter", tags=["cover-letter-analysis"])
 
 # 지원자 라우터 등록
 from routers.applicants import router as applicants_router
