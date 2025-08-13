@@ -1,6 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import EnhancedModalChatbot from '../EnhancedModalChatbot';
 
 const FloatingChatbot = ({ page, onFieldUpdate, onComplete, onPageAction }) => {
   const navigate = useNavigate();
@@ -10,9 +9,6 @@ const FloatingChatbot = ({ page, onFieldUpdate, onComplete, onPageAction }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [uiElements, setUiElements] = useState([]);
   // const [sessionId, setSessionId] = useState(null); // 세션 ID 상태 제거
-  
-  // EnhancedModalChatbot 상태
-  const [showEnhancedModal, setShowEnhancedModal] = useState(false);
   
   // AI 채용공고 작성 도우미 관련 상태
   const [aiMode, setAiMode] = useState(false);
@@ -171,10 +167,6 @@ const FloatingChatbot = ({ page, onFieldUpdate, onComplete, onPageAction }) => {
 
     const handleHideFloatingChatbot = () => {
       setIsOpen(false);
-      // 입력값 초기화
-      setInputValue('');
-      setMessages([]);
-      setIsLoading(false);
       console.log('플로팅 챗봇이 숨겨졌습니다.');
     };
 
@@ -195,56 +187,16 @@ const FloatingChatbot = ({ page, onFieldUpdate, onComplete, onPageAction }) => {
       setMessages([welcomeMessage]);
     };
 
-    const handleStartLangGraphMode = () => {
-      console.log('랭그래프 모드 시작 - 플로팅 챗봇 완전 초기화');
-      
-      // 플로팅 챗봇 완전히 닫기
-      setIsOpen(false);
-      sessionStorage.setItem('chatbotWasOpen', 'false');
-      
-      // 모든 상태 완전 초기화
-      setInputValue('');
-      setMessages([]);
-      setIsLoading(false);
-      setAiMode(false);
-      setAiStep(1);
-      setAiFormData({
-        department: '',
-        experience: '',
-        experienceYears: '',
-        headcount: '',
-        mainDuties: '',
-        workHours: '',
-        workDays: '',
-        locationCity: '',
-        locationDistrict: '',
-        salary: '',
-        contactEmail: '',
-        deadline: ''
-      });
-      
-      // 사용자 상호작용 히스토리 초기화
-      setUserInteractionHistory([]);
-      setLearnedPatterns({});
-      
-      // UI 요소 스캔 결과 초기화
-      setUiElements([]);
-      
-      console.log('랭그래프 모드 시작 - 플로팅 챗봇 상태 완전 초기화 완료');
-    };
-
     window.addEventListener('closeChatbot', handleCloseChatbot);
     window.addEventListener('hideFloatingChatbot', handleHideFloatingChatbot);
     window.addEventListener('showFloatingChatbot', handleShowFloatingChatbot);
     window.addEventListener('startFreeTextMode', handleStartFreeTextMode);
-    window.addEventListener('startLangGraphMode', handleStartLangGraphMode);
 
     return () => {
       window.removeEventListener('closeChatbot', handleCloseChatbot);
       window.removeEventListener('hideFloatingChatbot', handleHideFloatingChatbot);
       window.removeEventListener('showFloatingChatbot', handleShowFloatingChatbot);
       window.removeEventListener('startFreeTextMode', handleStartFreeTextMode);
-      window.removeEventListener('startLangGraphMode', handleStartLangGraphMode);
     };
   }, []);
 
@@ -1559,17 +1511,7 @@ const FloatingChatbot = ({ page, onFieldUpdate, onComplete, onPageAction }) => {
   const startAIChatbot = () => {
     console.log('=== startAIChatbot 함수 호출됨 ===');
     
-    // 기존 플로팅 챗봇 닫기
-    setIsOpen(false);
-    sessionStorage.setItem('chatbotWasOpen', 'false');
-    
-    // 입력값 초기화
-    setInputValue('');
-    setMessages([]);
-    setIsLoading(false);
-    
-    // AI 관련 상태 초기화
-    setAiMode(false);
+    setAiMode(true);
     setAiStep(1);
     setAiFormData({
       department: '',
@@ -1586,16 +1528,38 @@ const FloatingChatbot = ({ page, onFieldUpdate, onComplete, onPageAction }) => {
       deadline: ''
     });
     
-    // 사용자 상호작용 히스토리 초기화
-    setUserInteractionHistory([]);
-    setLearnedPatterns({});
+    console.log('AI 모드 상태 초기화 완료');
     
-    // UI 요소 스캔 결과 초기화
-    setUiElements([]);
+    // AI 도우미 시작 메시지 추가
+    const aiStartMessage = {
+      type: 'bot',
+      content: '🤖 AI 채용공고 작성 도우미를 시작합니다!\n\n먼저 구인 부서를 알려주세요. (예: 개발, 마케팅, 영업, 디자인 등)',
+      timestamp: new Date()
+    };
+    setMessages(prev => [...prev, aiStartMessage]);
     
-    // EnhancedModalChatbot 열기
-    setShowEnhancedModal(true);
-    console.log('EnhancedModalChatbot 열기 완료 - 기존 챗봇 닫힘 및 모든 상태 초기화됨');
+    console.log('AI 시작 메시지 추가 완료');
+    
+    // 자동 진행 활성화 - 1초 후 텍스트 기반 등록 시작
+    setTimeout(() => {
+      console.log('=== 1초 타이머 완료 - 자동 진행 시작 ===');
+      console.log('onPageAction 존재 여부:', !!onPageAction);
+      
+      if (onPageAction) {
+        console.log('openTextBasedRegistration 액션 호출');
+        onPageAction('openTextBasedRegistration');
+        
+        // 추가로 0.5초 후 AI 챗봇 시작
+        setTimeout(() => {
+          console.log('startTextBasedFlow 액션 호출');
+          if (onPageAction) {
+            onPageAction('startTextBasedFlow');
+          }
+        }, 500);
+      } else {
+        console.log('onPageAction이 없어서 자동 진행 불가');
+      }
+    }, 1000);
   };
 
   // AI 응답 처리 함수
@@ -1681,11 +1645,6 @@ const FloatingChatbot = ({ page, onFieldUpdate, onComplete, onPageAction }) => {
       console.log('[FloatingChatbot] 빈 메시지로 인해 전송 취소');
       return;
     }
-
-    // 랭그래프 모드 및 자유 텍스트 모드 감지 (함수 상단에서 한 번만 선언)
-    const langgraphSessionId = sessionStorage.getItem('langgraphSessionId');
-    const isLangGraphMode = !!langgraphSessionId;
-    const isFreeTextMode = sessionStorage.getItem('freeTextMode') === 'true';
 
     // 등록 관련 키워드 감지 시 페이지 이동 처리
     const registrationKeywords = ['등록', '채용공고', '채용', '공고', '작성', '만들어줘', '작성해줘', '등록해줘'];
@@ -1840,61 +1799,8 @@ const FloatingChatbot = ({ page, onFieldUpdate, onComplete, onPageAction }) => {
     // 백엔드 API 호출 (Gemini 연동용)
     console.log('[FloatingChatbot] 백엔드 API 호출 시작');
     
-    // 랭그래프 모드 감지 (이미 위에서 선언됨)
-    // const langgraphSessionId = sessionStorage.getItem('langgraphSessionId');
-    // const isLangGraphMode = !!langgraphSessionId;
-    
-    // 랭그래프 모드인 경우 랭그래프 Agent API 호출
-    if (isLangGraphMode) {
-      try {
-        console.log('[FloatingChatbot] 랭그래프 Agent 호출');
-        
-        const response = await fetch('/api/langgraph-agent', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            message: messageString,
-            conversation_history: messages.map(msg => ({
-              role: msg.type === 'user' ? 'user' : 'assistant',
-              content: msg.content
-            })),
-            session_id: langgraphSessionId
-          }),
-        });
-
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-
-        const result = await response.json();
-        console.log('[FloatingChatbot] 랭그래프 Agent 응답:', result);
-
-        // 추출된 필드 정보가 있으면 이벤트로 전달
-        if (result.extracted_fields && Object.keys(result.extracted_fields).length > 0) {
-          console.log('[FloatingChatbot] 추출된 필드 정보:', result.extracted_fields);
-          
-          // 채용공고등록도우미에 이벤트 전달
-          window.dispatchEvent(new CustomEvent('langGraphDataUpdate', {
-            detail: result.extracted_fields
-          }));
-        }
-
-        return {
-          type: 'bot',
-          content: result.response,
-          timestamp: new Date()
-        };
-      } catch (error) {
-        console.error('[FloatingChatbot] 랭그래프 Agent 호출 오류:', error);
-        return {
-          type: 'bot',
-          content: `랭그래프 Agent 연결에 실패했습니다: ${error.message}`,
-          timestamp: new Date()
-        };
-      }
-    }
+    // 자유 텍스트 모드 감지 (sessionStorage에서 확인)
+    const isFreeTextMode = sessionStorage.getItem('freeTextMode') === 'true';
     
     const requestBody = {
       user_input: messageString,
@@ -2292,15 +2198,6 @@ const FloatingChatbot = ({ page, onFieldUpdate, onComplete, onPageAction }) => {
           </div>
         </div>
       </div>
-
-      {/* EnhancedModalChatbot */}
-      <EnhancedModalChatbot
-        isOpen={showEnhancedModal}
-        onClose={() => setShowEnhancedModal(false)}
-        onPageAction={onPageAction}
-        formData={{}}
-        pageId="recruit_form"
-      />
     </>
   );
 };

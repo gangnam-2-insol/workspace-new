@@ -13,7 +13,8 @@ import {
   FiBriefcase,
   FiClock,
   FiGlobe,
-  FiFolder
+  FiFolder,
+  FiZap
 } from 'react-icons/fi';
 import JobDetailModal from './JobDetailModal';
 import RegistrationMethodModal from './RegistrationMethodModal';
@@ -851,6 +852,18 @@ const JobPostingRegistration = () => {
           >
             <FiFolder size={20} />
             템플릿 관리
+          </AddButton>
+          <AddButton
+            onClick={() => {
+              console.log('=== 랭그래프모드용 채용공고등록도우미 열기 ===');
+              setShowLangGraphRegistration(true);
+            }}
+            whileHover={{ scale: 1.05 }}
+            whileTap={{ scale: 0.95 }}
+            style={{ background: 'linear-gradient(135deg, #f093fb, #f5576c)' }}
+          >
+            <FiZap size={20} />
+            랭그래프 모드
           </AddButton>
         </div>
       </Header>
