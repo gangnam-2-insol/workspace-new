@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 from typing import Optional
+import os
 
 from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -24,12 +25,12 @@ class Settings(BaseSettings):
     poppler_path: Optional[str] = Field(default=None)
 
     # OCR 설정
-    ocr_lang: str = Field(default="kor+eng")  # 기본 한국어+영어 동시 인식
+    ocr_lang: str = Field(default="kor+eng")  # 한국어 우선, 영어 병행
     ocr_oem: int = Field(default=1)  # 0: Legacy + LSTM, 1: LSTM
     ocr_default_psm: int = Field(default=6)  # 기본 단순 문단
-    dpi: int = Field(default=300)  # PDF → 이미지 변환 DPI
-    quality_threshold: float = Field(default=0.7)
-    max_retries: int = Field(default=2)
+    dpi: int = Field(default=400)  # PDF → 이미지 변환 DPI (300에서 400으로 증가)
+    quality_threshold: float = Field(default=0.6)  # 품질 임계값 완화
+    max_retries: int = Field(default=3)  # 재시도 횟수 증가
 
     # MongoDB
     mongodb_uri: str = Field(default="mongodb://localhost:27017")
@@ -73,6 +74,40 @@ class Settings(BaseSettings):
     groq_model: str = Field(default="llama-3.1-70b-versatile")
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
+        
+        # 환경변수에서 직접 읽기 (fallback)
+        if not self.poppler_path:
+            self.poppler_path = os.getenv("POPPLER_PATH")
+        
+        if not self.tesseract_cmd:
+            self.tesseract_cmd = os.getenv("TESSERACT_CMD")
+        
+        # 기본 경로 시도 (Windows)
+        if not self.poppler_path:
+            possible_poppler_paths = [
+                r"C:\tools\poppler\Library\bin",  # 사용자가 제공한 경로
+                r"C:\Program Files\poppler\bin",
+                r"C:\poppler\bin",
+                r"C:\ProgramData\chocolatey\lib\poppler\tools\poppler-23.11.0\Library\bin",
+                r"C:\ProgramData\chocolatey\lib\poppler\tools\poppler-24.02.0\Library\bin",
+            ]
+            for path in possible_poppler_paths:
+                if os.path.exists(path):
+                    self.poppler_path = path
+                    break
+        
+        if not self.tesseract_cmd:
+            possible_tesseract_paths = [
+                r"C:\Program Files\Tesseract-OCR\tesseract.exe",  # 사용자가 제공한 경로
+                r"C:\Users\Drew\AppData\Local\Programs\Tesseract-OCR\tesseract.exe",
+            ]
+            for path in possible_tesseract_paths:
+                if os.path.exists(path):
+                    self.tesseract_cmd = path
+                    break
 
 
 

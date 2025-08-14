@@ -16,21 +16,24 @@ def _configure_tesseract(settings: Settings) -> None:
 
 
 def _preprocess_for_ocr(pil_image: Image.Image, profile: str = "default") -> Image.Image:
-    # 그레이스케일
-    img = pil_image.convert("L")
-    np_img = np.array(img)
-    # 간단한 임계처리 + 노이즈 저감 (OpenCV 제거, NumPy/Pillow만 사용)
-    thr = np_img.mean() * (0.8 if profile == "low_contrast" else 1.0)
-    bin_img = (np_img > thr).astype(np.uint8) * 255
-    # 간단한 노이즈 제거 (scipy 있으면 사용, 없으면 생략)
-    try:
-        from scipy.ndimage import median_filter  # optional
-        bin_img = median_filter(bin_img, size=3)
-    except Exception:
-        pass
-    # 얇은 글자 보정: 샤프닝
-    pil_bin = Image.fromarray(bin_img).filter(ImageFilter.UnsharpMask(radius=1.0, percent=150, threshold=3))
-    return pil_bin
+    # 기본 전처리 (단순화)
+    img = pil_image.convert("L")  # 그레이스케일
+    
+    # 이미지 크기 확대 (해상도 향상)
+    width, height = img.size
+    if width < 1000 or height < 1000:
+        scale_factor = 2
+        new_width = int(width * scale_factor)
+        new_height = int(height * scale_factor)
+        img = img.resize((new_width, new_height), Image.LANCZOS)
+    
+    # 대비 강화 (단순하게)
+    img = ImageOps.autocontrast(img, cutoff=2)
+    
+    # 샤프닝으로 텍스트 선명화
+    img = img.filter(ImageFilter.UnsharpMask(radius=1.0, percent=150, threshold=3))
+    
+    return img
 
 
 def _guess_psm_for_layout(pil_image: Image.Image) -> int:
@@ -47,7 +50,13 @@ def _guess_psm_for_layout(pil_image: Image.Image) -> int:
 
 
 def _tesseract_config(psm: int, settings: Settings) -> str:
-    return f"--oem {settings.ocr_oem} --psm {psm}"
+    # 기본 설정 (단순화)
+    config = f"--oem {settings.ocr_oem} --psm {psm}"
+    
+    # 기본적인 한국어 인식 설정만 추가
+    config += " -c preserve_interword_spaces=1"
+    
+    return config
 
 
 def ocr_images(image_paths: List[Path], settings: Settings) -> List[str]:

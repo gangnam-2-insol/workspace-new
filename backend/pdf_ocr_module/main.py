@@ -196,6 +196,7 @@ def process_pdf(pdf_path: str | Path) -> Dict[str, Any]:
         "mongo_id": inserted_id,
         "file_name": pdf_path.name,
         "num_pages": len(page_texts),
+        "full_text": full_text,  # 전체 텍스트 추가
         "summary": analysis.get("summary") if settings.index_generate_summary else None,
         "keywords": analysis.get("keywords", []) if settings.index_generate_keywords else [],
         "doc_hash": doc_hash,
