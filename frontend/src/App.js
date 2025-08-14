@@ -16,6 +16,7 @@ import TestGithubSummary from './pages/TestGithubSummary';
 import PDFOCRPage from './pages/PDFOCRPage/PDFOCRPage';
 import FloatingChatbot from './chatbot/components/FloatingChatbot';
 import AITooltip from './components/AITooltip';
+import LangGraphChatbot from './components/LangGraphChatbot';
 
 
 
@@ -23,6 +24,7 @@ function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const currentPage = location.pathname.replace('/', '') || 'dashboard';
+  const [isAgentChatbotOpen, setIsAgentChatbotOpen] = React.useState(false);
 
   // 전역 이벤트 리스너 추가 (디버깅용)
   React.useEffect(() => {
@@ -39,6 +41,13 @@ function App() {
       console.log('[App.js] 전역 이벤트 리스너 해제');
       window.removeEventListener('langGraphDataUpdate', handleGlobalLangGraphDataUpdate);
     };
+  }, []);
+
+  // 헤더에서 에이전트 챗봇 열기 이벤트 수신
+  React.useEffect(() => {
+    const openHandler = () => setIsAgentChatbotOpen(true);
+    window.addEventListener('openAgentChatbot', openHandler);
+    return () => window.removeEventListener('openAgentChatbot', openHandler);
   }, []);
 
   const handlePageAction = (action) => { // 이 함수는 'action'이라는 인자 하나만 받습니다.
@@ -200,6 +209,9 @@ function App() {
         }}
         onPageAction={handlePageAction}
       />
+
+      {/* 에이전트 챗봇 (LangGraph) */}
+      <LangGraphChatbot isOpen={isAgentChatbotOpen} onOpenChange={setIsAgentChatbotOpen} />
     </>
   );
 }
