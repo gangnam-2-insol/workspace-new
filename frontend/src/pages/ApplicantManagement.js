@@ -24,7 +24,9 @@ import {
   FiList,
   FiBarChart2,
   FiGitBranch,
-  FiArrowLeft
+  FiArrowLeft,
+  FiCamera
+
 } from 'react-icons/fi';
 import DetailedAnalysisModal from '../components/DetailedAnalysisModal';
 import GithubSummaryPanel from './PortfolioSummary/GithubSummaryPanel';
@@ -2801,6 +2803,10 @@ const ApplicantManagement = () => {
             <NewResumeButton onClick={handleResumeModalOpen}>
               <FiFileText size={16} />
               새 이력서 등록
+            </NewResumeButton>
+            <NewResumeButton onClick={() => window.open('/pdf-ocr', '_blank')} style={{ marginLeft: '10px', backgroundColor: '#8B5CF6' }}>
+              <FiCamera size={16} />
+              PDF OCR
             </NewResumeButton>
           </HeaderRight>
         </HeaderContent>

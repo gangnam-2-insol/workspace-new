@@ -1,0 +1,72 @@
+{
+  "mongo_id": "689ccd734cee92bd7ae1c864",
+  "doc_id": "c5cfa6ec-f2ab-40be-a740-e615a63849aa",
+  "doc_hash": "a3e0cec62fb586088f4ce258f533383321b68a7da92b97f48a94a260a5832242",
+  "file_name": "tmpg91ibm0b.pdf",
+  "num_pages": 1,
+  "preview": [
+    "data\\images\\tmpg91ibm0b\\thumb_tmpg91ibm0b_page0001.png"
+  ],
+  "pages": [
+    {
+      "page": 1,
+      "clean_text": "AeQTSIEEATSAS9 BEMLRMGEAO42GhOUPALO1eL AZOBOLUEUMAtLEOhlakGaOALGelFtALELAVLAbeLALO5 PapyhdeoSeyeAISivielPAQAhySAuheaghivhwoo4 y OGOUEAEE5QUUAYEPBePLEUAL9ieEeAOAMetwarLaltal4 APQLEAvOAL-G0 139 ortt LICENSE WORKEXPERIENCE 2050TORICSneaxine1204 n24aUBAeicjapelelqel ProsentDOAA e2050PORIC9604 Prosentc044 2050MAIQeltag MERLBGAEAlolZATQAlKel RRUAeeApOALg507naes SUPLEARES-3QHUYUIADS2QtetoheaQabwehoahfaLeuheaeu 2050IATtoFeO AL Q z SKILLS BARYASEYAlalSAopAAD 2044-2040 VdobePnrotosnoppro lg aghtFQQEAYAolAahgAlHol BEMAROUYAlOALg50ngeo SSUSLALZOBENIUEtHAELeyObMat4OALBohLALAUEREeL Vdohe 111 Sie iC Dro Sse yTrice A ma dobeIndesigtpro SJAPHAaAAlayS-AlojBA2 0 oy 20442040 Vdobe PronuerePro PBALTFQQUALAloLearQALR BPUALEAAOAL950UGhZee URALOBQEMATSONlopOaOALBahwALPAee EDUCATION 20302034 20442040 nejang-ehalS9 ehhyFQQIEELAlolGarQALGeI BEARRULYApOAL-9507ufZEO 2030-2OR4 SQUTAPSES-3QPeyMAE22QiTopaOALgelwerTALpueaU",
+      "quality_score": 0.0,
+      "trace": {
+        "attempts": [
+          {
+            "psm": 6,
+            "profile": "default",
+            "quality": 0.0
+          },
+          {
+            "psm": 6,
+            "profile": "low_contrast",
+            "quality": 0.0
+          },
+          {
+            "psm": 6,
+            "profile": "low_contrast",
+            "quality": 0.0
+          },
+          {
+            "psm": 6,
+            "profile": "low_contrast",
+            "quality": 0.0
+          }
+        ]
+      }
+    }
+  ],
+  "text": "        AeQTSIEEATSAS9    BEMLRMGEAO42GhOUPALO1eL\n        AZOBOLUEUMAtLEOhlakGaOALGelFtALELAVLAbeLALO5\nPapyhdeoSeyeAISivielPAQAhySAuheaghivhwoo4\ny           OGOUEAEE5QUUAYEPBePLEUAL9ieEeAOAMetwarLaltal4\n          APQLEAvOAL-G0  139  ortt\nLICENSE                     WORKEXPERIENCE\n2050TORICSneaxine1204     n24aUBAeicjapelelqel\nProsentDOAA\ne2050PORIC9604          Prosentc044\n2050MAIQeltag     MERLBGAEAlolZATQAlKel   RRUAeeApOALg507naes\nSUPLEARES-3QHUYUIADS2QtetoheaQabwehoahfaLeuheaeu\n2050IATtoFeO\nAL Q z\nSKILLS          BARYASEYAlalSAopAAD\n2044-2040\nVdobePnrotosnoppro\nlg        aghtFQQEAYAolAahgAlHol   BEMAROUYAlOALg50ngeo\nSSUSLALZOBENIUEtHAELeyObMat4OALBohLALAUEREeL\nVdohe 111 Sie iC Dro\nSse\nyTrice                A  ma\ndobeIndesigtpro              SJAPHAaAAlayS-AlojBA2\n0                oy\n20442040\nVdobe PronuerePro\n        PBALTFQQUALAloLearQALR    BPUALEAAOAL950UGhZee\nURALOBQEMATSONlopOaOALBahwALPAee\nEDUCATION\n20302034          20442040\nnejang-ehalS9            ehhyFQQIEELAlolGarQALGeI    BEARRULYApOAL-9507ufZEO\n2030-2OR4                  SQUTAPSES-3QPeyMAE22QiTopaOALgelwerTALpueaU\n",
+  "fields": {
+    "emails": [],
+    "phones": [
+      "20302034          20442040",
+      "2044-2040",
+      "20442040",
+      "9604",
+      "2\n0",
+      "4",
+      "9"
+    ],
+    "dates": [],
+    "numbers": [],
+    "urls": [],
+    "names": [],
+    "positions": [
+      "PL"
+    ],
+    "companies": [],
+    "education": [],
+    "skills": [
+      "BARYASEYAlalSAopAAD",
+      "GO",
+      "AI"
+    ],
+    "addresses": []
+  },
+  "summary": "",
+  "keywords": [],
+  "created_at": "2025-08-13T17:37:55.207765"
+}
