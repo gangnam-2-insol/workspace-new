@@ -1,151 +1,242 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
+import { useNavigate } from 'react-router-dom';
+import AdminToolsManager from './AdminToolsManager';
+import { ensureUiIndexIfNeeded, resolveByQuery } from '../utils/uiIndex';
 import styled from 'styled-components';
+import { motion, AnimatePresence } from 'framer-motion';
+import { 
+  FiMessageCircle, 
+  FiX, 
+  FiSend, 
+  FiMinimize2, 
+  FiMaximize2,
+  FiTrash2,
+  FiRefreshCw,
+  FiTool,
+  FiCpu
+} from 'react-icons/fi';
 
-/**
- * LangGraph 기반 AI 채팅봇 컴포넌트
- * 실제 LangGraph 라이브러리를 사용하는 Agent 시스템과 통신
- */
-
-const ChatContainer = styled.div`
+const ChatbotContainer = styled(motion.div)`
   position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 400px;
-  height: 500px;
-  background: white;
-  border-radius: 12px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+  bottom: 80px;
+  right: 25px;
+  z-index: 1000;
   display: flex;
   flex-direction: column;
-  z-index: 1000;
-  border: 2px solid #667eea;
+  align-items: flex-end;
+`;
+
+const ChatButton = styled(motion.button)`
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+  font-size: 24px;
+  cursor: pointer;
+  box-shadow: 0 3px 14px rgba(102, 126, 234, 0.35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  background-size: 130% 130%;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, background-position 0.2s ease;
+
+  &:before {
+    content: '';
+    position: absolute;
+    inset: -6px;
+    border-radius: 50%;
+    background: radial-gradient(closest-side, rgba(118, 75, 162, 0.25), rgba(118, 75, 162, 0));
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    pointer-events: none;
+  }
+
+  &:hover {
+    transform: scale(1.05) translateY(-1px);
+    box-shadow: 0 6px 22px rgba(102, 126, 234, 0.5);
+    background-position: 80% 20%;
+    filter: invert(1);
+  }
+
+  &:hover:before {
+    opacity: 0.7;
+  }
+
+  &:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.3), 0 6px 22px rgba(102, 126, 234, 0.5);
+  }
+`;
+
+const ChatWindow = styled(motion.div)`
+  width: 400px;
+  height: 600px;
+  background: white;
+  border-radius: 20px;
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  margin-bottom: 15px;
+
+  @media (max-width: 480px) {
+    width: 350px;
+    height: 500px;
+  }
 `;
 
 const ChatHeader = styled.div`
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  padding: 16px;
-  border-radius: 10px 10px 0 0;
+  background: linear-gradient(135deg, #2dd4bf 0%, #38bdf8 60%, #60a5fa 100%);
+  color: #ffffff;
+  padding: 20px;
   display: flex;
-  justify-content: space-between;
   align-items: center;
+  justify-content: space-between;
+  position: relative;
 `;
 
-const ChatTitle = styled.h3`
-  margin: 0;
-  font-size: 16px;
-  font-weight: 600;
+const HeaderInfo = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
 `;
 
-const LangGraphBadge = styled.span`
-  background: #ff6b6b;
-  color: white;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 10px;
-  font-weight: bold;
+const AgentIcon = styled.div`
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+`;
+
+const HeaderText = styled.div`
+  h3 {
+    margin: 0;
+    font-size: 16px;
+    font-weight: 600;
+  }
+  p {
+    margin: 0;
+    font-size: 12px;
+    opacity: 0.8;
+  }
+`;
+
+const HeaderActions = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const IconButton = styled.button`
+  background: none;
+  border: none;
+  color: #ffffff;
+  padding: 6px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.2s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.22);
+  }
 `;
 
 const ChatBody = styled.div`
   flex: 1;
+  padding: 20px;
+  overflow-y: auto;
   display: flex;
   flex-direction: column;
-  overflow: hidden;
+  gap: 16px;
 `;
 
-const MessagesContainer = styled.div`
-  flex: 1;
-  overflow-y: auto;
-  padding: 16px;
+const MessageContainer = styled.div`
   display: flex;
-  flex-direction: column;
+  justify-content: ${props => props.$isUser ? 'flex-end' : 'flex-start'};
+  margin-bottom: 8px;
+`;
+
+const Message = styled(motion.div)`
+  max-width: 80%;
+  padding: 12px 16px;
+  border-radius: 18px;
+  font-size: 14px;
+  line-height: 1.4;
+  word-wrap: break-word;
+  white-space: pre-wrap; /* 줄바꿈 문자 보존 */
+  overflow-wrap: anywhere; /* 긴 단어 줄바꿈 */
+  
+  ${props => props.$isUser ? `
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border-bottom-right-radius: 4px;
+  ` : `
+    background: #f8f9fa;
+    color: #333;
+    border-bottom-left-radius: 4px;
+  `}
+`;
+
+const ToolIndicator = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: #667eea;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: rgba(102, 126, 234, 0.1);
+  border-radius: 12px;
+  width: fit-content;
+`;
+
+const ChatInput = styled.div`
+  padding: 20px;
+  border-top: 1px solid #eee;
+  display: flex;
+  align-items: center;
   gap: 12px;
 `;
 
-const Message = styled.div`
-  display: flex;
-  align-items: flex-start;
-  gap: 8px;
-  animation: fadeIn 0.3s ease-in;
-  
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-`;
-
-const MessageAvatar = styled.div`
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
+const MinimizedContent = styled.button`
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 14px;
-  font-weight: bold;
-  flex-shrink: 0;
-`;
-
-const UserAvatar = styled(MessageAvatar)`
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-`;
-
-const BotAvatar = styled(MessageAvatar)`
-  background: linear-gradient(135deg, #ff6b6b 0%, #ffa500 100%);
-  color: white;
-`;
-
-const MessageContent = styled.div`
-  flex: 1;
-  padding: 12px 16px;
-  border-radius: 18px;
-  max-width: 80%;
-  word-wrap: break-word;
-  line-height: 1.4;
-`;
-
-const UserMessage = styled(MessageContent)`
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  margin-left: auto;
-  border-bottom-right-radius: 4px;
-`;
-
-const BotMessage = styled(MessageContent)`
-  background: #f8f9fa;
+  width: 100%;
+  height: 100%;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  font-size: 22px;
   color: #333;
-  border: 1px solid #e9ecef;
-  border-bottom-left-radius: 4px;
-`;
+  transition: background 0.15s ease, transform 0.15s ease, box-shadow 0.15s ease;
 
-const WorkflowTrace = styled.div`
-  background: #fff3cd;
-  border: 1px solid #ffeaa7;
-  border-radius: 8px;
-  padding: 8px 12px;
-  margin-top: 8px;
-  font-size: 12px;
-  color: #856404;
-  font-family: 'Courier New', monospace;
-`;
-
-const InputContainer = styled.div`
-  padding: 16px;
-  border-top: 1px solid #e9ecef;
-  display: flex;
-  gap: 8px;
+  &:hover {
+    background: rgba(0, 0, 0, 0.04);
+    transform: scale(1.04);
+    filter: invert(1);
+  }
 `;
 
 const Input = styled.input`
   flex: 1;
   padding: 12px 16px;
-  border: 2px solid #e9ecef;
+  border: 2px solid #eee;
   border-radius: 25px;
-  outline: none;
   font-size: 14px;
-  transition: border-color 0.3s ease;
-  
+  outline: none;
+  transition: border-color 0.2s ease;
+
   &:focus {
     border-color: #667eea;
   }
@@ -155,297 +246,614 @@ const SendButton = styled.button`
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  border: none;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
   color: white;
   cursor: pointer;
   display: flex;
   align-items: center;
   justify-content: center;
+  position: relative;
+  overflow: visible;
   transition: transform 0.2s ease;
-  
+
   &:hover {
-    transform: scale(1.05);
+    transform: scale(1.1);
   }
-  
+
   &:disabled {
     opacity: 0.5;
     cursor: not-allowed;
     transform: none;
   }
+
+  .lgc-send-base { display: flex; align-items: center; justify-content: center; }
+  .lgc-send-fly { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+  .lgc-send-trail { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border-radius: 50%; background: rgba(255,255,255,0.9); pointer-events: none; }
 `;
 
-const LoadingSpinner = styled.div`
-  display: inline-block;
-  width: 16px;
-  height: 16px;
-  border: 2px solid #ffffff;
-  border-radius: 50%;
-  border-top-color: transparent;
-  animation: spin 1s ease-in-out infinite;
-  
-  @keyframes spin {
-    to { transform: rotate(360deg); }
-  }
-`;
-
-const ToggleButton = styled.button`
-  position: fixed;
-  bottom: 20px;
-  right: 20px;
-  width: 60px;
-  height: 60px;
-  border-radius: 50%;
-  border: none;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  cursor: pointer;
+const LoadingDots = styled.div`
   display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-  box-shadow: 0 4px 16px rgba(102, 126, 234, 0.3);
-  transition: transform 0.2s ease;
-  z-index: 999;
-  
-  &:hover {
-    transform: scale(1.1);
-  }
+  gap: 4px;
+  padding: 12px 16px;
+  background: #f8f9fa;
+  border-radius: 18px;
+  border-bottom-left-radius: 4px;
+  width: fit-content;
 `;
 
-const LangGraphChatbot = () => {
-  const [isOpen, setIsOpen] = useState(false);
+const Dot = styled(motion.div)`
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #667eea;
+`;
+
+const WelcomeMessage = styled.div`
+  text-align: center;
+  padding: 20px;
+  color: #666;
+  font-size: 14px;
+  line-height: 1.5;
+`;
+
+const SHOW_PURPLE_TRIGGER_BUTTON = false; // 보라색 플로팅 트리거 버튼 숨김
+
+const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
+  const [isOpenInternal, setIsOpenInternal] = useState(false);
+  const [isMinimized, setIsMinimized] = useState(false);
   const [messages, setMessages] = useState([]);
   const [inputValue, setInputValue] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [systemInfo, setSystemInfo] = useState(null);
+  const [sessionId, setSessionId] = useState(null);
+  const [agentStatus, setAgentStatus] = useState('idle');
+  const [isAdminMode, setIsAdminMode] = useState(false);
+  const [showAdminPanel, setShowAdminPanel] = useState(false);
+  const [isSendAnimating, setIsSendAnimating] = useState(false);
+  const wsRef = useRef(null);
+	const navigate = useNavigate();
+  
+  const messagesEndRef = useRef(null);
+  const inputRef = useRef(null);
 
-  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+  // 제어/비제어 겸용: 외부 isOpen이 boolean이면 제어 모드로 동작
+  const isControlled = typeof isOpenProp === 'boolean';
+  const isOpen = isControlled ? isOpenProp : isOpenInternal;
 
-  // 시스템 정보 가져오기
+  // 스크롤을 맨 아래로 이동
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  };
+
   useEffect(() => {
-    const fetchSystemInfo = async () => {
-      try {
-        const response = await fetch(`${API_BASE_URL}/api/chatbot/langgraph-info`);
-        const data = await response.json();
-        setSystemInfo(data);
-        
-        if (data.available) {
-          // 시스템 정보를 첫 번째 메시지로 추가
-          setMessages([{
-            id: 'system-info',
-            type: 'bot',
-            content: `🤖 LangGraph Agent 시스템이 준비되었습니다!\n\n📋 사용 가능한 기능:\n• 정보 검색\n• 계산 도구\n• 채용공고 작성\n• 데이터베이스 조회\n• 일반 대화\n\n💡 자연스럽게 질문해보세요!`,
-            timestamp: new Date(),
-            workflowTrace: null
-          }]);
-        } else {
-          setMessages([{
-            id: 'system-error',
-            type: 'bot',
-            content: `❌ LangGraph 시스템을 사용할 수 없습니다.\n\n${data.message}`,
-            timestamp: new Date(),
-            workflowTrace: null
-          }]);
-        }
-      } catch (error) {
-        console.error('LangGraph 시스템 정보 조회 실패:', error);
-        setMessages([{
-          id: 'system-error',
-          type: 'bot',
-          content: '❌ LangGraph 시스템에 연결할 수 없습니다.',
-          timestamp: new Date(),
-          workflowTrace: null
-        }]);
-      }
+    scrollToBottom();
+  }, [messages]);
+
+  // 에이전트 상태 확인
+  useEffect(() => {
+    checkAgentHealth();
+  }, []);
+
+  // 자동 오픈 제거: 페이지 로드시 챗봇이 자동으로 열리지 않도록 함
+
+  // WebSocket 연결 (있으면 사용, 실패하면 무시하고 REST로 폴백)
+  // WebSocket 완전 제거: REST만 사용
+
+	// 메시지가 추가될 때마다 입력창에 포커스
+	useEffect(() => {
+		if (isOpen && !isMinimized) {
+			setTimeout(() => {
+				inputRef.current?.focus();
+			}, 0);
+		}
+	}, [messages, isOpen, isMinimized]);
+
+  const checkAgentHealth = async () => {
+    try {
+      const response = await fetch('/api/langgraph-agent/health');
+      const data = await response.json();
+      setAgentStatus(data.status);
+    } catch (error) {
+      console.error('에이전트 상태 확인 실패:', error);
+      setAgentStatus('error');
+    }
+  };
+
+  // 관리자 모드 상태 추정: 서버가 명시 API를 제공하지 않으므로 메시지 기반 추정 또는 추후 전용 API 연동
+  useEffect(() => {
+    const handler = (e) => {
+      // 단순 표시용 훅: 특정 시스템 메시지를 감지해 토글 (향후 백엔드 API로 대체 가능)
+      const text = String(e.detail || '').toLowerCase();
+      if (text.includes('관리자 모드가 활성화되었습니다')) setIsAdminMode(true);
+      if (text.includes('관리자 모드가 비활성화되었습니다')) setIsAdminMode(false);
     };
+    window.addEventListener('chatbot-system', handler);
+    return () => window.removeEventListener('chatbot-system', handler);
+  }, []);
 
-    fetchSystemInfo();
-  }, [API_BASE_URL]);
-
-  const sendMessage = useCallback(async () => {
+  const sendMessage = async () => {
     if (!inputValue.trim() || isLoading) return;
 
     const userMessage = {
-      id: `user-${Date.now()}`,
-      type: 'user',
+      id: Date.now(),
       content: inputValue,
-      timestamp: new Date()
+      isUser: true,
+      timestamp: new Date().toISOString()
     };
 
     setMessages(prev => [...prev, userMessage]);
     setInputValue('');
     setIsLoading(true);
 
+    // 1) 로컬 우선 실행: 현재 페이지에 버튼이 있는데도 답변만 하는 문제를 회피
     try {
-      const response = await fetch(`${API_BASE_URL}/api/chatbot/langgraph-chat`, {
+      const text = userMessage.content.toLowerCase();
+      const isActionLike = /(클릭|눌러|누르|열어|열기|상세|보기|삭제|제거|open|view|detail|delete|remove)/.test(text);
+      if (isActionLike) {
+        const page = await ensureUiIndexIfNeeded(window.location.href, true);
+        const target = resolveByQuery(userMessage.content, 'click', page);
+        if (target && target.selector) {
+          const el = document.querySelector(target.selector);
+          if (el) {
+            try { window.HireMeUI?.highlightOnce?.(el); } catch(_) {}
+            el.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+            setTimeout(() => el.click(), 120);
+            const botNotice = {
+              id: Date.now() + 2,
+              content: `요청하신 동작을 현재 페이지에서 바로 실행했습니다. (대상: ${target.text || target.selector})`,
+              isUser: false,
+              timestamp: new Date().toISOString(),
+            };
+            setMessages(prev => [...prev, botNotice]);
+            setIsLoading(false);
+            // 백엔드 호출 없이 로컬 실행 완료
+            return;
+          }
+        }
+      }
+    } catch(_) {}
+
+    try {
+      console.debug('[Chat][request.user]', userMessage.content);
+      // WebSocket 우선 사용
+      if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+        try {
+          wsRef.current.send(JSON.stringify({
+            user_input: userMessage.content,
+            session_id: sessionId,
+            context: {
+              current_page: window.location.pathname,
+              user_agent: navigator.userAgent
+            }
+          }));
+          return; // WS 모드에선 서버 응답 onmessage에서 처리
+        } catch(_) {}
+      }
+
+      // 폴백: REST 호출
+      const payload = {
+        user_input: userMessage.content,
+        session_id: sessionId,
+        context: {
+          current_page: window.location.pathname,
+          user_agent: navigator.userAgent
+        }
+      };
+      console.log('[DEBUG] POST /api/langgraph-agent/chat payload:', payload);
+      console.debug('[Chat][request.payload]', payload);
+
+      const response = await fetch('/api/langgraph-agent/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({
-          user_input: inputValue,
-          conversation_history: messages.map(msg => ({
-            role: msg.type === 'user' ? 'user' : 'assistant',
-            content: msg.content
-          }))
-        })
+        body: JSON.stringify(payload)
       });
 
-      const data = await response.json();
+      console.log('[DEBUG] /chat status:', response.status);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
 
-      if (response.ok) {
-        // 워크플로우 추적 정보 추출
-        let botContent = data.message;
-        let workflowTrace = null;
+    	const data = await response.json();
+      console.log('[DEBUG] /chat json:', data);
+      console.debug('[Chat][response.raw]', { message: data.message, mode: data.mode, tool_used: data.tool_used });
 
-        // 워크플로우 추적 정보가 포함되어 있는지 확인
-        if (botContent.includes('🔍 워크플로우 추적:')) {
-          const parts = botContent.split('🔍 워크플로우 추적:');
-          botContent = parts[0].trim();
-          workflowTrace = parts[1]?.trim() || null;
-        }
+		if (data.success) {
+            let displayContent = data.message;
+            let pageAction = null;
+            try {
+				const parsed = JSON.parse(data.message);
+				console.log('[DEBUG] parsed message:', parsed);
+				if (parsed && parsed.type === 'react_agent_response') {
+					displayContent = parsed.response || data.message;
+					pageAction = parsed.page_action || null;
+				}
+			} catch (e) {
+				// message가 JSON이 아니면 그대로 사용
+				console.warn('[DEBUG] message is not JSON, raw message used.');
+			}
 
-        const botMessage = {
-          id: `bot-${Date.now()}`,
-          type: 'bot',
-          content: botContent,
-          timestamp: new Date(),
-          workflowTrace: workflowTrace
-        };
+			const botMessage = {
+				id: Date.now() + 1,
+				content: displayContent,
+				isUser: false,
+				timestamp: data.timestamp,
+				mode: data.mode,
+				toolUsed: data.tool_used,
+				confidence: data.confidence
+			};
 
-        setMessages(prev => [...prev, botMessage]);
-      } else {
-        const errorMessage = {
-          id: `error-${Date.now()}`,
-          type: 'bot',
-          content: `❌ 오류가 발생했습니다: ${data.detail || '알 수 없는 오류'}`,
-          timestamp: new Date(),
-          workflowTrace: null
-        };
-        setMessages(prev => [...prev, errorMessage]);
+			setMessages(prev => [...prev, botMessage]);
+            console.debug('[Chat][response.assistant]', displayContent);
+
+			// 세션 ID 저장
+			if (!sessionId) {
+				setSessionId(data.session_id);
+			}
+
+			// React Agent page_action 처리
+            if (pageAction && pageAction.action === 'navigate' && pageAction.target) {
+				console.log('[DEBUG] navigate action:', pageAction.target);
+				setTimeout(() => {
+					navigate(pageAction.target);
+                    // 페이지 이동 후 최초 1회 UI 인덱스 수집
+                    setTimeout(() => {
+                      try { ensureUiIndexIfNeeded(window.location.href, true); } catch(_) {}
+                    }, 400);
+                }, 100);
+            } else if (pageAction && pageAction.action === 'dom' && pageAction.dom_action) {
+              // DOM 액션 실행 (기본 구현)
+              try {
+                const a = pageAction.dom_action;
+                const args = pageAction.args || {};
+                console.log('[DEBUG] dom action:', a, 'args:', args);
+                console.debug('[Action][dom.request]', { action: a, args });
+                if (a === 'dumpUI') {
+                  const href = window.location.href;
+                  const page = await ensureUiIndexIfNeeded(href, true);
+                  const list = page.elements.slice(0, 200).map((e, i) => `${i+1}. [${e.role}] ${e.text || e.attributes?.['aria-label'] || e.selector}`);
+                  const content = `현재 페이지 UI 요소 ${page.elements.length}개 중 상위 200개:\n\n` + list.join('\n');
+                  setMessages(prev => [...prev, { id: Date.now()+2, content, isUser: false, timestamp: new Date().toISOString() }]);
+                  return;
+                }
+                // selector가 비어 있고 자연어 질의가 있을 경우 UI 인덱스에서 해석 시도
+                if (!args.selector && args.query) {
+                  try {
+                    const page = await ensureUiIndexIfNeeded(window.location.href, true);
+                    const kind = a === 'typeText' ? 'type' : 'click';
+                    const target = resolveByQuery(args.query, kind, page);
+                    if (target) args.selector = target.selector;
+                    console.debug('[Action][dom.resolve]', { query: args.query, resolvedSelector: args.selector });
+                  } catch(_) {}
+                }
+                // 현재 페이지에서 대상이 해석되지 않으면 범위 확장 요청 메시지 안내
+                if (!args.selector && args.query) {
+                  const ask = `현재 페이지에서 "${args.query}"을(를) 찾지 못했습니다.\n범위를 확장해 계속할까요?\n- 이 페이지 전체 재스캔: "이 페이지 다시 스캔"\n- 사이트 전역 검색: "사이트 전역에서 ${args.query} 찾기"\n- 다른 페이지로 이동: "채용공고 페이지로 이동" 등`;
+                  setMessages(prev => [
+                    ...prev,
+                    { id: Date.now()+3, content: ask, isUser: false, timestamp: new Date().toISOString() }
+                  ]);
+                  console.debug('[Action][dom.unresolved]', { query: args.query, scope: 'page', suggested: true });
+                  return; // 범위 확장 응답을 사용자에게 요청하고 종료
+                }
+                if (a === 'click') {
+                  const el = document.querySelector(args.selector);
+                  if (el) {
+                    try { window.HireMeUI?.highlightOnce?.(el); } catch(_) {}
+                    el.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+                    setTimeout(() => el.click(), 150);
+                  }
+                } else if (a === 'typeText') {
+                  const el = document.querySelector(args.selector);
+                  if (el) el.value = args.text ?? '';
+                } else if (a === 'submitForm') {
+                  const el = document.querySelector(args.selector);
+                  if (el && typeof el.submit === 'function') el.submit();
+                } else if (a === 'check') {
+                  const el = document.querySelector(args.selector);
+                  if (el) el.checked = true;
+                } else if (a === 'selectOption') {
+                  const el = document.querySelector(args.selector);
+                  if (el) el.value = args.value ?? '';
+                } else if (a === 'scrollToElement') {
+                  const el = document.querySelector(args.selector);
+                  if (el) el.scrollIntoView({ behavior: 'smooth' });
+                } else if (a === 'scrollToBottom') {
+                  window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
+                } else if (a === 'copyText') {
+                  const el = document.querySelector(args.selector);
+                  if (el) navigator.clipboard?.writeText?.(el.innerText || '');
+                } else if (a === 'pasteText') {
+                  const el = document.querySelector(args.selector);
+                  if (el && navigator.clipboard?.readText) {
+                    navigator.clipboard.readText().then(t => { el.value = t; }).catch(()=>{});
+                  }
+                } else if (a === 'getText') {
+                  const el = document.querySelector(args.selector);
+                  // 결과를 메시지로 표시만 함
+                  const text = el ? (el.innerText || el.value || '') : '';
+                  setMessages(prev => [...prev, { id: Date.now()+2, content: `값: ${text}`, isUser: false, timestamp: new Date().toISOString() }]);
+                } else if (a === 'exists') {
+                  const el = document.querySelector(args.selector);
+                  const exists = !!el;
+                  setMessages(prev => [...prev, { id: Date.now()+2, content: `존재 여부: ${exists}`, isUser: false, timestamp: new Date().toISOString() }]);
+                }
+                console.debug('[Action][dom.done]', { action: a, selectorTried: args.selector });
+              } catch (err) {
+                console.error('DOM 액션 실패:', err);
+              }
+			}
+		} else {
+        throw new Error(data.message || '응답 처리 실패');
       }
     } catch (error) {
-      console.error('LangGraph 채팅 오류:', error);
+      console.error('메시지 전송 실패:', error);
       const errorMessage = {
-        id: `error-${Date.now()}`,
-        type: 'bot',
-        content: '❌ 서버에 연결할 수 없습니다. 서버가 실행 중인지 확인해주세요.',
-        timestamp: new Date(),
-        workflowTrace: null
+        id: Date.now() + 1,
+        content: '죄송합니다. 오류가 발생했습니다. 다시 시도해주세요.',
+        isUser: false,
+        timestamp: new Date().toISOString(),
+        isError: true
       };
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
+		// 전송 후에도 입력창 포커스 유지
+		setTimeout(() => {
+			inputRef.current?.focus();
+		}, 0);
     }
-  }, [inputValue, messages, isLoading, API_BASE_URL]);
-
-  const handleKeyPress = useCallback((e) => {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  }, [sendMessage]);
-
-  const formatTime = (timestamp) => {
-    if (!timestamp) return '';
-    const date = timestamp instanceof Date ? timestamp : new Date(timestamp);
-    return date.toLocaleTimeString('ko-KR', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
   };
 
-  if (!isOpen) {
-    return (
-      <ToggleButton onClick={() => setIsOpen(true)} title="LangGraph 채팅봇 열기">
-        🤖
-      </ToggleButton>
-    );
-  }
+  const handleKeyPress = (e) => {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      if (!isLoading && inputValue.trim()) {
+        setIsSendAnimating(true);
+        setTimeout(() => setIsSendAnimating(false), 1000);
+      }
+      sendMessage();
+    }
+  };
+
+  const clearChat = async () => {
+    if (sessionId) {
+      try {
+        await fetch(`/api/langgraph-agent/sessions/${sessionId}/clear`, {
+          method: 'POST'
+        });
+      } catch (error) {
+        console.error('채팅 기록 삭제 실패:', error);
+      }
+    }
+    setMessages([]);
+    setSessionId(null);
+	// 기록 삭제 후 입력창 포커스
+	setTimeout(() => {
+		inputRef.current?.focus();
+	}, 0);
+  };
+
+  const toggleChat = () => {
+    const next = !isOpen;
+    if (isControlled) {
+      onOpenChange && onOpenChange(next);
+    } else {
+      setIsOpenInternal(next);
+    }
+    if (next) {
+      setTimeout(() => {
+        inputRef.current?.focus();
+      }, 300);
+    }
+  };
+
+  const toggleMinimize = () => {
+    setIsMinimized(!isMinimized);
+  };
+
+  const getStatusColor = () => {
+    switch (agentStatus) {
+      case 'healthy': return '#00c851';
+      case 'unhealthy': return '#ff4444';
+      case 'error': return '#ff8800';
+      default: return '#999';
+    }
+  };
 
   return (
-    <ChatContainer>
-      <ChatHeader>
-        <ChatTitle>LangGraph AI Assistant</ChatTitle>
-        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-          <LangGraphBadge>LangGraph</LangGraphBadge>
-          <button
-            onClick={() => setIsOpen(false)}
-            style={{
-              background: 'none',
-              border: 'none',
-              color: 'white',
-              cursor: 'pointer',
-              fontSize: '18px'
+    <ChatbotContainer className="lgc-container">
+      <AnimatePresence>
+        {isOpen && (
+          <ChatWindow
+            className="lgc-window"
+            initial={{ opacity: 0, y: 20, scale: 0.9 }}
+            animate={{ 
+              opacity: 1, 
+              y: 0, 
+              scale: 1,
+              height: isMinimized ? '64px' : '600px',
+              width: isMinimized ? '64px' : '400px',
+              borderRadius: isMinimized ? '50%' : '20px',
+              padding: isMinimized ? '0px' : undefined
             }}
+            exit={{ opacity: 0, y: 20, scale: 0.9 }}
+            transition={{ duration: 0.25 }}
+            style={{ overflow: 'hidden' }}
           >
-            ✕
-          </button>
-        </div>
-      </ChatHeader>
+            <ChatHeader className="lgc-header" style={{ display: isMinimized ? 'none' : undefined }}>
+              <HeaderInfo className="lgc-header-info">
+                <AgentIcon className="lgc-agent-icon">
+                  <FiCpu />
+                </AgentIcon>
+                <HeaderText className="lgc-header-text">
+                  <h3>AI 어시스턴트</h3>
+                  <p>LangGraph 기반 지능형 챗봇 {isAdminMode && '· 관리자'}</p>
+                </HeaderText>
+              </HeaderInfo>
+              <HeaderActions className="lgc-header-actions">
+                <div className="lgc-status-dot" style={{ 
+                  width: '8px', 
+                  height: '8px', 
+                  borderRadius: '50%', 
+                  backgroundColor: getStatusColor(),
+                  marginRight: '8px'
+                }} />
+                <IconButton className="lgc-btn lgc-btn-minimize" onClick={toggleMinimize}>
+                  {isMinimized ? <FiMaximize2 size={16} /> : <FiMinimize2 size={16} />}
+                </IconButton>
+                <IconButton className="lgc-btn lgc-btn-clear" onClick={clearChat}>
+                  <FiRefreshCw size={16} />
+                </IconButton>
+                {isAdminMode && (
+                  <IconButton className="lgc-btn lgc-btn-admin" onClick={() => setShowAdminPanel(true)} title="관리자 툴 관리">
+                    <FiTool size={16} />
+                  </IconButton>
+                )}
+                <IconButton className="lgc-btn lgc-btn-close" onClick={toggleChat}>
+                  <FiX size={16} />
+                </IconButton>
+              </HeaderActions>
+            </ChatHeader>
 
-      <ChatBody>
-        <MessagesContainer>
-          {messages.map((message) => (
-            <Message key={message.id}>
-              {message.type === 'user' ? (
-                <>
-                  <UserAvatar>U</UserAvatar>
-                  <UserMessage>
-                    {message.content}
-                    <div style={{ fontSize: '10px', opacity: 0.7, marginTop: '4px' }}>
-                      {formatTime(message.timestamp)}
-                    </div>
-                  </UserMessage>
-                </>
-              ) : (
-                <>
-                  <BotAvatar>AI</BotAvatar>
-                  <BotMessage>
-                    {message.content}
-                    {message.workflowTrace && (
-                      <WorkflowTrace>
-                        🔍 워크플로우: {message.workflowTrace}
-                      </WorkflowTrace>
+            {isMinimized ? (
+              <MinimizedContent className="lgc-minimized" title="확대" onClick={toggleMinimize} aria-label="채팅창 확대">
+                💬
+              </MinimizedContent>
+            ) : (
+              <>
+                <ChatBody className="lgc-body">
+                  {messages.length === 0 && (
+                    <WelcomeMessage className="lgc-welcome">
+                      안녕하세요! 저는 HireMe AI 어시스턴트입니다. 🤖<br />
+                      채용 관련 질문이나 도움이 필요한 내용을 언제든 말씀해주세요.
+                    </WelcomeMessage>
+                  )}
+                  
+                  {messages.map((message) => (
+                    <MessageContainer key={message.id} $isUser={message.isUser} className={`lgc-message-container ${message.isUser ? 'lgc--user' : 'lgc--bot'}`}>
+                      <Message
+                        className="lgc-message"
+                        $isUser={message.isUser}
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ duration: 0.3 }}
+                      >
+                        {message.content}
+                        {message.toolUsed && (
+                          <ToolIndicator className="lgc-tool-indicator">
+                            <FiTool size={12} />
+                            {message.toolUsed} 툴 사용
+                          </ToolIndicator>
+                        )}
+                      </Message>
+                    </MessageContainer>
+                  ))}
+                  
+                  {isLoading && (
+                    <MessageContainer className="lgc-message-container lgc--bot" isUser={false}>
+                      <LoadingDots className="lgc-loading-dots">
+                        <Dot className="lgc-loading-dot"
+                          animate={{ scale: [1, 1.2, 1] }}
+                          transition={{ duration: 0.6, repeat: Infinity, delay: 0 }}
+                        />
+                        <Dot className="lgc-loading-dot"
+                          animate={{ scale: [1, 1.2, 1] }}
+                          transition={{ duration: 0.6, repeat: Infinity, delay: 0.2 }}
+                        />
+                        <Dot className="lgc-loading-dot"
+                          animate={{ scale: [1, 1.2, 1] }}
+                          transition={{ duration: 0.6, repeat: Infinity, delay: 0.4 }}
+                        />
+                      </LoadingDots>
+                    </MessageContainer>
+                  )}
+                  <div ref={messagesEndRef} />
+                </ChatBody>
+
+                <ChatInput className="lgc-input">
+                  <Input
+                    className="lgc-text-input"
+                    ref={inputRef}
+                    value={inputValue}
+                    onChange={(e) => setInputValue(e.target.value)}
+                    onKeyPress={handleKeyPress}
+                    placeholder="메시지를 입력하세요..."
+                    disabled={isLoading}
+                  />
+                  <SendButton
+                    className="lgc-send-button"
+                    onClick={() => {
+                      if (!isLoading && inputValue.trim()) {
+                        setIsSendAnimating(true);
+                        setTimeout(() => setIsSendAnimating(false), 1000);
+                      }
+                      sendMessage();
+                    }}
+                    disabled={isLoading || !inputValue.trim()}
+                  >
+                    {/* 기본 아이콘 */}
+                    <span className="lgc-send-base" style={{ opacity: isSendAnimating ? 0 : 1 }}>
+                      <FiSend size={16} />
+                    </span>
+                    {/* 날아가는 복제 아이콘 */}
+                    {isSendAnimating && (
+                      <>
+                        <motion.div
+                          className="lgc-send-fly"
+                          initial={{ x: 0, y: 0, scale: 1, opacity: 1, rotate: 0 }}
+                          animate={{
+                            x: [0, 12, 28, 52, 78],
+                            y: [0, -10, -24, -36, -46],
+                            scale: [1, 1.05, 1, 0.95, 0.9],
+                            opacity: [1, 1, 0.9, 0.75, 0],
+                            rotate: [0, 12, 20, 28, 36]
+                          }}
+                          transition={{ duration: 0.95, ease: 'easeOut' }}
+                        >
+                          <FiSend size={18} />
+                        </motion.div>
+                        {/* 트레일 2개 */}
+                        <motion.div
+                          className="lgc-send-trail"
+                          style={{ width: 8, height: 8 }}
+                          initial={{ x: 0, y: 0, opacity: 0.7, scale: 0.8 }}
+                          animate={{ x: [0, 10, 30], y: [0, -8, -22], opacity: [0.7, 0.4, 0], scale: [0.8, 1.2, 1.6] }}
+                          transition={{ duration: 0.9, ease: 'easeOut' }}
+                        />
+                        <motion.div
+                          className="lgc-send-trail"
+                          style={{ width: 6, height: 6 }}
+                          initial={{ x: 0, y: 0, opacity: 0.6, scale: 0.7 }}
+                          animate={{ x: [0, 6, 18], y: [0, -6, -16], opacity: [0.6, 0.35, 0], scale: [0.7, 1.1, 1.4] }}
+                          transition={{ duration: 0.9, ease: 'easeOut', delay: 0.05 }}
+                        />
+                      </>
                     )}
-                    <div style={{ fontSize: '10px', opacity: 0.7, marginTop: '4px' }}>
-                      {formatTime(message.timestamp)}
-                    </div>
-                  </BotMessage>
-                </>
-              )}
-            </Message>
-          ))}
-          
-          {isLoading && (
-            <Message>
-              <BotAvatar>AI</BotAvatar>
-              <BotMessage>
-                <LoadingSpinner />
-                <span style={{ marginLeft: '8px' }}>LangGraph 처리 중...</span>
-              </BotMessage>
-            </Message>
-          )}
-        </MessagesContainer>
+                  </SendButton>
+                </ChatInput>
+              </>
+            )}
+          </ChatWindow>
+        )}
+      </AnimatePresence>
 
-        <InputContainer>
-          <Input
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            onKeyPress={handleKeyPress}
-            placeholder="LangGraph AI에게 질문해보세요..."
-            disabled={isLoading || !systemInfo?.available}
-          />
-          <SendButton 
-            onClick={sendMessage}
-            disabled={isLoading || !inputValue.trim() || !systemInfo?.available}
-          >
-            {isLoading ? <LoadingSpinner /> : '→'}
-          </SendButton>
-        </InputContainer>
-      </ChatBody>
-    </ChatContainer>
+      {SHOW_PURPLE_TRIGGER_BUTTON && (
+        <ChatButton
+          className="lgc-trigger"
+          onClick={toggleChat}
+          whileHover={{ scale: 1.1 }}
+          whileTap={{ scale: 0.9 }}
+        >
+          <FiMessageCircle />
+        </ChatButton>
+      )}
+
+      {showAdminPanel && isAdminMode && (
+        <AdminToolsManager className="lgc-admin-panel" sessionId={sessionId} onClose={() => setShowAdminPanel(false)} />
+      )}
+    </ChatbotContainer>
   );
 };
 

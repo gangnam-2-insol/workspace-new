@@ -2434,12 +2434,12 @@ const ApplicantManagement = () => {
       setPortfolioView('select');
     }
     
-    // 이력서 타입일 때만 유사도 체크 실행
-    if (type === 'resume') {
+    // 자소서 타입일 때만 유사도 체크 실행
+    if (type === 'coverLetter') {
       setDocumentModal(prev => ({ ...prev, isLoadingSimilarity: true }));
       
       try {
-      const response = await fetch(`${API_BASE_URL}/api/resume/similarity-check/${applicant.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/coverletter/similarity-check/${applicant.id}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -3332,7 +3332,7 @@ const ApplicantManagement = () => {
                 )}
 
                 {/* 이력서/자소서 기존 로직 */}
-                {documentModal.type === 'resume' && documentModal.isOriginal && (
+                {documentModal.type === 'coverLetter' && documentModal.isOriginal && (
                   <>
                     <DocumentSection>
                       <DocumentSectionTitle>지원자 기본정보</DocumentSectionTitle>
@@ -3396,7 +3396,7 @@ const ApplicantManagement = () => {
                   </>
                 )}
 
-                {documentModal.type === 'resume' && !documentModal.isOriginal && documentModal.applicant.documents?.resume && (
+                {documentModal.type === 'resume' && documentModal.applicant.documents?.resume && (
                   <>
                     <DocumentSection>
                       <DocumentSectionTitle>개인정보</DocumentSectionTitle>
@@ -3463,28 +3463,6 @@ const ApplicantManagement = () => {
                   </>
                 )}
 
-                {documentModal.type === 'coverLetter' && documentModal.applicant.documents?.coverLetter && (
-                  <>
-                    <DocumentSection>
-                      <DocumentSectionTitle>지원 동기</DocumentSectionTitle>
-                      <DocumentText>{documentModal.applicant.documents.coverLetter.motivation}</DocumentText>
-                    </DocumentSection>
-
-                    <DocumentSection>
-                      <DocumentSectionTitle>나의 강점</DocumentSectionTitle>
-                      <DocumentList>
-                        {(documentModal.applicant.documents.coverLetter.strengths || []).map((strength, index) => (
-                          <DocumentListItem key={index}>{strength}</DocumentListItem>
-                        ))}
-                      </DocumentList>
-                    </DocumentSection>
-
-                    <DocumentSection>
-                      <DocumentSectionTitle>향후 목표</DocumentSectionTitle>
-                      <DocumentText>{documentModal.applicant.documents.coverLetter.goals}</DocumentText>
-                    </DocumentSection>
-                  </>
-                )}
 
                 {documentModal.type === 'portfolio' && documentModal.applicant.documents?.portfolio && (
                   <>
@@ -3518,7 +3496,7 @@ const ApplicantManagement = () => {
                   </>
                 )}
 
-                {documentModal.type === 'resume' && !documentModal.isOriginal && (
+                {documentModal.type === 'coverLetter' && !documentModal.isOriginal && (
                   <>
                     {/* 유사도 체크 결과 섹션 */}
                     <DocumentSection>
@@ -3527,7 +3505,7 @@ const ApplicantManagement = () => {
                       {documentModal.isLoadingSimilarity && (
                         <DocumentCard>
                           <DocumentCardText>
-                            📊 다른 이력서들과의 유사도를 분석 중입니다...
+                            📊 다른 자소서들과의 유사도를 분석 중입니다...
                           </DocumentCardText>
                         </DocumentCard>
                       )}
@@ -3553,10 +3531,54 @@ const ApplicantManagement = () => {
                             </DocumentGrid>
                           </DocumentCard>
 
+                          {/* 표절 위험도 분석 */}
+                          {documentModal.similarityData.plagiarism_analysis && documentModal.similarityData.plagiarism_analysis.success && (
+                            <DocumentCard>
+                              <DocumentCardTitle>⚠️ 표절 위험도 분석</DocumentCardTitle>
+                              <div style={{
+                                padding: '12px',
+                                borderRadius: '8px',
+                                backgroundColor: documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#fff5f5' : 
+                                                documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#fffbf0' : '#f0fff4',
+                                border: `2px solid ${documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#ff4757' : 
+                                                   documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#ffa502' : '#2ed573'}`
+                              }}>
+                                <div style={{
+                                  fontWeight: 'bold',
+                                  marginBottom: '8px',
+                                  color: documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#ff4757' : 
+                                        documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#ffa502' : '#2ed573'
+                                }}>
+                                  위험도: {documentModal.similarityData.plagiarism_analysis.risk_level} 
+                                  ({(documentModal.similarityData.plagiarism_analysis.risk_score * 100).toFixed(1)}%)
+                                </div>
+                                <div style={{fontSize: '14px', color: '#333', marginBottom: '8px', whiteSpace: 'pre-line'}}>
+                                  {documentModal.similarityData.plagiarism_analysis.analysis}
+                                </div>
+                                
+                                {documentModal.similarityData.plagiarism_analysis.recommendations && 
+                                 documentModal.similarityData.plagiarism_analysis.recommendations.length > 0 && (
+                                  <div>
+                                    <div style={{fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '4px'}}>
+                                      권장사항:
+                                    </div>
+                                    <ul style={{margin: '0', paddingLeft: '16px'}}>
+                                      {documentModal.similarityData.plagiarism_analysis.recommendations.map((rec, idx) => (
+                                        <li key={idx} style={{fontSize: '12px', color: '#666', marginBottom: '2px'}}>
+                                          {rec}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            </DocumentCard>
+                          )}
+
                           {/* 상위 유사 이력서들 */}
                           {documentModal.similarityData.top_similar.length > 0 && (
                             <DocumentCard>
-                              <DocumentCardTitle>🎯 가장 유사한 이력서 TOP 5</DocumentCardTitle>
+                              <DocumentCardTitle>🎯 가장 유사한 자소서 TOP 5</DocumentCardTitle>
                               {documentModal.similarityData.top_similar.map((similar, index) => (
                                 <div key={similar.resume_id} style={{
                                   padding: '12px',
@@ -3578,6 +3600,38 @@ const ApplicantManagement = () => {
                                     지원동기: {(similar.field_similarities.motivation * 100).toFixed(1)}% | 
                                     경력사항: {(similar.field_similarities.careerHistory * 100).toFixed(1)}%
                                   </div>
+                                  
+                                  {/* LLM 분석 결과 추가 */}
+                                  {similar.llm_analysis && similar.llm_analysis.success && (
+                                    <div style={{
+                                      marginTop: '8px',
+                                      padding: '8px',
+                                      backgroundColor: '#f0f8ff',
+                                      borderLeft: '4px solid #4a90e2',
+                                      borderRadius: '4px'
+                                    }}>
+                                      <div style={{fontSize: '11px', fontWeight: 'bold', color: '#4a90e2', marginBottom: '4px'}}>
+                                        🤖 AI 분석
+                                      </div>
+                                      <div style={{fontSize: '12px', color: '#333', lineHeight: '1.4', whiteSpace: 'pre-line'}}>
+                                        {similar.llm_analysis.analysis}
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  {similar.llm_analysis && !similar.llm_analysis.success && (
+                                    <div style={{
+                                      marginTop: '8px',
+                                      padding: '8px',
+                                      backgroundColor: '#fff0f0',
+                                      borderLeft: '4px solid #e74c3c',
+                                      borderRadius: '4px'
+                                    }}>
+                                      <div style={{fontSize: '11px', color: '#e74c3c'}}>
+                                        AI 분석 실패: {similar.llm_analysis.error || 'Unknown error'}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </DocumentCard>
@@ -3594,13 +3648,13 @@ const ApplicantManagement = () => {
                       )}
                     </DocumentSection>
 
-                    {/* 기존 이력서 요약 섹션 */}
+                    {/* 자소서 요약 섹션 */}
                     {!documentModal.applicant.documents?.resume && (
                       <DocumentSection>
-                        <DocumentSectionTitle>이력서 요약</DocumentSectionTitle>
+                        <DocumentSectionTitle>자소서 요약</DocumentSectionTitle>
                         <DocumentCard>
                           <DocumentCardText>
-                            현재 이 지원자의 상세 이력서 정보는 등록되지 않았습니다.<br/>
+                            현재 이 지원자의 상세 자소서 정보는 등록되지 않았습니다.<br/>
                             <strong>원본보기</strong> 버튼을 클릭하면 DB에 저장된 지원자의 모든 정보를 확인할 수 있습니다.
                           </DocumentCardText>
                         </DocumentCard>

@@ -179,7 +179,13 @@ const FloatingChatbot = ({ page, onFieldUpdate, onComplete, onPageAction }) => {
     };
 
     const handleShowFloatingChatbot = () => {
-      console.log('플로팅 챗봇이 다시 보입니다.');
+      console.log('플로팅 챗봇 열기 요청 수신');
+      setIsOpen(true);
+      sessionStorage.setItem('chatbotWasOpen', 'true');
+      // 입력창 포커스
+      setTimeout(() => {
+        focusInput();
+      }, 200);
     };
 
     const handleStartFreeTextMode = () => {
