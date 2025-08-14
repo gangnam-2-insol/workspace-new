@@ -44,9 +44,9 @@ gemini_service = None
 # Gemini 서비스 초기화
 try:
     gemini_service = GeminiService("gemini-1.5-pro")
-    print("✅ Gemini 서비스 초기화 성공 (모델: gemini-1.5-pro)")
+            print("[SUCCESS] Gemini 서비스 초기화 성공 (모델: gemini-1.5-pro)")
 except Exception as e:
-    print(f"❌ Gemini 서비스 초기화 실패: {e}")
+    print(f"[ERROR] Gemini 서비스 초기화 실패: {e}")
     gemini_service = None
 
 # 임베딩 모델 설정
