@@ -3,7 +3,7 @@
 """
 
 import re
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 class FieldExtractor:
     """필드 추출기 클래스"""
@@ -47,6 +47,11 @@ class FieldExtractor:
             if value:
                 extracted_fields[field_name] = value
         
+        # 이름 추출(점수화 기반)도 함께 시도
+        name = self._extract_name_with_scoring(text)
+        if name:
+            extracted_fields['name'] = name
+
         return extracted_fields
     
     def _extract_field_value(self, text: str, patterns: List[str], field_name: str) -> str:
@@ -65,6 +70,101 @@ class FieldExtractor:
                     return matches[0] if isinstance(matches[0], str) else matches[0][0]
         
         return None
+
+    # ===== 이름 추출/선택 로직 =====
+    def _extract_name_with_scoring(self, text: str) -> Optional[str]:
+        """여러 후보 중에서 점수화로 최적 이름 선택.
+        - 대상: 2~4자 한글
+        - 배제: 주소/지명 접미사, 섹션 타이틀성 단어
+        - 가산: 상단 위치, 라벨 근접(이름/성명/Name), '입니다' 패턴, 연락처 근접, 성씨 시작
+        """
+        candidates = []
+        # 기본 후보 수집
+        name_patterns = [
+            r'\b([가-힣]{2,4})\b',
+            r'\b([가-힣]{2,4})\s*입니다',
+            r'(?:이름|성명|Name)\s*[:\-]?\s*([가-힣]{2,4})',
+        ]
+        for pat in name_patterns:
+            candidates.extend(self._re_findall_safe(pat, text))
+
+        # 2~4자 한글 필터 및 배제 필터
+        candidates = [c.strip() for c in candidates if isinstance(c, str) and c.strip()]
+        candidates = [c for c in candidates if self._is_korean_2_to_4(c)]
+        candidates = [c for c in candidates if not self._is_address_like(c) and not self._is_section_title(c)]
+
+        if not candidates:
+            return None
+
+        # 점수 계산
+        def score(name: str) -> int:
+            s = 0
+            pos = text.find(name)
+            if pos != -1 and pos / max(1, len(text)) < 0.2:
+                s += 2
+            # 라벨 근접
+            if self._re_search_any([rf"이름\s*[:\-]?\s*{name}", rf"성명\s*[:\-]?\s*{name}", rf"Name\s*[:\-]?\s*{name}"], text):
+                s += 3
+            # '입니다'
+            if self._re_search_any([rf"\b{name}\s*입니다"], text):
+                s += 3
+            # 연락처 근접(±200자)
+            contact_positions = self._find_all_positions(["이메일", "email", "메일", "전화", "연락처", "contact", "phone"], text)
+            if pos != -1 and any(abs(pos - cp) <= 200 for cp in contact_positions):
+                s += 1
+            # 성씨 시작
+            if name and name[0] in self._common_family_names():
+                s += 2
+            # 패널티
+            if self._is_section_title(name) or self._is_address_like(name):
+                s -= 5
+            return s
+
+        uniq = []
+        seen = set()
+        for n in candidates:
+            if n not in seen:
+                uniq.append(n)
+                seen.add(n)
+
+        best = max(uniq, key=score) if uniq else None
+        return best if (best is not None and score(best) >= 0) else None
+
+    def _re_findall_safe(self, pattern: str, text: str) -> List[str]:
+        try:
+            matches = re.findall(pattern, text, flags=re.IGNORECASE | re.MULTILINE)
+            if not matches:
+                return []
+            if isinstance(matches[0], tuple):
+                return [m[0] for m in matches if m and m[0]]
+            return [m for m in matches if m]
+        except Exception:
+            return []
+
+    def _re_search_any(self, patterns: List[str], text: str) -> bool:
+        for pat in patterns:
+            if re.search(pat, text, flags=re.IGNORECASE | re.MULTILINE):
+                return True
+        return False
+
+    def _find_all_positions(self, keywords: List[str], text: str) -> List[int]:
+        positions: List[int] = []
+        for kw in keywords:
+            for m in re.finditer(kw, text, flags=re.IGNORECASE):
+                positions.append(m.start())
+        return positions
+
+    def _is_korean_2_to_4(self, s: str) -> bool:
+        return bool(re.match(r'^[가-힣]{2,4}$', s))
+
+    def _is_address_like(self, s: str) -> bool:
+        return any(s.endswith(suf) for suf in ['동','로','길','구','시','도','군','면','리','대로','번길'])
+
+    def _is_section_title(self, s: str) -> bool:
+        return s in {'경력정보','경력','개인정보','자격증','수상','수상경력','기술','기술 숙련도','학력','학력사항','연락처','주소','이메일','전화','프로젝트','목표','해외'}
+
+    def _common_family_names(self) -> set:
+        return {"김","이","박","최","정","조","강","윤","장","임","한","오","서","신","권","황","안","송","류","유","홍","전","고","문","양","손","배","백","허"}
     
     def _process_experience(self, text: str, matches: List) -> str:
         """경력 정보 처리"""
