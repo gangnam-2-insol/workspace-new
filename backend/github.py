@@ -20,6 +20,51 @@ class GithubSummaryResponse(BaseModel):
     source: str
     summary: str
     detailed_analysis: Optional[Dict] = None
+    # 인터랙티브 차트를 위한 원시 데이터
+    language_stats: Optional[Dict[str, int]] = None
+    language_total_bytes: Optional[int] = None
+    original_language_stats: Optional[Dict[str, int]] = None  # 원본 언어 통계
+
+class LanguageChartResponse(BaseModel):
+    language_stats: Dict[str, int]  # 언어별 통계
+    total_bytes: int  # 총 바이트 수
+    original_stats: Optional[Dict[str, int]] = None  # 원본 통계 (기타 분류 전)
+
+def process_language_stats(language_stats: Dict[str, int], total_bytes: int) -> Dict[str, int]:
+    """언어 통계를 처리하여 8개 이상이거나 3% 이하인 언어들을 '기타'로 분류"""
+    if not language_stats:
+        return language_stats
+    
+    entries = sorted(language_stats.items(), key=lambda x: x[1], reverse=True)
+    
+    # 3% 이하인 언어들을 찾기
+    small_languages = [(name, value) for name, value in entries if (value / total_bytes) * 100 <= 3]
+    
+    # 8개 이상이거나 3% 이하인 언어가 여러 개인 경우 처리
+    if len(entries) > 8 or len(small_languages) > 1:
+        # 3% 이하인 언어들을 제외하고 상위 언어들 선택
+        significant_languages = [(name, value) for name, value in entries if (value / total_bytes) * 100 > 3]
+        top_languages = significant_languages[:7]
+        
+        # 나머지 언어들을 '기타'로 분류
+        others = []
+        for name, value in entries:
+            percentage = (value / total_bytes) * 100
+            if percentage <= 3 or not any(top_name == name for top_name, _ in top_languages):
+                others.append((name, value))
+        
+        # 결과 구성 - 기타를 맨 마지막에 배치
+        result = {}
+        for name, value in top_languages:
+            result[name] = value
+        if others:
+            others_sum = sum(value for _, value in others)
+            result['기타'] = others_sum
+        
+        return result
+    else:
+        # 기존 로직: 상위 7개만 표시
+        return dict(entries[:7])
 
 class RepositoryAnalysis(BaseModel):
     project_overview: Dict
@@ -711,6 +756,76 @@ async def summarize_with_llm(text: str, lines: int = 7) -> List[Dict]:
     # 임시로 'unknown' 사용
     return await generate_unified_summary('unknown', None, {'text': text}, None)
 
+
+
+async def generate_user_language_chart(username: str, token: Optional[str] = None) -> LanguageChartResponse:
+    """사용자의 모든 레포지토리 언어 통계를 수집"""
+    try:
+        # 사용자의 모든 레포지토리 가져오기
+        repos = await fetch_user_repos(username, token)
+        if not repos:
+            raise HTTPException(status_code=404, detail="공개 리포지토리를 찾을 수 없습니다.")
+        
+        # 모든 레포지토리의 언어 통계 수집
+        all_languages = {}
+        total_bytes = 0
+        
+        # 상위 10개 레포지토리만 분석 (성능 최적화)
+        top_repos = [r for r in repos if not r.get('fork')][:10]
+        
+        for repo in top_repos:
+            owner_login = repo.get('owner', {}).get('login', username)
+            try:
+                repo_languages = await fetch_repo_languages(owner_login, repo['name'], token)
+                for lang, bytes_count in repo_languages.items():
+                    all_languages[lang] = all_languages.get(lang, 0) + bytes_count
+                    total_bytes += bytes_count
+            except Exception as e:
+                print(f"레포지토리 {repo['name']} 언어 통계 수집 실패: {e}")
+                continue
+        
+        if not all_languages:
+            raise HTTPException(status_code=404, detail="언어 통계를 찾을 수 없습니다.")
+        
+        # 언어 통계 처리
+        processed_languages = process_language_stats(all_languages, total_bytes)
+        
+        return LanguageChartResponse(
+            language_stats=processed_languages,
+            total_bytes=total_bytes,
+            original_stats=all_languages
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"언어 통계 수집 중 오류가 발생했습니다: {str(e)}")
+
+async def generate_repo_language_chart(username: str, repo_name: str, token: Optional[str] = None) -> LanguageChartResponse:
+    """특정 레포지토리의 언어 통계를 수집"""
+    try:
+        # 레포지토리 언어 통계 가져오기
+        languages = await fetch_repo_languages(username, repo_name, token)
+        
+        if not languages:
+            raise HTTPException(status_code=404, detail="언어 통계를 찾을 수 없습니다.")
+        
+        total_bytes = sum(languages.values())
+        
+        # 언어 통계 처리
+        processed_languages = process_language_stats(languages, total_bytes)
+        
+        return LanguageChartResponse(
+            language_stats=processed_languages,
+            total_bytes=total_bytes,
+            original_stats=languages
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"언어 통계 수집 중 오류가 발생했습니다: {str(e)}")
+
 @router.post("/github/summary", response_model=GithubSummaryResponse)
 async def github_summary(request: GithubSummaryRequest):
     """GitHub 사용자 요약"""
@@ -748,6 +863,25 @@ async def github_summary(request: GithubSummaryRequest):
         profile_api_url = f"https://api.github.com/users/{username}"
         
         print(f"최종 처리 - username: {username}, repo_name: {request.repo_name}")
+        
+        # 언어 통계 데이터 생성
+        language_stats: Dict[str, int] = {}
+        language_total_bytes: int = 0
+        try:
+            if request.repo_name:
+                # 특정 레포지토리 언어 통계
+                chart_response = await generate_repo_language_chart(username, request.repo_name, github_token)
+                language_stats = chart_response.language_stats
+                language_total_bytes = chart_response.total_bytes
+            else:
+                # 사용자 전체 언어 통계
+                chart_response = await generate_user_language_chart(username, github_token)
+                language_stats = chart_response.language_stats
+                language_total_bytes = chart_response.total_bytes
+        except Exception as e:
+            print(f"언어 통계 수집 실패: {e}")
+            language_stats = {}
+            language_total_bytes = 0
         
         # 통일된 검색 로직: 항상 동일한 우선순위로 분석 수행
         # 1. 특정 저장소가 지정된 경우에도 '전체 레포 분석 파이프라인'을 재사용하여 일관된 결과 생성
@@ -806,7 +940,10 @@ async def github_summary(request: GithubSummaryRequest):
                     profileUrl=profile_url,
                     profileApiUrl=profile_api_url,
                     source=f'repos_meta_filtered_{request.repo_name}',
-                    summary=json.dumps(summaries, ensure_ascii=False)
+                    summary=json.dumps(summaries, ensure_ascii=False),
+                    language_stats=language_stats,
+                    language_total_bytes=language_total_bytes,
+                    original_language_stats=chart_response.original_stats
                 )
 
             except httpx.HTTPStatusError as e:
@@ -824,7 +961,10 @@ async def github_summary(request: GithubSummaryRequest):
                 profileUrl=profile_url,
                 profileApiUrl=profile_api_url,
                 source='profile_readme',
-                summary=json.dumps(summaries, ensure_ascii=False)
+                summary=json.dumps(summaries, ensure_ascii=False),
+                language_stats=language_stats,
+                language_total_bytes=language_total_bytes,
+                original_language_stats=chart_response.original_stats
             )
         
         # 3. 리포지토리 메타데이터 분석 (프로필 README가 없는 경우)
@@ -867,7 +1007,10 @@ async def github_summary(request: GithubSummaryRequest):
             profileUrl=profile_url,
             profileApiUrl=profile_api_url,
             source='repos_meta',
-            summary=json.dumps(summaries, ensure_ascii=False)
+            summary=json.dumps(summaries, ensure_ascii=False),
+            language_stats=language_stats,
+            language_total_bytes=language_total_bytes,
+            original_language_stats=chart_response.original_stats
         )
         
     except HTTPException:
@@ -946,12 +1089,22 @@ async def github_repo_analysis(request: GithubSummaryRequest):
         # 통합 요약 생성
         summaries = await generate_unified_summary(username, request.repo_name, None, [detailed_analysis])
         
+        # 언어 통계 데이터 생성 (repo 전용)
+        try:
+            chart_response = await generate_repo_language_chart(owner_login, request.repo_name, github_token)
+            language_stats = chart_response.language_stats
+            language_total_bytes = chart_response.total_bytes
+        except Exception:
+            language_stats = languages or {}
+            language_total_bytes = sum((languages or {}).values()) if languages else 0
+
         return GithubSummaryResponse(
             profileUrl=profile_url,
             profileApiUrl=profile_api_url,
             source=f'repo_analysis_{request.repo_name}',
             summary=json.dumps(summaries, ensure_ascii=False),
-            detailed_analysis=detailed_analysis
+            language_stats=language_stats,
+            language_total_bytes=language_total_bytes
         )
         
     except httpx.HTTPStatusError as e:
