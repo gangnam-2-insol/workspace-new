@@ -1,6 +1,7 @@
-# 이력서 분석 시스템
+# 이력서 분석 시스템 (RAG 적용)
 
 이력서 원본을 MongoDB에 저장하고, 임베딩된 벡터를 Pinecone 벡터 DB에 저장하는 시스템입니다.
+**RAG (Retrieval-Augmented Generation) 기술**을 적용하여 유사도 검색 결과를 **Gemini 1.5 Flash**가 자연어로 분석하고 설명합니다.
 
 ## 설치 및 설정
 
@@ -295,9 +296,86 @@ POST /api/chunking/merge
 }
 ```
 
-### 8. Similarity Service APIs
+### 8. 이력서 유사도 체크 (RAG 적용) 🆕
 
-#### 8.1. 텍스트 유사도 비교
+#### 8.1. 이력서 유사도 체크 및 AI 분석 🔥
+```
+POST /api/resume/similarity-check/{resume_id}
+```
+**설명**: 특정 이력서와 다른 모든 이력서를 비교하여 유사도를 계산하고, LLM을 통해 구체적인 유사성을 분석합니다.
+
+**요청:**
+```json
+POST /api/resume/similarity-check/68999dda47ea917329ee7aba
+```
+
+**응답:**
+```json
+{
+  "current_resume": {
+    "id": "68999dda47ea917329ee7aba",
+    "name": "김민수",
+    "position": "프론트엔드 개발자",
+    "department": "개발팀"
+  },
+  "similarity_results": [
+    {
+      "resume_id": "68999dda47ea917329ee7abe",
+      "applicant_name": "박영희",
+      "position": "프론트엔드 개발자",
+      "overall_similarity": 0.65,
+      "field_similarities": {
+        "growthBackground": 0.72,
+        "motivation": 0.58,
+        "careerHistory": 0.65
+      },
+      "is_high_similarity": false,
+      "is_moderate_similarity": true,
+      "is_low_similarity": false,
+      "llm_analysis": {
+        "success": true,
+        "analysis": "성장배경에서 '어려운 환경 극복' 표현과 지원동기의 '회사 발전 기여' 키워드가 매우 유사합니다. 경력사항에서도 비슷한 업무 경험을 언급하고 있어 전반적으로 높은 유사성을 보입니다.",
+        "similarity_score": 0.65,
+        "analyzed_at": "2025-01-15T10:30:00Z"
+      }
+    }
+  ],
+  "statistics": {
+    "total_compared": 15,
+    "high_similarity_count": 2,
+    "moderate_similarity_count": 5,
+    "low_similarity_count": 8,
+    "average_similarity": 0.42
+  },
+  "plagiarism_analysis": {
+    "success": true,
+    "risk_level": "MEDIUM",
+    "risk_score": 0.65,
+    "analysis": "높은 유사도(65.0%)의 이력서가 발견되었습니다. 주의가 필요합니다.",
+    "recommendations": [
+      "일부 내용의 독창성을 확인해주세요",
+      "개인만의 특색을 더 강조해주세요"
+    ],
+    "similar_count": 7,
+    "analyzed_at": "2025-01-15T10:30:00Z"
+  },
+  "top_similar": [
+    {
+      "resume_id": "68999dda47ea917329ee7abe",
+      "applicant_name": "박영희", 
+      "overall_similarity": 0.65,
+      "llm_analysis": {
+        "analysis": "성장배경에서 '어려운 환경 극복' 표현이 매우 유사..."
+      }
+    }
+  ],
+  "analysis_timestamp": "2025-01-15T10:30:00Z"
+}
+```
+
+### 9. Similarity Service APIs
+
+#### 9.1. 텍스트 유사도 비교
 ```
 POST /api/similarity/compare
 ```
@@ -599,6 +677,55 @@ graph TD
 - **상호 유사도 검증**: 텍스트 기반 A→B, B→A 양방향 검증으로 정확도 향상
 - **Pinecone 인덱싱 대기**: 벡터 저장 후 인덱싱 완료까지 자동 대기
 
+## RAG (Retrieval-Augmented Generation) 시스템 🚀
+
+### LLM 서비스 (Gemini 1.5 Flash)
+- **AI 모델**: Google Gemini 1.5 Flash
+- **기능**: 유사도 분석 결과를 자연어로 설명
+- **처리 과정**:
+  1. 유사도 검색 결과 수집
+  2. LLM에게 원본 + 유사 이력서 데이터 제공
+  3. 구체적인 유사점 분석 및 자연어 생성
+  4. 표절 위험도 평가 및 권장사항 제시
+
+### RAG 플로우
+```mermaid
+graph TD
+    A[이력서 A 입력] --> B[유사도 검색 실행]
+    B --> C[유사한 이력서들 발견]
+    C --> D[LLM에게 데이터 전달]
+    D --> E[AI 분석 실행]
+    E --> F[구체적 유사점 설명]
+    F --> G[표절 위험도 평가]
+    G --> H[프론트엔드에 표시]
+    
+    style A fill:#e1f5fe
+    style E fill:#fff3e0
+    style H fill:#e8f5e8
+```
+
+### 환경변수 설정
+```bash
+# 기존 환경변수
+GEMINI_API_KEY=your_gemini_api_key  # 변경: OpenAI → Gemini
+PINECONE_API_KEY=your_pinecone_api_key
+PINECONE_INDEX_NAME=resume-vectors
+MONGODB_URI=mongodb://localhost:27017/hireme
+
+# 새로 추가된 환경변수 (RAG용)
+# OPENAI_API_KEY는 더 이상 필요하지 않음
+```
+
+### LLM 분석 결과 예시
+**입력**: 두 이력서가 65% 유사함
+**LLM 출력**: 
+> "성장배경에서 '어려운 환경 극복' 표현과 지원동기의 '회사 발전 기여' 키워드가 매우 유사합니다. 경력사항에서도 비슷한 업무 경험을 언급하고 있어 전반적으로 높은 유사성을 보입니다."
+
+### 표절 위험도 분석
+- **HIGH (80% 이상)**: 표절 가능성 높음, 즉시 검토 필요
+- **MEDIUM (60-80%)**: 주의 필요, 일부 수정 권장 
+- **LOW (60% 미만)**: 적정 수준, 문제없음
+
 ## 주요 기능
 
 ### 기본 이력서 관리
@@ -608,6 +735,14 @@ graph TD
 - ✅ 이력서 상세 조회
 - ✅ 이력서 삭제 (원본 + 벡터)
 - ✅ AI 기반 이력서 분석 및 점수 부여
+
+### RAG 기반 유사도 분석 🆕
+- ✅ **Gemini 1.5 Flash**를 활용한 지능형 유사도 분석
+- ✅ **구체적 유사점 설명**: 어떤 부분이 왜 유사한지 자연어로 설명
+- ✅ **표절 위험도 평가**: HIGH/MEDIUM/LOW 3단계 위험도 분석
+- ✅ **개선 권장사항 제시**: AI가 제안하는 구체적인 수정 방향
+- ✅ **실시간 분석**: 유사도 검색과 동시에 LLM 분석 수행
+- ✅ **프론트엔드 통합**: 분석 결과를 사용자 친화적으로 표시
 
 ### Vector Service 기능
 - ✅ 텍스트를 벡터로 변환하여 저장

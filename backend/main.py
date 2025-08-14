@@ -851,6 +851,26 @@ async def check_resume_similarity(resume_id: str):
                     else:
                         field_similarities[field_name] = 0.0
             
+            # LLM 분석 추가 (유사도가 일정 수준 이상일 때만)
+            llm_analysis = None
+            
+            if overall_similarity >= 0.3:  # 30% 이상 유사할 때만 LLM 분석
+                try:
+                    print(f"[API] LLM 분석 시작 - 유사도: {overall_similarity:.3f}")
+                    llm_analysis = await similarity_service.llm_service.analyze_similarity_reasoning(
+                        original_resume=current_resume,
+                        similar_resume=other_resume,
+                        similarity_score=overall_similarity
+                    )
+                    print(f"[API] LLM 분석 완료")
+                except Exception as llm_error:
+                    print(f"[API] LLM 분석 중 오류: {llm_error}")
+                    llm_analysis = {
+                        "success": False,
+                        "error": str(llm_error),
+                        "analysis": "LLM 분석에 실패했습니다."
+                    }
+            
             similarity_result = {
                 "resume_id": other_id,
                 "applicant_name": other_resume.get("name", "알 수 없음"),
@@ -864,13 +884,35 @@ async def check_resume_similarity(resume_id: str):
                 },
                 "is_high_similarity": overall_similarity > 0.7,
                 "is_moderate_similarity": 0.4 <= overall_similarity <= 0.7,
-                "is_low_similarity": overall_similarity < 0.4
+                "is_low_similarity": overall_similarity < 0.4,
+                "llm_analysis": llm_analysis
             }
             
             similarity_results.append(similarity_result)
         
         # 유사도 높은 순으로 정렬
         similarity_results.sort(key=lambda x: x["overall_similarity"], reverse=True)
+        
+        # 전체 표절 위험도 분석 추가
+        plagiarism_analysis = None
+        high_similarity_results = [r for r in similarity_results if r["overall_similarity"] >= 0.3]
+        
+        if high_similarity_results:
+            try:
+                print(f"[API] 표절 위험도 분석 시작")
+                plagiarism_analysis = await similarity_service.llm_service.analyze_plagiarism_risk(
+                    original_resume=current_resume,
+                    similar_resumes=high_similarity_results
+                )
+                print(f"[API] 표절 위험도 분석 완료")
+            except Exception as plag_error:
+                print(f"[API] 표절 위험도 분석 중 오류: {plag_error}")
+                plagiarism_analysis = {
+                    "success": False,
+                    "error": str(plag_error),
+                    "risk_level": "UNKNOWN",
+                    "analysis": "표절 위험도 분석에 실패했습니다."
+                }
         
         # 통계 정보
         high_similarity_count = len([r for r in similarity_results if r["is_high_similarity"]])
@@ -893,6 +935,7 @@ async def check_resume_similarity(resume_id: str):
                 "average_similarity": round(sum([r["overall_similarity"] for r in similarity_results]) / len(similarity_results) if similarity_results else 0, 4)
             },
             "top_similar": similarity_results[:5] if similarity_results else [],
+            "plagiarism_analysis": plagiarism_analysis,
             "analysis_timestamp": datetime.now().isoformat()
         }
         
