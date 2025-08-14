@@ -70,3 +70,4 @@ async def health_check():
     PDF OCR 서비스 상태 확인
     """
     return {"status": "healthy", "service": "pdf_ocr"}
+

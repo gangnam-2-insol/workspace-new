@@ -6,7 +6,10 @@ import json
 import asyncio
 
 from .config import Settings
-from ..gemini_service import GeminiService
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from gemini_service import GeminiService
 
 
 def analyze_text(text: str, settings: Settings) -> Dict[str, Any]:
