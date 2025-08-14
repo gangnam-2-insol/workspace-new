@@ -117,3 +117,7 @@ admin/backend/__pycache__/models.cpython-313.pyc
 admin/backend/__pycache__/database.cpython-313.pyc
 admin/backend/__pycache__/chatbot_router.cpython-313.pyc
 /work
+
+# Data directories
+data/
+*/data/
