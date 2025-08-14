@@ -135,39 +135,47 @@ class LLMService:
         Returns:
             str: 구성된 프롬프트
         """
-        prompt = f"""
-다음 두 이력서의 유사성을 분석해주세요. 유사도 점수는 {similarity_score:.1%}입니다.
-
-**원본 이력서 A:**
-- 이름: {original_info['name']}
-- 지원 직무: {original_info['position']}
-- 지원 부서: {original_info['department']}
-- 성장배경: {original_info['growth_background'][:200]}...
-- 지원동기: {original_info['motivation'][:200]}...
-- 경력사항: {original_info['career_history'][:200]}...
-
-**유사한 이력서 B:**
-- 이름: {similar_info['name']}
-- 지원 직무: {similar_info['position']}
-- 지원 부서: {similar_info['department']}
-- 성장배경: {similar_info['growth_background'][:200]}...
-- 지원동기: {similar_info['motivation'][:200]}...
-- 경력사항: {similar_info['career_history'][:200]}...
-"""
-
+        
+        # 청크 매칭 정보 구성
+        chunk_info = ""
         if chunk_details:
-            prompt += f"\n**청크별 매칭 정보:**\n"
+            chunk_matches = []
             for key, detail in chunk_details.items():
-                prompt += f"- {detail['query_chunk']} → {detail['match_chunk']}: {detail['score']:.1%}\n"
+                chunk_matches.append(f"- {detail['query_chunk']} → {detail['match_chunk']} ({detail['score']:.1%})")
+            chunk_info = "\n".join(chunk_matches)
+        else:
+            chunk_info = "청크 매칭 정보 없음"
+        
+        prompt = f"""역할: 너는 유사성 판정 보조자다. 외부지식 절대 금지.
+입력: 이력서 A/B의 섹션 텍스트가 주어진다.
+엄격한 규칙:
+- 아래 텍스트에 실제로 있는 단어만 사용
+- 창작, 추측, 해석 절대 금지
+- 없으면 반드시 '없음'이라고 적어라
+- 4줄만 출력, 각 줄 40자 이내
 
-        prompt += """
-**분석 요청:**
-1. 어떤 구체적인 부분에서 유사성이 발견되는지 설명해주세요
-2. 유사한 키워드나 표현이 있다면 언급해주세요
-3. 전체적인 유사성의 특징을 간결하게 요약해주세요
+## 이력서 A ({original_info['name']})
+성장배경: {original_info['growth_background'][:200]}
+지원동기: {original_info['motivation'][:200]}
+경력사항: {original_info['career_history'][:200]}
 
-200자 이내로 간결하게 답변해주세요.
-"""
+## 이력서 B ({similar_info['name']})
+성장배경: {similar_info['growth_background'][:200]}
+지원동기: {similar_info['motivation'][:200]}
+경력사항: {similar_info['career_history'][:200]}
+
+출력 형식 (반드시 각 줄 사이에 공백 줄):
+
+1) 유사부분: {{위 텍스트에서 실제 유사한 섹션만}}
+
+2) 키워드: {{위 텍스트에 실제 나타난 단어만}}
+
+3) 요약: {{실제 텍스트 기반으로만}}
+
+4) 섹션키워드: 성장배경={{실제단어}}|지원동기={{실제단어}}|경력사항={{실제단어}}
+
+**경고: 위 텍스트에 없는 단어는 절대 사용하지 마라.**"""
+        
         return prompt
     
     async def analyze_plagiarism_risk(self, 
@@ -217,19 +225,12 @@ class LLMService:
                 risk_level = "HIGH"
                 risk_score = max_similarity
                 analysis = f"매우 높은 유사도({max_similarity:.1%})의 이력서가 발견되었습니다. 표절 가능성이 높습니다."
-                recommendations = [
-                    "이력서 내용의 독창성을 확인해주세요",
-                    "유사한 표현이나 문구를 다른 방식으로 작성해주세요",
-                    "개인적인 경험과 구체적인 사례를 더 추가해주세요"
-                ]
+                recommendations = []
             elif max_similarity >= 0.6:
                 risk_level = "MEDIUM"
                 risk_score = max_similarity
                 analysis = f"높은 유사도({max_similarity:.1%})의 이력서가 발견되었습니다. 주의가 필요합니다."
-                recommendations = [
-                    "일부 내용의 독창성을 확인해주세요",
-                    "개인만의 특색을 더 강조해주세요"
-                ]
+                recommendations = []
             else:
                 risk_level = "LOW"
                 risk_score = max_similarity

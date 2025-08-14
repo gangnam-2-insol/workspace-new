@@ -3574,7 +3574,7 @@ const ApplicantManagement = () => {
                                   위험도: {documentModal.similarityData.plagiarism_analysis.risk_level} 
                                   ({(documentModal.similarityData.plagiarism_analysis.risk_score * 100).toFixed(1)}%)
                                 </div>
-                                <div style={{fontSize: '14px', color: '#333', marginBottom: '8px'}}>
+                                <div style={{fontSize: '14px', color: '#333', marginBottom: '8px', whiteSpace: 'pre-line'}}>
                                   {documentModal.similarityData.plagiarism_analysis.analysis}
                                 </div>
                                 
@@ -3635,7 +3635,7 @@ const ApplicantManagement = () => {
                                       <div style={{fontSize: '11px', fontWeight: 'bold', color: '#4a90e2', marginBottom: '4px'}}>
                                         🤖 AI 분석
                                       </div>
-                                      <div style={{fontSize: '12px', color: '#333', lineHeight: '1.4'}}>
+                                      <div style={{fontSize: '12px', color: '#333', lineHeight: '1.4', whiteSpace: 'pre-line'}}>
                                         {similar.llm_analysis.analysis}
                                       </div>
                                     </div>
