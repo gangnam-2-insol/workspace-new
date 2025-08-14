@@ -5,6 +5,9 @@ import EnhancedModalChatbot from '../../chatbot/components/EnhancedModalChatbot'
 import { FiX, FiArrowLeft, FiArrowRight, FiCheck, FiFileText, FiClock, FiMapPin, FiDollarSign, FiUsers, FiMail, FiCalendar, FiFolder, FiSettings } from 'react-icons/fi';
 import './LangGraphJobRegistration.css';
 
+// UI 토스트/알림 및 상단 안내 배너 노출 제어
+const SHOW_AI_TOASTS = false;
+
 // Styled Components
 const Overlay = styled(motion.div)`
   position: fixed;
@@ -567,6 +570,7 @@ const LangGraphJobRegistration = ({ isOpen, onClose, initialData = {} }) => {
   // 토스트 알림 상태 (이미 위에서 선언됨)
   
   const displayToast = (message) => {
+    if (!SHOW_AI_TOASTS) return;
     setToastMessage(message);
     setShowToast(true);
     
@@ -733,10 +737,12 @@ const LangGraphJobRegistration = ({ isOpen, onClose, initialData = {} }) => {
               {/* 준비 완료 후 폼 표시 */}
               {!isPreparing && (
                 <>
-                  <AINotice>
-                    <FiSettings size={20} />
-                    LangGraph AI가 단계별로 질문하여 자동으로 입력해드립니다! (LangGraph 템플릿 기반)
-                  </AINotice>
+                  {SHOW_AI_TOASTS && (
+                    <AINotice>
+                      <FiSettings size={20} />
+                      LangGraph AI가 단계별로 질문하여 자동으로 입력해드립니다! (LangGraph 템플릿 기반)
+                    </AINotice>
+                  )}
 
                   <form onSubmit={handleSubmit}>
                 {/* 동적 폼 필드 렌더링 */}
@@ -1366,7 +1372,7 @@ const LangGraphJobRegistration = ({ isOpen, onClose, initialData = {} }) => {
       )}
 
       {/* 토스트 알림 */}
-      {showToast && (
+      {SHOW_AI_TOASTS && showToast && (
         <div
           style={{
             position: 'fixed',
