@@ -9,6 +9,7 @@ import aiofiles
 from datetime import datetime
 import google.generativeai as genai
 from pydantic import BaseModel
+import re
 
 # .env 파일 로드 (현재 디렉토리에서)
 print(f"🔍 upload.py 현재 작업 디렉토리: {os.getcwd()}")
@@ -83,7 +84,7 @@ class PortfolioAnalysis(BaseModel):
     maintainability: AnalysisScore
 
 class OverallSummary(BaseModel):
-    total_score: int
+    total_score: float
     recommendation: str
 
 class DetailedAnalysisResponse(BaseModel):
@@ -91,6 +92,104 @@ class DetailedAnalysisResponse(BaseModel):
     cover_letter_analysis: Optional[CoverLetterAnalysis] = None
     portfolio_analysis: Optional[PortfolioAnalysis] = None
     overall_summary: OverallSummary
+
+# ===== 분석 실패 시 기본 구조 생성 유틸 =====
+def _build_score(msg: str) -> Dict[str, object]:
+    return {"score": 0, "feedback": msg}
+
+def build_fallback_analysis(document_type: str) -> Dict[str, object]:
+    reason = "문서에서 텍스트를 추출할 수 없어 평가하지 못했습니다. 편집 가능한 PDF/DOCX로 재업로드해주세요."
+    resume = {
+        "basic_info_completeness": _build_score(reason),
+        "job_relevance": _build_score(reason),
+        "experience_clarity": _build_score(reason),
+        "tech_stack_clarity": _build_score(reason),
+        "project_recency": _build_score(reason),
+        "achievement_metrics": _build_score(reason),
+        "readability": _build_score(reason),
+        "typos_and_errors": _build_score(reason),
+        "update_freshness": _build_score(reason),
+    }
+    cover = {
+        "motivation_relevance": _build_score(reason),
+        "problem_solving_STAR": _build_score(reason),
+        "quantitative_impact": _build_score(reason),
+        "job_understanding": _build_score(reason),
+        "unique_experience": _build_score(reason),
+        "logical_flow": _build_score(reason),
+        "keyword_diversity": _build_score(reason),
+        "sentence_readability": _build_score(reason),
+        "typos_and_errors": _build_score(reason),
+    }
+    portfolio = {
+        "project_overview": _build_score(reason),
+        "tech_stack": _build_score(reason),
+        "personal_contribution": _build_score(reason),
+        "achievement_metrics": _build_score(reason),
+        "visual_quality": _build_score(reason),
+        "documentation_quality": _build_score(reason),
+        "job_relevance": _build_score(reason),
+        "unique_features": _build_score(reason),
+        "maintainability": _build_score(reason),
+    }
+    return {
+        "resume_analysis": resume,
+        "cover_letter_analysis": cover,
+        "portfolio_analysis": portfolio,
+        "overall_summary": {"total_score": 0, "recommendation": reason},
+    }
+
+# ===== 내용 기반 문서 유형 분류기 =====
+def classify_document_type_by_content(text: str) -> Dict[str, object]:
+    """간단한 규칙 기반으로 문서 유형(resume/cover_letter/portfolio)을 분류합니다."""
+    text_lower = text.lower()
+
+    # 한국어/영어 키워드 세트
+    resume_keywords = [
+        "경력", "이력", "프로젝트", "학력", "기술", "스킬", "자격증", "근무", "담당", "성과",
+        "경험", "요약", "핵심역량", "phone", "email", "github", "linkedin",
+        "experience", "education", "skills", "projects", "certificate"
+    ]
+    cover_letter_keywords = [
+        "지원동기", "성장배경", "입사", "포부", "저는", "배우며", "하고자", "기여", "관심",
+        "동기", "열정", "왜", "왜 우리", "motiv", "cover letter", "passion"
+    ]
+    portfolio_keywords = [
+        "포트폴리오", "작품", "시연", "데모", "링크", "이미지", "스샷", "캡처", "레포지토리",
+        "repository", "demo", "screenshot", "figma", "behance", "dribbble"
+    ]
+
+    def score_keywords(keywords: List[str]) -> float:
+        score = 0.0
+        for kw in keywords:
+            # 단어 경계 우선, 없으면 포함 검사
+            if re.search(rf"\b{re.escape(kw)}\b", text_lower) or kw in text_lower:
+                score += 1.0
+        # 섹션 헤더 보너스
+        section_headers = ["경력", "학력", "프로젝트", "skills", "experience", "education"]
+        if any(h in text for h in section_headers):
+            score += 0.5
+        # 연락처 패턴 보너스 (이력서 지표)
+        if re.search(r"[0-9]{2,3}-[0-9]{3,4}-[0-9]{4}", text) or re.search(r"\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b", text_lower):
+            score += 0.7
+        return score
+
+    resume_score = score_keywords(resume_keywords)
+    cover_letter_score = sum(1.0 for kw in cover_letter_keywords if kw in text_lower)
+    portfolio_score = sum(1.0 for kw in portfolio_keywords if kw in text_lower)
+
+    scores = {
+        "resume": resume_score,
+        "cover_letter": cover_letter_score,
+        "portfolio": portfolio_score,
+    }
+
+    detected_type = max(scores.items(), key=lambda x: x[1])[0]
+    max_score = scores[detected_type]
+    # 간단한 신뢰도 정규화 (최대 10점 가정)
+    confidence = min(round(max_score / 10.0, 2), 1.0)
+
+    return {"detected_type": detected_type, "confidence": confidence, "scores": scores}
 
 # 허용된 파일 타입
 ALLOWED_EXTENSIONS = {
@@ -116,39 +215,61 @@ def validate_file(file: UploadFile) -> bool:
     return True
 
 async def extract_text_from_file(file_path: str, file_ext: str) -> str:
-    """파일에서 텍스트 추출"""
+    """파일에서 텍스트 추출 (다중 백업 전략)"""
     try:
         if file_ext == '.txt':
             async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
                 return await f.read()
         elif file_ext == '.pdf':
-            # PDF 텍스트 추출 (PyPDF2 또는 pdfplumber 사용)
+            # 1차: PyPDF2
             try:
                 import PyPDF2
                 text = ""
                 with open(file_path, 'rb') as pdf_file:
                     pdf_reader = PyPDF2.PdfReader(pdf_file)
                     for page in pdf_reader.pages:
-                        text += page.extract_text() + "\n"
-                return text
-            except ImportError:
-                # PyPDF2가 설치되지 않은 경우 기본 텍스트 반환
-                return "PDF 파일입니다. 텍스트 추출을 위해 PyPDF2를 설치해주세요."
-        elif file_ext in ['.doc', '.docx']:
-            # Word 문서 텍스트 추출 (python-docx 사용)
+                        extracted = page.extract_text() or ""
+                        text += extracted + ("\n" if extracted else "")
+                if text.strip():
+                    return text
+            except Exception:
+                pass
+            # 2차: pdfplumber
             try:
-                from docx import Document
-                doc = Document(file_path)
+                import pdfplumber  # type: ignore
                 text = ""
-                for paragraph in doc.paragraphs:
-                    text += paragraph.text + "\n"
+                with pdfplumber.open(file_path) as pdf:
+                    for p in pdf.pages:
+                        extracted = p.extract_text() or ""
+                        text += extracted + ("\n" if extracted else "")
+                if text.strip():
+                    return text
+            except Exception:
+                pass
+            # 실패 시 빈 문자열 반환
+            return ""
+        elif file_ext in ['.doc', '.docx']:
+            # 1차: python-docx
+            try:
+                from docx import Document  # type: ignore
+                doc = Document(file_path)
+                text = "\n".join([p.text for p in doc.paragraphs if p.text])
+                if text.strip():
+                    return text
+            except Exception:
+                pass
+            # 2차: docx2txt
+            try:
+                import docx2txt  # type: ignore
+                text = docx2txt.process(file_path) or ""
                 return text
-            except ImportError:
-                return "Word 문서입니다. 텍스트 추출을 위해 python-docx를 설치해주세요."
+            except Exception:
+                pass
+            return ""
         else:
-            return "지원하지 않는 파일 형식입니다."
+            return ""
     except Exception as e:
-        return f"파일 읽기 오류: {str(e)}"
+        return ""
 
 async def generate_summary_with_gemini(content: str, summary_type: str = "general") -> SummaryResponse:
     """Gemini API를 사용하여 요약 생성"""
@@ -248,236 +369,368 @@ async def generate_detailed_analysis_with_gemini(content: str, document_type: st
     
     try:
         # 문서 타입에 따른 맞춤형 프롬프트 생성
-        if document_type == "resume":
-            analysis_prompt = f"""
-[ROLE] 채용담당자로서 이력서를 분석하고 점수화하세요.
+        # 통합 분석 프롬프트 - 직무별 맞춤형 분석 및 적합률 계산
+        analysis_prompt = f"""
+[ROLE] 당신은 직무별 채용 전문가입니다. 업로드된 이력서와 자기소개서를 직무별 중요사항과 필수 역량에 맞춰 평가하고, 적합률을 계산하여 상세한 피드백을 제공하세요.
 
-[분석 기준] 0~10점 평가, 간단한 피드백 작성
+[절대 규칙]
+- 반드시 JSON 형식만 출력하세요
+- JSON 외의 텍스트, 메모, 설명은 절대 포함하지 마세요
+- "**Note:**", "참고:", "예시:" 등의 텍스트는 절대 포함하지 마세요
+- JSON 응답 후 아무것도 추가하지 마세요
 
-[이력서 분석 항목]
-1. basic_info_completeness (기본정보 완성도): 이름, 연락처, 이메일, GitHub/LinkedIn 등이 포함되어 있는지
-2. job_relevance (직무 적합성): 지원 직무와 경험/기술이 일치하는지
-3. experience_clarity (경력 명확성): 경력 사항이 명확하게 기술되어 있는지
-4. tech_stack_clarity (기술스택 명확성): 사용 기술이 구체적으로 명시되어 있는지
-5. project_recency (프로젝트 최신성): 최근 프로젝트 경험이 포함되어 있는지
-6. achievement_metrics (성과 지표): 정량적 성과나 성과 지표가 명시되어 있는지
-7. readability (가독성): 전체적으로 읽기 쉽고 이해하기 쉬운지
-8. typos_and_errors (오탈자): 오탈자나 문법 오류가 적은지
-9. update_freshness (최신성): 최근 정보로 업데이트되어 있는지
+[중요: 실제 문서 내용 기반 분석]
+- 반드시 제공된 문서 내용만을 기반으로 분석하세요
+- 문서에 없는 내용을 추측하거나 가정하지 마세요
+- 문서에 명시되지 않은 정보에 대해 점수를 매기지 마세요
+- 실제 문서 내용을 구체적으로 인용하여 피드백을 작성하세요
+
+[이력서 분석 시 가이드: 형식적 답변 금지]
+- 각 항목의 피드백은 반드시 실제 이력서 텍스트에서 인용구(따옴표)로 최소 1개 이상 포함하세요
+- 인용구 바로 뒤에 개선 제안을 한 문장으로 제시하세요
+- "형식적인 일반 조언"은 금지합니다. 문서의 구체 표현, 수치, 기술명, 기간 등만을 근거로 하세요
+- 정량 지표(숫자, %, 기간, 규모)가 없다면 "정량 지표 부재"를 명시하고, 무엇을 채워야 할지 구체적으로 제안하세요
+
+[직무별 중요사항 및 필수 역량 평가 기준]
+
+## ① 개발자 / 엔지니어
+**중요 사항:**
+- JD에 명시된 프로그래밍 언어, 프레임워크, 협업 툴 등 기술 스택과 툴의 일치 여부 확인
+- 프로젝트 경험은 단순 나열이 아닌, STAR 기법 기반 구조 + 수치 성과 포함
+
+**필수 역량:**
+- AI 도구 활용 능력 (예: 코드 리뷰 자동화, 테스트 자동화 등)
+- 지속적인 업스킬링 학습력, 문제 해결력, 효율 개선 경험
+
+## ② 데이터 / AI 분석가
+**중요 사항:**
+- Python, SQL, Tableau, Power BI 같은 데이터 분석 툴 및 언어 키워드 반영
+- 분석 결과와 영향(예: 매출 증가, 고객 만족도 향상 등) 명시
+
+**필수 역량:**
+- 데이터 기반 의사결정 능력, AI 활용 능력
+- 협업 도구 활용 경험 (예: 클라우드, 협업 플랫폼 등), 원격 협업 능력
+
+## ③ 기획 / 프로덕트 매니저 (PM)
+**중요 사항:**
+- JD에서 요구하는 프로세스 관리, 프로젝트 목표 달성 경험, 성과 지표 (KPI) 연결
+- 협업 능력과 갈등 해결 경험 강조
+
+**필수 역량:**
+- 커뮤니케이션 능력 + 전략적 사고 + 조직 적합성
+- STAR 방식으로 문제 상황 → 해결 과정 → 결과 전달, 수치 포함
+
+## ④ 프로젝트 매니저 / 운영 직무
+**중요 사항:**
+- PM 경험이나 일정 관리, 예산 관리, 리소스 조율 등 JD 관련 경험 요약
+- 면접 질문 설계 시, "최근 담당 프로젝트의 가장 큰 도전과 극복 사례" 같은 질문 예상
+
+**필수 역량:**
+- 일정 준수율, 품질 관리, 협업 조율력 등 수치 기반 성과 활용
+- AI 도구를 통한 일정 관리나 업무 자동화 경험
+
+## ⑤ HR / 채용 담당자
+**중요 사항:**
+- "3년 이상 채용/HR 담당 경력" 같은 필수 요건 여부
+- ATS, MS Office, 데이터 기반 채용 경험 등의 도구 역량
+
+**필수 역량:**
+- 체계적인 평가 기준 설정 능력 (Google식 GCA, RRKE, 리더십 등)
+- JD 기반 체계적 프로세스 설계 및 실행 경험
+
+[직무별 평가 기준 - 0-10점]
+- 0-2점: 해당 항목이 전혀 충족되지 않음 (심각한 문제)
+- 3-4점: 매우 부족함 (대폭 개선 필요)
+- 5-6점: 보통 수준, 개선 여지가 있음 (중간 수준)
+- 7-8점: 양호함, 일부 개선점 있음 (좋은 수준)
+- 9-10점: 매우 우수함, 모범 사례 수준 (완벽함)
+
+[직무별 적합률 계산 가중치]
+**개발자/엔지니어:**
+- 기술 스택 일치도: 40%
+- 프로젝트 경험 (STAR + 수치): 30%
+- AI 도구 활용 능력: 20%
+- 학습력/문제해결력: 10%
+
+**데이터/AI 분석가:**
+- 데이터 분석 도구 역량: 35%
+- AI 활용 능력: 25%
+- 분석 결과/영향 수치: 25%
+- 협업 도구 경험: 15%
+
+**기획/PM:**
+- 프로세스 관리 경험: 30%
+- KPI 달성 성과: 25%
+- 협업/갈등해결 능력: 25%
+- 전략적 사고: 20%
+
+**프로젝트 매니저/운영:**
+- PM 경험/일정관리: 35%
+- 수치 기반 성과: 30%
+- 리소스 조율 능력: 25%
+- AI 도구 활용: 10%
+
+**HR/채용 담당자:**
+- 필수 요건 충족도: 40%
+- 도구 역량: 25%
+- 평가 기준 설정: 20%
+- 프로세스 설계: 15%
+
+[이력서 분석 항목 - 직무별 맞춤형]
+1. basic_info_completeness: 
+   - 필수 정보: 이름, 연락처, 직무 관련 필수 요건 충족 여부
+   - 학력 정보: 전공분야, 관련 수업/프로젝트, 직무 관련 자격증
+   - 경력 기간: 각 회사별 재직기간, 직무명, 담당 업무 영역
+   - 추가 정보: 직무 관련 포트폴리오, 인증서, 수상 경험
+
+2. job_relevance: 
+   - 지원 직무와 보유 역량의 직접적 연관성
+   - JD 요구사항과 실제 보유 역량의 일치 정도
+   - 관련 프로젝트 경험: 지원 직무와 직접 관련된 프로젝트의 규모, 기간, 역할, 성과
+   - 업계 경험: 해당 분야에서의 경력 기간과 전문성 수준
+
+3. experience_clarity: 
+   - 각 경험의 역할과 책임: 구체적인 직무명, 담당 업무, 팀 내 위치
+   - 경험 기간: 시작일-종료일, 단계별 참여 기간
+   - 경험 규모: 프로젝트 규모, 예산, 인원, 복잡도 등 구체적 수치
+   - 팀 구성: 본인 역할, 팀원 수, 협업 방식, 보고 체계
+   - 업무 성과: 구체적인 결과물, 개선 효과, 비즈니스 임팩트
+
+4. tech_stack_clarity: 
+   - 직무별 필수 기술/도구: 각 직무에서 요구하는 핵심 기술과 도구
+   - 기술/도구 버전: 구체적인 버전 정보와 활용 경험
+   - 최신 기술 트렌드: 최근 2-3년 내 출시된 기술의 활용 여부
+   - 기술/도구의 다양성: 다양한 영역에서의 활용 경험
+   - 기술/도구 깊이: 각 기술/도구에 대한 숙련도, 인증서, 프로젝트 적용 경험
+
+5. project_recency: 
+   - 최근 2-3년 내 경험의 비중: 전체 경력 대비 최신 경험의 비율
+   - 경험의 규모: 대형, 중형, 소형 구분
+   - 경험의 복잡성: 기술적/업무적 난이도, 비즈니스 로직의 복잡성
+   - 최신 방법론 적용: 최신 업무 방법론, 도구, 프로세스 활용
+   - 경험 성공률: 완료된 경험의 비율, 고객 만족도, 예산/일정 준수율
+
+6. achievement_metrics: 
+   - 정량적 성과 지표: 직무별 핵심 성과 지표
+   - 구체적인 수치와 데이터: 정확한 수치와 개선 효과
+   - 성과의 영향력: 비즈니스에 미친 구체적 영향
+   - 비교 데이터: 이전 대비 개선율, 목표 달성률
+   - 지속적 개선: 성과 지표의 지속적 모니터링과 개선 노력
+
+7. readability: 
+   - 정보의 논리적 배치: 직무별 적절한 정보 구성
+   - 가독성: 명확하고 이해하기 쉬운 정보 전달
+   - 시각적 요소: 적절한 시각적 요소 활용
+   - 일관성: 용어 사용, 형식의 통일성
+   - 핵심 정보 강조: 중요한 내용의 적절한 배치와 강조
+
+8. typos_and_errors: 
+   - 맞춤법과 문법: 한글 맞춤법, 영어 문법, 전문 용어의 정확성
+   - 용어 사용의 정확성: 업계 표준 용어, 회사 내부 용어의 일관된 사용
+   - 일관된 문체와 톤앤매너: 존댓말/반말의 일관성, 공식적/비공식적 톤의 적절한 선택
+   - 전문성과 신뢰성: 오타나 문법 오류가 없는 깔끔한 문서, 전문가다운 신뢰감
+   - 검토 상태: 최종 검토 완료 여부, 수정 이력 관리
+
+9. update_freshness: 
+   - 정보의 최신성: 최근 업데이트 여부, 현재 상태와의 일치성
+   - 경험과 역량의 최신성: 최신 트렌드 반영, 현재 사용 중인 기술/방법론
+   - 업데이트 주기: 정기적인 정보 갱신, 변화 시 즉시 반영
+   - 관리 상태: 문서 관리의 체계성, 버전 관리
+   - 현실성: 과장되지 않은 정확한 정보, 검증 가능한 사실 기반 기술
+
+[자기소개서 분석 항목 - 직무별 맞춤형]
+1. motivation_relevance: 
+   - 지원 동기의 명확성: "왜 이 회사인가?", "왜 이 직무인가?"에 대한 명확한 답변
+   - 진정성: 개인적 경험과 연결된 진심 어린 동기
+   - 회사/직무와의 구체적 연결성: 회사 비전, 제품, 서비스, 문화와의 직접적 연관성
+   - 개인적 경험과 지원 동기의 연관성: 과거 경험, 학습, 성장 과정이 지원 동기로 연결되는 논리적 흐름
+   - 미래 계획과의 연관성: 지원 동기가 개인의 장기적 커리어 목표와 어떻게 연결되는지
+
+2. problem_solving_STAR: 
+   - STAR 기법 적용의 완성도: 상황(Situation)-과제(Task)-행동(Action)-결과(Result)의 모든 요소 포함
+   - 구체적인 사례: 실제 발생한 문제 상황, 해결해야 할 과제의 명확한 정의
+   - 해결 과정: 문제 분석, 대안 검토, 선택한 해결책의 구체적 실행 과정
+   - 문제 해결 능력의 입증: 창의적 사고, 논리적 분석, 실행력, 결과 도출 능력
+   - 학습과 성장: 문제 해결 과정에서 얻은 교훈, 개선점, 향후 적용 방안
+
+3. quantitative_impact: 
+   - 정량적 성과와 영향력: 구체적인 수치와 데이터를 통한 성과 입증
+   - 수치화된 결과: 직무별 핵심 성과 지표
+   - 개선 효과: 이전 대비 개선율, 목표 달성률, 예상 효과 대비 실제 결과
+   - 비즈니스 임팩트: 회사에 미친 구체적 영향
+   - 지속적 성과: 일회성이 아닌 지속적인 개선 효과와 장기적 가치 창출
+
+4. job_understanding: 
+   - 직무에 대한 깊은 이해: 해당 직무의 핵심 책임, 요구되는 역량, 업무 프로세스에 대한 정확한 인식
+   - 업계 트렌드와 동향: 최신 동향, 시장 변화, 경쟁사 동향에 대한 파악
+   - 직무 요구사항의 정확한 인식: 회사가 요구하는 구체적인 역량, 경험, 자격 요건 이해
+   - 업무 환경과 문화: 해당 직무의 업무 환경, 팀 문화, 협업 방식에 대한 이해
+   - 성장 가능성: 직무에서의 학습 기회, 커리어 발전 경로, 전문성 향상 방안
+
+5. unique_experience: 
+   - 차별화된 경험: 다른 지원자와 구별되는 독특한 경험, 특별한 프로젝트, 특수한 상황
+   - 개인만의 특별한 스토리: 개인의 성장 과정, 도전과 극복, 실패와 학습의 구체적 사례
+   - 경쟁력 있는 차별점: 직무별 전문성, 업계 경험, 인증서, 수상 경력 등 객관적 우수성
+   - 창의적 문제 해결: 기존 방식과 다른 혁신적 접근법, 창의적 아이디어의 실제 적용
+   - 국제적 경험: 해외 연수, 글로벌 프로젝트, 다국적 팀 협업 등 국제적 역량
+
+6. logical_flow: 
+   - 논리적 구조와 흐름: 도입-전개-결론의 명확한 구조, 각 문단의 논리적 연결
+   - 각 문단 간의 연결성: 문단 간 자연스러운 전환, 핵심 메시지의 일관성
+   - 전개 방식: 시간순, 중요도순, 인과관계순 등 적절한 전개 방식 선택
+   - 결론으로의 자연스러운 흐름: 각 문단이 최종 결론으로 연결되는 논리적 흐름
+   - 핵심 메시지의 강조: 중요한 내용의 적절한 배치와 강조, 독자의 이해도 향상
+
+7. keyword_diversity: 
+   - 전문 용어와 키워드: 해당 직무/업계에서 사용되는 전문 용어의 적절한 활용
+   - 업계 표준 용어: 표준화된 용어, 약어, 기술 명세서의 정확한 사용
+   - 기술적 깊이와 전문성: 직무별 세부사항, 방법론, 도구에 대한 깊이 있는 설명
+   - 트렌드 키워드: 최신 업계 트렌드, 핫 이슈, 신기술 관련 키워드 활용
+   - 용어의 일관성: 동일한 개념에 대해 일관된 용어 사용, 혼동을 주지 않는 명확한 표현
+
+8. sentence_readability: 
+   - 문장력과 가독성: 명확하고 이해하기 쉬운 문장 구성, 적절한 문장 길이
+   - 명확하고 간결한 표현: 불필요한 수식어 제거, 핵심 내용의 명확한 전달
+   - 적절한 문장 길이: 너무 길거나 짧지 않은 적절한 문장 길이, 읽기 편한 구성
+   - 문체의 일관성: 공식적이면서도 친근한 문체, 일관된 톤앤매너 유지
+   - 문법적 정확성: 맞춤법, 문법, 문장 구조의 정확성, 자연스러운 한국어 표현
+
+9. typos_and_errors: 
+   - 맞춤법과 문법: 한글 맞춤법, 영어 문법, 전문 용어의 정확성
+   - 용어 사용의 정확성: 업계 표준 용어, 회사 내부 용어의 일관된 사용
+   - 일관된 문체와 톤앤매너: 존댓말/반말의 일관성, 공식적/비공식적 톤의 적절한 선택
+   - 전문성과 신뢰성: 오타나 문법 오류가 없는 깔끔한 문서, 전문가다운 신뢰감
+   - 검토 상태: 최종 검토 완료 여부, 수정 이력 관리
+
+[피드백 작성 가이드 - 직무별 맞춤형]
+- 각 항목에 대해 반드시 실제 문서에서 발견된 구체적인 내용을 인용하세요
+- 문서에 없는 내용을 추측하거나 가정하지 마세요
+- 실제 문서 내용을 바탕으로 한 구체적 예시를 포함하세요
+- 실무에서 바로 적용 가능한 개선 방안을 제시하세요
+- 점수에 따른 명확한 근거와 이유를 설명하세요
+- 긍정적 피드백과 개선 제안의 균형을 유지하세요
+
+[출력 형식 강화]
+- 모든 feedback은 다음 형식을 준수합니다:
+  "인용: <문서에서 발췌한 구체 문장>" → "개선: <해당 문장을 바탕으로 한 구체 개선 제안>"
+
+[구체적 피드백 강제 요구사항 - 반드시 준수]
+절대적으로 금지할 것:
+❌ "~가 부족합니다", "~가 미흡합니다", "~가 불충분합니다" 등 추상적이고 모호한 표현
+❌ "~를 추가하세요", "~를 보완하세요" 등 일반적인 조언
+❌ "~가 좋습니다", "~가 우수합니다" 등 구체적 근거 없는 칭찬
+❌ 문서에 없는 내용을 추측하거나 가정하는 피드백
+
+반드시 포함해야 할 것:
+✅ 실제 문서에서 발견된 구체적인 내용 인용 (예: "React 경험이 기술되어 있지만")
+✅ 구체적인 개선 방안 제시 (예: "React 18.2 버전과 함께 TypeScript 적용 경험을 추가하세요")
+✅ 정량적 지표나 구체적 예시 포함 (예: "사용자 수 10만명 증가, 페이지 로딩 속도 3초→1초 단축")
+✅ 실무에서 바로 적용 가능한 구체적 행동 지침
+
+[AI 분석 강제 지시사항]
+당신은 반드시 다음 단계를 따라야 합니다:
+
+1단계: 제공된 문서 내용을 한 글자씩 꼼꼼히 읽고 분석하세요
+2단계: 각 항목에서 발견된 구체적인 내용을 정확히 인용하세요
+3단계: 구체적인 개선 방안을 제시하세요 (구체적 기술명, 버전, 프로젝트 예시 포함)
+4단계: 정량적 지표나 구체적 수치를 포함하세요
+5단계: 문서에 없는 내용은 절대 추측하거나 가정하지 마세요
+
+만약 위 단계를 따르지 않으면 분석을 처음부터 다시 시작하세요.
+
+[분석 결과 검증 기준]
+각 피드백이 다음 기준을 만족하는지 확인:
+1. 실제 문서 내용을 구체적으로 인용했는가?
+2. 구체적인 개선 방안을 제시했는가?
+3. 정량적 지표나 구체적 예시를 포함했는가?
+4. 지원자가 바로 실행할 수 있는 행동 지침인가?
+5. 추상적이고 모호한 표현을 사용하지 않았는가?
+6. 문서에 없는 내용을 추측하지 않았는가?
+
+위 기준을 만족하지 않으면 피드백을 다시 작성하세요.
+
+[최종 강제 지시사항]
+⚠️ 경고: 만약 당신이 추상적이고 모호한 피드백을 생성하거나, 문서에 없는 내용을 추측한다면, 이는 완전히 실패한 분석입니다.
+
+✅ 성공적인 분석의 예시:
+"React 경험이 기술되어 있지만 구체적인 버전(React 16? 18?)과 활용 프로젝트가 명시되지 않았습니다. '2023년 사용자 관리 시스템 구축 시 React 18.2 + TypeScript 5.0 조합으로 타입 안정성을 확보하고, Next.js 14를 활용한 SSR 구현 경험을 추가하세요.'"
+
+❌ 실패한 분석의 예시:
+"기술 스택이 부족합니다", "기술을 보완하세요", "기술 경험이 미흡합니다", "React 경험이 있을 것으로 예상됩니다"
+
+당신은 반드시 성공적인 분석 예시 수준의 구체적이고 실용적인 피드백을 생성해야 합니다. 
+추상적이고 모호한 피드백을 생성하거나 문서에 없는 내용을 추측하면 분석을 처음부터 다시 시작하세요.
 
 [출력] JSON만:
 {{
   "resume_analysis": {{
-    "basic_info_completeness": {{"score": 0, "feedback": ""}},
-    "job_relevance": {{"score": 0, "feedback": ""}},
-    "experience_clarity": {{"score": 0, "feedback": ""}},
-    "tech_stack_clarity": {{"score": 0, "feedback": ""}},
-    "project_recency": {{"score": 0, "feedback": ""}},
-    "achievement_metrics": {{"score": 0, "feedback": ""}},
-    "readability": {{"score": 0, "feedback": ""}},
-    "typos_and_errors": {{"score": 0, "feedback": ""}},
-    "update_freshness": {{"score": 0, "feedback": ""}}
-  }},
-  "overall_summary": {{"total_score": 0, "recommendation": ""}}
-}}
-
-[문서] {content}
-
-[요구사항]
-- 각 항목을 실제 분석하여 0~10점으로 평가하세요 (0점 = 전혀 충족하지 않음, 10점 = 매우 우수)
-- 점수는 반드시 0~10 정수로 입력하세요
-- feedback은 간단하고 구체적으로 작성하세요
-- JSON만 출력하세요
-"""
-        elif document_type == "cover_letter":
-            analysis_prompt = f"""
-[ROLE] 당신은 IT기업 채용담당자입니다. 입력된 자기소개서를 아래 현업 IT기업 기준에 따라 분석하고 점수화해야 합니다.
-
-[분석 기준]
-- 각 항목은 0~10점으로 평가 (10점 = 매우 우수, 0점 = 전혀 충족하지 않음)
-- 각 항목별로 개선이 필요한 부분을 간단히 피드백으로 작성
-- 점수와 피드백은 JSON 형식으로 출력
-
-[현업 IT기업 자소서 분석 기준]
-1. tech_fit (기술 적합성): 사용 기술 스택, 프로젝트 경험, 문제 해결 능력이 명시되어 있는지
-2. job_understanding (직무 이해도): 해당 포지션의 역할·책임에 대한 명확한 이해가 드러나는지
-3. growth_potential (성장 가능성): 학습 태도, 새로운 기술 습득 경험이 구체적으로 제시되어 있는지
-4. teamwork_communication (팀워크/커뮤니케이션): 협업 경험, 갈등 해결 사례가 구체적으로 기술되어 있는지
-5. motivation_company_fit (동기/회사 이해도): 지원 동기, 회사와의 가치관 일치 여부가 명확한지
-6. problem_solving (문제 해결 능력): STAR 기법 적용, 구체적 사례가 제시되어 있는지
-7. performance_orientation (성과 지향성): 정량적 성과, 임팩트 있는 결과가 명시되어 있는지
-8. grammar_expression (문법 및 표현): 문장 구조, 전문성, 오류 정도가 적절한지
-
-[출력 형식]
-아래 JSON 스키마에 맞춰 출력:
-{{
-  "cover_letter_analysis": {{
-    "tech_fit": {{"score": 0, "feedback": ""}},
-    "job_understanding": {{"score": 0, "feedback": ""}},
-    "growth_potential": {{"score": 0, "feedback": ""}},
-    "teamwork_communication": {{"score": 0, "feedback": ""}},
-    "motivation_company_fit": {{"score": 0, "feedback": ""}},
-    "problem_solving": {{"score": 0, "feedback": ""}},
-    "performance_orientation": {{"score": 0, "feedback": ""}},
-    "grammar_expression": {{"score": 0, "feedback": ""}}
-  }},
-  "overall_summary": {{
-    "total_score": 0,
-    "recommendation": ""
-  }}
-}}
-
-[입력 문서]
-{content}
-
-[요구사항]
-- 각 항목을 실제 분석하여 0~10점으로 평가하세요 (0점 = 전혀 충족하지 않음, 10점 = 매우 우수)
-- 점수는 반드시 0~10 정수로 입력하세요
-- feedback은 간단하고 구체적으로 작성하세요
-- JSON만 출력하세요
-"""
-        elif document_type == "portfolio":
-            analysis_prompt = f"""
-[ROLE] 당신은 채용담당자입니다. 입력된 포트폴리오를 아래 기준에 따라 분석하고 점수화해야 합니다.
-
-[분석 기준]
-- 각 항목은 0~10점으로 평가 (10점 = 매우 우수, 0점 = 전혀 충족하지 않음)
-- 각 항목별로 개선이 필요한 부분을 간단히 피드백으로 작성
-- 점수와 피드백은 JSON 형식으로 출력
-
-[포트폴리오 분석 기준]
-1. project_overview (프로젝트 개요 명확성): 프로젝트 목적과 개요가 명확하게 설명되어 있는지
-2. tech_stack (사용 기술 스택): 사용된 기술이 구체적으로 명시되어 있는지
-3. personal_contribution (개인 기여도 명확성): 본인의 기여도가 구체적으로 기술되어 있는지
-4. achievement_metrics (정량적 성과 여부): 프로젝트 성과가 정량적으로 제시되어 있는지
-5. visual_quality (시각 자료 품질): 스크린샷, 다이어그램 등이 적절하게 포함되어 있는지
-6. documentation_quality (문서화 수준): 코드 설명, README 등이 잘 작성되어 있는지
-7. job_relevance (직무 관련성): 지원 직무와 관련된 프로젝트인지
-8. unique_features (독창적 기능/아이디어): 차별화된 기능이나 아이디어가 있는지
-9. maintainability (유지보수성): 코드 구조와 문서화가 유지보수하기 좋은지
-
-[출력 형식]
-아래 JSON 스키마에 맞춰 출력:
-{{
-  "portfolio_analysis": {{
-    "project_overview": {{"score": 0, "feedback": ""}},
-    "tech_stack": {{"score": 0, "feedback": ""}},
-    "personal_contribution": {{"score": 0, "feedback": ""}},
-    "achievement_metrics": {{"score": 0, "feedback": ""}},
-    "visual_quality": {{"score": 0, "feedback": ""}},
-    "documentation_quality": {{"score": 0, "feedback": ""}},
-    "job_relevance": {{"score": 0, "feedback": ""}},
-    "unique_features": {{"score": 0, "feedback": ""}},
-    "maintainability": {{"score": 0, "feedback": ""}}
-  }},
-  "overall_summary": {{
-    "total_score": 0,
-    "recommendation": ""
-  }}
-}}
-
-[입력 문서]
-{content}
-
-[요구사항]
-- 각 항목을 실제 분석하여 0~10점으로 평가하세요 (0점 = 전혀 충족하지 않음, 10점 = 매우 우수)
-- 점수는 반드시 0~10 정수로 입력하세요
-- feedback은 간단하고 구체적으로 작성하세요
-- JSON만 출력하세요
-"""
-        else:
-            # 기본 프롬프트 (기존과 동일)
-            analysis_prompt = f"""
-[ROLE] 당신은 채용담당자입니다. 입력된 문서({document_type})를 아래 기준에 따라 분석하고 점수화해야 합니다.
-
-[분석 기준]
-- 각 항목은 0~10점으로 평가 (10점 = 매우 우수, 0점 = 전혀 충족하지 않음)
-- 각 항목별로 개선이 필요한 부분을 간단히 피드백으로 작성
-- 점수와 피드백은 JSON 형식으로 출력
-
-[이력서 분석 기준]
-1. basic_info_completeness (이름, 연락처, 이메일, GitHub/LinkedIn 여부)
-2. job_relevance (직무 적합성)
-3. experience_clarity (경력 설명 명확성)
-4. tech_stack_clarity (기술 스택 명확성)
-5. project_recency (프로젝트 최신성)
-6. achievement_metrics (정량적 성과 지표 여부)
-7. readability (가독성)
-8. typos_and_errors (오탈자 여부)
-9. update_freshness (최신 수정 여부)
-
-[자기소개서 분석 기준]
-1. motivation_relevance (지원 동기 직무/회사와의 연결성)
-2. problem_solving_STAR (STAR 기법 적용 여부)
-3. quantitative_impact (정량적 성과 언급 여부)
-4. job_understanding (직무 이해도)
-5. unique_experience (차별화된 경험)
-6. logical_flow (논리 구조)
-7. keyword_diversity (전문 용어 다양성)
-8. sentence_readability (문장 가독성)
-9. typos_and_errors (오탈자 여부)
-
-[포트폴리오 분석 기준]
-1. project_overview (프로젝트 개요 명확성)
-2. tech_stack (사용 기술 스택)
-3. personal_contribution (개인 기여도 명확성)
-4. achievement_metrics (정량적 성과 여부)
-5. visual_quality (시각 자료 품질)
-6. documentation_quality (문서화 수준)
-7. job_relevance (직무 관련성)
-8. unique_features (독창적 기능/아이디어)
-9. maintainability (유지보수성)
-
-[출력 형식]
-아래 JSON 스키마에 맞춰 출력:
-{{
-  "resume_analysis": {{
-    "basic_info_completeness": {{"score": 0, "feedback": ""}},
-    "job_relevance": {{"score": 0, "feedback": ""}},
-    "experience_clarity": {{"score": 0, "feedback": ""}},
-    "tech_stack_clarity": {{"score": 0, "feedback": ""}},
-    "project_recency": {{"score": 0, "feedback": ""}},
-    "achievement_metrics": {{"score": 0, "feedback": ""}},
-    "readability": {{"score": 0, "feedback": ""}},
-    "typos_and_errors": {{"score": 0, "feedback": ""}},
-    "update_freshness": {{"score": 0, "feedback": ""}}
+    "basic_info_completeness": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "job_relevance": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "experience_clarity": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "tech_stack_clarity": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "project_recency": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "achievement_metrics": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "readability": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "typos_and_errors": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "update_freshness": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}}
   }},
   "cover_letter_analysis": {{
-    "motivation_relevance": {{"score": 0, "feedback": ""}},
-    "problem_solving_STAR": {{"score": 0, "feedback": ""}},
-    "quantitative_impact": {{"score": 0, "feedback": ""}},
-    "job_understanding": {{"score": 0, "feedback": ""}},
-    "unique_experience": {{"score": 0, "feedback": ""}},
-    "logical_flow": {{"score": 0, "feedback": ""}},
-    "keyword_diversity": {{"score": 0, "feedback": ""}},
-    "sentence_readability": {{"score": 0, "feedback": ""}},
-    "typos_and_errors": {{"score": 0, "feedback": ""}}
+    "motivation_relevance": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "problem_solving_STAR": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "quantitative_impact": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "job_understanding": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "unique_experience": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "logical_flow": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "keyword_diversity": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "sentence_readability": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "typos_and_errors": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}}
   }},
   "portfolio_analysis": {{
-    "project_overview": {{"score": 0, "feedback": ""}},
-    "tech_stack": {{"score": 0, "feedback": ""}},
-    "personal_contribution": {{"score": 0, "feedback": ""}},
-    "achievement_metrics": {{"score": 0, "feedback": ""}},
-    "visual_quality": {{"score": 0, "feedback": ""}},
-    "documentation_quality": {{"score": 0, "feedback": ""}},
-    "job_relevance": {{"score": 0, "feedback": ""}},
-    "unique_features": {{"score": 0, "feedback": ""}},
-    "maintainability": {{"score": 0, "feedback": ""}}
+    "project_overview": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "tech_stack": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "personal_contribution": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "achievement_metrics": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "visual_quality": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "documentation_quality": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "job_relevance": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "unique_features": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}},
+    "maintainability": {{"score": [0-10], "feedback": "구체적이고 실용적인 피드백"}}
   }},
   "overall_summary": {{
     "total_score": 0,
-    "recommendation": ""
+    "job_fit_score": 0,
+    "recommendation": "전체적인 개선 방향과 우선순위를 제시하는 구체적이고 실용적인 조언"
+  }},
+  "job_specific_analysis": {{
+    "job_category": "직무 분류 (개발자/데이터분석가/기획PM/프로젝트매니저/HR)",
+    "key_requirements_match": "JD 핵심 요구사항 일치도 (%)",
+    "essential_competencies": "필수 역량 충족도 (%)",
+    "overall_job_fit": "전체 직무 적합도 (%)",
+    "strengths": ["직무별 강점 리스트"],
+    "improvement_areas": ["직무별 개선 영역 리스트"],
+    "priority_recommendations": ["우선순위별 개선 제안"]
   }}
 }}
 
-[입력 문서]
+[분석할 문서 내용]
 {content}
 
-[요구사항]
-- 점수는 반드시 0~10 정수
-- feedback은 간단하고 구체적으로 작성
-- JSON만 출력
+[최종 분석 지시사항]
+위 내용을 바탕으로 직무별 맞춤형 분석을 수행하고, 각 직무별 중요사항과 필수 역량을 기준으로 적합률을 계산하여 JSON으로만 출력하세요.
+
+⚠️ 중요: 
+1. 직무별 중요사항과 필수 역량을 우선적으로 분석하세요.
+2. 각 분석 항목마다 반드시 구체적이고 실용적인 피드백을 생성하세요.
+3. 평가 속성을 세분화하여 각 항목의 세부 요소를 상세하게 분석하세요.
+4. 직무별 적합률을 정확하게 계산하세요.
+5. 반드시 제공된 문서 내용만을 기반으로 분석하고, 문서에 없는 내용은 추측하지 마세요.
+
+❌ 절대 추상적이고 모호한 표현을 사용하지 마세요.
+✅ 반드시 실제 문서 내용을 인용하고, 구체적인 개선 방안을 제시하세요.
+
+JSON 외의 텍스트는 절대 포함하지 마세요.
 """
+        # 모든 문서 타입에 대해 통합 분석 수행
         
         # Gemini API 호출 (JSON 강제)
         json_model = genai.GenerativeModel(
@@ -521,30 +774,82 @@ async def generate_detailed_analysis_with_gemini(content: str, document_type: st
         try:
             analysis_result = json.loads(response_text)
             
-            # 응답 구조 검증 (빠른 검증)
+            # 응답 구조 검증 및 보정
             if not isinstance(analysis_result, dict):
                 raise ValueError("응답이 딕셔너리 형식이 아닙니다.")
-            
-            # 문서 타입별로만 필요한 키 확인 (속도 향상)
-            if document_type == "resume":
-                if "resume_analysis" not in analysis_result:
-                    raise ValueError("이력서 분석 결과가 응답에 없습니다.")
-            elif document_type == "cover_letter":
-                if "cover_letter_analysis" not in analysis_result:
-                    raise ValueError("자기소개서 분석 결과가 응답에 없습니다.")
-            elif document_type == "portfolio":
-                if "portfolio_analysis" not in analysis_result:
-                    raise ValueError("포트폴리오 분석 결과가 응답에 없습니다.")
-            
+
+                # 키 정규화/보정 함수들
+            def make_score(obj):
+                    if not isinstance(obj, dict):
+                        return {"score": 0, "feedback": ""}
+                    return {
+                        "score": int(obj.get("score", 0)) if isinstance(obj.get("score", 0), (int, float)) else 0,
+                        "feedback": str(obj.get("feedback", ""))
+                    }
+
+            # 필수 overall_summary 보정
             if "overall_summary" not in analysis_result:
-                raise ValueError("전체 요약이 응답에 없습니다.")
+                analysis_result["overall_summary"] = {"total_score": 0, "recommendation": ""}
+
+            # 이력서 섹션 보정 (skill_stack_clarity -> tech_stack_clarity 매핑 포함)
+            if isinstance(analysis_result.get("resume_analysis"), dict):
+                resume_raw = analysis_result["resume_analysis"]
+                if "tech_stack_clarity" not in resume_raw and "skill_stack_clarity" in resume_raw:
+                    resume_raw["tech_stack_clarity"] = resume_raw.pop("skill_stack_clarity")
+                expected_resume = [
+                    "basic_info_completeness","job_relevance","experience_clarity","tech_stack_clarity",
+                    "project_recency","achievement_metrics","readability","typos_and_errors","update_freshness"
+                ]
+                analysis_result["resume_analysis"] = {k: make_score(resume_raw.get(k, {})) for k in expected_resume}
+            elif analysis_result.get("resume_analysis") is None:
+                analysis_result["resume_analysis"] = None
+
+            # 자소서 섹션 보정
+            if isinstance(analysis_result.get("cover_letter_analysis"), dict):
+                cover_raw = analysis_result["cover_letter_analysis"]
+                expected_cover = [
+                    "motivation_relevance","problem_solving_STAR","quantitative_impact","job_understanding",
+                    "unique_experience","logical_flow","keyword_diversity","sentence_readability","typos_and_errors"
+                ]
+                analysis_result["cover_letter_analysis"] = {k: make_score(cover_raw.get(k, {})) for k in expected_cover}
+            elif analysis_result.get("cover_letter_analysis") is None:
+                analysis_result["cover_letter_analysis"] = None
+
+            # 포트폴리오 섹션 보정
+            if isinstance(analysis_result.get("portfolio_analysis"), dict):
+                port_raw = analysis_result["portfolio_analysis"]
+                expected_port = [
+                    "project_overview","tech_stack","personal_contribution","achievement_metrics","visual_quality",
+                    "documentation_quality","job_relevance","unique_features","maintainability"
+                ]
+                analysis_result["portfolio_analysis"] = {k: make_score(port_raw.get(k, {})) for k in expected_port}
+            elif analysis_result.get("portfolio_analysis") is None:
+                analysis_result["portfolio_analysis"] = None
             
-            # 전체 점수 계산 (문서 타입별로만 계산하여 속도 향상)
+            # 전체 점수 계산 (모든 섹션의 평균)
             total_score = 0
             count = 0
             
-            print(f"🔍 문서 타입: {document_type}")
-            print(f"🔍 분석 결과 구조: {list(analysis_result.keys())}")
+            # 이력서 분석 점수
+            if "resume_analysis" in analysis_result:
+                for value in analysis_result["resume_analysis"].values():
+                    if isinstance(value, dict) and "score" in value:
+                        total_score += value["score"]
+                        count += 1
+            
+            # 자기소개서 분석 점수
+            if "cover_letter_analysis" in analysis_result:
+                for value in analysis_result["cover_letter_analysis"].values():
+                    if isinstance(value, dict) and "score" in value:
+                        total_score += value["score"]
+                        count += 1
+            
+            # 포트폴리오 분석 점수
+            if "portfolio_analysis" in analysis_result:
+                for value in analysis_result["portfolio_analysis"].values():
+                    if isinstance(value, dict) and "score" in value:
+                        total_score += value["score"]
+                        count += 1
             
             if document_type == "resume" and "resume_analysis" in analysis_result:
                 print(f"🔍 이력서 분석 항목: {list(analysis_result['resume_analysis'].keys())}")
@@ -579,32 +884,14 @@ async def generate_detailed_analysis_with_gemini(content: str, document_type: st
             else:
                 average_score = 0
             
-            print(f"🔍 평균 점수: {average_score}")
-            
-            # 추천사항 생성
-            if document_type == "resume":
-                if average_score >= 8:
-                    recommendation = "전반적으로 우수한 이력서입니다. 현재 상태를 유지하세요."
-                elif average_score >= 6:
-                    recommendation = "양호한 수준이지만 몇 가지 개선점이 있습니다. 피드백을 참고하여 수정하세요."
-                else:
-                    recommendation = "전반적인 개선이 필요합니다. 각 항목별 피드백을 참고하여 체계적으로 수정하세요."
-            elif document_type == "cover_letter":
-                if average_score >= 8:
-                    recommendation = "매우 우수한 자기소개서입니다. 현재 상태를 유지하세요."
-                elif average_score >= 6:
-                    recommendation = "양호한 수준이지만 몇 가지 개선점이 있습니다. 피드백을 참고하여 수정하세요."
-                else:
-                    recommendation = "전반적인 개선이 필요합니다. 각 항목별 피드백을 참고하여 체계적으로 수정하세요."
-            elif document_type == "portfolio":
-                if average_score >= 8:
-                    recommendation = "매우 우수한 포트폴리오입니다. 현재 상태를 유지하세요."
-                elif average_score >= 6:
-                    recommendation = "양호한 수준이지만 몇 가지 개선점이 있습니다. 피드백을 참고하여 수정하세요."
-                else:
-                    recommendation = "전반적인 개선이 필요합니다. 각 항목별 피드백을 참고하여 체계적으로 수정하세요."
+            # 추천사항 생성 (통합 분석 기준)
+            if average_score >= 8:
+                recommendation = "전반적으로 우수한 문서입니다. 현재 상태를 유지하세요."
+            elif average_score >= 6:
+                recommendation = "양호한 수준이지만 몇 가지 개선점이 있습니다. 피드백을 참고하여 수정하세요."
             else:
-                recommendation = "문서 분석이 완료되었습니다."
+                recommendation = "전반적인 개선이 필요합니다. 각 항목별 피드백을 참고하여 체계적으로 수정하세요."
+
             
             analysis_result["overall_summary"]["total_score"] = average_score
             analysis_result["overall_summary"]["recommendation"] = recommendation
@@ -704,11 +991,10 @@ async def upload_and_summarize_file(
             # 파일에서 텍스트 추출
             extracted_text = await extract_text_from_file(temp_file_path, file_ext)
             
-            if not extracted_text or extracted_text.strip() == "":
-                raise HTTPException(
-                    status_code=400,
-                    detail="파일에서 텍스트를 추출할 수 없습니다."
-                )
+            # 텍스트 추출 실패 시에도 더미 분석으로 계속 진행 (사용자 경험 개선)
+            if not extracted_text or str(extracted_text).strip() == "":
+                print("⚠️ 텍스트 추출 실패: 빈 내용 감지 → 더미 분석으로 계속 진행합니다.")
+                extracted_text = "[EMPTY_CONTENT] 텍스트 추출 실패 (스캔 PDF/이미지 기반 문서일 수 있습니다.)"
             
             # Gemini API로 요약 생성
             summary_result = await generate_summary_with_gemini(extracted_text, summary_type)
@@ -785,99 +1071,46 @@ async def analyze_documents(
             extracted_text = await extract_text_from_file(temp_file_path, file_ext)
             
             if not extracted_text or extracted_text.strip() == "":
-                raise HTTPException(
-                    status_code=400,
-                    detail="파일에서 텍스트를 추출할 수 없습니다."
-                )
+                # 스캔 PDF 등 추출 불가 → 기본 구조로 결과 제공 (400 대신 200)
+                fallback = build_fallback_analysis(document_type)
+                return {
+                    "filename": file.filename,
+                    "file_size": file_size,
+                    "extracted_text_length": 0,
+                    "document_type": "통합 분석",
+                    "analysis_result": fallback,
+                    "detected_type": None,
+                    "detected_confidence": 0,
+                    "wrong_placement": False,
+                    "placement_message": "텍스트 추출 불가 문서로 기본 안내 결과 제공"
+                }
             
+            # 내용 기반 문서 타입 분류 수행
+            classification = classify_document_type_by_content(extracted_text)
+
             # Gemini API로 상세 분석 생성
             analysis_result = await generate_detailed_analysis_with_gemini(extracted_text, document_type)
             
-            # 지원자 정보 생성 및 MongoDB에 저장
-            if document_type == "resume" and applicant_name and position and department:
-                try:
-                    # MongoDB 연결
-                    from motor.motor_asyncio import AsyncIOMotorClient
-                    import uuid
-                    from datetime import datetime
-                    
-                    mongodb_client = AsyncIOMotorClient("mongodb://localhost:27017/")
-                    mongodb_db = mongodb_client.Hireme
-                    
-                    # 지원자 데이터 구성
-                    applicant_data = {
-                        "id": str(uuid.uuid4()),
-                        "name": applicant_name,
-                        "position": position,
-                        "department": department,
-                        "experience": 0,  # 기본값, 나중에 업데이트 가능
-                        "skills": [],  # 기본값, 나중에 업데이트 가능
-                        "ai_score": analysis_result.overall_summary.total_score,
-                        "ai_analysis": analysis_result.overall_summary.recommendation,
-                        "status": "신규",
-                        "created_at": datetime.now(),
-                        "updated_at": datetime.now()
-                    }
-                    
-                    # MongoDB에 저장
-                    result = await mongodb_db.resumes.insert_one(applicant_data)
-                    applicant_data["_id"] = result.inserted_id
-                    
-                    mongodb_client.close()
-                    
-                    print(f"✅ 지원자 정보가 MongoDB에 저장되었습니다: {applicant_name}")
-                    
-                except Exception as e:
-                    print(f"⚠️ MongoDB 저장 실패: {str(e)}")
-            
-            # 문서 타입에 따라 해당하는 분석 결과만 반환
-            if document_type == "resume":
-                return {
-                    "filename": file.filename,
-                    "file_size": file_size,
-                    "extracted_text_length": len(extracted_text),
-                    "document_type": document_type,
-                    "analysis_type": "resume_analysis",
-                    "analysis_result": {
-                        "resume_analysis": analysis_result.resume_analysis,
-                        "overall_summary": analysis_result.overall_summary
-                    },
-                    "applicant_saved": applicant_name and position and department
-                }
-            elif document_type == "cover_letter":
-                return {
-                    "filename": file.filename,
-                    "file_size": file_size,
-                    "extracted_text_length": len(extracted_text),
-                    "document_type": document_type,
-                    "analysis_type": "cover_letter_analysis",
-                    "analysis_result": {
-                        "cover_letter_analysis": analysis_result.cover_letter_analysis,
-                        "overall_summary": analysis_result.overall_summary
-                    }
-                }
-            elif document_type == "portfolio":
-                return {
-                    "filename": file.filename,
-                    "file_size": file_size,
-                    "extracted_text_length": len(extracted_text),
-                    "document_type": document_type,
-                    "analysis_type": "portfolio_analysis",
-                    "analysis_result": {
-                        "portfolio_analysis": analysis_result.portfolio_analysis,
-                        "overall_summary": analysis_result.overall_summary
-                    }
-                }
-            else:
-                # 기본값: 전체 결과 반환
-                return {
-                    "filename": file.filename,
-                    "file_size": file_size,
-                    "extracted_text_length": len(extracted_text),
-                    "document_type": document_type,
-                    "analysis_type": "full_analysis",
-                    "analysis_result": analysis_result.dict()
-                }
+            # 업로드된 의도(document_type)와 실제 감지 타입이 다르면 경고 포함
+            wrong_placement = False
+            placement_message = ""
+            detected_type = classification.get("detected_type")
+            if detected_type and detected_type != document_type:
+                wrong_placement = True
+                placement_message = f"이 문서는 '{detected_type}'로 감지되었습니다. 현재 영역('{document_type}')에 올바르지 않습니다. 옳지 않은 자리에 놓였습니다."
+
+            # 모든 분석 결과를 통합하여 반환
+            return {
+                "filename": file.filename,
+                "file_size": file_size,
+                "extracted_text_length": len(extracted_text),
+                "document_type": "통합 분석",
+                "analysis_result": analysis_result.dict(),
+                "detected_type": detected_type,
+                "detected_confidence": classification.get("confidence"),
+                "wrong_placement": wrong_placement,
+                "placement_message": placement_message
+            }
             
         finally:
             # 임시 파일 삭제

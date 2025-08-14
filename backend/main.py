@@ -4,7 +4,7 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import uvicorn
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel
@@ -473,23 +473,14 @@ class Interview(BaseModel):
     status: str = "scheduled"
     created_at: Optional[datetime] = None
 
-# 자소서 분석 관련 모델들
-class CoverLetterAnalysis(BaseModel):
-    id: Optional[str] = None
-    filename: str
-    original_text: str
-    summary: str
-    top_strengths: List[Dict[str, Any]]
-    star_cases: List[Dict[str, Any]]
-    job_fit_score: int
-    matched_skills: List[str]
-    missing_skills: List[str]
-    grammar_suggestions: List[Dict[str, str]]
-    improvement_suggestions: List[Dict[str, str]]
-    overall_score: int
-    analysis_date: Optional[datetime] = None
-    job_description: Optional[str] = None
-    # embedding: Optional[List[float]] = None
+# 초기 데이터 로딩 유틸리티: DB가 비어있으면 루트 CSV에서 임포트
+async def seed_applicants_from_csv_if_empty() -> None:
+    try:
+        # 기존 데이터가 있으면 CSV 임포트 건너뛰기
+        total_documents = await db.resumes.count_documents({})
+        if total_documents > 0:
+            print(f"📋 기존 데이터 {total_documents}건이 이미 존재합니다. CSV 임포트를 건너뜁니다.")
+            return
 
 class JobDescription(BaseModel):
     title: str
@@ -503,6 +494,11 @@ class JobDescription(BaseModel):
 @app.get("/")
 async def root():
     return {"message": "AI 채용 관리 시스템 API가 실행 중입니다."}
+
+@app.get("/favicon.ico")
+async def favicon():
+    # 브라우저의 기본 파비콘 요청을 204로 응답해 404 로그를 제거합니다.
+    return Response(status_code=204)
 
 @app.get("/health")
 async def health_check():
@@ -854,33 +850,45 @@ async def create_interview(interview: Interview):
 @app.get("/api/applicants")
 async def get_applicants(skip: int = 0, limit: int = 20):
     try:
-        # 페이징으로 지원자 목록 조회 (applicants 컬렉션 사용)
-        applicants = await db.applicants.find().skip(skip).limit(limit).to_list(limit)
-        
-        # MongoDB의 _id를 id로 변환 및 필요한 필드들 추가
+        # DB가 비어있으면 CSV에서 자동 임포트
+        await seed_applicants_from_csv_if_empty()
+        # 총 문서 수
+        total_applicants = await db.resumes.count_documents({})
+
+        if total_applicants == 0:
+            # DB가 완전 비어있을 때 CSV를 가상 DB처럼 반환
+            csv_applicants = load_applicants_from_csv()
+            items = csv_applicants[skip:skip+limit]
+            return {
+                "applicants": [Resume(**a) for a in items],
+                "total_count": len(csv_applicants),
+                "skip": skip,
+                "limit": limit,
+                "has_more": (skip + limit) < len(csv_applicants)
+            }
+
+        # 페이징으로 이력서(지원자) 목록 조회
+        applicants = await db.resumes.find().skip(skip).limit(limit).to_list(limit)
+
+        # MongoDB의 _id를 id로 변환 및 ObjectId 필드들을 문자열로 변환
         for applicant in applicants:
             applicant["id"] = str(applicant["_id"])
             del applicant["_id"]
+            if "resume_id" in applicant and applicant["resume_id"]:
+                applicant["resume_id"] = str(applicant["resume_id"])
             
-            # 필수 필드들이 없는 경우 기본값 설정
-            if "email" not in applicant:
-                applicant["email"] = "이메일 정보 없음"
-            if "phone" not in applicant:
-                applicant["phone"] = "전화번호 정보 없음"
-            if "appliedDate" not in applicant:
-                applicant["appliedDate"] = applicant.get("created_at", "지원일 정보 없음")
-            if "skills" not in applicant:
-                applicant["skills"] = applicant.get("skills", "기술 정보 없음")
-        
-        # 총 지원자 수
-        total_count = await db.applicants.count_documents({})
-        
+            # 문자열 필드들이 숫자로 저장되어 있을 수 있으므로 강제로 문자열로 변환
+            string_fields = ["growthBackground", "motivation", "careerHistory"]
+            for field_name in string_fields:
+                if field_name in applicant:
+                    applicant[field_name] = str(applicant[field_name]) if applicant[field_name] is not None else ""
+
         return {
-            "applicants": applicants,
-            "total_count": total_count,
+            "applicants": [Resume(**applicant) for applicant in applicants],
+            "total_count": total_applicants,
             "skip": skip,
             "limit": limit,
-            "has_more": (skip + limit) < total_count
+            "has_more": (skip + limit) < total_applicants
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"지원자 목록 조회 실패: {str(e)}")
@@ -915,6 +923,63 @@ async def get_applicant_stats():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"지원자 통계 조회 실패: {str(e)}")
+
+# 지원자 상태 업데이트 API
+@app.put("/api/applicants/{applicant_id}/status")
+async def update_applicant_status(applicant_id: str, status_update: Dict[str, str]):
+    try:
+        new_status = status_update.get("status")
+        if not new_status:
+            raise HTTPException(status_code=400, detail="status 필드가 필요합니다.")
+        
+        # 유효한 상태값 검증
+        valid_statuses = ["pending", "approved", "rejected"]
+        if new_status not in valid_statuses:
+            raise HTTPException(status_code=400, detail=f"유효하지 않은 상태값입니다. 허용된 값: {', '.join(valid_statuses)}")
+        
+        # ObjectId로 변환 시도
+        try:
+            object_id = ObjectId(applicant_id)
+        except Exception:
+            # ObjectId가 아닌 경우 문자열 ID로 처리
+            object_id = applicant_id
+        
+        # 지원자 상태 업데이트
+        result = await db.resumes.update_one(
+            {"_id": object_id},
+            {"$set": {"status": new_status}}
+        )
+        
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다.")
+        
+        if result.modified_count == 0:
+            raise HTTPException(status_code=400, detail="상태가 이미 동일합니다.")
+        
+        # 업데이트된 지원자 정보 반환
+        updated_applicant = await db.resumes.find_one({"_id": object_id})
+        if updated_applicant:
+            updated_applicant["id"] = str(updated_applicant["_id"])
+            del updated_applicant["_id"]
+            if "resume_id" in updated_applicant and updated_applicant["resume_id"]:
+                updated_applicant["resume_id"] = str(updated_applicant["resume_id"])
+            
+            # 문자열 필드들을 강제로 문자열로 변환
+            string_fields = ["growthBackground", "motivation", "careerHistory"]
+            for field_name in string_fields:
+                if field_name in updated_applicant:
+                    updated_applicant[field_name] = str(updated_applicant[field_name]) if updated_applicant[field_name] is not None else ""
+        
+        return {
+            "message": "지원자 상태가 성공적으로 업데이트되었습니다.",
+            "applicant_id": applicant_id,
+            "new_status": new_status,
+            "applicant": updated_applicant
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"지원자 상태 업데이트 실패: {str(e)}")
 
 # Vector Service API
 @app.post("/api/vector/create")
