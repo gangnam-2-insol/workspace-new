@@ -139,7 +139,7 @@ class Interview(BaseModel):
 # 초기 데이터 로딩 유틸리티: DB가 비어있으면 루트 CSV에서 임포트
 async def seed_applicants_from_csv_if_empty() -> None:
     try:
-        total_documents = await db.resumes.count_documents({})
+        total_documents = await db.applicants.count_documents({})
         if total_documents > 0:
             return
 
@@ -209,8 +209,8 @@ async def seed_applicants_from_csv_if_empty() -> None:
 
         if documents_to_insert:
             print(f"🔎 시드 대상 문서 수: {len(documents_to_insert)}")
-            await db.resumes.insert_many(documents_to_insert)
-            new_count = await db.resumes.count_documents({})
+            await db.applicants.insert_many(documents_to_insert)
+            new_count = await db.applicants.count_documents({})
             print(f"📥 CSV에서 {len(documents_to_insert)}건 임포트 완료 → 현재 총 문서 수: {new_count}")
     except Exception as seed_error:
                     print(f"[ERROR] CSV 임포트 실패: {seed_error}")
@@ -341,7 +341,7 @@ async def get_applicants(skip: int = 0, limit: int = 20):
         # DB가 비어있으면 CSV에서 자동 임포트
         await seed_applicants_from_csv_if_empty()
         # 총 문서 수
-        total_count = await db.resumes.count_documents({})
+        total_count = await db.applicants.count_documents({})
 
         if total_count == 0:
             # DB가 완전 비어있을 때 CSV를 가상 DB처럼 반환
@@ -356,7 +356,7 @@ async def get_applicants(skip: int = 0, limit: int = 20):
             }
 
         # 페이징으로 이력서(지원자) 목록 조회
-        applicants = await db.resumes.find().skip(skip).limit(limit).to_list(limit)
+        applicants = await db.applicants.find().skip(skip).limit(limit).to_list(limit)
 
         # MongoDB의 _id를 id로 변환 및 ObjectId 필드들을 문자열로 변환
         for applicant in applicants:
@@ -774,12 +774,12 @@ async def check_resume_similarity(resume_id: str):
             raise HTTPException(status_code=400, detail=f"잘못된 resume_id 형식: {resume_id}")
         
         # 현재 이력서 정보 조회
-        current_resume = await db.resumes.find_one({"_id": object_id})
+        current_resume = await db.applicants.find_one({"_id": object_id})
         print(f"[INFO] 데이터베이스 조회 결과: {current_resume is not None}")
         
         if not current_resume:
             # 데이터베이스에 있는 모든 resume ID들 확인
-            all_resumes = await db.resumes.find({}, {"_id": 1, "name": 1}).to_list(100)
+            all_resumes = await db.applicants.find({}, {"_id": 1, "name": 1}).to_list(100)
             print(f"📋 데이터베이스의 모든 이력서 ID들:")
             for resume in all_resumes:
                 print(f"  - {resume['_id']} ({resume.get('name', 'Unknown')})")
@@ -787,7 +787,7 @@ async def check_resume_similarity(resume_id: str):
             raise HTTPException(status_code=404, detail=f"이력서를 찾을 수 없습니다. 요청된 ID: {resume_id}")
         
         # 다른 모든 이력서 조회 (현재 이력서 제외)
-        other_resumes = await db.resumes.find({"_id": {"$ne": ObjectId(resume_id)}}).to_list(1000)
+        other_resumes = await db.applicants.find({"_id": {"$ne": ObjectId(resume_id)}}).to_list(1000)
         
         # 현재 이력서의 비교 텍스트 (유사도 계산 필드)
         current_fields = {
