@@ -4,6 +4,7 @@ from pymongo.collection import Collection
 from embedding_service import EmbeddingService
 from vector_service import VectorService
 from chunking_service import ChunkingService
+from llm_service import LLMService
 import re
 from collections import Counter
 
@@ -19,6 +20,7 @@ class SimilarityService:
         self.embedding_service = embedding_service
         self.vector_service = vector_service
         self.chunking_service = ChunkingService()
+        self.llm_service = LLMService()
         # 유사도 임계값 설정
         self.similarity_threshold = 0.3   # 30%로 설정
         # 필드별 최소 유사도 임계값 (성장배경, 지원동기, 경력사항만 사용)
@@ -184,13 +186,28 @@ class SimilarityService:
                         resume_detail["_id"] = str(resume_detail["_id"])
                         resume_detail["created_at"] = resume_detail["created_at"].isoformat()
                         
+                        # LLM을 통한 유사성 분석 추가
+                        llm_analysis = await self.llm_service.analyze_similarity_reasoning(
+                            original_resume=resume,
+                            similar_resume=resume_detail,
+                            similarity_score=score_data["similarity_score"],
+                            chunk_details=score_data["chunk_details"]
+                        )
+                        
                         results.append({
                             "similarity_score": score_data["similarity_score"],
                             "similarity_percentage": round(score_data["similarity_score"] * 100, 1),
                             "chunk_matches": score_data["chunk_matches"],
                             "resume": resume_detail,
-                            "chunk_details": score_data["chunk_details"]
+                            "chunk_details": score_data["chunk_details"],
+                            "llm_analysis": llm_analysis
                         })
+            
+            # 전체 결과에 대한 표절 위험도 분석 추가
+            plagiarism_analysis = await self.llm_service.analyze_plagiarism_risk(
+                original_resume=resume,
+                similar_resumes=results
+            )
             
             print(f"[SimilarityService] 최종 유사 이력서 수: {len(results)}")
             print(f"[SimilarityService] === 청킹 기반 유사도 검색 완료 ===")
@@ -204,7 +221,8 @@ class SimilarityService:
                         "chunk_count": len(query_chunks)
                     },
                     "similar_resumes": results,
-                    "total": len(results)
+                    "total": len(results),
+                    "plagiarism_analysis": plagiarism_analysis
                 }
             }
             
@@ -331,14 +349,28 @@ class SimilarityService:
                             # 텍스트 유사도 계산 실패 시 벡터 유사도만 사용
                             print(f"[SimilarityService] 텍스트 유사도 계산 실패, 벡터 유사도만 사용")
                         
+                        # LLM을 통한 유사성 분석 추가
+                        llm_analysis = await self.llm_service.analyze_similarity_reasoning(
+                            original_resume=resume,
+                            similar_resume=resume_detail,
+                            similarity_score=match["score"]
+                        )
+                        
                         results.append({
                             "similarity_score": match["score"],
                             "similarity_percentage": similarity_percentage,
-                            "resume": resume_detail
+                            "resume": resume_detail,
+                            "llm_analysis": llm_analysis
                         })
                 
                 # 유사도 점수로 정렬 (높은 순)
                 results.sort(key=lambda x: x["similarity_score"], reverse=True)
+                
+                # 전체 결과에 대한 표절 위험도 분석 추가
+                plagiarism_analysis = await self.llm_service.analyze_plagiarism_risk(
+                    original_resume=resume,
+                    similar_resumes=results
+                )
                 
                 print(f"[SimilarityService] 최종 유사 이력서 수: {len(results)}")
                 for result in results:
@@ -355,7 +387,8 @@ class SimilarityService:
                             "department": resume.get("department", "")
                         },
                         "similar_resumes": results,
-                        "total": len(results)
+                        "total": len(results),
+                        "plagiarism_analysis": plagiarism_analysis
                     }
                 }
             else:
