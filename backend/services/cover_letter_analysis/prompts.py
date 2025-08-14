@@ -77,20 +77,19 @@ SENTENCE_IMPROVEMENT_PROMPT = """
 개선 유형은 "간결성", "적극성", "문법", "전문성" 중에서 선택하라.
 """
 
-# 5. 평가 루브릭 점수화 프롬프트 (현업 IT기업 기준)
+# 5. 평가 루브릭 점수화 프롬프트
 EVALUATION_RUBRIC_PROMPT = """
-당신은 경력 15년의 IT기업 HR 전문가이다. 
-자소서를 다음 현업 IT기업 평가 기준으로 0~10점 척도로 평가해라.
+당신은 경력 15년의 HR 전문가이다. 
+자소서를 다음 기준으로 0~10점 척도로 평가해라.
 
-[현업 IT기업 자소서 평가 기준]
-1. 기술 적합성 (Tech Fit) (0-10): 사용 기술 스택, 프로젝트 경험, 문제 해결 능력
-2. 직무 이해도 (0-10): 해당 포지션의 역할·책임에 대한 명확한 이해
-3. 성장 가능성 (0-10): 학습 태도, 새로운 기술 습득 경험
-4. 팀워크/커뮤니케이션 (0-10): 협업 경험, 갈등 해결 사례
-5. 동기/회사 이해도 (0-10): 지원 동기, 회사와의 가치관 일치 여부
-6. 문제 해결 능력 (0-10): STAR 기법 적용, 구체적 사례 제시
-7. 성과 지향성 (0-10): 정량적 성과, 임팩트 있는 결과
-8. 문법 및 표현 (0-10): 문장 구조, 전문성, 오류 정도
+평가 기준:
+- 직무 연관성 (0-10): 키워드/스킬 매칭, 경험의 관련성
+- 문제 해결 (0-10): 구성된 STAR 사례의 유효성과 구체성
+- 임팩트 (0-10): 수치화, 성과표현 여부
+- 명료성 (0-10): 문장 구조, 핵심 전달력
+- 표현의 전문성 (0-10): 톤, 적극성, 기업문화 적합성
+- 문법 및 맞춤법 (0-10): 오류 정도
+- 키워드 커버리지 (0-10): 직무설명과 핵심 키워드 일치 비율
 
 자소서:
 {cover_letter_text}
@@ -100,21 +99,20 @@ EVALUATION_RUBRIC_PROMPT = """
 
 응답은 반드시 다음 JSON 형식으로만 출력하라:
 {{
-  "tech_fit": 8.5,
-  "job_understanding": 7.0,
-  "growth_potential": 8.0,
-  "teamwork_communication": 7.5,
-  "motivation_company_fit": 8.0,
+  "job_relevance": 8.5,
   "problem_solving": 7.0,
-  "performance_orientation": 6.5,
-  "grammar_expression": 9.0,
+  "impact": 6.5,
+  "clarity": 8.0,
+  "professionalism": 7.5,
+  "grammar": 9.0,
+  "keyword_coverage": 7.5,
   "overall_score": 7.7
 }}
 """
 
-# 6. 종합 분석 프롬프트 (모든 분석을 한 번에) - 현업 IT기업 기준
+# 6. 종합 분석 프롬프트 (모든 분석을 한 번에)
 COMPREHENSIVE_ANALYSIS_PROMPT = """
-당신은 20년 경력의 IT기업 HR 컨설턴트이다.
+당신은 20년 경력의 시니어 HR 컨설턴트이다.
 지원자의 자소서를 종합적으로 분석하여 다음 항목들을 모두 평가해라.
 
 자소서:
@@ -141,14 +139,13 @@ COMPREHENSIVE_ANALYSIS_PROMPT = """
     "explanation": "적합성 점수 근거"
   }},
   "evaluation_rubric": {{
-    "tech_fit": 8.5,
-    "job_understanding": 7.0,
-    "growth_potential": 8.0,
-    "teamwork_communication": 7.5,
-    "motivation_company_fit": 8.0,
+    "job_relevance": 8.5,
     "problem_solving": 7.0,
-    "performance_orientation": 6.5,
-    "grammar_expression": 9.0,
+    "impact": 6.5,
+    "clarity": 8.0,
+    "professionalism": 7.5,
+    "grammar": 9.0,
+    "keyword_coverage": 7.5,
     "overall_score": 7.7
   }},
   "sentence_improvements": [

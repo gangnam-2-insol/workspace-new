@@ -27,11 +27,11 @@ class GeminiService:
             genai.configure(api_key=self.api_key)
             self.client = genai.GenerativeModel(model_name)
             
-            print(f"✅ Gemini 서비스 초기화 성공 (모델: {model_name})")
+            print(f"[SUCCESS] Gemini 서비스 초기화 성공 (모델: {model_name})")
             
         except Exception as e:
-            print(f"❌ Gemini 서비스 초기화 실패: {e}")
-            print("💡 GOOGLE_API_KEY가 올바르게 설정되었는지 확인하세요")
+            print(f"[ERROR] Gemini 서비스 초기화 실패: {e}")
+            print("[INFO] GOOGLE_API_KEY가 올바르게 설정되었는지 확인하세요")
             self.client = None
     
     async def generate_response(self, prompt: str, conversation_history: List[Dict[str, Any]] = None) -> str:
@@ -96,7 +96,7 @@ class GeminiService:
                 return "응답을 생성할 수 없습니다."
                 
         except Exception as e:
-            print(f"❌ Gemini 응답 생성 실패: {e}")
+            print(f"[ERROR] Gemini 응답 생성 실패: {e}")
             return f"Gemini 서비스 오류가 발생했습니다: {str(e)}"
     
     async def generate_streaming_response(self, prompt: str, conversation_history: List[Dict[str, Any]] = None):
@@ -162,7 +162,7 @@ class GeminiService:
                     yield chunk.text
                     
         except Exception as e:
-            print(f"❌ Gemini 스트리밍 응답 생성 실패: {e}")
+            print(f"[ERROR] Gemini 스트리밍 응답 생성 실패: {e}")
             yield f"Gemini 서비스 오류가 발생했습니다: {str(e)}"
     
     def list_available_models(self) -> List[str]:
@@ -192,10 +192,10 @@ class GeminiService:
         try:
             self.model_name = new_model_name
             self.client = genai.GenerativeModel(new_model_name)
-            print(f"✅ 모델이 {new_model_name}로 변경되었습니다.")
+            print(f"[SUCCESS] 모델이 {new_model_name}로 변경되었습니다.")
             return True
         except Exception as e:
-            print(f"❌ 모델 변경 실패: {e}")
+            print(f"[ERROR] 모델 변경 실패: {e}")
             return False
 
     async def process_user_input(self, page: str, field: str, user_input: str, conversation_history: List[Dict] = None, questions: List[Dict] = None, current_index: int = None) -> Dict[str, Any]:

@@ -22,9 +22,15 @@ import {
   FiCode,
   FiGrid,
   FiList,
-  FiBarChart2
+  FiBarChart2,
+  FiGitBranch,
+  FiArrowLeft,
+  FiCamera
+
 } from 'react-icons/fi';
 import DetailedAnalysisModal from '../components/DetailedAnalysisModal';
+import GithubSummaryPanel from './PortfolioSummary/GithubSummaryPanel';
+import PortfolioSummaryPanel from './PortfolioSummary/PortfolioSummaryPanel';
 
 // 평균 점수 계산 함수
 const calculateAverageScore = (analysisData) => {
@@ -89,7 +95,7 @@ const getPortfolioAnalysisLabel = (key) => {
 };
 
 // API 서비스 추가
-const API_BASE_URL = 'http://localhost:8000';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 const api = {
   // 모든 지원자 조회 (페이지네이션 지원)
@@ -1874,6 +1880,67 @@ const DocumentModalTitle = styled.h2`
   color: var(--text-primary);
 `;
 
+// 포트폴리오 뷰 선택 UI 스타일
+const SelectionGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-top: 8px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const SelectionCard = styled(motion.div)`
+  border: 2px solid var(--border-color);
+  border-radius: 12px;
+  padding: 24px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  position: relative;
+  background: white;
+
+  &:hover {
+    border-color: var(--primary-color);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(0, 200, 81, 0.1);
+  }
+`;
+
+const SelectionIcon = styled.div`
+  width: 56px;
+  height: 56px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 16px;
+  font-size: 22px;
+  color: white;
+
+  &.github {
+    background: linear-gradient(135deg, #24292e, #57606a);
+  }
+
+  &.portfolio {
+    background: linear-gradient(135deg, #667eea, #764ba2);
+  }
+`;
+
+const SelectionTitle = styled.h3`
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0 0 8px 0;
+`;
+
+const SelectionDesc = styled.p`
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin: 0;
+`;
+
 const DocumentCloseButton = styled.button`
   background: none;
   border: none;
@@ -2320,6 +2387,8 @@ const ApplicantManagement = () => {
   const [selectedApplicant, setSelectedApplicant] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [documentModal, setDocumentModal] = useState({ isOpen: false, type: '', applicant: null, isOriginal: false, similarityData: null, isLoadingSimilarity: false });
+  // 포트폴리오 모달 내 뷰 선택 상태: 'select' | 'github' | 'portfolio'
+  const [portfolioView, setPortfolioView] = useState('select');
   const [filterModal, setFilterModal] = useState(false);
   const [selectedJobs, setSelectedJobs] = useState([]);
   const [selectedExperience, setSelectedExperience] = useState([]);
@@ -2545,13 +2614,16 @@ const ApplicantManagement = () => {
   const handleDocumentClick = async (type, applicant) => {
     // 모달 먼저 열기
     setDocumentModal({ isOpen: true, type, applicant, isOriginal: false, similarityData: null, isLoadingSimilarity: false });
+    if (type === 'portfolio') {
+      setPortfolioView('select');
+    }
     
-    // 이력서 타입일 때만 유사도 체크 실행
-    if (type === 'resume') {
+    // 자소서 타입일 때만 유사도 체크 실행
+    if (type === 'coverLetter') {
       setDocumentModal(prev => ({ ...prev, isLoadingSimilarity: true }));
       
       try {
-        const response = await fetch(`http://localhost:8000/api/resume/similarity-check/${applicant.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/coverletter/similarity-check/${applicant.id}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -2584,6 +2656,7 @@ const ApplicantManagement = () => {
 
   const handleCloseDocumentModal = () => {
     setDocumentModal({ isOpen: false, type: '', applicant: null, isOriginal: false, similarityData: null, isLoadingSimilarity: false });
+    setPortfolioView('select');
   };
 
   const handleFilterClick = () => {
@@ -3006,23 +3079,21 @@ const ApplicantManagement = () => {
   };
 
   const extractRecommendationsFromAnalysis = (analysisData, documentType) => {
-    // 총점 계산: overall_summary.total_score 우선, 없으면 overall_score(0-100)을 0-10으로 변환
-    const totalScore = (
-      analysisData?.overall_summary?.total_score ??
-      (typeof analysisData?.overall_score === 'number' ? analysisData.overall_score / 10 : 0)
-    );
-
+    // 선택한 항목에 대한 요약 정보 반환
     if (documentType === '이력서' && analysisData.resume_analysis) {
       const itemCount = Object.keys(analysisData.resume_analysis).length;
+      const totalScore = analysisData.overall_summary.total_score;
       return [`이력서 분석 완료: 총 ${itemCount}개 항목 분석, 평균 점수 ${totalScore}/10점`];
     } else if (documentType === '자기소개서' && analysisData.cover_letter_analysis) {
       const itemCount = Object.keys(analysisData.cover_letter_analysis).length;
+      const totalScore = analysisData.overall_summary.total_score;
       return [`자기소개서 분석 완료: 총 ${itemCount}개 항목 분석, 평균 점수 ${totalScore}/10점`];
     } else if (documentType === '포트폴리오' && analysisData.portfolio_analysis) {
       const itemCount = Object.keys(analysisData.portfolio_analysis).length;
+      const totalScore = analysisData.overall_summary.total_score;
       return [`포트폴리오 분석 완료: 총 ${itemCount}개 항목 분석, 평균 점수 ${totalScore}/10점`];
     }
-
+    
     return ['문서 분석이 완료되었습니다.'];
   };
 
@@ -3038,6 +3109,10 @@ const ApplicantManagement = () => {
             <NewResumeButton onClick={handleResumeModalOpen}>
               <FiFileText size={16} />
               새 이력서 등록
+            </NewResumeButton>
+            <NewResumeButton onClick={() => window.open('/pdf-ocr', '_blank')} style={{ marginLeft: '10px', backgroundColor: '#8B5CF6' }}>
+              <FiCamera size={16} />
+              PDF OCR
             </NewResumeButton>
           </HeaderRight>
         </HeaderContent>
@@ -3479,7 +3554,91 @@ const ApplicantManagement = () => {
               </DocumentModalHeader>
 
               <DocumentContent>
-                {documentModal.type === 'resume' && documentModal.isOriginal && (
+                {/* 포트폴리오: 선택 화면 */}
+                {documentModal.type === 'portfolio' && portfolioView === 'select' && (
+                  <>
+                    <DocumentSection>
+                      <DocumentSectionTitle>포트폴리오 요약 방법 선택</DocumentSectionTitle>
+                      <SelectionGrid>
+                        <SelectionCard
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => setPortfolioView('github')}
+                        >
+                          <SelectionIcon className="github">
+                            <FiGitBranch />
+                          </SelectionIcon>
+                          <SelectionTitle>깃헙 요약</SelectionTitle>
+                          <SelectionDesc>GitHub URL/아이디로 레포 분석 요약 보기</SelectionDesc>
+                        </SelectionCard>
+                        <SelectionCard
+                          whileHover={{ scale: 1.02 }}
+                          whileTap={{ scale: 0.98 }}
+                          onClick={() => setPortfolioView('portfolio')}
+                        >
+                          <SelectionIcon className="portfolio">
+                            <FiCode />
+                          </SelectionIcon>
+                          <SelectionTitle>포트폴리오 요약</SelectionTitle>
+                          <SelectionDesc>등록된 포트폴리오 정보 기반 요약 보기</SelectionDesc>
+                        </SelectionCard>
+                      </SelectionGrid>
+                    </DocumentSection>
+                  </>
+                )}
+
+                {/* 포트폴리오: 깃헙 요약 화면 */}
+                {documentModal.type === 'portfolio' && portfolioView === 'github' && (
+                  <>
+                    <DocumentSection>
+                      <DocumentSectionTitle>
+                        <button 
+                          onClick={() => setPortfolioView('select')} 
+                          style={{ 
+                            background: 'transparent', 
+                            border: 'none', 
+                            cursor: 'pointer', 
+                            marginRight: 8, 
+                            color: 'var(--text-secondary)'
+                          }}
+                          aria-label="뒤로"
+                        >
+                          <FiArrowLeft />
+                        </button>
+                        깃헙 요약
+                      </DocumentSectionTitle>
+                      <GithubSummaryPanel />
+                    </DocumentSection>
+                  </>
+                )}
+
+                {/* 포트폴리오: 기존 포트폴리오 상세 */}
+                {documentModal.type === 'portfolio' && portfolioView === 'portfolio' && documentModal.applicant.documents?.portfolio && (
+                  <>
+                    <DocumentSection>
+                      <DocumentSectionTitle>
+                        <button 
+                          onClick={() => setPortfolioView('select')} 
+                          style={{ 
+                            background: 'transparent', 
+                            border: 'none', 
+                            cursor: 'pointer', 
+                            marginRight: 8, 
+                            color: 'var(--text-secondary)'
+                          }}
+                          aria-label="뒤로"
+                        >
+                          <FiArrowLeft />
+                        </button>
+                        포트폴리오
+                      </DocumentSectionTitle>
+                      <PortfolioSummaryPanel portfolio={documentModal.applicant.documents.portfolio} />
+                    </DocumentSection>
+                  </>
+                )}
+
+                {/* 이력서/자소서 기존 로직 */}
+                {documentModal.type === 'coverLetter' && documentModal.isOriginal && (
                   <>
                     <DocumentSection>
                       <DocumentSectionTitle>지원자 기본정보</DocumentSectionTitle>
@@ -3543,7 +3702,7 @@ const ApplicantManagement = () => {
                   </>
                 )}
 
-                {documentModal.type === 'resume' && !documentModal.isOriginal && documentModal.applicant.documents?.resume && (
+                {documentModal.type === 'resume' && documentModal.applicant.documents?.resume && (
                   <>
                     <DocumentSection>
                       <DocumentSectionTitle>개인정보</DocumentSectionTitle>
@@ -3610,28 +3769,6 @@ const ApplicantManagement = () => {
                   </>
                 )}
 
-                {documentModal.type === 'coverLetter' && documentModal.applicant.documents?.coverLetter && (
-                  <>
-                    <DocumentSection>
-                      <DocumentSectionTitle>지원 동기</DocumentSectionTitle>
-                      <DocumentText>{documentModal.applicant.documents.coverLetter.motivation}</DocumentText>
-                    </DocumentSection>
-
-                    <DocumentSection>
-                      <DocumentSectionTitle>나의 강점</DocumentSectionTitle>
-                      <DocumentList>
-                        {(documentModal.applicant.documents.coverLetter.strengths || []).map((strength, index) => (
-                          <DocumentListItem key={index}>{strength}</DocumentListItem>
-                        ))}
-                      </DocumentList>
-                    </DocumentSection>
-
-                    <DocumentSection>
-                      <DocumentSectionTitle>향후 목표</DocumentSectionTitle>
-                      <DocumentText>{documentModal.applicant.documents.coverLetter.goals}</DocumentText>
-                    </DocumentSection>
-                  </>
-                )}
 
                 {documentModal.type === 'portfolio' && documentModal.applicant.documents?.portfolio && (
                   <>
@@ -3665,7 +3802,7 @@ const ApplicantManagement = () => {
                   </>
                 )}
 
-                {documentModal.type === 'resume' && !documentModal.isOriginal && (
+                {documentModal.type === 'coverLetter' && !documentModal.isOriginal && (
                   <>
                     {/* 유사도 체크 결과 섹션 */}
                     <DocumentSection>
@@ -3674,7 +3811,7 @@ const ApplicantManagement = () => {
                       {documentModal.isLoadingSimilarity && (
                         <DocumentCard>
                           <DocumentCardText>
-                            📊 다른 이력서들과의 유사도를 분석 중입니다...
+                            📊 다른 자소서들과의 유사도를 분석 중입니다...
                           </DocumentCardText>
                         </DocumentCard>
                       )}
@@ -3700,10 +3837,54 @@ const ApplicantManagement = () => {
                             </DocumentGrid>
                           </DocumentCard>
 
+                          {/* 표절 위험도 분석 */}
+                          {documentModal.similarityData.plagiarism_analysis && documentModal.similarityData.plagiarism_analysis.success && (
+                            <DocumentCard>
+                              <DocumentCardTitle>⚠️ 표절 위험도 분석</DocumentCardTitle>
+                              <div style={{
+                                padding: '12px',
+                                borderRadius: '8px',
+                                backgroundColor: documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#fff5f5' : 
+                                                documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#fffbf0' : '#f0fff4',
+                                border: `2px solid ${documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#ff4757' : 
+                                                   documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#ffa502' : '#2ed573'}`
+                              }}>
+                                <div style={{
+                                  fontWeight: 'bold',
+                                  marginBottom: '8px',
+                                  color: documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#ff4757' : 
+                                        documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#ffa502' : '#2ed573'
+                                }}>
+                                  위험도: {documentModal.similarityData.plagiarism_analysis.risk_level} 
+                                  ({(documentModal.similarityData.plagiarism_analysis.risk_score * 100).toFixed(1)}%)
+                                </div>
+                                <div style={{fontSize: '14px', color: '#333', marginBottom: '8px', whiteSpace: 'pre-line'}}>
+                                  {documentModal.similarityData.plagiarism_analysis.analysis}
+                                </div>
+                                
+                                {documentModal.similarityData.plagiarism_analysis.recommendations && 
+                                 documentModal.similarityData.plagiarism_analysis.recommendations.length > 0 && (
+                                  <div>
+                                    <div style={{fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '4px'}}>
+                                      권장사항:
+                                    </div>
+                                    <ul style={{margin: '0', paddingLeft: '16px'}}>
+                                      {documentModal.similarityData.plagiarism_analysis.recommendations.map((rec, idx) => (
+                                        <li key={idx} style={{fontSize: '12px', color: '#666', marginBottom: '2px'}}>
+                                          {rec}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            </DocumentCard>
+                          )}
+
                           {/* 상위 유사 이력서들 */}
                           {documentModal.similarityData.top_similar.length > 0 && (
                             <DocumentCard>
-                              <DocumentCardTitle>🎯 가장 유사한 이력서 TOP 5</DocumentCardTitle>
+                              <DocumentCardTitle>🎯 가장 유사한 자소서 TOP 5</DocumentCardTitle>
                               {documentModal.similarityData.top_similar.map((similar, index) => (
                                 <div key={similar.resume_id} style={{
                                   padding: '12px',
@@ -3725,6 +3906,38 @@ const ApplicantManagement = () => {
                                     지원동기: {(similar.field_similarities.motivation * 100).toFixed(1)}% | 
                                     경력사항: {(similar.field_similarities.careerHistory * 100).toFixed(1)}%
                                   </div>
+                                  
+                                  {/* LLM 분석 결과 추가 */}
+                                  {similar.llm_analysis && similar.llm_analysis.success && (
+                                    <div style={{
+                                      marginTop: '8px',
+                                      padding: '8px',
+                                      backgroundColor: '#f0f8ff',
+                                      borderLeft: '4px solid #4a90e2',
+                                      borderRadius: '4px'
+                                    }}>
+                                      <div style={{fontSize: '11px', fontWeight: 'bold', color: '#4a90e2', marginBottom: '4px'}}>
+                                        🤖 AI 분석
+                                      </div>
+                                      <div style={{fontSize: '12px', color: '#333', lineHeight: '1.4', whiteSpace: 'pre-line'}}>
+                                        {similar.llm_analysis.analysis}
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  {similar.llm_analysis && !similar.llm_analysis.success && (
+                                    <div style={{
+                                      marginTop: '8px',
+                                      padding: '8px',
+                                      backgroundColor: '#fff0f0',
+                                      borderLeft: '4px solid #e74c3c',
+                                      borderRadius: '4px'
+                                    }}>
+                                      <div style={{fontSize: '11px', color: '#e74c3c'}}>
+                                        AI 분석 실패: {similar.llm_analysis.error || 'Unknown error'}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </DocumentCard>
@@ -3741,13 +3954,13 @@ const ApplicantManagement = () => {
                       )}
                     </DocumentSection>
 
-                    {/* 기존 이력서 요약 섹션 */}
+                    {/* 자소서 요약 섹션 */}
                     {!documentModal.applicant.documents?.resume && (
                       <DocumentSection>
-                        <DocumentSectionTitle>이력서 요약</DocumentSectionTitle>
+                        <DocumentSectionTitle>자소서 요약</DocumentSectionTitle>
                         <DocumentCard>
                           <DocumentCardText>
-                            현재 이 지원자의 상세 이력서 정보는 등록되지 않았습니다.<br/>
+                            현재 이 지원자의 상세 자소서 정보는 등록되지 않았습니다.<br/>
                             <strong>원본보기</strong> 버튼을 클릭하면 DB에 저장된 지원자의 모든 정보를 확인할 수 있습니다.
                           </DocumentCardText>
                         </DocumentCard>

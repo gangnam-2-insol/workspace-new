@@ -24,9 +24,9 @@ class AIService:
         try:
             from gemini_service import GeminiService
             self.gemini_service = GeminiService("gemini-1.5-pro")
-            print("✅ Gemini 서비스 초기화 성공")
+            print("[SUCCESS] Gemini 서비스 초기화 성공")
         except Exception as e:
-            print(f"❌ Gemini 서비스 초기화 실패: {e}")
+            print(f"[ERROR] Gemini 서비스 초기화 실패: {e}")
             self.gemini_service = None
     
     async def handle_ai_assistant_request(self, request: ChatbotRequest) -> ChatbotResponse:

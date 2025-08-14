@@ -2,7 +2,6 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from typing import Optional, Dict, List
 import os
-from dotenv import load_dotenv
 import tempfile
 import asyncio
 import aiofiles
@@ -11,19 +10,13 @@ import google.generativeai as genai
 from pydantic import BaseModel
 import re
 
-# .env 파일 로드 (현재 디렉토리에서)
-print(f"🔍 upload.py 현재 작업 디렉토리: {os.getcwd()}")
-print(f"🔍 upload.py .env 파일 존재 여부: {os.path.exists('.env')}")
-load_dotenv('.env')
-print(f"🔍 upload.py GOOGLE_API_KEY 로드 후: {os.getenv('GOOGLE_API_KEY')}")
-
 # Gemini API 설정
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
     model = genai.GenerativeModel('gemini-1.5-flash')
 
-router = APIRouter(tags=["upload"])
+router = APIRouter(prefix="/api/upload", tags=["upload"])
 
 class SummaryRequest(BaseModel):
     content: str
@@ -39,16 +32,6 @@ class SummaryResponse(BaseModel):
 class AnalysisScore(BaseModel):
     score: int  # 0-10
     feedback: str
-
-class DocumentValidationRequest(BaseModel):
-    content: str
-    expected_type: str  # "이력서", "자기소개서", "포트폴리오"
-
-class DocumentValidationResponse(BaseModel):
-    is_valid: bool
-    confidence: float
-    reason: str
-    suggested_type: str
 
 class ResumeAnalysis(BaseModel):
     basic_info_completeness: AnalysisScore
@@ -88,9 +71,9 @@ class OverallSummary(BaseModel):
     recommendation: str
 
 class DetailedAnalysisResponse(BaseModel):
-    resume_analysis: Optional[ResumeAnalysis] = None
-    cover_letter_analysis: Optional[CoverLetterAnalysis] = None
-    portfolio_analysis: Optional[PortfolioAnalysis] = None
+    resume_analysis: ResumeAnalysis
+    cover_letter_analysis: CoverLetterAnalysis
+    portfolio_analysis: PortfolioAnalysis
     overall_summary: OverallSummary
 
 # ===== 분석 실패 시 기본 구조 생성 유틸 =====
@@ -732,15 +715,9 @@ JSON 외의 텍스트는 절대 포함하지 마세요.
 """
         # 모든 문서 타입에 대해 통합 분석 수행
         
-        # Gemini API 호출 (JSON 강제)
-        json_model = genai.GenerativeModel(
-            'gemini-1.5-flash',
-            generation_config={
-                'response_mime_type': 'application/json'
-            }
-        )
+        # Gemini API 호출
         response = await asyncio.to_thread(
-            json_model.generate_content,
+            model.generate_content,
             analysis_prompt
         )
         
@@ -748,19 +725,7 @@ JSON 외의 텍스트는 절대 포함하지 마세요.
         if not response or not response.text or response.text.strip() == "":
             raise HTTPException(status_code=500, detail="Gemini API에서 빈 응답을 받았습니다.")
         
-        # 일부 드라이버는 .text가 없을 수 있어 안전 접근
-        response_text = getattr(response, 'text', '')
-        if hasattr(response, 'candidates') and not response_text:
-            try:
-                # application/json로 내려오면 first candidate의 content를 합성
-                parts = []
-                for c in response.candidates or []:
-                    for p in getattr(c, 'content', {}).get('parts', []):
-                        parts.append(str(getattr(p, 'text', '')))
-                response_text = ''.join(parts).strip()
-            except Exception:
-                response_text = ''
-        response_text = (response_text or '').strip()
+        response_text = response.text.strip()
         print(f"Gemini API 응답: {response_text[:200]}...")  # 디버깅용 로그
         
         # Markdown 코드 블록 제거 (정규식 사용으로 속도 향상)
@@ -852,35 +817,24 @@ JSON 외의 텍스트는 절대 포함하지 마세요.
                         count += 1
             
             if document_type == "resume" and "resume_analysis" in analysis_result:
-                print(f"🔍 이력서 분석 항목: {list(analysis_result['resume_analysis'].keys())}")
-                for key, value in analysis_result["resume_analysis"].items():
-                    print(f"🔍 {key}: {value}")
+                for value in analysis_result["resume_analysis"].values():
                     if isinstance(value, dict) and "score" in value:
                         total_score += value["score"]
                         count += 1
-                        print(f"🔍 {key} 점수: {value['score']}")
             elif document_type == "cover_letter" and "cover_letter_analysis" in analysis_result:
-                print(f"🔍 자기소개서 분석 항목: {list(analysis_result['cover_letter_analysis'].keys())}")
-                for key, value in analysis_result["cover_letter_analysis"].items():
-                    print(f"🔍 {key}: {value}")
+                for value in analysis_result["cover_letter_analysis"].values():
                     if isinstance(value, dict) and "score" in value:
                         total_score += value["score"]
                         count += 1
-                        print(f"🔍 {key} 점수: {value['score']}")
             elif document_type == "portfolio" and "portfolio_analysis" in analysis_result:
-                print(f"🔍 포트폴리오 분석 항목: {list(analysis_result['portfolio_analysis'].keys())}")
-                for key, value in analysis_result["portfolio_analysis"].items():
-                    print(f"🔍 {key}: {value}")
+                for value in analysis_result["portfolio_analysis"].values():
                     if isinstance(value, dict) and "score" in value:
                         total_score += value["score"]
                         count += 1
-                        print(f"🔍 {key} 점수: {value['score']}")
             
-            print(f"🔍 총 점수: {total_score}, 항목 수: {count}")
-            
-            # 평균 점수 계산 (정수로 변환)
+            # 평균 점수 계산 (소수점 포함)
             if count > 0:
-                average_score = int(round(total_score / count))
+                average_score = round(total_score / count, 1)
             else:
                 average_score = 0
             
@@ -895,49 +849,6 @@ JSON 외의 텍스트는 절대 포함하지 마세요.
             
             analysis_result["overall_summary"]["total_score"] = average_score
             analysis_result["overall_summary"]["recommendation"] = recommendation
-            
-            # 문서 타입에 따라 누락된 필드에 기본값 제공
-            if document_type == "resume" and "resume_analysis" not in analysis_result:
-                # 이력서 분석 결과가 없는 경우 기본값 생성
-                analysis_result["resume_analysis"] = {
-                    "basic_info_completeness": {"score": 0, "feedback": "분석 실패"},
-                    "job_relevance": {"score": 0, "feedback": "분석 실패"},
-                    "experience_clarity": {"score": 0, "feedback": "분석 실패"},
-                    "tech_stack_clarity": {"score": 0, "feedback": "분석 실패"},
-                    "project_recency": {"score": 0, "feedback": "분석 실패"},
-                    "achievement_metrics": {"score": 0, "feedback": "분석 실패"},
-                    "readability": {"score": 0, "feedback": "분석 실패"},
-                    "typos_and_errors": {"score": 0, "feedback": "분석 실패"},
-                    "update_freshness": {"score": 0, "feedback": "분석 실패"}
-                }
-            
-            if document_type == "cover_letter" and "cover_letter_analysis" not in analysis_result:
-                # 자기소개서 분석 결과가 없는 경우 기본값 생성
-                analysis_result["cover_letter_analysis"] = {
-                    "motivation_relevance": {"score": 0, "feedback": "분석 실패"},
-                    "problem_solving_STAR": {"score": 0, "feedback": "분석 실패"},
-                    "quantitative_impact": {"score": 0, "feedback": "분석 실패"},
-                    "job_understanding": {"score": 0, "feedback": "분석 실패"},
-                    "unique_experience": {"score": 0, "feedback": "분석 실패"},
-                    "logical_flow": {"score": 0, "feedback": "분석 실패"},
-                    "keyword_diversity": {"score": 0, "feedback": "분석 실패"},
-                    "sentence_readability": {"score": 0, "feedback": "분석 실패"},
-                    "typos_and_errors": {"score": 0, "feedback": "분석 실패"}
-                }
-            
-            if document_type == "portfolio" and "portfolio_analysis" not in analysis_result:
-                # 포트폴리오 분석 결과가 없는 경우 기본값 생성
-                analysis_result["portfolio_analysis"] = {
-                    "project_overview": {"score": 0, "feedback": "분석 실패"},
-                    "tech_stack": {"score": 0, "feedback": "분석 실패"},
-                    "personal_contribution": {"score": 0, "feedback": "분석 실패"},
-                    "achievement_metrics": {"score": 0, "feedback": "분석 실패"},
-                    "visual_quality": {"score": 0, "feedback": "분석 실패"},
-                    "documentation_quality": {"score": 0, "feedback": "분석 실패"},
-                    "job_relevance": {"score": 0, "feedback": "분석 실패"},
-                    "unique_features": {"score": 0, "feedback": "분석 실패"},
-                    "maintainability": {"score": 0, "feedback": "분석 실패"}
-                }
             
             processing_time = (datetime.now() - start_time).total_seconds()
             print(f"분석 처리 완료: {processing_time:.2f}초")
@@ -1023,23 +934,8 @@ async def upload_and_summarize_file(
 @router.post("/analyze")
 async def analyze_documents(
     file: UploadFile = File(...),
-    document_type: str = Form("resume"),  # resume, cover_letter, portfolio
-    applicant_name: str = Form(""),  # 지원자 이름
-    position: str = Form(""),  # 희망 직무
-    department: str = Form("")  # 희망 부서
+    document_type: str = Form("resume")  # resume, cover_letter, portfolio
 ):
-    # 프론트엔드에서 보내는 한글 문서 타입을 영문으로 변환
-    document_type_mapping = {
-        "이력서": "resume",
-        "자기소개서": "cover_letter", 
-        "포트폴리오": "portfolio"
-    }
-    
-    # 한글로 들어온 경우 영문으로 변환
-    if document_type in document_type_mapping:
-        document_type = document_type_mapping[document_type]
-    
-    print(f"🔍 변환된 문서 타입: {document_type}")
     """파일 업로드 및 상세 분석"""
     try:
         # 파일 유효성 검사
@@ -1140,320 +1036,6 @@ async def summarize_text(request: SummaryRequest):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"요약 생성 실패: {str(e)}")
-
-@router.post("/validate-document-type")
-async def validate_document_type(request: DocumentValidationRequest):
-    """문서 내용을 분석하여 선택된 문서 타입과 일치하는지 검증"""
-    try:
-        if not request.content or len(request.content.strip()) == 0:
-            raise HTTPException(status_code=400, detail="검증할 문서 내용이 없습니다.")
-        
-        if not GOOGLE_API_KEY:
-            raise HTTPException(status_code=500, detail="Gemini API 키가 설정되지 않았습니다.")
-        
-        # 문서 타입 검증을 위한 프롬프트 생성
-        validation_prompt = f"""
-        다음 문서 내용을 분석하여 이것이 "{request.expected_type}"인지 판단해주세요.
-        
-        문서 내용:
-        {request.content[:2000]}  # 내용이 너무 길면 앞부분만 사용
-        
-        다음 기준으로 판단해주세요:
-        
-        이력서의 경우:
-        - 개인 정보 (이름, 연락처, 생년월일 등)
-        - 학력 정보
-        - 경력 정보 (회사명, 직무, 기간)
-        - 기술 스택
-        - 자격증
-        - 프로젝트 경험
-        
-        자기소개서의 경우:
-        - 지원 동기
-        - 성장 과정
-        - 지원 직무에 대한 이해
-        - 본인의 강점과 약점
-        - 입사 후 포부
-        
-        포트폴리오의 경우:
-        - 프로젝트 개요
-        - 사용 기술
-        - 구현 과정
-        - 결과물
-        - GitHub 링크 등
-        
-        응답 형식:
-        - 유효성: true/false
-        - 신뢰도: 0.0-1.0 (소수점)
-        - 판단 이유: 간단한 설명
-        - 제안 타입: 실제 문서 타입 (이력서/자기소개서/포트폴리오)
-        
-        JSON 형태로 응답해주세요.
-        """
-        
-        # Gemini API 호출
-        response = await asyncio.to_thread(
-            model.generate_content,
-            validation_prompt
-        )
-        
-        response_text = response.text.strip()
-        
-        # JSON 응답 파싱 시도
-        try:
-            # JSON 부분만 추출
-            json_start = response_text.find('{')
-            json_end = response_text.rfind('}') + 1
-            if json_start != -1 and json_end != 0:
-                json_str = response_text[json_start:json_end]
-                import json
-                parsed_response = json.loads(json_str)
-                
-                return DocumentValidationResponse(
-                    is_valid=parsed_response.get('유효성', False),
-                    confidence=parsed_response.get('신뢰도', 0.0),
-                    reason=parsed_response.get('판단 이유', '분석 실패'),
-                    suggested_type=parsed_response.get('제안 타입', '알 수 없음')
-                )
-        except (json.JSONDecodeError, KeyError):
-            pass
-        
-        # JSON 파싱 실패 시 텍스트 분석으로 대체
-        response_lower = response_text.lower()
-        
-        # 간단한 키워드 기반 분석
-        resume_keywords = ['이력서', 'resume', 'cv', '경력', '학력', '자격증', '프로젝트']
-        cover_letter_keywords = ['자기소개서', '자소서', 'cover letter', '지원동기', '성장과정', '포부']
-        portfolio_keywords = ['포트폴리오', 'portfolio', '프로젝트', 'github', '구현']
-        
-        expected_lower = request.expected_type.lower()
-        
-        if '이력서' in expected_lower:
-            relevant_keywords = resume_keywords
-            conflicting_keywords = cover_letter_keywords + portfolio_keywords
-        elif '자기소개서' in expected_lower:
-            relevant_keywords = cover_letter_keywords
-            conflicting_keywords = resume_keywords + portfolio_keywords
-        elif '포트폴리오' in expected_lower:
-            relevant_keywords = portfolio_keywords
-            conflicting_keywords = resume_keywords + cover_letter_keywords
-        else:
-            relevant_keywords = []
-            conflicting_keywords = []
-        
-        # 키워드 기반 유효성 판단
-        has_relevant = any(keyword in response_lower for keyword in relevant_keywords)
-        has_conflicting = any(keyword in response_lower for keyword in conflicting_keywords)
-        
-        if has_conflicting:
-            is_valid = False
-            confidence = 0.8
-            reason = f"문서 내용이 {request.expected_type}와 맞지 않습니다."
-            suggested_type = "알 수 없음"
-        elif has_relevant:
-            is_valid = True
-            confidence = 0.7
-            reason = f"문서 내용이 {request.expected_type}와 일치합니다."
-            suggested_type = request.expected_type
-        else:
-            is_valid = False
-            confidence = 0.6
-            reason = f"문서 내용을 분석할 수 없습니다."
-            suggested_type = "알 수 없음"
-        
-        return DocumentValidationResponse(
-            is_valid=is_valid,
-            confidence=confidence,
-            reason=reason,
-            suggested_type=suggested_type
-        )
-        
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"문서 타입 검증 실패: {str(e)}")
-
-@router.post("/validate-uploaded-file")
-async def validate_uploaded_file(
-    file: UploadFile = File(...),
-    expected_type: str = Form(...)
-):
-    """업로드된 파일을 분석하여 선택된 문서 타입과 일치하는지 검증"""
-    try:
-        if not file.filename:
-            raise HTTPException(status_code=400, detail="파일이 선택되지 않았습니다.")
-        
-        # 파일 유효성 검사
-        if not validate_file(file):
-            raise HTTPException(status_code=400, detail="지원하지 않는 파일 형식입니다.")
-        
-        # 파일 크기 확인
-        content = await file.read()
-        file_size = len(content)
-        
-        if file_size > MAX_FILE_SIZE:
-            raise HTTPException(status_code=400, detail="파일 크기가 너무 큽니다. 최대 10MB까지 지원합니다.")
-        
-        # 파일 확장자 확인
-        file_ext = os.path.splitext(file.filename.lower())[1]
-        
-        # 임시 파일 생성
-        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
-            temp_file.write(content)
-            temp_file_path = temp_file.name
-        
-        try:
-            # 파일에서 텍스트 추출
-            extracted_text = await extract_text_from_file(temp_file_path, file_ext)
-            
-            if not extracted_text or extracted_text.strip() == "":
-                raise HTTPException(
-                    status_code=400,
-                    detail="파일에서 텍스트를 추출할 수 없습니다."
-                )
-            
-            # 문서 타입 검증
-            validation_result = await validate_document_type_internal(extracted_text, expected_type)
-            
-            return {
-                "filename": file.filename,
-                "file_size": file_size,
-                "extracted_text_length": len(extracted_text),
-                "expected_type": expected_type,
-                "validation_result": validation_result.dict()
-            }
-            
-        finally:
-            # 임시 파일 삭제
-            if os.path.exists(temp_file_path):
-                os.unlink(temp_file_path)
-                
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"파일 검증 실패: {str(e)}")
-
-async def validate_document_type_internal(content: str, expected_type: str) -> DocumentValidationResponse:
-    """내부적으로 문서 타입을 검증하는 함수"""
-    # if not GOOGLE_API_KEY:
-    #     raise HTTPException(status_code=500, detail="Gemini API 키가 설정되지 않았습니다.")
-    
-    # 문서 타입 검증을 위한 프롬프트 생성
-    validation_prompt = f"""
-    다음 문서 내용을 분석하여 이것이 "{expected_type}"인지 판단해주세요.
-    
-    문서 내용:
-    {content[:2000]}  # 내용이 너무 길면 앞부분만 사용
-    
-    다음 기준으로 판단해주세요:
-    
-    이력서의 경우:
-    - 개인 정보 (이름, 연락처, 생년월일 등)
-    - 학력 정보
-    - 경력 정보 (회사명, 직무, 기간)
-    - 기술 스택
-    - 자격증
-    - 프로젝트 경험
-    
-    자기소개서의 경우:
-    - 지원 동기
-    - 성장 과정
-    - 지원 직무에 대한 이해
-    - 본인의 강점과 약점
-    - 입사 후 포부
-    
-    포트폴리오의 경우:
-    - 프로젝트 개요
-    - 사용 기술
-    - 구현 과정
-    - 결과물
-    - GitHub 링크 등
-    
-    응답 형식:
-    - 유효성: true/false
-    - 신뢰도: 0.0-1.0 (소수점)
-    - 판단 이유: 간단한 설명
-    - 제안 타입: 실제 문서 타입 (이력서/자기소개서/포트폴리오)
-    
-    JSON 형태로 응답해주세요.
-    """
-    
-    # Gemini API 호출
-    response = await asyncio.to_thread(
-        model.generate_content,
-        validation_prompt
-    )
-    
-    response_text = response.text.strip()
-    
-    # JSON 응답 파싱 시도
-    try:
-        # JSON 부분만 추출
-        json_start = response_text.find('{')
-        json_end = response_text.rfind('}') + 1
-        if json_start != -1 and json_end != 0:
-            json_str = response_text[json_start:json_end]
-            import json
-            parsed_response = json.loads(json_str)
-            
-            return DocumentValidationResponse(
-                is_valid=parsed_response.get('유효성', False),
-                confidence=parsed_response.get('신뢰도', 0.0),
-                reason=parsed_response.get('판단 이유', '분석 실패'),
-                suggested_type=parsed_response.get('제안 타입', '알 수 없음')
-            )
-    except (json.JSONDecodeError, KeyError):
-        pass
-    
-    # JSON 파싱 실패 시 텍스트 분석으로 대체
-    response_lower = response_text.lower()
-    
-    # 간단한 키워드 기반 분석
-    resume_keywords = ['이력서', 'resume', 'cv', '경력', '학력', '자격증', '프로젝트']
-    cover_letter_keywords = ['자기소개서', '자소서', 'cover letter', '지원동기', '성장과정', '포부']
-    portfolio_keywords = ['포트폴리오', 'portfolio', '프로젝트', 'github', '구현']
-    
-    expected_lower = expected_type.lower()
-    
-    if '이력서' in expected_lower:
-        relevant_keywords = resume_keywords
-        conflicting_keywords = cover_letter_keywords + portfolio_keywords
-    elif '자기소개서' in expected_lower:
-        relevant_keywords = cover_letter_keywords
-        conflicting_keywords = resume_keywords + portfolio_keywords
-    elif '포트폴리오' in expected_lower:
-        relevant_keywords = portfolio_keywords
-        conflicting_keywords = resume_keywords + cover_letter_keywords
-    else:
-        relevant_keywords = []
-        conflicting_keywords = []
-    
-    # 키워드 기반 유효성 판단
-    has_relevant = any(keyword in response_lower for keyword in relevant_keywords)
-    has_conflicting = any(keyword in response_lower for keyword in conflicting_keywords)
-    
-    if has_conflicting:
-        is_valid = False
-        confidence = 0.8
-        reason = f"문서 내용이 {expected_type}와 맞지 않습니다."
-        suggested_type = "알 수 없음"
-    elif has_relevant:
-        is_valid = True
-        confidence = 0.7
-        reason = f"문서 내용이 {expected_type}와 일치합니다."
-        suggested_type = expected_type
-    else:
-        is_valid = False
-        confidence = 0.6
-        reason = f"문서 내용을 분석할 수 없습니다."
-        suggested_type = "알 수 없음"
-    
-    return DocumentValidationResponse(
-        is_valid=is_valid,
-        confidence=confidence,
-        reason=reason,
-        suggested_type=suggested_type
-    )
 
 @router.get("/health")
 async def upload_health_check():

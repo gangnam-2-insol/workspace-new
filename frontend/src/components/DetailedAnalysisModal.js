@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiX, FiCheck, FiAlertCircle, FiStar, FiTrendingUp, FiTrendingDown, FiFileText, FiMessageSquare, FiCode, FiBarChart2 } from 'react-icons/fi';
@@ -353,7 +353,6 @@ const getScoreColor = (score) => {
 };
 
 const DetailedAnalysisModal = ({ isOpen, onClose, analysisData }) => {
-  const [showRaw, setShowRaw] = useState(false);
   if (!isOpen || !analysisData) return null;
 
   const { analysis_result } = analysisData;
@@ -474,15 +473,6 @@ const DetailedAnalysisModal = ({ isOpen, onClose, analysisData }) => {
             <Header>
               <Title>AI 상세 분석 결과</Title>
               <Subtitle>{analysisData.fileName} - {analysisData.analysisDate}</Subtitle>
-              <div style={{position:'absolute', top: 20, right: 52}}>
-                <button
-                  onClick={() => setShowRaw(v => !v)}
-                  style={{
-                    padding: '6px 10px', borderRadius: 6, border: '1px solid #e5e7eb',
-                    background: showRaw ? '#f3f4f6' : 'white', cursor: 'pointer', fontSize: 12
-                  }}
-                >{showRaw ? '원본 JSON 숨기기' : '원본 JSON 보기'}</button>
-              </div>
             </Header>
 
             {/* 디버깅 정보 - 실제 파일 내용 확인 (표시 비활성화) */}

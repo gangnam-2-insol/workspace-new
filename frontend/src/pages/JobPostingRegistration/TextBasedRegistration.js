@@ -4,7 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import TemplateModal from './TemplateModal';
 import EnhancedModalChatbot from '../../chatbot/components/EnhancedModalChatbot';
 import TitleRecommendationModal from '../../components/TitleRecommendationModal';
-import TestAutoFillButton from '../../components/TestAutoFillButton';
+// import TestAutoFillButton from '../../components/TestAutoFillButton';
 import './TextBasedRegistration.css';
 import { FiX, FiArrowLeft, FiArrowRight, FiCheck, FiFileText, FiClock, FiMapPin, FiDollarSign, FiUsers, FiMail, FiCalendar, FiFolder, FiSettings } from 'react-icons/fi';
 
@@ -621,7 +621,8 @@ const TextBasedRegistration = ({
     }
   }, [isOpen]);
 
-  // 테스트 자동입력 처리
+  // 테스트 자동입력 처리 (주석 처리됨)
+  /*
   const handleTestAutoFill = (sampleData) => {
     console.log('테스트 자동입력 시작:', sampleData);
     
@@ -648,6 +649,7 @@ const TextBasedRegistration = ({
     // 사용자에게 알림
     alert('🧪 테스트 데이터가 자동으로 입력되었습니다!');
   };
+  */
 
   return (
     <AnimatePresence>
@@ -669,7 +671,7 @@ const TextBasedRegistration = ({
             <Header>
               <Title>🤖 AI 채용공고 등록 도우미</Title>
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                <TestAutoFillButton onAutoFill={handleTestAutoFill} />
+                {/* <TestAutoFillButton onAutoFill={handleTestAutoFill} /> */}
                 <CloseButton onClick={onClose}>
                   <FiX />
                 </CloseButton>
