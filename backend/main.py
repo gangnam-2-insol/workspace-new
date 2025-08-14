@@ -3,7 +3,7 @@ import sys
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import uvicorn
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel
@@ -278,6 +278,11 @@ def load_applicants_from_csv() -> List[Dict[str, Any]]:
 async def root():
     return {"message": "AI 채용 관리 시스템 API가 실행 중입니다."}
 
+@app.get("/favicon.ico")
+async def favicon():
+    # 브라우저의 기본 파비콘 요청을 204로 응답해 404 로그를 제거합니다.
+    return Response(status_code=204)
+
 @app.get("/health")
 async def health_check():
     return {"status": "healthy", "message": "서버가 정상적으로 작동 중입니다."}
@@ -372,7 +377,7 @@ async def get_applicants(skip: int = 0, limit: int = 20):
             "total_count": total_count,
             "skip": skip,
             "limit": limit,
-            "has_more": (skip + limit) < total_count
+            "has_more": (skip + limit) < total_applicants
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"지원자 목록 조회 실패: {str(e)}")
@@ -423,6 +428,63 @@ async def get_applicant_stats():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"지원자 통계 조회 실패: {str(e)}")
+
+# 지원자 상태 업데이트 API
+@app.put("/api/applicants/{applicant_id}/status")
+async def update_applicant_status(applicant_id: str, status_update: Dict[str, str]):
+    try:
+        new_status = status_update.get("status")
+        if not new_status:
+            raise HTTPException(status_code=400, detail="status 필드가 필요합니다.")
+        
+        # 유효한 상태값 검증
+        valid_statuses = ["pending", "approved", "rejected"]
+        if new_status not in valid_statuses:
+            raise HTTPException(status_code=400, detail=f"유효하지 않은 상태값입니다. 허용된 값: {', '.join(valid_statuses)}")
+        
+        # ObjectId로 변환 시도
+        try:
+            object_id = ObjectId(applicant_id)
+        except Exception:
+            # ObjectId가 아닌 경우 문자열 ID로 처리
+            object_id = applicant_id
+        
+        # 지원자 상태 업데이트
+        result = await db.resumes.update_one(
+            {"_id": object_id},
+            {"$set": {"status": new_status}}
+        )
+        
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다.")
+        
+        if result.modified_count == 0:
+            raise HTTPException(status_code=400, detail="상태가 이미 동일합니다.")
+        
+        # 업데이트된 지원자 정보 반환
+        updated_applicant = await db.resumes.find_one({"_id": object_id})
+        if updated_applicant:
+            updated_applicant["id"] = str(updated_applicant["_id"])
+            del updated_applicant["_id"]
+            if "resume_id" in updated_applicant and updated_applicant["resume_id"]:
+                updated_applicant["resume_id"] = str(updated_applicant["resume_id"])
+            
+            # 문자열 필드들을 강제로 문자열로 변환
+            string_fields = ["growthBackground", "motivation", "careerHistory"]
+            for field_name in string_fields:
+                if field_name in updated_applicant:
+                    updated_applicant[field_name] = str(updated_applicant[field_name]) if updated_applicant[field_name] is not None else ""
+        
+        return {
+            "message": "지원자 상태가 성공적으로 업데이트되었습니다.",
+            "applicant_id": applicant_id,
+            "new_status": new_status,
+            "applicant": updated_applicant
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"지원자 상태 업데이트 실패: {str(e)}")
 
 # Vector Service API
 @app.post("/api/vector/create")
