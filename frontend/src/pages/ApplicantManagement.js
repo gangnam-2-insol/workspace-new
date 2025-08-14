@@ -3553,6 +3553,50 @@ const ApplicantManagement = () => {
                             </DocumentGrid>
                           </DocumentCard>
 
+                          {/* 표절 위험도 분석 */}
+                          {documentModal.similarityData.plagiarism_analysis && documentModal.similarityData.plagiarism_analysis.success && (
+                            <DocumentCard>
+                              <DocumentCardTitle>⚠️ 표절 위험도 분석</DocumentCardTitle>
+                              <div style={{
+                                padding: '12px',
+                                borderRadius: '8px',
+                                backgroundColor: documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#fff5f5' : 
+                                                documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#fffbf0' : '#f0fff4',
+                                border: `2px solid ${documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#ff4757' : 
+                                                   documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#ffa502' : '#2ed573'}`
+                              }}>
+                                <div style={{
+                                  fontWeight: 'bold',
+                                  marginBottom: '8px',
+                                  color: documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#ff4757' : 
+                                        documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#ffa502' : '#2ed573'
+                                }}>
+                                  위험도: {documentModal.similarityData.plagiarism_analysis.risk_level} 
+                                  ({(documentModal.similarityData.plagiarism_analysis.risk_score * 100).toFixed(1)}%)
+                                </div>
+                                <div style={{fontSize: '14px', color: '#333', marginBottom: '8px', whiteSpace: 'pre-line'}}>
+                                  {documentModal.similarityData.plagiarism_analysis.analysis}
+                                </div>
+                                
+                                {documentModal.similarityData.plagiarism_analysis.recommendations && 
+                                 documentModal.similarityData.plagiarism_analysis.recommendations.length > 0 && (
+                                  <div>
+                                    <div style={{fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '4px'}}>
+                                      권장사항:
+                                    </div>
+                                    <ul style={{margin: '0', paddingLeft: '16px'}}>
+                                      {documentModal.similarityData.plagiarism_analysis.recommendations.map((rec, idx) => (
+                                        <li key={idx} style={{fontSize: '12px', color: '#666', marginBottom: '2px'}}>
+                                          {rec}
+                                        </li>
+                                      ))}
+                                    </ul>
+                                  </div>
+                                )}
+                              </div>
+                            </DocumentCard>
+                          )}
+
                           {/* 상위 유사 이력서들 */}
                           {documentModal.similarityData.top_similar.length > 0 && (
                             <DocumentCard>
@@ -3578,6 +3622,38 @@ const ApplicantManagement = () => {
                                     지원동기: {(similar.field_similarities.motivation * 100).toFixed(1)}% | 
                                     경력사항: {(similar.field_similarities.careerHistory * 100).toFixed(1)}%
                                   </div>
+                                  
+                                  {/* LLM 분석 결과 추가 */}
+                                  {similar.llm_analysis && similar.llm_analysis.success && (
+                                    <div style={{
+                                      marginTop: '8px',
+                                      padding: '8px',
+                                      backgroundColor: '#f0f8ff',
+                                      borderLeft: '4px solid #4a90e2',
+                                      borderRadius: '4px'
+                                    }}>
+                                      <div style={{fontSize: '11px', fontWeight: 'bold', color: '#4a90e2', marginBottom: '4px'}}>
+                                        🤖 AI 분석
+                                      </div>
+                                      <div style={{fontSize: '12px', color: '#333', lineHeight: '1.4', whiteSpace: 'pre-line'}}>
+                                        {similar.llm_analysis.analysis}
+                                      </div>
+                                    </div>
+                                  )}
+                                  
+                                  {similar.llm_analysis && !similar.llm_analysis.success && (
+                                    <div style={{
+                                      marginTop: '8px',
+                                      padding: '8px',
+                                      backgroundColor: '#fff0f0',
+                                      borderLeft: '4px solid #e74c3c',
+                                      borderRadius: '4px'
+                                    }}>
+                                      <div style={{fontSize: '11px', color: '#e74c3c'}}>
+                                        AI 분석 실패: {similar.llm_analysis.error || 'Unknown error'}
+                                      </div>
+                                    </div>
+                                  )}
                                 </div>
                               ))}
                             </DocumentCard>
