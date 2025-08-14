@@ -38,6 +38,7 @@ def save_to_db(
     keywords: list[str] | None,
     *,
     doc_hash: Optional[str] = None,
+    ocr_text_raw: Optional[str] = None,
 ) -> str:
     settings = Settings()
     client = db_conn or MongoClient(settings.mongodb_uri)
@@ -54,6 +55,8 @@ def save_to_db(
         }
         if doc_hash:
             payload["doc_hash"] = doc_hash
+        if ocr_text_raw is not None:
+            payload["ocr_text_raw"] = ocr_text_raw
         result = col_pages.insert_one(payload)
         return str(result.inserted_id)
     finally:

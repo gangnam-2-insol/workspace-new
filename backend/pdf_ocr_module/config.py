@@ -28,8 +28,8 @@ class Settings(BaseSettings):
     ocr_lang: str = Field(default="kor+eng")  # 한국어 우선, 영어 병행
     ocr_oem: int = Field(default=1)  # 0: Legacy + LSTM, 1: LSTM
     ocr_default_psm: int = Field(default=6)  # 기본 단순 문단
-    dpi: int = Field(default=400)  # PDF → 이미지 변환 DPI (300에서 400으로 증가)
-    quality_threshold: float = Field(default=0.6)  # 품질 임계값 완화
+    dpi: int = Field(default=400)  # 중간 모드: 품질/속도 균형 DPI
+    quality_threshold: float = Field(default=0.7)  # 중간 임계값
     max_retries: int = Field(default=3)  # 재시도 횟수 증가
 
     # MongoDB
@@ -55,8 +55,9 @@ class Settings(BaseSettings):
     l2_normalize_embeddings: bool = Field(default=True)
 
     # 청크 설정
-    chunk_size: int = Field(default=800)
-    chunk_overlap: int = Field(default=200)
+    # 중간 모드: 청크 개수 감소로 임베딩 계산량 완화
+    chunk_size: int = Field(default=1200)
+    chunk_overlap: int = Field(default=120)
     min_chunk_chars: int = Field(default=20)
 
     # 인덱싱 시 요약/키워드 생성 여부(LLM/휴리스틱 모두 비활성화)
@@ -84,6 +85,9 @@ class Settings(BaseSettings):
         
         if not self.tesseract_cmd:
             self.tesseract_cmd = os.getenv("TESSERACT_CMD")
+        # 사용자 제공 경로 우선 적용 (윈도우 기본 설치 경로)
+        if not self.tesseract_cmd and os.path.exists(r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe"):
+            self.tesseract_cmd = r"C:\\Program Files\\Tesseract-OCR\\tesseract.exe"
         
         # 기본 경로 시도 (Windows)
         if not self.poppler_path:

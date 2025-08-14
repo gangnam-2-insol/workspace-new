@@ -38,24 +38,43 @@ def process_pdf(pdf_path: str | Path) -> Dict[str, Any]:
     # 2) 이미지 -> 텍스트 (OCR)
     ocr_outputs = ocr_images_with_quality(image_paths, settings)
     page_texts: List[str] = []
-    # 내장 텍스트가 있으면 우선 사용, 부족하면 OCR 보완
+    # 전체 텍스트 우선 보존: 내장 텍스트와 OCR 텍스트를 모두 결합
     for i in range(len(image_paths)):
         page_spans = next((p.get("spans", []) for p in layout.get("pages", []) if p.get("page") == i + 1), [])
         embedded_text = " ".join([s.get("text", "") for s in page_spans]).strip()
-        ocr_text = ocr_outputs[i]["result"]["text"]
-        chosen = embedded_text if len(embedded_text) >= max(50, len(ocr_text) * 0.5) else ocr_text
-        page_texts.append(chosen)
+        ocr_text = ocr_outputs[i]["result"].get("text") or ""
+        # 중복을 줄이되, 누락 없이 모두 포함
+        if embedded_text and ocr_text:
+            combined = (embedded_text + "\n\n" + ocr_text).strip()
+        else:
+            combined = (embedded_text or ocr_text).strip()
+        page_texts.append(combined)
     full_text: str = "\n\n".join(page_texts)
 
-    # 3) 텍스트 분석 (요약/키워드) - 인덱싱 단계에서는 비활성화 가능
-    if settings.index_generate_summary or settings.index_generate_keywords:
-        analysis = analyze_text(full_text, settings)
-        _summary = summarize_text(full_text) if settings.index_generate_summary else ""
-        _keywords = extract_keywords(full_text) if settings.index_generate_keywords else []
-    else:
-        analysis = {"summary": "", "keywords": [], "clean_text": full_text}
-        _summary = ""
-        _keywords = []
+    # 3) 텍스트 분석 - 중간 모드: 기본적으로 요약/키워드 비활성
+    analysis = {"summary": "", "keywords": [], "clean_text": full_text}
+    _summary = ""
+    _keywords = []
+
+    # 3.5) 후처리: 이메일 라벨에 복원한 이메일을 인라인 반영(숫자/깨짐 치환)
+    def _replace_email_inline(text: str, email_value: str | None) -> str:
+        if not email_value:
+            return text
+        import re as _re
+        # '이메일' 라벨 라인에서 값 부분을 이메일로 교체
+        patt = _re.compile(r"(이\s*메일\s*[_:：\-]?\s*)([^\n]*)", flags=_re.IGNORECASE)
+        def _sub(m: 're.Match[str]') -> str:  # type: ignore[name-defined]
+            return f"{m.group(1)}{email_value}"
+        return patt.sub(_sub, text)
+
+    # 먼저 전체 텍스트에서 이메일 후보를 추출
+    from .ai_analyzer import extract_basic_info
+    email_candidates = extract_basic_info(full_text).get("emails", []) if full_text else []
+    first_email = email_candidates[0] if email_candidates else None
+    if first_email:
+        # 페이지별 텍스트와 전체 텍스트 모두 치환 적용
+        page_texts = [_replace_email_inline(t, first_email) for t in page_texts]
+        full_text = _replace_email_inline(full_text, first_email)
 
     # 4) 청크 생성 및 임베딩(페이지→청크 단일화)
     def chunk_text(text: str, size: int, overlap: int) -> list[tuple[str, tuple[int, int]]]:
@@ -182,8 +201,20 @@ def process_pdf(pdf_path: str | Path) -> Dict[str, Any]:
     inserted_id = save_document_to_mongo(document, settings)
 
     # 페이지 단위 몽고 저장(원본 텍스트+클린): 필요시 검증용
+    # DB 저장: 줄맞춤 불요 → 가공된 page_text와 원시 OCR 텍스트(혼합 결과) 모두 저장
     for idx, page_text in enumerate(page_texts, start=1):
-        save_to_db(pdf_path.name.lstrip('.'), idx, page_text, None, None, None, doc_hash=doc_hash)
+        # 원시 OCR 텍스트: ocr_outputs[i]["result"]["text"]는 병합 전 raw일 수 있으므로 병합 후 텍스트 사용
+        ocr_raw_for_page = ocr_outputs[idx-1]["result"].get("text_raw") or ocr_outputs[idx-1]["result"].get("text") or page_text
+        save_to_db(
+            pdf_path.name.lstrip('.'),
+            idx,
+            page_text,
+            None,
+            None,
+            None,
+            doc_hash=doc_hash,
+            ocr_text_raw=ocr_raw_for_page,
+        )
 
     # 7) 결과 저장 (선택)
     result_path = settings.results_dir / f"{pdf_path.stem}.json"
