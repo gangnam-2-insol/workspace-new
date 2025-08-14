@@ -2600,11 +2600,24 @@ const EnhancedModalChatbot = ({
           });
         }
         
-        // LangGraph API 서비스를 통해 필드 업데이트 이벤트 발생
+        // LangGraph API 서비스를 통해 필드 업데이트 이벤트 발생 (빈 객체일 경우 텍스트로 폴백 전달)
         console.log('[EnhancedModalChatbot] dispatchFieldUpdate 호출 전:', data.extracted_fields);
         console.log('[EnhancedModalChatbot] 전체 응답 데이터:', data);
         console.log('[EnhancedModalChatbot] extracted_fields 상세:', JSON.stringify(data.extracted_fields, null, 2));
-        LangGraphApiService.dispatchFieldUpdate(data.extracted_fields);
+        const hasFields = data.extracted_fields && Object.keys(data.extracted_fields).length > 0;
+        if (hasFields) {
+          LangGraphApiService.dispatchFieldUpdate(data.extracted_fields);
+        } else {
+          // 폴백: 문자열 데이터로 전달하면 LangGraphJobRegistration에서 텍스트 분석 후 동적 폼 생성
+          const event = new CustomEvent('langGraphDataUpdate', {
+            detail: {
+              action: 'updateLangGraphData',
+              data: userInput
+            }
+          });
+          window.dispatchEvent(event);
+          console.log('[EnhancedModalChatbot] 빈 필드 → 사용자 입력 텍스트로 폴백 이벤트 전달');
+        }
       } else {
         console.log('[EnhancedModalChatbot] LangGraph 모드가 아니거나 extracted_fields가 없음');
         console.log('[EnhancedModalChatbot] selectedAIMode:', selectedAIMode);

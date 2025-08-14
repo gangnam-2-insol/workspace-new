@@ -76,28 +76,35 @@ class TwoStageClassifier:
         first_stage_result = self._first_stage_scoring(text)
         print(f"🔍 [1차] 점수: {first_stage_result['score']}, 판정: {first_stage_result['decision']}")
         
-        # 2차: 필요시 의미 기반 재판단
-        if first_stage_result['decision'] == 'ambiguous':
-            print(f"🔍 [2차] 애매한 케이스 → 의미 기반 재분석")
+        # 2차: 의미 기반 재판단 (1차가 채용으로 확정되지 않은 모든 경우)
+        if first_stage_result['decision'] != 'recruitment':
+            print(f"🔍 [2차] 1차 판정이 '{first_stage_result['decision']}' → 의미 기반 재분석 수행")
             second_stage_result = self._second_stage_semantic_analysis(text)
             
-            # 2차 결과로 최종 판정
             final_result = {
-                'is_recruitment': second_stage_result['is_recruitment'],
-                'confidence': second_stage_result['confidence'],
-                'fields': second_stage_result['fields'],
+                'is_recruitment': second_stage_result.get('is_recruitment', False),
+                'confidence': second_stage_result.get('confidence', first_stage_result['confidence']),
+                'fields': second_stage_result.get('fields', {}),
                 'stage': 'two_stage',
                 'first_stage_score': first_stage_result['score']
             }
         else:
-            # 1차에서 확정된 경우
+            # 1차에서 채용으로 확정된 경우
             final_result = {
-                'is_recruitment': first_stage_result['decision'] == 'recruitment',
+                'is_recruitment': True,
                 'confidence': first_stage_result['confidence'],
                 'fields': first_stage_result['fields'],
                 'stage': 'first_stage',
                 'first_stage_score': first_stage_result['score']
             }
+            # 채용으로 확정되었으나 필드가 비어있으면 2차 의미 기반으로 보강
+            if not final_result['fields']:
+                print("🔍 [후보강] 채용공고로 확정되었으나 필드가 비어있음 → 2차 의미 기반 보강 실행")
+                second_stage = self._second_stage_semantic_analysis(text)
+                if second_stage.get('is_recruitment', False) and second_stage.get('fields'):
+                    final_result['fields'] = second_stage['fields']
+                    final_result['confidence'] = max(final_result['confidence'], second_stage.get('confidence', 0.5))
+                    final_result['stage'] = 'first_stage+semantic_enhance'
         
         print(f"🔍 [최종] 채용공고: {final_result['is_recruitment']}, 신뢰도: {final_result['confidence']}")
         return final_result

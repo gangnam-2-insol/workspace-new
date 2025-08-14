@@ -66,6 +66,8 @@ async def add_charset_header(request, call_next):
 # 라우터 등록
 app.include_router(chatbot_router, prefix="/api/chatbot", tags=["chatbot"])
 app.include_router(langgraph_router, prefix="/api/langgraph", tags=["langgraph"])
+# 프론트엔드 호환을 위해 /api/langgraph-agent 프리픽스도 동일 라우터로 마운트
+app.include_router(langgraph_router, prefix="/api/langgraph-agent", tags=["langgraph-agent"])
 app.include_router(github_router, prefix="/api", tags=["github"])
 app.include_router(upload_router, tags=["upload"])
 
