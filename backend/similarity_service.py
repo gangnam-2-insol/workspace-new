@@ -7,6 +7,7 @@ from chunking_service import ChunkingService
 from llm_service import LLMService
 import re
 from collections import Counter
+from datetime import datetime
 
 class SimilarityService:
     def __init__(self, embedding_service: EmbeddingService, vector_service: VectorService):
