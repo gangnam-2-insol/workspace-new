@@ -7,6 +7,7 @@ from chunking_service import ChunkingService
 from llm_service import LLMService
 import re
 from collections import Counter
+from datetime import datetime
 
 class SimilarityService:
     def __init__(self, embedding_service: EmbeddingService, vector_service: VectorService):
@@ -76,7 +77,7 @@ class SimilarityService:
                 "chunks_count": 0
             }
     
-    async def find_similar_resumes_by_chunks(self, resume_id: str, collection: Collection, limit: int = 5, document_type: str = "이력서") -> Dict[str, Any]:
+    async def find_similar_resumes_by_chunks(self, resume_id: str, collection: Collection, limit: int = 5) -> Dict[str, Any]:
         """
         청킹 기반으로 특정 이력서와 유사한 이력서들을 찾습니다.
         
@@ -191,8 +192,7 @@ class SimilarityService:
                             original_resume=resume,
                             similar_resume=resume_detail,
                             similarity_score=score_data["similarity_score"],
-                            chunk_details=score_data["chunk_details"],
-                            document_type=document_type
+                            chunk_details=score_data["chunk_details"]
                         )
                         
                         results.append({
@@ -207,8 +207,7 @@ class SimilarityService:
             # 전체 결과에 대한 표절 위험도 분석 추가
             plagiarism_analysis = await self.llm_service.analyze_plagiarism_risk(
                 original_resume=resume,
-                similar_resumes=results,
-                document_type=document_type
+                similar_resumes=results
             )
             
             print(f"[SimilarityService] 최종 유사 이력서 수: {len(results)}")

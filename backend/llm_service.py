@@ -24,29 +24,31 @@ class LLMService:
                                          original_resume: Dict[str, Any], 
                                          similar_resume: Dict[str, Any],
                                          similarity_score: float,
-                                         chunk_details: Optional[Dict] = None) -> Dict[str, Any]:
+                                         chunk_details: Optional[Dict] = None,
+                                         document_type: str = "이력서") -> Dict[str, Any]:
         """
-        두 이력서 간의 유사성을 분석하고 어떤 부분이 유사한지 설명합니다.
+        두 문서 간의 유사성을 분석하고 어떤 부분이 유사한지 설명합니다.
         
         Args:
-            original_resume (Dict[str, Any]): 원본 이력서
-            similar_resume (Dict[str, Any]): 유사한 이력서
+            original_resume (Dict[str, Any]): 원본 문서
+            similar_resume (Dict[str, Any]): 유사한 문서
             similarity_score (float): 유사도 점수
             chunk_details (Optional[Dict]): 청크별 세부 정보
+            document_type (str): 문서 타입 ("이력서" 또는 "자소서")
             
         Returns:
             Dict[str, Any]: 유사성 분석 결과
         """
         try:
             print(f"[LLMService] === 유사성 분석 시작 ===")
-            print(f"[LLMService] 원본 이력서: {original_resume.get('name', 'Unknown')}")
-            print(f"[LLMService] 유사 이력서: {similar_resume.get('name', 'Unknown')}")
+            print(f"[LLMService] 원본 {document_type}: {original_resume.get('name', 'Unknown')}")
+            print(f"[LLMService] 유사 {document_type}: {similar_resume.get('name', 'Unknown')}")
             print(f"[LLMService] 유사도 점수: {similarity_score:.3f}")
             
             # 이력서에서 주요 정보 추출
             original_info = self._extract_resume_info(original_resume)
             similar_info = self._extract_resume_info(similar_resume)
-            print(f"[LLMService] 이력서 정보 추출 완료")
+            print(f"[LLMService] {document_type} 정보 추출 완료")
             
             # 프롬프트 구성
             prompt = self._build_similarity_analysis_prompt(
@@ -58,7 +60,7 @@ class LLMService:
             print(f"[LLMService] 프롬프트 생성 완료 (길이: {len(prompt)})")
             
             # Gemini API 호출
-            system_prompt = "당신은 이력서 유사성 분석 전문가입니다. 두 이력서를 비교하여 구체적으로 어떤 부분이 유사한지 간결하고 명확하게 설명해주세요."
+            system_prompt = f"당신은 {document_type} 유사성 분석 전문가입니다. 두 {document_type}를 비교하여 구체적으로 어떤 부분이 유사한지 간결하고 명확하게 설명해주세요."
             full_prompt = f"{system_prompt}\n\n{prompt}"
             print(f"[LLMService] Gemini API 호출 시작...")
             
@@ -180,29 +182,31 @@ class LLMService:
     
     async def analyze_plagiarism_risk(self, 
                                     original_resume: Dict[str, Any], 
-                                    similar_resumes: List[Dict[str, Any]]) -> Dict[str, Any]:
+                                    similar_resumes: List[Dict[str, Any]],
+                                    document_type: str = "이력서") -> Dict[str, Any]:
         """
         표절 위험도를 분석합니다.
         
         Args:
-            original_resume (Dict[str, Any]): 원본 이력서
-            similar_resumes (List[Dict[str, Any]]): 유사한 이력서들
+            original_resume (Dict[str, Any]): 원본 문서
+            similar_resumes (List[Dict[str, Any]]): 유사한 문서들
+            document_type (str): 문서 타입 ("이력서" 또는 "자소서")
             
         Returns:
             Dict[str, Any]: 표절 위험도 분석 결과
         """
         try:
             print(f"[LLMService] === 표절 위험도 분석 시작 ===")
-            print(f"[LLMService] 원본 이력서: {original_resume.get('name', 'Unknown')}")
-            print(f"[LLMService] 유사한 이력서 수: {len(similar_resumes)}")
+            print(f"[LLMService] 원본 {document_type}: {original_resume.get('name', 'Unknown')}")
+            print(f"[LLMService] 유사한 {document_type} 수: {len(similar_resumes)}")
             
             if not similar_resumes:
-                print(f"[LLMService] 유사한 이력서가 없음 - LOW 위험도 반환")
+                print(f"[LLMService] 유사한 {document_type}가 없음 - LOW 위험도 반환")
                 return {
                     "success": True,
                     "risk_level": "LOW",
                     "risk_score": 0.0,
-                    "analysis": "유사한 이력서가 발견되지 않았습니다.",
+                    "analysis": f"유사한 {document_type}가 발견되지 않았습니다.",
                     "recommendations": []
                 }
             
@@ -224,12 +228,12 @@ class LLMService:
             if max_similarity >= 0.8:
                 risk_level = "HIGH"
                 risk_score = max_similarity
-                analysis = f"매우 높은 유사도({max_similarity:.1%})의 이력서가 발견되었습니다. 표절 가능성이 높습니다."
+                analysis = f"매우 높은 유사도({max_similarity:.1%})의 {document_type}가 발견되었습니다. 표절 가능성이 높습니다."
                 recommendations = []
             elif max_similarity >= 0.6:
                 risk_level = "MEDIUM"
                 risk_score = max_similarity
-                analysis = f"높은 유사도({max_similarity:.1%})의 이력서가 발견되었습니다. 주의가 필요합니다."
+                analysis = f"높은 유사도({max_similarity:.1%})의 {document_type}가 발견되었습니다. 주의가 필요합니다."
                 recommendations = []
             else:
                 risk_level = "LOW"

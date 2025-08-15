@@ -243,7 +243,7 @@ const ResumeDetail = () => {
     const fetchResumeDetail = async () => {
       try {
         // 실제 API 호출 시도
-        const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/applications/${id}`);
+        const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8010'}/api/applications/${id}`);
         
         if (response.ok) {
           const data = await response.json();

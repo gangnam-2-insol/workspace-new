@@ -305,7 +305,7 @@ const handleFileUpload = async (file) => {
   formData.append('file', file);
   formData.append('document_type', 'resume');
 
-  const response = await fetch('http://localhost:8000/api/upload/analyze', {
+  const response = await fetch('http://localhost:8010/api/upload/analyze', {
     method: 'POST',
     body: formData,
   });
