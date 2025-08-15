@@ -9,7 +9,6 @@ import logging
 from pdf_ocr_module.main import process_pdf
 from pdf_ocr_module.config import Settings
 from pdf_ocr_module.ai_analyzer import analyze_text
-import pytesseract
 
 router = APIRouter()
 
@@ -71,49 +70,4 @@ async def health_check():
     PDF OCR 서비스 상태 확인
     """
     return {"status": "healthy", "service": "pdf_ocr"}
-
-
-@router.get("/diag/tesseract")
-async def tesseract_diagnostics():
-    """
-    Tesseract 설치 및 언어팩 진단용 엔드포인트
-    - 현재 설정된 tesseract 경로
-    - 사용 가능한 언어 목록
-    - 버전 정보
-    - kor 언어팩 존재 여부
-    - POPPLER_PATH 등 기본 설정
-    """
-    settings = Settings()
-    # pytesseract가 사용할 실행 파일 경로 적용
-    if settings.tesseract_cmd:
-        pytesseract.pytesseract.tesseract_cmd = settings.tesseract_cmd
-
-    version = None
-    languages = []
-    error = None
-    try:
-        try:
-            version = str(pytesseract.get_tesseract_version())
-        except Exception:
-            version = None
-        try:
-            languages = pytesseract.get_languages(config="") or []
-        except Exception as e:
-            error = str(e)
-            languages = []
-    except Exception as e:
-        error = str(e)
-
-    return JSONResponse(content={
-        "tesseract_cmd": pytesseract.pytesseract.tesseract_cmd,
-        "version": version,
-        "languages": languages,
-        "kor_present": any(lang.lower() == "kor" for lang in languages),
-        "settings": {
-            "ocr_lang": settings.ocr_lang,
-            "quality_threshold": settings.quality_threshold,
-            "poppler_path": settings.poppler_path,
-        },
-        "error": error,
-    })
 

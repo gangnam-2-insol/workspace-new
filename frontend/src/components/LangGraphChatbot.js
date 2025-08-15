@@ -243,8 +243,8 @@ const Input = styled.input`
 `;
 
 const SendButton = styled.button`
-  width: 40px;
-  height: 40px;
+  width: 50px;
+  height: 50px;
   border-radius: 50%;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   border: none;
@@ -267,7 +267,7 @@ const SendButton = styled.button`
     transform: none;
   }
 
-  .lgc-send-base { display: flex; align-items: center; justify-content: center; }
+  .lgc-send-base { width: 100%; display: flex; align-items: center; justify-content: center; }
   .lgc-send-fly { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; }
   .lgc-send-trail { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border-radius: 50%; background: rgba(255,255,255,0.9); pointer-events: none; }
 `;
@@ -359,6 +359,60 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
     }
   };
 
+  // 간단한 네비게이션 의도 감지 및 경로 매핑
+  const resolveNavigationPath = (text) => {
+    const lower = String(text || '').toLowerCase();
+
+    const moveVerbs = [
+      '이동', '넘어가', '넘어 가', '가 ', '가자', '열어', '열기', '열어줘', '보여', '페이지', '메뉴',
+      'move', 'go', 'open', 'navigate'
+    ];
+
+    const hasMoveVerb = moveVerbs.some(v => lower.includes(v));
+
+    // 메뉴 키워드 매핑
+    const routes = [
+      { path: '/', keywords: ['대시보드', '메인', '홈', 'dashboard', 'home'] },
+      { path: '/job-posting', keywords: ['채용공고', '공고', '채용', 'job posting'] },
+      { path: '/resume', keywords: ['이력서 관리', '이력서관리', '이력서', 'resume', 'cv'] },
+      { path: '/applicants', keywords: ['지원자 관리', '지원자관리', '지원자', 'applicant', 'candidate'] },
+      { path: '/interview', keywords: ['면접 관리', '면접관리', '면접', 'interview'] },
+      { path: '/interview-calendar', keywords: ['캘린더', '달력', '일정', 'calendar'] },
+      { path: '/portfolio', keywords: ['포트폴리오 분석', '포트폴리오', 'portfolio'] },
+      { path: '/cover-letter', keywords: ['자소서 검증', '자소서', 'cover letter'] },
+      { path: '/talent', keywords: ['인재 추천', '인재추천', '인재', 'talent'] },
+      { path: '/users', keywords: ['사용자 관리', '사용자관리', '사용자', 'user'] },
+      { path: '/settings', keywords: ['설정', '세팅', 'settings'] },
+    ];
+
+    for (const r of routes) {
+      if (r.keywords.some(k => lower.includes(k.toLowerCase()))) {
+        // 이동 의도가 명시된 경우 우선 처리, 없더라도 정확 매칭이면 허용
+        if (hasMoveVerb || lower.trim() === r.keywords[0].toLowerCase()) {
+          return r.path;
+        }
+      }
+    }
+    return null;
+  };
+
+  const labelForPath = (path) => {
+    const map = {
+      '/': '대시보드',
+      '/job-posting': '채용공고 등록',
+      '/resume': '이력서 관리',
+      '/applicants': '지원자 관리',
+      '/interview': '면접 관리',
+      '/interview-calendar': '면접 캘린더',
+      '/portfolio': '포트폴리오 분석',
+      '/cover-letter': '자소서 검증',
+      '/talent': '인재 추천',
+      '/users': '사용자 관리',
+      '/settings': '설정'
+    };
+    return map[path] || path;
+  };
+
   // 관리자 모드 상태 추정: 서버가 명시 API를 제공하지 않으므로 메시지 기반 추정 또는 추후 전용 API 연동
   useEffect(() => {
     const handler = (e) => {
@@ -410,6 +464,26 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
             return;
           }
         }
+      }
+    } catch(_) {}
+
+    // 1-b) 로컬 네비게이션 의도 감지 (예: "지원자 관리 이동")
+    try {
+      const navPath = resolveNavigationPath(userMessage.content);
+      if (navPath) {
+        navigate(navPath);
+        const label = labelForPath(navPath);
+        const botNotice = {
+          id: Date.now() + 3,
+          content: `${label} 페이지로 이동합니다. (navigate 툴 적용) 🚀`,
+          isUser: false,
+          timestamp: new Date().toISOString(),
+        };
+        setMessages(prev => [...prev, botNotice]);
+        setIsLoading(false);
+        // 페이지 이동 후 UI 인덱스 수집 시도
+        setTimeout(() => { try { ensureUiIndexIfNeeded(window.location.href, true); } catch(_) {} }, 400);
+        return;
       }
     } catch(_) {}
 
@@ -688,8 +762,8 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
                   <FiCpu />
                 </AgentIcon>
                 <HeaderText className="lgc-header-text">
-                  <h3>AI 어시스턴트</h3>
-                  <p>LangGraph 기반 지능형 챗봇 {isAdminMode && '· 관리자'}</p>
+                  <h3>에이전트 챗봇</h3>
+                  <p>랭그래프 기반 리액트 에이전트 챗봇 {isAdminMode && '· 관리자'}</p>
                 </HeaderText>
               </HeaderInfo>
               <HeaderActions className="lgc-header-actions">
@@ -726,8 +800,9 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
                 <ChatBody className="lgc-body">
                   {messages.length === 0 && (
                     <WelcomeMessage className="lgc-welcome">
-                      안녕하세요! 저는 HireMe AI 어시스턴트입니다. 🤖<br />
-                      채용 관련 질문이나 도움이 필요한 내용을 언제든 말씀해주세요.
+                      안녕하세요!<br /> 
+                      저는 HireMe AI 어시스턴트입니다. 🤖<br />
+                      채용 관련 질문이나 도움이 필요할 경우 말씀해주세요.
                     </WelcomeMessage>
                   )}
                   
@@ -795,7 +870,7 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
                   >
                     {/* 기본 아이콘 */}
                     <span className="lgc-send-base" style={{ opacity: isSendAnimating ? 0 : 1 }}>
-                      <FiSend size={16} />
+                      <FiSend size={20} />
                     </span>
                     {/* 날아가는 복제 아이콘 */}
                     {isSendAnimating && (
@@ -812,7 +887,7 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
                           }}
                           transition={{ duration: 0.95, ease: 'easeOut' }}
                         >
-                          <FiSend size={18} />
+                          <FiSend size={22} />
                         </motion.div>
                         {/* 트레일 2개 */}
                         <motion.div

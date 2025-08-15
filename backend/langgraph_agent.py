@@ -22,7 +22,7 @@ from langgraph_config import (
     get_tool_description,
     is_navigate_intent,
 )
-from langgraph_config import is_dom_action_intent, is_ui_dump_intent
+from langgraph_config import is_dom_action_intent, is_ui_dump_intent, quick_intent_classify
 from langgraph_tools import tool_manager
 from admin_mode import handle_admin_mode, is_admin_mode
 
@@ -110,7 +110,11 @@ class LangGraphAgent:
         """사용자 입력 분류"""
         user_input = state["user_input"]
         
-        # LLM 기반 의도 분류 시도
+        # 0) 경량 분류기로 선 판별 (토큰/청크 기반)
+        quick_intent, quick_score = quick_intent_classify(user_input)
+        state["confidence"] = float(max(min(quick_score, 1.0), 0.0))
+
+        # 1) LLM 기반 의도 분류 (경량 결과를 힌트로 사용)
         intent, target = self._classify_with_llm(user_input)
         state["llm_intent"] = intent
         state["llm_target"] = target
@@ -147,8 +151,13 @@ class LangGraphAgent:
                 state["next_action"] = "tool"
                 state["llm_intent"] = "dom_action"
             else:
-                state["mode"] = "general"
-                state["next_action"] = "general"
+                # 경량 분류가 tool에 가깝고 확신도가 높으면 tool로 보정
+                if quick_intent == "tool" and quick_score >= 0.7:
+                    state["mode"] = "tool"
+                    state["next_action"] = "tool"
+                else:
+                    state["mode"] = "general"
+                    state["next_action"] = "general"
         
         return state
     
@@ -223,6 +232,12 @@ class LangGraphAgent:
                 query_payload = state["user_input"]
                 if selected_tool == "navigate" and state.get("llm_target"):
                     query_payload = json.dumps({"target": state["llm_target"]}, ensure_ascii=False)
+                # 실행 모드 힌트: 내부(local) 우선 vs LLM 우선
+                try:
+                    from langgraph_config import config as lg_config
+                    context_with_session.setdefault('tool_execution_mode', lg_config.tool_execution_mode)
+                except Exception:
+                    pass
                 # 자연어 클릭 지시를 dom_action으로 매핑 (셀렉터는 프론트의 UI 인덱서가 해석)
                 if selected_tool == "dom_action":
                     if state.get("llm_target") == "dumpUI":

@@ -8,11 +8,20 @@ from datetime import datetime
 import json
 import re
 import os
-import ast
 from pathlib import Path
 
-from admin_guide import policy as admin_policy
+import importlib
+try:
+    _admin_guide = importlib.import_module('admin_guide')
+    admin_policy = getattr(_admin_guide, 'policy', {})
+except Exception:
+    admin_policy = {'storage_dir': 'admin/backend/dynamic_tools', 'forbidden_patterns': []}
+
 from langgraph_config import config as lg_config
+try:
+    from llm_service import LLMService  # 선택적 의존성: 없으면 LLM 경로 추론 비활성
+except Exception:
+    LLMService = None
 
 class ToolManager:
     """툴 관리자 클래스"""
@@ -20,6 +29,7 @@ class ToolManager:
     def __init__(self):
         self.tools = {}
         self._register_default_tools()
+        self._llm = None
     
     def _register_default_tools(self):
         """기본 툴들 등록"""
@@ -56,9 +66,15 @@ class ToolManager:
     def execute_tool(self, tool_name: str, query: str, context: Dict[str, Any] = None) -> str:
         """툴 실행"""
         # 관리자 모드 권한 검사 (create_function_tool, 동적 코드 관련)
-        from admin_mode import is_admin_mode  # 순환 임포트 방지 위해 내부 임포트
+        def _is_admin_mode(session_id: str) -> bool:
+            try:
+                mod = importlib.import_module('admin_mode')
+                fn = getattr(mod, 'is_admin_mode', None)
+                return bool(fn(session_id)) if callable(fn) else False
+            except Exception:
+                return False
         session_id = (context or {}).get("session_id", "")
-        if tool_name in ("create_function_tool",) and not is_admin_mode(session_id):
+        if tool_name in ("create_function_tool",) and not _is_admin_mode(session_id):
             return json.dumps({
                 "success": False,
                 "response": "권한이 없습니다. 관리자 모드로 전환하세요.",
@@ -73,7 +89,7 @@ class ToolManager:
                 pass  # 승인된 동적 툴은 허용
             else:
                 # 관리자 모드가 아니면 차단
-                if not is_admin_mode(session_id):
+                if not _is_admin_mode(session_id):
                     return json.dumps({
                         "success": False,
                         "response": "승인된 툴이 아니어서 실행할 수 없습니다.",
@@ -83,11 +99,85 @@ class ToolManager:
         tool = self.get_tool(tool_name)
         if tool:
             try:
+                mode = (lg_config.tool_execution_mode or {}).get(tool_name, 'local')
+                # 현재 구현: navigate/dom_action/search 등은 내부(local) 직접 실행
+                # LLM이 필요한 경우는 도구 내부에서 자체적으로 호출(또는 context로 플래그 전달)
+                # mode가 'llm'이어도, LLM 불가/에러 시 도구 내부 폴백이 적용되도록 유지
                 return tool(query, context or {})
             except Exception as e:
                 return f"툴 실행 중 오류가 발생했습니다: {str(e)}"
         else:
             return f"툴 '{tool_name}'을 찾을 수 없습니다."
+
+    # LLM 헬퍼
+    def _get_llm(self):
+        if self._llm is None and LLMService is not None:
+            try:
+                self._llm = LLMService()
+            except Exception:
+                self._llm = None
+        return self._llm
+
+    def _resolve_route_with_llm(self, text: str) -> Optional[str]:
+        """LLM을 사용해 허용 라우트 중 최적 경로를 선택. 실패 시 None 반환"""
+        llm = self._get_llm()
+        if llm is None:
+            return None
+        try:
+            allowed = lg_config.allowed_routes
+            # 라벨/동의어 제공해 힌트 강화
+            keyword_to_path = {
+                "/": ["대시보드", "홈", "메인", "home", "dashboard"],
+                "/job-posting": ["채용공고", "채용", "공고", "job", "job posting", "posting"],
+                "/resume": ["이력서", "이력서관리", "resume", "cv"],
+                "/applicants": ["지원자", "지원자관리", "applicant", "candidate"],
+                "/interview": ["면접", "면접관리", "interview"],
+                "/interview-calendar": ["캘린더", "달력", "일정", "calendar"],
+                "/portfolio": ["포트폴리오", "portfolio"],
+                "/cover-letter": ["자소서", "cover letter"],
+                "/talent": ["인재", "인재추천", "talent"],
+                "/users": ["사용자", "사용자관리", "user", "users"],
+                "/settings": ["설정", "세팅", "setting", "settings"]
+            }
+
+            system = (
+                "너는 웹앱 내 페이지 이동을 위한 라우트 선택기다. "
+                "반드시 아래 allowed_routes 중 하나만 선택하고, JSON으로만 답한다. "
+                "창작/추론으로 새로운 경로를 만들지 말 것."
+            )
+            user_prompt = (
+                f"사용자 입력: {text}\n\n"
+                f"allowed_routes: {allowed}\n\n"
+                f"참고 동의어: {keyword_to_path}\n\n"
+                "출력 형식: {\n  \"target\": \"<allowed_routes 중 하나>\"\n}\n"
+                "규칙: 정확히 하나만 고르고, 다른 말은 쓰지 말 것."
+            )
+            # gemini sync 호출 사용 (LLMService 내부 모델)
+            response = llm.model.generate_content(
+                f"{system}\n\n{user_prompt}"
+            )
+            text_resp = getattr(response, 'text', None) or ''
+            # 간단 JSON 파싱
+            import json as _json
+            target = None
+            try:
+                parsed = _json.loads(text_resp)
+                target = str(parsed.get('target') or '').strip()
+            except Exception:
+                # 텍스트에서 첫 JSON 블록 추출 시도
+                start = text_resp.find('{')
+                end = text_resp.rfind('}')
+                if start != -1 and end != -1 and end > start:
+                    try:
+                        parsed = _json.loads(text_resp[start:end+1])
+                        target = str(parsed.get('target') or '').strip()
+                    except Exception:
+                        target = None
+            if target in allowed:
+                return target
+        except Exception:
+            return None
+        return None
 
     # 동적 툴 저장/로드
     def _dynamic_tools_dir(self) -> str:
@@ -175,12 +265,8 @@ class ToolManager:
         # update index
         index = self._read_index()
         index["tools"] = [t for t in index.get("tools", []) if t.get('name') != name]
-        # 관리자 생성 시 자동 신뢰 적용 옵션: 컨텍스트에 플래그가 있는 경우
+        # 관리자 생성 시 자동 신뢰 적용 옵션은 비활성 (별도 API에서 설정)
         is_trusted = False
-        try:
-            is_trusted = bool((context or {}).get('auto_trust_new_tool'))
-        except Exception:
-            is_trusted = False
         index["tools"].append({"name": name, "description": description, "trusted": is_trusted})
         self._write_index(index)
         # register
@@ -436,24 +522,13 @@ class ToolManager:
         except Exception:
             pass
 
-        # 자연어에서 경로 힌트 추출 (간단 키워드 매핑)
+        # 1) LLM 경로 추론 시도 (허용 라우트 중 선택)
         if not target:
-            text = (query or "").lower()
-            mapping = {
-                "job": "/job-posting",
-                "채용": "/job-posting",
-                "이력서": "/resume",
-                "면접": "/interview",
-                "포트폴리오": "/portfolio",
-                "자소서": "/cover-letter",
-                "인재": "/talent",
-                "설정": "/settings",
-                "대시보드": "/"
-            }
-            for key, path in mapping.items():
-                if key in text:
-                    target = path
-                    break
+            text = str(query or "").strip()
+            llm_target = self._resolve_route_with_llm(text)
+            if llm_target:
+                target = llm_target
+        # 2) 폴백 제거: 사용자가 원한 전략대로 LLM 실패 시 기본 라우트만 사용
 
         if not target:
             target = "/"
@@ -464,7 +539,7 @@ class ToolManager:
 
         payload = {
             "success": True,
-            "response": f"페이지를 {target}으로 이동합니다.",
+            "response": f"페이지를 {target}으로 이동합니다. (navigate 툴 적용)",
             "type": "react_agent_response",
             "page_action": {
                 "action": "navigate",

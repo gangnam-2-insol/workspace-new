@@ -862,8 +862,7 @@ async def check_resume_similarity(resume_id: str):
                     llm_analysis = await similarity_service.llm_service.analyze_similarity_reasoning(
                         original_resume=current_resume,
                         similar_resume=other_resume,
-                        similarity_score=overall_similarity,
-                        document_type="resume"
+                        similarity_score=overall_similarity
                     )
                     print(f"[API] LLM 분석 완료")
                 except Exception as llm_error:
@@ -905,8 +904,7 @@ async def check_resume_similarity(resume_id: str):
                 print(f"[API] 표절 위험도 분석 시작")
                 plagiarism_analysis = await similarity_service.llm_service.analyze_plagiarism_risk(
                     original_resume=current_resume,
-                    similar_resumes=high_similarity_results,
-                    document_type="resume"
+                    similar_resumes=high_similarity_results
                 )
                 print(f"[API] 표절 위험도 분석 완료")
             except Exception as plag_error:
@@ -945,192 +943,6 @@ async def check_resume_similarity(resume_id: str):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"유사도 체크 실패: {str(e)}")
-
-# 자소서 유사도 체크 API
-@app.post("/api/coverletter/similarity-check/{coverletter_id}")
-async def check_coverletter_similarity(coverletter_id: str):
-    """특정 자소서의 유사도 체크 (다른 모든 자소서와 비교)"""
-    try:
-        print(f"[INFO] 자소서 유사도 체크 요청 - coverletter_id: {coverletter_id}")
-        
-        # ObjectId 변환 시도
-        try:
-            object_id = ObjectId(coverletter_id)
-            print(f"[SUCCESS] ObjectId 변환 성공: {object_id}")
-        except Exception as oid_error:
-            print(f"[ERROR] ObjectId 변환 실패: {oid_error}")
-            raise HTTPException(status_code=400, detail=f"잘못된 coverletter_id 형식: {coverletter_id}")
-        
-        # 현재 자소서 정보 조회
-        current_coverletter = await db.applicants.find_one({"_id": object_id})
-        print(f"[INFO] 데이터베이스 조회 결과: {current_coverletter is not None}")
-        
-        if not current_coverletter:
-            # 데이터베이스에 있는 모든 coverletter ID들 확인
-            all_coverletters = await db.applicants.find({}, {"_id": 1, "name": 1}).to_list(100)
-            print(f"📋 데이터베이스의 모든 자소서 ID들:")
-            for coverletter in all_coverletters:
-                print(f"  - {coverletter['_id']} ({coverletter.get('name', 'Unknown')})")
-            
-            raise HTTPException(status_code=404, detail=f"자소서를 찾을 수 없습니다. 요청된 ID: {coverletter_id}")
-        
-        # 다른 모든 자소서 조회 (현재 자소서 제외)
-        other_coverletters = await db.applicants.find({"_id": {"$ne": ObjectId(coverletter_id)}}).to_list(1000)
-        
-        # 현재 자소서의 비교 텍스트 (유사도 계산 필드)
-        current_fields = {
-            "growthBackground": current_coverletter.get("growthBackground", ""),
-            "motivation": current_coverletter.get("motivation", ""),
-            "careerHistory": current_coverletter.get("careerHistory", "")
-        }
-        
-        # 전체 텍스트 조합
-        current_text = " ".join([text for text in current_fields.values() if text])
-        
-        similarity_results = []
-        
-        for other_coverletter in other_coverletters:
-            other_id = str(other_coverletter["_id"])
-            
-            # 다른 자소서의 비교 텍스트
-            other_fields = {
-                "growthBackground": other_coverletter.get("growthBackground", ""),
-                "motivation": other_coverletter.get("motivation", ""), 
-                "careerHistory": other_coverletter.get("careerHistory", "")
-            }
-            other_text = " ".join([text for text in other_fields.values() if text])
-            
-            # 실제 유사도 계산 사용
-            try:
-                print(f"💫 자소서 간 유사도 계산 시작: {coverletter_id} vs {other_id}")
-                
-                # SimilarityService의 텍스트 유사도 계산 메서드 직접 호출
-                text_similarity = similarity_service._calculate_text_similarity(current_coverletter, other_coverletter)
-                overall_similarity = text_similarity if text_similarity is not None else 0.0
-                
-                print(f"📊 텍스트 유사도 결과: {overall_similarity:.3f}")
-                
-                # 필드별 유사도 계산
-                field_similarities = {}
-                for field_name in current_fields.keys():
-                    if current_fields[field_name] and other_fields[field_name]:
-                        # 필드별 개별 텍스트 유사도 계산
-                        field_sim = similarity_service._calculate_text_similarity(
-                            {field_name: current_fields[field_name]},
-                            {field_name: other_fields[field_name]}
-                        )
-                        field_similarities[field_name] = field_sim if field_sim is not None else 0.0
-                        print(f"📋 {field_name} 유사도: {field_similarities[field_name]:.3f}")
-                    else:
-                        field_similarities[field_name] = 0.0
-                        
-            except Exception as e:
-                print(f"[ERROR] 유사도 계산 중 오류 발생: {e}")
-                import traceback
-                traceback.print_exc()
-                
-                # 오류 시 기본값 사용
-                import random
-                overall_similarity = random.uniform(0.1, 0.9)
-                field_similarities = {}
-                for field_name in current_fields.keys():
-                    if current_fields[field_name] and other_fields[field_name]:
-                        field_similarities[field_name] = random.uniform(0.0, 1.0)
-                    else:
-                        field_similarities[field_name] = 0.0
-            
-            # LLM 분석 추가 (유사도가 일정 수준 이상일 때만)
-            llm_analysis = None
-            
-            if overall_similarity >= 0.3:  # 30% 이상 유사할 때만 LLM 분석
-                try:
-                    print(f"[API] LLM 분석 시작 - 유사도: {overall_similarity:.3f}")
-                    llm_analysis = await similarity_service.llm_service.analyze_similarity_reasoning(
-                        original_resume=current_coverletter,
-                        similar_resume=other_coverletter,
-                        similarity_score=overall_similarity,
-                        document_type="coverletter"
-                    )
-                    print(f"[API] LLM 분석 완료")
-                except Exception as llm_error:
-                    print(f"[API] LLM 분석 중 오류: {llm_error}")
-                    llm_analysis = {
-                        "success": False,
-                        "error": str(llm_error),
-                        "analysis": "LLM 분석에 실패했습니다."
-                    }
-            
-            similarity_result = {
-                "resume_id": other_id,
-                "applicant_name": other_coverletter.get("name", "알 수 없음"),
-                "position": other_coverletter.get("position", ""),
-                "department": other_coverletter.get("department", ""),
-                "overall_similarity": round(overall_similarity, 4),
-                "field_similarities": {
-                    "growthBackground": round(field_similarities["growthBackground"], 4),
-                    "motivation": round(field_similarities["motivation"], 4),
-                    "careerHistory": round(field_similarities["careerHistory"], 4)
-                },
-                "is_high_similarity": overall_similarity > 0.7,
-                "is_moderate_similarity": 0.4 <= overall_similarity <= 0.7,
-                "is_low_similarity": overall_similarity < 0.4,
-                "llm_analysis": llm_analysis
-            }
-            
-            similarity_results.append(similarity_result)
-        
-        # 유사도 높은 순으로 정렬
-        similarity_results.sort(key=lambda x: x["overall_similarity"], reverse=True)
-        
-        # 전체 표절 위험도 분석 추가
-        plagiarism_analysis = None
-        high_similarity_results = [r for r in similarity_results if r["overall_similarity"] >= 0.3]
-        
-        if high_similarity_results:
-            try:
-                print(f"[API] 표절 위험도 분석 시작")
-                plagiarism_analysis = await similarity_service.llm_service.analyze_plagiarism_risk(
-                    original_resume=current_coverletter,
-                    similar_resumes=high_similarity_results,
-                    document_type="coverletter"
-                )
-                print(f"[API] 표절 위험도 분석 완료")
-            except Exception as plag_error:
-                print(f"[API] 표절 위험도 분석 중 오류: {plag_error}")
-                plagiarism_analysis = {
-                    "success": False,
-                    "error": str(plag_error),
-                    "risk_level": "UNKNOWN",
-                    "analysis": "표절 위험도 분석에 실패했습니다."
-                }
-        
-        # 통계 정보
-        high_similarity_count = len([r for r in similarity_results if r["is_high_similarity"]])
-        moderate_similarity_count = len([r for r in similarity_results if r["is_moderate_similarity"]])
-        low_similarity_count = len([r for r in similarity_results if r["is_low_similarity"]])
-        
-        return {
-            "current_resume": {
-                "id": coverletter_id,
-                "name": current_coverletter.get("name", ""),
-                "position": current_coverletter.get("position", ""),
-                "department": current_coverletter.get("department", "")
-            },
-            "similarity_results": similarity_results,
-            "statistics": {
-                "total_compared": len(similarity_results),
-                "high_similarity_count": high_similarity_count,
-                "moderate_similarity_count": moderate_similarity_count,
-                "low_similarity_count": low_similarity_count,
-                "average_similarity": round(sum([r["overall_similarity"] for r in similarity_results]) / len(similarity_results) if similarity_results else 0, 4)
-            },
-            "top_similar": similarity_results[:5] if similarity_results else [],
-            "plagiarism_analysis": plagiarism_analysis,
-            "analysis_timestamp": datetime.now().isoformat()
-        }
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"자소서 유사도 체크 실패: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
