@@ -123,8 +123,8 @@ const HeaderText = styled.div`
   }
   p {
     margin: 0;
-    font-size: 12px;
-    opacity: 0.8;
+    font-size: 14px;
+    opacity: 1;
   }
 `;
 
@@ -170,7 +170,7 @@ const Message = styled(motion.div)`
   max-width: 80%;
   padding: 12px 16px;
   border-radius: 18px;
-  font-size: 14px;
+  font-size: 16px;
   line-height: 1.4;
   word-wrap: break-word;
   white-space: pre-wrap; /* 줄바꿈 문자 보존 */
@@ -182,7 +182,7 @@ const Message = styled(motion.div)`
     border-bottom-right-radius: 4px;
   ` : `
     background: #f8f9fa;
-    color: #333;
+    color: #111;
     border-bottom-left-radius: 4px;
   `}
 `;
@@ -191,13 +191,13 @@ const ToolIndicator = styled.div`
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 12px;
-  color: #667eea;
-  margin-top: 4px;
-  padding: 4px 8px;
-  background: rgba(102, 126, 234, 0.1);
-  border-radius: 12px;
-  width: fit-content;
+  font-size: 14px;
+  color: #333;
+  margin-top: 6px;
+  padding: 0;
+  background: transparent;
+  border-radius: 0;
+  width: auto;
 `;
 
 const ChatInput = styled.div`
@@ -292,8 +292,8 @@ const Dot = styled(motion.div)`
 const WelcomeMessage = styled.div`
   text-align: center;
   padding: 20px;
-  color: #666;
-  font-size: 14px;
+  color: #111;
+  font-size: 16px;
   line-height: 1.5;
 `;
 
@@ -475,7 +475,7 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
         const label = labelForPath(navPath);
         const botNotice = {
           id: Date.now() + 3,
-          content: `${label} 페이지로 이동합니다. (navigate 툴 적용) 🚀`,
+          content: `${label} 페이지로 이동합니다.\n(navigate 툴 적용) 🚀`,
           isUser: false,
           timestamp: new Date().toISOString(),
         };
@@ -870,7 +870,7 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
                   >
                     {/* 기본 아이콘 */}
                     <span className="lgc-send-base" style={{ opacity: isSendAnimating ? 0 : 1 }}>
-                      <FiSend size={20} />
+                      <FiSend size={24} />
                     </span>
                     {/* 날아가는 복제 아이콘 */}
                     {isSendAnimating && (
@@ -887,7 +887,7 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
                           }}
                           transition={{ duration: 0.95, ease: 'easeOut' }}
                         >
-                          <FiSend size={22} />
+                          <FiSend size={24} />
                         </motion.div>
                         {/* 트레일 2개 */}
                         <motion.div

@@ -178,11 +178,10 @@ const NoResultsText = styled.p`
   margin: 0;
 `;
 
-const SimilarityModal = ({ isOpen, onClose, data, documentType = 'resume' }) => {
+const SimilarityModal = ({ isOpen, onClose, data }) => {
   if (!isOpen || !data) return null;
 
   const { original_resume, similar_resumes, total } = data;
-  const docTypeName = documentType === 'resume' ? '이력서' : '자소서';
 
   const formatSimilarityScore = (score) => {
     return Math.round(score * 100);
@@ -213,14 +212,14 @@ const SimilarityModal = ({ isOpen, onClose, data, documentType = 'resume' }) => 
                 유사도 검색 결과
               </Title>
               <Subtitle>
-                {original_resume.name}님의 {docTypeName}와 유사한 {docTypeName} {total}건을 찾았습니다.
+                {original_resume.name}님의 이력서와 유사한 이력서 {total}건을 찾았습니다.
               </Subtitle>
             </Header>
 
             <OriginalResume>
               <OriginalTitle>
                 <FiUser />
-                기준 {docTypeName}
+                기준 이력서
               </OriginalTitle>
               <OriginalInfo>
                 <InfoItem>
@@ -290,7 +289,7 @@ const SimilarityModal = ({ isOpen, onClose, data, documentType = 'resume' }) => 
               <NoResults>
                 <NoResultsIcon>🔍</NoResultsIcon>
                 <NoResultsText>
-                  유사한 {docTypeName}를 찾을 수 없습니다.
+                  유사한 이력서를 찾을 수 없습니다.
                 </NoResultsText>
               </NoResults>
             )}
