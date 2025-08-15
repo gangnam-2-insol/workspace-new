@@ -25,7 +25,7 @@ if (-not (Test-Path "main.py")) {
     exit 1
 }
 
-Write-Host "Starting server on http://localhost:8010" -ForegroundColor Cyan
+Write-Host "Starting server on http://localhost:8000" -ForegroundColor Cyan
 Write-Host "Press Ctrl+C to stop the server" -ForegroundColor Yellow
 Write-Host ""
 

@@ -6,7 +6,7 @@ import styled, { keyframes } from 'styled-components';
 // ==========================================================
 class AIChatbotService {
   constructor() {
-    this.baseURL = 'http://localhost:8010';
+    this.baseURL = 'http://localhost:8000';
     this.sessionId = null;
     this.conversationHistory = [];
   }

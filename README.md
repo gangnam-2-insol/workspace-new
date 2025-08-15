@@ -923,7 +923,7 @@ cd admin
 # admin/backend/.env 파일 생성
 GOOGLE_API_KEY=your_gemini_api_key_here
 MONGODB_URL=mongodb://localhost:27017
-REACT_APP_API_URL=http://localhost:8010
+REACT_APP_API_URL=http://localhost:8000
 ```
 
 ### 3. 백엔드 서버 실행
@@ -952,9 +952,9 @@ docker run -d --name mongodb -p 27017:27017 mongo:6.0
 ```
 
 ### 🎯 실행 후 접속
-- **프론트엔드**: http://localhost:3010
-- **백엔드 API**: http://localhost:8010
-- **API 문서**: http://localhost:8010/docs
+- **프론트엔드**: http://localhost:3001
+- **백엔드 API**: http://localhost:8000
+- **API 문서**: http://localhost:8000/docs
 
 ## 📊 테스트
 

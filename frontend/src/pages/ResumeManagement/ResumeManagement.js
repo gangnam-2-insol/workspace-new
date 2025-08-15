@@ -369,7 +369,7 @@ const ResumeManagement = () => {
     const fetchResumes = async () => {
       try {
         setLoading(true);
-        const response = await fetch((process.env.REACT_APP_API_URL || 'http://localhost:8010') + '/api/resumes');
+        const response = await fetch((process.env.REACT_APP_API_URL || 'http://localhost:8000') + '/api/resumes');
         if (!response.ok) {
           throw new Error('이력서 데이터를 불러오는데 실패했습니다.');
         }

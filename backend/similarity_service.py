@@ -94,7 +94,7 @@ class SimilarityService:
             print(f"[SimilarityService] 이력서 ID: {resume_id}")
             
             # 해당 이력서 조회
-            resume = collection.find_one({"_id": ObjectId(resume_id)})
+            resume = await collection.find_one({"_id": ObjectId(resume_id)})
             if not resume:
                 raise ValueError("이력서를 찾을 수 없습니다.")
             
@@ -179,7 +179,7 @@ class SimilarityService:
             results = []
             if resume_scores:
                 resume_ids = [ObjectId(score["resume_id"]) for score in resume_scores]
-                resumes_detail = list(collection.find({"_id": {"$in": resume_ids}}))
+                resumes_detail = await collection.find({"_id": {"$in": resume_ids}}).to_list(1000)
                 
                 for score_data in resume_scores:
                     resume_detail = next((r for r in resumes_detail if str(r["_id"]) == score_data["resume_id"]), None)
@@ -250,7 +250,7 @@ class SimilarityService:
             print(f"[SimilarityService] 유사도 임계값: {self.similarity_threshold}")
             
             # 해당 이력서 조회
-            resume = collection.find_one({"_id": ObjectId(resume_id)})
+            resume = await collection.find_one({"_id": ObjectId(resume_id)})
             if not resume:
                 raise ValueError("이력서를 찾을 수 없습니다.")
             
@@ -301,7 +301,7 @@ class SimilarityService:
             # MongoDB에서 상세 정보 조회
             if similar_resumes:
                 resume_ids = [ObjectId(match["metadata"]["resume_id"]) for match in similar_resumes]
-                resumes_detail = list(collection.find({"_id": {"$in": resume_ids}}))
+                resumes_detail = await collection.find({"_id": {"$in": resume_ids}}).to_list(1000)
                 
                 # 검색 결과와 상세 정보 매칭
                 results = []

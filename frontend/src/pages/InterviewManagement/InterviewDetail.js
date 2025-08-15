@@ -331,7 +331,7 @@ const InterviewDetail = () => {
         console.log('요청할 면접 ID:', id);
         
         // 실제 API 호출 시도
-        const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8010'}/api/interviews/${id}`);
+        const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/interviews/${id}`);
         
         if (response.ok) {
           const data = await response.json();

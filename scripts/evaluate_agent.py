@@ -3,7 +3,7 @@ import re
 import random
 from urllib import request as urlreq
 
-API = "http://localhost:8010/api/langgraph-agent/chat"
+API = "http://localhost:8000/api/langgraph-agent/chat"
 
 GENERAL_PROMPTS = [
     "날씨가 너무 더워", "오늘 컨디션 안 좋아", "퇴근하고 뭐할까", "너무 피곤하다",

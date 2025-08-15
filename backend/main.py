@@ -771,7 +771,7 @@ async def check_resume_similarity(resume_id: str):
         result = await similarity_service.find_similar_resumes_by_chunks(resume_id, db.applicants, limit=50)
         
         # 현재 이력서 정보 조회
-        current_resume = await db.applicants.find_one({"_id": object_id})
+        current_resume = await db.applicants.find_one({"_id": ObjectId(resume_id)})
         print(f"[INFO] 데이터베이스 조회 결과: {current_resume is not None}")
         
         # 청킹 기반 API 응답 형식에 맞게 변환
@@ -969,6 +969,12 @@ async def check_resume_similarity(resume_id: str):
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"유사도 체크 실패: {str(e)}")
+
+# 커버레터 유사도 체크 엔드포인트 (이력서 엔드포인트와 동일 로직 재사용)
+@app.post("/api/coverletter/similarity-check/{resume_id}")
+async def check_coverletter_similarity(resume_id: str):
+    """커버레터 유사도 체크 별칭 엔드포인트 (현재는 이력서 비교 로직 재사용)"""
+    return await check_resume_similarity(resume_id)
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

@@ -22,9 +22,14 @@ import {
   FiCode,
   FiGrid,
   FiList,
-  FiBarChart2
+  FiBarChart2,
+  FiCamera,
+  FiGitBranch,
+  FiArrowLeft
 } from 'react-icons/fi';
 import DetailedAnalysisModal from '../components/DetailedAnalysisModal';
+import GithubSummaryPanel from './PortfolioSummary/GithubSummaryPanel';
+import PortfolioSummaryPanel from './PortfolioSummary/PortfolioSummaryPanel';
 
 // 평균 점수 계산 함수
 const calculateAverageScore = (analysisData) => {
@@ -89,7 +94,7 @@ const getPortfolioAnalysisLabel = (key) => {
 };
 
 // API 서비스 추가
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8010';
+const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
 const api = {
   // 모든 지원자 조회 (페이지네이션 지원)
