@@ -1,9 +1,10 @@
 import os
 import sys
-from fastapi import FastAPI, HTTPException
+from dotenv import load_dotenv
+from fastapi import FastAPI, HTTPException, File, UploadFile, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 import uvicorn
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel
@@ -12,18 +13,41 @@ from typing import List, Optional, Dict, Any
 import locale
 import codecs
 from datetime import datetime
-from datetime import timedelta
-import csv
-from chatbot import chatbot_router, langgraph_router
-from github import router as github_router
-from routers.upload import router as upload_router
+import io
+import json
+import re
+import random
+# from sentence_transformers import SentenceTransformer
+# import numpy as np
 
-from routers.pdf_ocr import router as pdf_ocr_router
+# 자소서 분석 관련 라이브러리
+try:
+    import pdfplumber
+    import docx
+    PDF_AVAILABLE = True
+except ImportError:
+    PDF_AVAILABLE = False
 
+# .env 파일 로드 (현재 디렉토리에서)
+print(f"🔍 현재 작업 디렉토리: {os.getcwd()}")
+print(f"🔍 .env 파일 존재 여부: {os.path.exists('.env')}")
+load_dotenv()
+print(f"🔍 GOOGLE_API_KEY 로드 후: {os.getenv('GOOGLE_API_KEY')}")
 
-from similarity_service import SimilarityService
-from embedding_service import EmbeddingService
-from vector_service import VectorService
+# Gemini 클라이언트 (환경변수에서 API 키 가져오기)
+try:
+    import google.generativeai as genai
+    api_key = os.getenv("GOOGLE_API_KEY")
+    if api_key:
+        genai.configure(api_key=api_key)
+        GEMINI_AVAILABLE = True
+        print("✅ Gemini API가 설정되었습니다.")
+    else:
+        GEMINI_AVAILABLE = False
+        print("⚠️  GOOGLE_API_KEY가 설정되지 않았습니다. 자소서 분석 기능이 제한됩니다.")
+except ImportError:
+    GEMINI_AVAILABLE = False
+    print("⚠️  Gemini 라이브러리가 설치되지 않았습니다. 자소서 분석 기능이 제한됩니다.")
 
 # Python 환경 인코딩 설정
 # 시스템 기본 인코딩을 UTF-8로 설정
@@ -64,33 +88,344 @@ async def add_charset_header(request, call_next):
     return response
 
 # 라우터 등록
-app.include_router(chatbot_router, prefix="/api/chatbot", tags=["chatbot"])
-app.include_router(langgraph_router, prefix="/api/langgraph", tags=["langgraph"])
-# 프론트엔드 호환을 위해 /api/langgraph-agent 프리픽스도 동일 라우터로 마운트
-app.include_router(langgraph_router, prefix="/api/langgraph-agent", tags=["langgraph-agent"])
+# chatbot_router와 langgraph_router는 현재 사용하지 않음
+# app.include_router(chatbot_router, prefix="/api/chatbot", tags=["chatbot"])
+# app.include_router(langgraph_router, prefix="/api/langgraph", tags=["langgraph"])
+
+# Upload 라우터 등록
+from routers.upload import router as upload_router
+app.include_router(upload_router, prefix="/api/upload", tags=["upload"])
+
+# GitHub 요약 라우터 등록
+from github import router as github_router
 app.include_router(github_router, prefix="/api", tags=["github"])
-app.include_router(upload_router, tags=["upload"])
 
-app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
+# 자소서 분석 라우터 등록
+# from routers.cover_letter_analysis import router as cover_letter_router
+# app.include_router(cover_letter_router, prefix="/api/cover-letter", tags=["cover-letter-analysis"])
 
+# 지원자 라우터 등록
+# from routers.applicants import router as applicants_router
+# app.include_router(applicants_router, prefix="/api/applicants", tags=["applicants"])
 
 # MongoDB 연결
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/hireme")
 client = AsyncIOMotorClient(MONGODB_URI)
 db = client.hireme
 
+# 자소서 분석 관련 함수들
+def extract_text_from_pdf(file_bytes: bytes) -> str:
+    """PDF 파일에서 텍스트 추출"""
+    if not PDF_AVAILABLE:
+        raise HTTPException(status_code=400, detail="PDF 처리 라이브러리가 설치되지 않았습니다.")
+    
+    text = []
+    try:
+        with pdfplumber.open(io.BytesIO(file_bytes)) as pdf:
+            for page in pdf.pages:
+                page_text = page.extract_text()
+                if page_text:
+                    text.append(page_text)
+        return "\n".join(text)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"PDF 텍스트 추출 실패: {str(e)}")
+
+def extract_text_from_docx(file_bytes: bytes) -> str:
+    """DOCX 파일에서 텍스트 추출"""
+    if not PDF_AVAILABLE:
+        raise HTTPException(status_code=400, detail="DOCX 처리 라이브러리가 설치되지 않았습니다.")
+    
+    try:
+        doc = docx.Document(io.BytesIO(file_bytes))
+        text = []
+        for paragraph in doc.paragraphs:
+            if paragraph.text.strip():
+                text.append(paragraph.text)
+        return "\n".join(text)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"DOCX 텍스트 추출 실패: {str(e)}")
+
+def extract_text_from_file(filename: str, file_bytes: bytes) -> str:
+    """파일 확장자에 따라 적절한 텍스트 추출 함수 호출"""
+    file_ext = filename.lower()
+    
+    if file_ext.endswith('.pdf'):
+        return extract_text_from_pdf(file_bytes)
+    elif file_ext.endswith('.docx'):
+        return extract_text_from_docx(file_bytes)
+    elif file_ext.endswith('.txt'):
+        return file_bytes.decode('utf-8', errors='ignore')
+    else:
+        raise HTTPException(status_code=400, detail="지원하지 않는 파일 형식입니다. PDF, DOCX, TXT 파일만 지원합니다.")
+
+def split_into_paragraphs(text: str) -> List[str]:
+    """텍스트를 문단으로 분리"""
+    paragraphs = [p.strip() for p in text.split('\n\n') if p.strip()]
+    if not paragraphs:
+        # 문단 구분이 없는 경우 문장 단위로 분리
+        sentences = re.split(r'[.!?]+', text)
+        paragraphs = [s.strip() for s in sentences if s.strip()]
+    return paragraphs
+
+def split_into_sentences(text: str) -> List[str]:
+    """텍스트를 문장으로 분리"""
+    sentences = re.split(r'[.!?]+', text)
+    return [s.strip() for s in sentences if s.strip()]
+
+async def analyze_cover_letter_basic(text: str, job_description: str = "") -> Dict[str, Any]:
+    """기본 자소서 분석 (Gemini가 사용 불가능할 때)"""
+    try:
+        # 간단한 텍스트 분석
+        words = text.split()
+        sentences = re.split(r'[.!?]+', text)
+        
+        return {
+            "summary": f"총 {len(words)}단어, {len(sentences)}문장으로 구성된 자소서입니다.",
+            "top_strengths": [
+                {"strength": "텍스트 길이", "evidence": f"총 {len(words)}단어", "confidence": 0.8}
+            ],
+            "star_cases": [],
+            "job_fit_score": 50,
+            "matched_skills": [],
+            "missing_skills": [],
+            "grammar_suggestions": [],
+            "improvement_suggestions": [],
+            "overall_score": 50
+        }
+    except Exception as e:
+        print(f"기본 분석 실패: {e}")
+        return {
+            "summary": "분석에 실패했습니다.",
+            "top_strengths": [],
+            "star_cases": [],
+            "job_fit_score": 0,
+            "matched_skills": [],
+            "missing_skills": [],
+            "grammar_suggestions": [],
+            "improvement_suggestions": [],
+            "overall_score": 0
+        }
+
+async def analyze_cover_letter_with_llm(text: str, job_description: str = "") -> Dict[str, Any]:
+    """Gemini를 사용하여 자소서 분석"""
+    if not GEMINI_AVAILABLE:
+        # Gemini가 사용 불가능할 때 기본 분석 제공
+        return await analyze_cover_letter_basic(text, job_description)
+    
+    try:
+        # Gemini 모델 초기화
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        
+        # 1. 요약 및 핵심 강점 추출
+        summary_prompt = f"""당신은 채용담당자 역할을 한다. 지원자가 제출한 자소서를 읽고, 3문장 내로 핵심 요약과 가장 강한 '핵심 강점' 3가지를 추출해줘. 핵심 강점은 구체적 근거(문장 위치/문장 일부)와 함께 표기해라.
+
+자소서:
+{text}
+
+반드시 다음 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요:
+{{
+  "summary": "한 문장 요약...",
+  "top_strengths": [
+    {{"strength":"팀 리딩 경험", "evidence":"3번째 문단: '팀을 이끌며...'", "confidence": 0.92}},
+    {{"strength":"기술 스택", "evidence":"2번째 문단: 'Python과...'", "confidence": 0.88}},
+    {{"strength":"문제 해결", "evidence":"4번째 문단: '프로젝트에서...'", "confidence": 0.85}}
+  ]
+}}"""
+
+        summary_response = model.generate_content(summary_prompt)
+        summary_result = json.loads(summary_response.text)
+        
+        # 2. STAR 사례 추출
+        star_prompt = f"""다음 텍스트에서 STAR(상황, 과제, 행동, 결과) 구조의 사례를 찾아 각각을 분리해서 반환해라. 찾을 수 없으면 빈 배열 [] 반환.
+
+텍스트:
+{text}
+
+반드시 다음 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요:
+[
+  {{"s":"상황 설명", "t":"과제 설명", "a":"행동 설명", "r":"결과 설명", "evidence_sentence_indices":[2,3]}}
+]"""
+
+        star_response = model.generate_content(star_prompt)
+        star_result = json.loads(star_response.text)
+        
+        # 3. 직무 적합성 점수 및 키워드 매칭
+        job_fit_prompt = f"""당신은 IT기업 채용담당자 역할을 한다. 채용공고(직무 설명)를 주면 자소서의 '직무 적합성'을 0~100으로 점수화하고, 어떤 스킬/경험이 일치하는지, 부족한 키워드는 무엇인지 정리한다.
+
+[평가 기준]
+- 기술 적합성: 사용 기술 스택, 프로젝트 경험, 문제 해결 능력
+- 직무 이해도: 해당 포지션의 역할·책임에 대한 명확한 이해
+- 성장 가능성: 학습 태도, 새로운 기술 습득 경험
+- 팀워크/커뮤니케이션: 협업 경험, 갈등 해결 사례
+- 동기/회사 이해도: 지원 동기, 회사와의 가치관 일치 여부
+
+직무 설명: {job_description if job_description else "직무 설명이 제공되지 않았습니다."}
+자소서: {text}
+
+반드시 다음 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요:
+{{
+ "score": 78,
+ "matched_skills":["Python", "팀리딩"],
+ "missing_skills":["클라우드","데이터 파이프라인"],
+ "explanation":"지원자는 Python과 팀리딩 경험이 우수하지만, 클라우드 기술과 데이터 파이프라인 경험이 부족합니다."
+}}"""
+
+        job_fit_response = model.generate_content(job_fit_prompt)
+        job_fit_result = json.loads(job_fit_response.text)
+        
+        # 4. 문장별 개선 제안
+        improvement_prompt = f"""각 문장을 더 간결하고 적극적으로 바꿔라. 원래 문장과 개선 문장을 짝지어 반환.
+
+자소서:
+{text}
+
+반드시 다음 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요:
+[{{"original":"원래 문장", "improved":"개선된 문장"}}]"""
+
+        improvement_response = model.generate_content(improvement_prompt)
+        improvement_result = json.loads(improvement_response.text)
+        
+        # 5. 문법 검사 및 교정 제안
+        grammar_prompt = f"""다음 자소서의 문법 오류를 찾아 교정 제안을 해주세요. 각 오류에 대해 원래 문장과 교정된 문장을 짝지어 반환하세요.
+
+자소서:
+{text}
+
+반드시 다음 JSON 형식으로만 응답하세요. 다른 텍스트는 포함하지 마세요:
+[{{"original":"원래 문장", "corrected":"교정된 문장", "explanation":"오류 설명"}}]"""
+
+        grammar_response = model.generate_content(grammar_prompt)
+        grammar_result = json.loads(grammar_response.text)
+        
+        # 종합 점수 계산
+        overall_score = calculate_overall_score(summary_result, star_result, job_fit_result, improvement_result, grammar_result)
+        
+        return {
+            "summary": summary_result.get("summary", ""),
+            "top_strengths": summary_result.get("top_strengths", []),
+            "star_cases": star_result if isinstance(star_result, list) else [],
+            "job_fit_score": job_fit_result.get("score", 0),
+            "matched_skills": job_fit_result.get("matched_skills", []),
+            "missing_skills": job_fit_result.get("missing_skills", []),
+            "grammar_suggestions": grammar_result if isinstance(grammar_result, list) else [],
+            "improvement_suggestions": improvement_result if isinstance(improvement_result, list) else [],
+            "overall_score": overall_score
+        }
+        
+    except Exception as e:
+        print(f"Gemini 분석 실패, 기본 분석으로 대체: {e}")
+        return await analyze_cover_letter_basic(text, job_description)
+
+def calculate_text_similarity_simple(resume_a: Dict[str, Any], resume_b: Dict[str, Any]) -> float:
+    """
+    두 이력서 간의 간단한 텍스트 유사도를 계산합니다.
+    """
+    try:
+        # 필드별 가중치 정의
+        field_weights = {
+            'growthBackground': 0.4,   # 성장배경 (가장 중요)
+            'motivation': 0.35,        # 지원동기 
+            'careerHistory': 0.25,     # 경력사항
+        }
+        
+        total_similarity = 0.0
+        total_weight = 0.0
+        
+        # 각 필드별 유사도 계산
+        for field, weight in field_weights.items():
+            value_a = resume_a.get(field, "").strip().lower()
+            value_b = resume_b.get(field, "").strip().lower()
+            
+            if value_a and value_b and len(value_a) > 2 and len(value_b) > 2:
+                # 필드별 유사도 계산
+                field_similarity = calculate_field_similarity_simple(value_a, value_b)
+                total_similarity += field_similarity * weight
+                total_weight += weight
+        
+        # 전체 유사도 계산
+        if total_weight > 0:
+            return total_similarity / total_weight
+        else:
+            return 0.0
+            
+    except Exception as e:
+        print(f"텍스트 유사도 계산 중 오류: {str(e)}")
+        return 0.0
+
+def calculate_field_similarity_simple(text_a: str, text_b: str) -> float:
+    """
+    두 텍스트 간의 간단한 Jaccard 유사도를 계산합니다.
+    """
+    try:
+        if not text_a or not text_b:
+            return 0.0
+        
+        # 텍스트를 단어로 분할
+        words_a = set(text_a.lower().split())
+        words_b = set(text_b.lower().split())
+        
+        if not words_a or not words_b:
+            return 0.0
+        
+        # Jaccard 유사도 계산
+        intersection = len(words_a.intersection(words_b))
+        union = len(words_a.union(words_b))
+        
+        return intersection / union if union > 0 else 0.0
+        
+    except Exception as e:
+        print(f"필드 유사도 계산 중 오류: {str(e)}")
+        return 0.0
+
+def calculate_overall_score(summary_result: Dict, star_result: List, job_fit_result: Dict, improvement_result: List, grammar_result: List) -> int:
+    """종합 점수 계산 (0-100)"""
+    score = 0
+    
+    # 요약 및 핵심 강점 (20점)
+    if summary_result.get("summary") and summary_result.get("top_strengths"):
+        score += 20
+    
+    # STAR 사례 (25점)
+    if star_result and len(star_result) > 0:
+        score += min(25, len(star_result) * 8)
+    
+    # 직무 적합성 (30점)
+    job_fit_score = job_fit_result.get("score", 0)
+    score += int(job_fit_score * 0.3)
+    
+    # 개선 제안 (15점)
+    if improvement_result and len(improvement_result) > 0:
+        score += min(15, len(improvement_result) * 2)
+    
+    # 문법 검사 (10점)
+    if grammar_result and len(grammar_result) > 0:
+        score += min(10, len(grammar_result) * 1.5)
+    
+    return min(100, score)
+
+# def generate_embedding(text: str) -> List[float]:
+#     """텍스트 임베딩 생성"""
+#     try:
+#         model = SentenceTransformer('all-MiniLM-L6-v2')
+#         embedding = model.encode([text])[0].tolist()
+#         return embedding
+#     except Exception as e:
+#         print(f"임베딩 생성 실패: {e}")
+#         return []
+
+
 # 환경 변수에서 API 키 로드
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-PINECONE_API_KEY = os.getenv("PINECONE_API_KEY") 
-PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "resume-vectors")
+# PINECONE_API_KEY = os.getenv("PINECONE_API_KEY") 
+# PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "resume-vectors")
 
-# 서비스 초기화
-embedding_service = EmbeddingService()
-vector_service = VectorService(
-    api_key=PINECONE_API_KEY or "dummy-key",  # API 키가 없어도 서버 시작은 가능
-    index_name=PINECONE_INDEX_NAME
-)
-similarity_service = SimilarityService(embedding_service, vector_service)
+# 서비스 초기화 (현재 사용하지 않음)
+# embedding_service = EmbeddingService()
+# vector_service = VectorService(
+#     api_key=PINECONE_API_KEY or "dummy-key",  # API 키가 없어도 서버 시작은 가능
+#     index_name=PINECONE_INDEX_NAME
+# )
+# similarity_service = SimilarityService(embedding_service, vector_service)
 
 # Pydantic 모델들
 class User(BaseModel):
@@ -141,146 +476,324 @@ class Interview(BaseModel):
 # 초기 데이터 로딩 유틸리티: DB가 비어있으면 루트 CSV에서 임포트
 async def seed_applicants_from_csv_if_empty() -> None:
     try:
-        total_documents = await db.applicants.count_documents({})
+        # 기존 데이터가 있으면 CSV 임포트 건너뛰기
+        total_documents = await db.resumes.count_documents({})
         if total_documents > 0:
+            print(f"📋 기존 데이터 {total_documents}건이 이미 존재합니다. CSV 임포트를 건너뜁니다.")
             return
+    except Exception as e:
+        print(f"⚠️ 데이터 카운트 중 오류 발생: {str(e)}")
+        return
 
-        project_root_csv_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "hireme.applicants.csv")
-        )
-        if not os.path.exists(project_root_csv_path):
-            return
-
-        documents_to_insert = []
-        with open(project_root_csv_path, mode="r", encoding="utf-8") as csv_file:
-            reader = csv.DictReader(csv_file)
-            for row in reader:
-                document: Dict[str, Any] = {}
-
-                # _id 처리: 가능하면 ObjectId로 저장
-                raw_id = row.get("_id")
-                if raw_id and isinstance(raw_id, str) and len(raw_id) == 24:
-                    try:
-                        document["_id"] = ObjectId(raw_id)
-                    except Exception:
-                        document["_id"] = raw_id
-
-                # resume_id 처리
-                raw_resume_id = row.get("resume_id")
-                if raw_resume_id and isinstance(raw_resume_id, str) and len(raw_resume_id) == 24:
-                    try:
-                        document["resume_id"] = ObjectId(raw_resume_id)
-                    except Exception:
-                        document["resume_id"] = raw_resume_id
-                elif raw_resume_id:
-                    document["resume_id"] = raw_resume_id
-
-                # 문자열 필드들: 항상 문자열로 캐스팅
-                string_fields = [
-                    "name",
-                    "position",
-                    "department",
-                    "experience",
-                    "skills",
-                    "growthBackground",
-                    "motivation",
-                    "careerHistory",
-                    "analysisResult",
-                    "status",
-                ]
-                for field_name in string_fields:
-                    value = row.get(field_name, "")
-                    document[field_name] = "" if value is None else str(value)
-
-                # 숫자 필드
-                try:
-                    document["analysisScore"] = int(row.get("analysisScore", "0") or 0)
-                except Exception:
-                    document["analysisScore"] = 0
-
-                # created_at 처리
-                created_at_raw = row.get("created_at")
-                if created_at_raw:
-                    try:
-                        iso_candidate = created_at_raw.replace("Z", "+00:00")
-                        document["created_at"] = datetime.fromisoformat(iso_candidate)
-                    except Exception:
-                        document["created_at"] = datetime.now()
-
-                documents_to_insert.append(document)
-
-        if documents_to_insert:
-            print(f"🔎 시드 대상 문서 수: {len(documents_to_insert)}")
-            await db.applicants.insert_many(documents_to_insert)
-            new_count = await db.applicants.count_documents({})
-            print(f"📥 CSV에서 {len(documents_to_insert)}건 임포트 완료 → 현재 총 문서 수: {new_count}")
-    except Exception as seed_error:
-                    print(f"[ERROR] CSV 임포트 실패: {seed_error}")
-
-
-def load_applicants_from_csv() -> List[Dict[str, Any]]:
-    """DB 미가동/비어있을 때 CSV를 직접 읽어 반환"""
-    try:
-        project_root_csv_path = os.path.abspath(
-            os.path.join(os.path.dirname(__file__), "..", "hireme.applicants.csv")
-        )
-        if not os.path.exists(project_root_csv_path):
-            return []
-
-        applicants: List[Dict[str, Any]] = []
-        with open(project_root_csv_path, mode="r", encoding="utf-8") as csv_file:
-            reader = csv.DictReader(csv_file)
-            for row in reader:
-                item: Dict[str, Any] = {}
-                # id/_id
-                raw_id = row.get("_id") or row.get("id")
-                if raw_id:
-                    item["id"] = str(raw_id)
-
-                # 기본 문자열 필드
-                for field_name in [
-                    "name",
-                    "position",
-                    "department",
-                    "experience",
-                    "skills",
-                    "growthBackground",
-                    "motivation",
-                    "careerHistory",
-                    "analysisResult",
-                    "status",
-                ]:
-                    value = row.get(field_name, "")
-                    item[field_name] = "" if value is None else str(value)
-
-                # score
-                try:
-                    item["analysisScore"] = int(row.get("analysisScore", "0") or 0)
-                except Exception:
-                    item["analysisScore"] = 0
-
-                # created_at
-                created_at_raw = row.get("created_at")
-                if created_at_raw:
-                    try:
-                        iso_candidate = created_at_raw.replace("Z", "+00:00")
-                        item["created_at"] = datetime.fromisoformat(iso_candidate)
-                    except Exception:
-                        item["created_at"] = datetime.now()
-
-                applicants.append(item)
-        return applicants
-    except Exception:
-        return []
+class JobDescription(BaseModel):
+    title: str
+    description: str
+    required_skills: List[str]
+    preferred_skills: List[str]
+    company: str
+    position_level: str
 
 # API 라우트들
 @app.get("/")
 async def root():
     return {"message": "AI 채용 관리 시스템 API가 실행 중입니다."}
 
+@app.get("/favicon.ico")
+async def favicon():
+    # 브라우저의 기본 파비콘 요청을 204로 응답해 404 로그를 제거합니다.
+    return Response(status_code=204)
+
 @app.get("/health")
 async def health_check():
-    return {"status": "healthy", "message": "서버가 정상적으로 작동 중입니다."}
+    return {"status": "healthy", "timestamp": datetime.now().isoformat()}
+
+# 이력서 분석 API 엔드포인트 (레거시: 상세 분석은 routers.upload의 /api/upload/analyze 사용)
+@app.post("/api/upload/analyze-legacy")
+async def analyze_resume_legacy(
+    file: UploadFile = File(...),
+    job_description: str = Form(""),
+    company: str = Form(""),
+    position: str = Form("")
+):
+    """이력서 파일 업로드 및 분석"""
+    try:
+        # 파일 크기 제한 (10MB)
+        if file.size > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="파일 크기는 10MB를 초과할 수 없습니다.")
+        
+        # 파일 내용 읽기
+        content = await file.read()
+        
+        # 텍스트 추출
+        extracted_text = extract_text_from_file(file.filename, content)
+        
+        # 문단 및 문장 분리
+        paragraphs = split_into_paragraphs(extracted_text)
+        sentences = split_into_sentences(extracted_text)
+        
+        # LLM을 사용한 이력서 분석
+        analysis_result = await analyze_cover_letter_with_llm(extracted_text, job_description)
+        
+        # 분석 결과를 MongoDB에 저장
+        resume_doc = {
+            "filename": file.filename,
+            "original_text": extracted_text,
+            "paragraphs": paragraphs,
+            "sentences": sentences,
+            "summary": analysis_result["summary"],
+            "top_strengths": analysis_result["top_strengths"],
+            "star_cases": analysis_result["star_cases"],
+            "job_fit_score": analysis_result["job_fit_score"],
+            "matched_skills": analysis_result["matched_skills"],
+            "missing_skills": analysis_result["missing_skills"],
+            "grammar_suggestions": analysis_result["grammar_suggestions"],
+            "improvement_suggestions": analysis_result["improvement_suggestions"],
+            "overall_score": analysis_result["overall_score"],
+            "analysis_date": datetime.now(),
+            "job_description": job_description,
+            "company": company,
+            "position": position
+        }
+        
+        result = await db.resumes.insert_one(resume_doc)
+        resume_doc["id"] = str(result.inserted_id)
+        
+        return {
+            "message": "이력서 분석(레거시)이 완료되었습니다.",
+            "analysis_id": str(result.inserted_id),
+            "analysis_result": analysis_result,
+            "overall_summary": {
+                "total_score": analysis_result["overall_score"] / 10,  # 0-100을 0-10으로 변환
+                "summary": analysis_result["summary"],
+                "top_strengths": analysis_result["top_strengths"],
+                "star_cases": analysis_result["star_cases"],
+                "job_fit_score": analysis_result["job_fit_score"],
+                "matched_skills": analysis_result["matched_skills"],
+                "missing_skills": analysis_result["missing_skills"],
+                "grammar_suggestions": analysis_result["grammar_suggestions"],
+                "improvement_suggestions": analysis_result["improvement_suggestions"]
+            },
+            "paragraphs_count": len(paragraphs),
+            "sentences_count": len(sentences)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"이력서 분석 실패: {str(e)}")
+
+# 자소서 분석 관련 API 엔드포인트들
+@app.post("/api/cover-letter/upload")
+async def upload_cover_letter(
+    file: UploadFile = File(...),
+    job_description: str = Form(""),
+    company: str = Form(""),
+    position: str = Form("")
+):
+    """자소서 파일 업로드 및 분석"""
+    try:
+        # 파일 크기 제한 (10MB)
+        if file.size > 10 * 1024 * 1024:
+            raise HTTPException(status_code=400, detail="파일 크기는 10MB를 초과할 수 없습니다.")
+        
+        # 파일 내용 읽기
+        content = await file.read()
+        
+        # 텍스트 추출
+        extracted_text = extract_text_from_file(file.filename, content)
+        
+        # 문단 및 문장 분리
+        paragraphs = split_into_paragraphs(extracted_text)
+        sentences = split_into_sentences(extracted_text)
+        
+        # LLM을 사용한 자소서 분석
+        analysis_result = await analyze_cover_letter_with_llm(extracted_text, job_description)
+        
+        # 임베딩 생성 (현재 사용하지 않음)
+        # embedding = generate_embedding(extracted_text)
+        
+        # 분석 결과를 MongoDB에 저장
+        cover_letter_doc = {
+            "filename": file.filename,
+            "original_text": extracted_text,
+            "paragraphs": paragraphs,
+            "sentences": sentences,
+            "summary": analysis_result["summary"],
+            "top_strengths": analysis_result["top_strengths"],
+            "star_cases": analysis_result["star_cases"],
+            "job_fit_score": analysis_result["job_fit_score"],
+            "matched_skills": analysis_result["matched_skills"],
+            "missing_skills": analysis_result["missing_skills"],
+            "grammar_suggestions": analysis_result["grammar_suggestions"],
+            "improvement_suggestions": analysis_result["improvement_suggestions"],
+            "overall_score": analysis_result["overall_score"],
+            "analysis_date": datetime.now(),
+            "job_description": job_description,
+            "company": company,
+            "position": position,
+            # "embedding": embedding  # 현재 사용하지 않음
+        }
+        
+        result = await db.cover_letters.insert_one(cover_letter_doc)
+        cover_letter_doc["id"] = str(result.inserted_id)
+        
+        return {
+            "message": "자소서 분석이 완료되었습니다.",
+            "analysis_id": str(result.inserted_id),
+            "analysis_result": analysis_result,
+            "overall_summary": {
+                "total_score": analysis_result["overall_score"] / 10,  # 0-100을 0-10으로 변환
+                "summary": analysis_result["summary"],
+                "top_strengths": analysis_result["top_strengths"],
+                "star_cases": analysis_result["star_cases"],
+                "job_fit_score": analysis_result["job_fit_score"],
+                "matched_skills": analysis_result["matched_skills"],
+                "missing_skills": analysis_result["missing_skills"],
+                "grammar_suggestions": analysis_result["grammar_suggestions"],
+                "improvement_suggestions": analysis_result["improvement_suggestions"]
+            },
+            "paragraphs_count": len(paragraphs),
+            "sentences_count": len(sentences)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"자소서 분석 실패: {str(e)}")
+
+@app.get("/api/cover-letter/{analysis_id}")
+async def get_cover_letter_analysis(analysis_id: str):
+    """자소서 분석 결과 조회"""
+    try:
+        from bson import ObjectId
+        analysis = await db.cover_letters.find_one({"_id": ObjectId(analysis_id)})
+        
+        if not analysis:
+            raise HTTPException(status_code=404, detail="분석 결과를 찾을 수 없습니다.")
+        
+        analysis["id"] = str(analysis["_id"])
+        del analysis["_id"]
+        
+        return analysis
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"분석 결과 조회 실패: {str(e)}")
+
+@app.get("/api/cover-letter/list")
+async def list_cover_letter_analyses(skip: int = 0, limit: int = 20):
+    """자소서 분석 결과 목록 조회"""
+    try:
+        analyses = await db.cover_letters.find().skip(skip).limit(limit).to_list(limit)
+        
+        for analysis in analyses:
+            analysis["id"] = str(analysis["_id"])
+            del analysis["_id"]
+        
+        total_count = await db.cover_letters.count_documents({})
+        
+        return {
+            "analyses": analyses,
+            "total_count": total_count,
+            "skip": skip,
+            "limit": limit,
+            "has_more": (skip + limit) < total_count
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"분석 결과 목록 조회 실패: {str(e)}")
+
+@app.post("/api/cover-letter/similar")
+async def find_similar_cover_letters(
+    text: str = Form(...),
+    limit: int = Form(5)
+):
+    """유사한 자소서 검색 (벡터 유사도 기반)"""
+    try:
+        # 입력 텍스트의 임베딩 생성 (비활성화)
+        query_embedding = []
+        
+        # MongoDB에서 유사한 임베딩 검색 (간단한 유클리드 거리 사용)
+        all_analyses = await db.cover_letters.find({"embedding": {"$exists": True}}).to_list(1000)
+        
+        # 유사도 계산 및 정렬
+        similarities = []
+        for analysis in all_analyses:
+            if analysis.get("embedding"):
+                # 임시 유사도 값 (임베딩 비활성화 상태)
+                import random
+                distance = 1.0 - random.uniform(0.0, 1.0)
+                similarities.append((distance, analysis))
+        
+        # 거리 기준으로 정렬 (가까울수록 유사)
+        similarities.sort(key=lambda x: x[0])
+        
+        # 상위 결과 반환
+        top_results = []
+        for distance, analysis in similarities[:limit]:
+            analysis["id"] = str(analysis["_id"])
+            analysis["similarity_score"] = 1.0 / (1.0 + distance)  # 0-1 범위의 유사도 점수
+            del analysis["_id"]
+            del analysis["embedding"]  # 임베딩은 제외
+            top_results.append(analysis)
+        
+        return {
+            "query_text": text,
+            "similar_analyses": top_results,
+            "total_found": len(top_results)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"유사 자소서 검색 실패: {str(e)}")
+
+@app.post("/api/cover-letter/improve")
+async def get_improvement_suggestions(
+    text: str = Form(...),
+    focus_area: str = Form("all")  # "grammar", "style", "content", "all"
+):
+    """자소서 개선 제안 생성"""
+    try:
+        if focus_area == "grammar":
+            prompt = f"""다음 자소서의 문법 오류를 찾아 교정 제안을 해주세요. 각 오류에 대해 원래 문장과 교정된 문장을 짝지어 반환하세요.
+
+자소서:
+{text}
+
+Response: [{{"original":"...", "corrected":"...", "explanation":"오류 설명"}}]"""
+        elif focus_area == "style":
+            prompt = f"""다음 자소서를 더 간결하고 적극적으로 바꿔라. 원래 문장과 개선 문장을 짝지어 반환.
+
+자소서:
+{text}
+
+Response: [{{"original":"...", "improved":"... (한 줄)"}}]"""
+        elif focus_area == "content":
+            prompt = f"""다음 자소서의 내용을 개선하여 더 구체적이고 설득력 있게 만들어주세요. 각 문장에 대한 개선 제안을 제공하세요.
+
+자소서:
+{text}
+
+Response: [{{"original":"...", "improved":"...", "explanation":"개선 이유"}}]"""
+        else:
+            prompt = f"""다음 자소서를 종합적으로 개선해주세요. 문법, 스타일, 내용을 모두 고려하여 개선 제안을 제공하세요.
+
+자소서:
+{text}
+
+Response: [{{"original":"...", "improved":"...", "explanation":"개선 이유"}}]"""
+        
+        if not GEMINI_AVAILABLE:
+            raise HTTPException(status_code=400, detail="Gemini API가 설정되지 않았습니다.")
+        
+        # Gemini 모델 초기화
+        model = genai.GenerativeModel('gemini-1.5-flash')
+        response = model.generate_content(prompt)
+        
+        improvement_result = json.loads(response.text)
+        
+        return {
+            "focus_area": focus_area,
+            "original_text": text,
+            "improvements": improvement_result if isinstance(improvement_result, list) else []
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"개선 제안 생성 실패: {str(e)}")
 
 # 사용자 관련 API
 @app.get("/api/users", response_model=List[User])
@@ -343,9 +856,9 @@ async def get_applicants(skip: int = 0, limit: int = 20):
         # DB가 비어있으면 CSV에서 자동 임포트
         await seed_applicants_from_csv_if_empty()
         # 총 문서 수
-        total_count = await db.applicants.count_documents({})
+        total_applicants = await db.resumes.count_documents({})
 
-        if total_count == 0:
+        if total_applicants == 0:
             # DB가 완전 비어있을 때 CSV를 가상 DB처럼 반환
             csv_applicants = load_applicants_from_csv()
             items = csv_applicants[skip:skip+limit]
@@ -358,7 +871,7 @@ async def get_applicants(skip: int = 0, limit: int = 20):
             }
 
         # 페이징으로 이력서(지원자) 목록 조회
-        applicants = await db.applicants.find().skip(skip).limit(limit).to_list(limit)
+        applicants = await db.resumes.find().skip(skip).limit(limit).to_list(limit)
 
         # MongoDB의 _id를 id로 변환 및 ObjectId 필드들을 문자열로 변환
         for applicant in applicants:
@@ -366,13 +879,19 @@ async def get_applicants(skip: int = 0, limit: int = 20):
             del applicant["_id"]
             if "resume_id" in applicant and applicant["resume_id"]:
                 applicant["resume_id"] = str(applicant["resume_id"])
+            
+            # 문자열 필드들이 숫자로 저장되어 있을 수 있으므로 강제로 문자열로 변환
+            string_fields = ["growthBackground", "motivation", "careerHistory"]
+            for field_name in string_fields:
+                if field_name in applicant:
+                    applicant[field_name] = str(applicant[field_name]) if applicant[field_name] is not None else ""
 
         return {
             "applicants": [Resume(**applicant) for applicant in applicants],
-            "total_count": total_count,
+            "total_count": total_applicants,
             "skip": skip,
             "limit": limit,
-            "has_more": (skip + limit) < total_count
+            "has_more": (skip + limit) < total_applicants
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"지원자 목록 조회 실패: {str(e)}")
@@ -381,35 +900,19 @@ async def get_applicants(skip: int = 0, limit: int = 20):
 @app.get("/api/applicants/stats/overview")
 async def get_applicant_stats():
     try:
-        # DB가 비어있으면 CSV에서 자동 임포트
-        await seed_applicants_from_csv_if_empty()
-        # 총 지원자 수 (resumes 컬렉션 기준)
-        total_applicants = await db.resumes.count_documents({})
-
-        if total_applicants == 0:
-            # CSV 기반 가상 통계
-            csv_applicants = load_applicants_from_csv()
-            total = len(csv_applicants)
-            status_counts = {"pending": 0, "approved": 0, "rejected": 0}
-            for a in csv_applicants:
-                s = (a.get("status") or "").lower()
-                if s in status_counts:
-                    status_counts[s] += 1
-            return {
-                "total_applicants": total,
-                "status_breakdown": status_counts,
-                "recent_applicants_30_days": total,
-                "success_rate": round((status_counts.get("approved", 0) / total * 100) if total > 0 else 0, 2)
-            }
-
-        # 상태별 지원자 수
-        pending_count = await db.resumes.count_documents({"status": "pending"})
-        approved_count = await db.resumes.count_documents({"status": "approved"})
-        rejected_count = await db.resumes.count_documents({"status": "rejected"})
+        # 총 지원자 수 (applicants 컬렉션 기준)
+        total_applicants = await db.applicants.count_documents({})
         
-        # 최근 30일간 지원자 수 (월 경계/윤달 이슈 없이 안전하게 계산)
-        thirty_days_ago = datetime.now() - timedelta(days=30)
-        recent_applicants = await db.resumes.count_documents({"created_at": {"$gte": thirty_days_ago}})
+        # 상태별 지원자 수
+        pending_count = await db.applicants.count_documents({"status": "pending"})
+        approved_count = await db.applicants.count_documents({"status": "approved"})
+        rejected_count = await db.applicants.count_documents({"status": "rejected"})
+        
+        # 최근 30일간 지원자 수
+        thirty_days_ago = datetime.now().replace(day=datetime.now().day-30) if datetime.now().day > 30 else datetime.now().replace(month=datetime.now().month-1, day=1)
+        recent_applicants = await db.applicants.count_documents({
+            "created_at": {"$gte": thirty_days_ago}
+        })
         
         return {
             "total_applicants": total_applicants,
@@ -423,6 +926,63 @@ async def get_applicant_stats():
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"지원자 통계 조회 실패: {str(e)}")
+
+# 지원자 상태 업데이트 API
+@app.put("/api/applicants/{applicant_id}/status")
+async def update_applicant_status(applicant_id: str, status_update: Dict[str, str]):
+    try:
+        new_status = status_update.get("status")
+        if not new_status:
+            raise HTTPException(status_code=400, detail="status 필드가 필요합니다.")
+        
+        # 유효한 상태값 검증
+        valid_statuses = ["pending", "approved", "rejected"]
+        if new_status not in valid_statuses:
+            raise HTTPException(status_code=400, detail=f"유효하지 않은 상태값입니다. 허용된 값: {', '.join(valid_statuses)}")
+        
+        # ObjectId로 변환 시도
+        try:
+            object_id = ObjectId(applicant_id)
+        except Exception:
+            # ObjectId가 아닌 경우 문자열 ID로 처리
+            object_id = applicant_id
+        
+        # 지원자 상태 업데이트
+        result = await db.resumes.update_one(
+            {"_id": object_id},
+            {"$set": {"status": new_status}}
+        )
+        
+        if result.matched_count == 0:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다.")
+        
+        if result.modified_count == 0:
+            raise HTTPException(status_code=400, detail="상태가 이미 동일합니다.")
+        
+        # 업데이트된 지원자 정보 반환
+        updated_applicant = await db.resumes.find_one({"_id": object_id})
+        if updated_applicant:
+            updated_applicant["id"] = str(updated_applicant["_id"])
+            del updated_applicant["_id"]
+            if "resume_id" in updated_applicant and updated_applicant["resume_id"]:
+                updated_applicant["resume_id"] = str(updated_applicant["resume_id"])
+            
+            # 문자열 필드들을 강제로 문자열로 변환
+            string_fields = ["growthBackground", "motivation", "careerHistory"]
+            for field_name in string_fields:
+                if field_name in updated_applicant:
+                    updated_applicant[field_name] = str(updated_applicant[field_name]) if updated_applicant[field_name] is not None else ""
+        
+        return {
+            "message": "지원자 상태가 성공적으로 업데이트되었습니다.",
+            "applicant_id": applicant_id,
+            "new_status": new_status,
+            "applicant": updated_applicant
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"지원자 상태 업데이트 실패: {str(e)}")
 
 # Vector Service API
 @app.post("/api/vector/create")
@@ -765,173 +1325,102 @@ async def get_similarity_metrics():
 async def check_resume_similarity(resume_id: str):
     """특정 이력서의 유사도 체크 (다른 모든 이력서와 비교)"""
     try:
-        print(f"[API] 이력서 유사도 체크 요청 - resume_id: {resume_id}")
+        print(f"🔍 유사도 체크 요청 - resume_id: {resume_id}")
         
-        # SimilarityService를 통한 유사도 분석
-        result = await similarity_service.find_similar_resumes(resume_id, db.applicants, limit=50)
+        # ObjectId 변환 시도
+        try:
+            object_id = ObjectId(resume_id)
+            print(f"✅ ObjectId 변환 성공: {object_id}")
+        except Exception as oid_error:
+            print(f"❌ ObjectId 변환 실패: {oid_error}")
+            raise HTTPException(status_code=400, detail=f"잘못된 resume_id 형식: {resume_id}")
         
-        if not result["success"]:
-            raise HTTPException(status_code=500, detail="유사도 분석에 실패했습니다.")
+        # 현재 이력서 정보 조회
+        current_resume = await db.resumes.find_one({"_id": object_id})
+        print(f"🔍 데이터베이스 조회 결과: {current_resume is not None}")
         
-        # 기존 API 응답 형식에 맞게 변환
-        similarity_results = []
-        for similar in result["data"]["similar_resumes"]:
-            similarity_result = {
-                "resume_id": similar["resume"]["_id"],
-                "applicant_name": similar["resume"].get("name", "알 수 없음"),
-                "position": similar["resume"].get("position", ""),
-                "department": similar["resume"].get("department", ""),
-                "overall_similarity": round(similar["similarity_score"], 4),
-                "field_similarities": {
-                    "growthBackground": round(similar["similarity_score"], 4),
-                    "motivation": round(similar["similarity_score"], 4),
-                    "careerHistory": round(similar["similarity_score"], 4)
-                },
-                "is_high_similarity": similar["similarity_score"] > 0.7,
-                "is_moderate_similarity": 0.4 <= similar["similarity_score"] <= 0.7,
-                "is_low_similarity": similar["similarity_score"] < 0.4,
-                "llm_analysis": similar.get("llm_analysis")
-            }
-            similarity_results.append(similarity_result)
+        if not current_resume:
+            # 상세 덤프 대신 간단한 진단만 남기고 404 반환
+            raise HTTPException(status_code=404, detail="이력서를 찾을 수 없습니다.")
         
-        # 통계 정보 계산
-        high_similarity_count = len([r for r in similarity_results if r["is_high_similarity"]])
-        moderate_similarity_count = len([r for r in similarity_results if r["is_moderate_similarity"]])
-        low_similarity_count = len([r for r in similarity_results if r["is_low_similarity"]])
+        # 다른 모든 이력서 조회 (현재 이력서 제외)
+        other_resumes = await db.resumes.find({"_id": {"$ne": ObjectId(resume_id)}}).to_list(1000)
         
-        return {
-            "current_resume": result["data"]["original_resume"],
-            "similarity_results": similarity_results,
-            "statistics": {
-                "total_compared": len(similarity_results),
-                "high_similarity_count": high_similarity_count,
-                "moderate_similarity_count": moderate_similarity_count,
-                "low_similarity_count": low_similarity_count,
-                "average_similarity": round(sum([r["overall_similarity"] for r in similarity_results]) / len(similarity_results) if similarity_results else 0, 4)
-            },
-            "top_similar": similarity_results[:5] if similarity_results else [],
-            "plagiarism_analysis": result["data"].get("plagiarism_analysis"),
-            "analysis_timestamp": datetime.now().isoformat()
+        # 현재 이력서의 비교 텍스트 (유사도 계산 필드)
+        current_fields = {
+            "growthBackground": current_resume.get("growthBackground", ""),
+            "motivation": current_resume.get("motivation", ""),
+            "careerHistory": current_resume.get("careerHistory", "")
         }
         
-    except Exception as e:
-        print(f"[API] 이력서 유사도 체크 실패: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"유사도 체크 실패: {str(e)}")
-
-# 자소서 유사도 체크 API
-@app.post("/api/coverletter/similarity-check/{applicant_id}")
-async def check_coverletter_similarity(applicant_id: str):
-    """특정 자소서의 유사도 체크 (다른 모든 자소서와 비교)"""
-    try:
-        print(f"[API] 자소서 유사도 체크 요청 - applicant_id: {applicant_id}")
-        
-        # ObjectId 검증
-        try:
-            object_id = ObjectId(applicant_id)
-        except Exception:
-            raise HTTPException(status_code=400, detail=f"잘못된 applicant_id 형식: {applicant_id}")
-        
-        # 지원자 존재 확인
-        current_applicant = await db.applicants.find_one({"_id": object_id})
-        if not current_applicant:
-            raise HTTPException(status_code=404, detail=f"지원자를 찾을 수 없습니다. 요청된 ID: {applicant_id}")
-        
-        # 자소서 데이터 확인 (motivation과 growthBackground 필드를 자소서로 간주)
-        current_motivation = current_applicant.get("motivation", "")
-        current_growth = current_applicant.get("growthBackground", "")
-        current_coverletter = f"{current_motivation}\n\n{current_growth}".strip()
-        
-        if not current_coverletter:
-            raise HTTPException(status_code=404, detail="자소서 데이터가 없습니다.")
-        
-        # SimilarityService의 텍스트 유사도 계산을 사용하여 자소서 비교
-        other_applicants = await db.applicants.find({
-            "_id": {"$ne": ObjectId(applicant_id)},
-            "$or": [
-                {"motivation": {"$exists": True, "$ne": ""}},
-                {"growthBackground": {"$exists": True, "$ne": ""}}
-            ]
-        }).to_list(1000)
+        # 전체 텍스트 조합
+        current_text = " ".join([text for text in current_fields.values() if text])
         
         similarity_results = []
         
-        for other_applicant in other_applicants:
-            other_id = str(other_applicant["_id"])
-            other_motivation = other_applicant.get("motivation", "")
-            other_growth = other_applicant.get("growthBackground", "")
-            other_coverletter = f"{other_motivation}\n\n{other_growth}".strip()
+        for other_resume in other_resumes:
+            other_id = str(other_resume["_id"])
             
-            if not other_coverletter:
-                continue
+            # 다른 이력서의 비교 텍스트
+            other_fields = {
+                "growthBackground": other_resume.get("growthBackground", ""),
+                "motivation": other_resume.get("motivation", ""), 
+                "careerHistory": other_resume.get("careerHistory", "")
+            }
+            other_text = " ".join([text for text in other_fields.values() if text])
             
-            # SimilarityService를 통한 텍스트 유사도 계산
-            current_data = {"motivation": current_motivation, "growthBackground": current_growth}
-            other_data = {"motivation": other_motivation, "growthBackground": other_growth}
-            
+            # 실제 유사도 계산 사용
             try:
-                overall_similarity = similarity_service._calculate_text_similarity(current_data, other_data)
-                if overall_similarity is None:
-                    overall_similarity = 0.0
+                print(f"💫 이력서 간 유사도 계산 시작: {resume_id} vs {other_id}")
                 
-                print(f"💫 자소서 유사도: {applicant_id} vs {other_id} = {overall_similarity:.3f}")
+                # 실제 텍스트 유사도 계산
+                overall_similarity = calculate_text_similarity_simple(current_resume, other_resume)
                 
-                # LLM 분석 (30% 이상 유사할 때만)
-                llm_analysis = None
-                if overall_similarity >= 0.3:
-                    try:
-                        llm_analysis = await similarity_service.llm_service.analyze_similarity_reasoning(
-                            original_resume=current_applicant,
-                            similar_resume=other_applicant,
-                            similarity_score=overall_similarity,
-                            document_type="자소서"
+                print(f"📊 텍스트 유사도 결과: {overall_similarity:.3f}")
+                
+                # 필드별 유사도 계산
+                field_similarities = {}
+                for field_name in current_fields.keys():
+                    if current_fields[field_name] and other_fields[field_name]:
+                        # 필드별 개별 텍스트 유사도 계산
+                        field_similarities[field_name] = calculate_field_similarity_simple(
+                            current_fields[field_name], other_fields[field_name]
                         )
-                    except Exception as llm_error:
-                        print(f"[API] LLM 분석 중 오류: {llm_error}")
-                        llm_analysis = {
-                            "success": False,
-                            "error": str(llm_error),
-                            "analysis": "LLM 분석에 실패했습니다."
-                        }
-                
-                similarity_result = {
-                    "resume_id": other_id,
-                    "applicant_name": other_applicant.get("name", "알 수 없음"),
-                    "position": other_applicant.get("position", ""),
-                    "department": other_applicant.get("department", ""),
-                    "overall_similarity": round(overall_similarity, 4),
-                    "is_high_similarity": overall_similarity > 0.7,
-                    "is_moderate_similarity": 0.4 <= overall_similarity <= 0.7,
-                    "is_low_similarity": overall_similarity < 0.4,
-                    "llm_analysis": llm_analysis
-                }
-                similarity_results.append(similarity_result)
-                
+                        print(f"📋 {field_name} 유사도: {field_similarities[field_name]:.3f}")
+                    else:
+                        field_similarities[field_name] = 0.0
+                        
             except Exception as e:
-                print(f"[API] 자소서 유사도 계산 중 오류: {e}")
-                continue
+                print(f"❌ 유사도 계산 중 오류 발생: {e}")
+                import traceback
+                traceback.print_exc()
+                
+                # 오류 시 기본값 사용
+                overall_similarity = 0.0
+                field_similarities = {}
+                for field_name in current_fields.keys():
+                    field_similarities[field_name] = 0.0
+            
+            similarity_result = {
+                "resume_id": other_id,
+                "applicant_name": other_resume.get("name", "알 수 없음"),
+                "position": other_resume.get("position", ""),
+                "department": other_resume.get("department", ""),
+                "overall_similarity": round(overall_similarity, 4),
+                "field_similarities": {
+                    "growthBackground": round(field_similarities["growthBackground"], 4),
+                    "motivation": round(field_similarities["motivation"], 4),
+                    "careerHistory": round(field_similarities["careerHistory"], 4)
+                },
+                "is_high_similarity": overall_similarity > 0.7,
+                "is_moderate_similarity": 0.4 <= overall_similarity <= 0.7,
+                "is_low_similarity": overall_similarity < 0.4
+            }
+            
+            similarity_results.append(similarity_result)
         
         # 유사도 높은 순으로 정렬
         similarity_results.sort(key=lambda x: x["overall_similarity"], reverse=True)
-        
-        # 표절 위험도 분석
-        plagiarism_analysis = None
-        high_similarity_results = [r for r in similarity_results if r["overall_similarity"] >= 0.3]
-        
-        if high_similarity_results:
-            try:
-                plagiarism_analysis = await similarity_service.llm_service.analyze_plagiarism_risk(
-                    original_resume=current_applicant,
-                    similar_resumes=high_similarity_results,
-                    document_type="자소서"
-                )
-            except Exception as plag_error:
-                print(f"[API] 표절 위험도 분석 중 오류: {plag_error}")
-                plagiarism_analysis = {
-                    "success": False,
-                    "error": str(plag_error),
-                    "risk_level": "UNKNOWN",
-                    "analysis": "표절 위험도 분석에 실패했습니다."
-                }
         
         # 통계 정보
         high_similarity_count = len([r for r in similarity_results if r["is_high_similarity"]])
@@ -940,10 +1429,10 @@ async def check_coverletter_similarity(applicant_id: str):
         
         return {
             "current_resume": {
-                "id": applicant_id,
-                "name": current_applicant.get("name", ""),
-                "position": current_applicant.get("position", ""),
-                "department": current_applicant.get("department", "")
+                "id": resume_id,
+                "name": current_resume.get("name", ""),
+                "position": current_resume.get("position", ""),
+                "department": current_resume.get("department", "")
             },
             "similarity_results": similarity_results,
             "statistics": {
@@ -954,13 +1443,14 @@ async def check_coverletter_similarity(applicant_id: str):
                 "average_similarity": round(sum([r["overall_similarity"] for r in similarity_results]) / len(similarity_results) if similarity_results else 0, 4)
             },
             "top_similar": similarity_results[:5] if similarity_results else [],
-            "plagiarism_analysis": plagiarism_analysis,
             "analysis_timestamp": datetime.now().isoformat()
         }
         
+    except HTTPException:
+        # 명시적으로 발생시킨 4xx는 그대로 전달
+        raise
     except Exception as e:
-        print(f"[API] 자소서 유사도 체크 실패: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"자소서 유사도 체크 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"유사도 체크 실패: {str(e)}")
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000) 
