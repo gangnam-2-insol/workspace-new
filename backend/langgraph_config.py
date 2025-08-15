@@ -12,14 +12,14 @@ class LangGraphConfig(BaseSettings):
     
     # LLM 설정
     llm_model: str = "gemini-1.5-pro"
-    llm_temperature: float = 0.7
-    llm_max_tokens: int = 1000
+    llm_temperature: float = 0.3
+    llm_max_tokens: int = 300
     
     # 에이전트 설정
     max_conversation_history: int = 10
     session_timeout_minutes: int = 30
     max_sessions_per_user: int = 5
-    enable_keyword_routing: bool = False
+    enable_keyword_routing: bool = True
     # 공개적으로 허용되는 안전 툴 화이트리스트
     allowed_public_tools: List[str] = ["navigate", "dom_action"]
     # 네비게이션 허용 라우트(프론트 내부 경로)

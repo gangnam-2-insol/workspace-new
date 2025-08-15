@@ -2,12 +2,20 @@ from fastapi import APIRouter, HTTPException, UploadFile, File, Form
 from fastapi.responses import JSONResponse
 from typing import Optional, Dict, List
 import os
+from dotenv import load_dotenv
 import tempfile
 import asyncio
 import aiofiles
 from datetime import datetime
 import google.generativeai as genai
 from pydantic import BaseModel
+import re
+
+# .env 파일 로드 (현재 디렉토리에서)
+print(f"🔍 upload.py 현재 작업 디렉토리: {os.getcwd()}")
+print(f"🔍 upload.py .env 파일 존재 여부: {os.path.exists('.env')}")
+load_dotenv('.env')
+print(f"🔍 upload.py GOOGLE_API_KEY 로드 후: {os.getenv('GOOGLE_API_KEY')}")
 
 # Gemini API 설정
 GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
@@ -15,7 +23,7 @@ if GOOGLE_API_KEY:
     genai.configure(api_key=GOOGLE_API_KEY)
     model = genai.GenerativeModel('gemini-1.5-flash')
 
-router = APIRouter(prefix="/api/upload", tags=["upload"])
+router = APIRouter(tags=["upload"])
 
 class SummaryRequest(BaseModel):
     content: str
@@ -31,6 +39,16 @@ class SummaryResponse(BaseModel):
 class AnalysisScore(BaseModel):
     score: int  # 0-10
     feedback: str
+
+class DocumentValidationRequest(BaseModel):
+    content: str
+    expected_type: str  # "이력서", "자기소개서", "포트폴리오"
+
+class DocumentValidationResponse(BaseModel):
+    is_valid: bool
+    confidence: float
+    reason: str
+    suggested_type: str
 
 class ResumeAnalysis(BaseModel):
     basic_info_completeness: AnalysisScore
@@ -66,14 +84,112 @@ class PortfolioAnalysis(BaseModel):
     maintainability: AnalysisScore
 
 class OverallSummary(BaseModel):
-    total_score: int
+    total_score: float
     recommendation: str
 
 class DetailedAnalysisResponse(BaseModel):
-    resume_analysis: ResumeAnalysis
-    cover_letter_analysis: CoverLetterAnalysis
-    portfolio_analysis: PortfolioAnalysis
+    resume_analysis: Optional[ResumeAnalysis] = None
+    cover_letter_analysis: Optional[CoverLetterAnalysis] = None
+    portfolio_analysis: Optional[PortfolioAnalysis] = None
     overall_summary: OverallSummary
+
+# ===== 분석 실패 시 기본 구조 생성 유틸 =====
+def _build_score(msg: str) -> Dict[str, object]:
+    return {"score": 0, "feedback": msg}
+
+def build_fallback_analysis(document_type: str) -> Dict[str, object]:
+    reason = "문서에서 텍스트를 추출할 수 없어 평가하지 못했습니다. 편집 가능한 PDF/DOCX로 재업로드해주세요."
+    resume = {
+        "basic_info_completeness": _build_score(reason),
+        "job_relevance": _build_score(reason),
+        "experience_clarity": _build_score(reason),
+        "tech_stack_clarity": _build_score(reason),
+        "project_recency": _build_score(reason),
+        "achievement_metrics": _build_score(reason),
+        "readability": _build_score(reason),
+        "typos_and_errors": _build_score(reason),
+        "update_freshness": _build_score(reason),
+    }
+    cover = {
+        "motivation_relevance": _build_score(reason),
+        "problem_solving_STAR": _build_score(reason),
+        "quantitative_impact": _build_score(reason),
+        "job_understanding": _build_score(reason),
+        "unique_experience": _build_score(reason),
+        "logical_flow": _build_score(reason),
+        "keyword_diversity": _build_score(reason),
+        "sentence_readability": _build_score(reason),
+        "typos_and_errors": _build_score(reason),
+    }
+    portfolio = {
+        "project_overview": _build_score(reason),
+        "tech_stack": _build_score(reason),
+        "personal_contribution": _build_score(reason),
+        "achievement_metrics": _build_score(reason),
+        "visual_quality": _build_score(reason),
+        "documentation_quality": _build_score(reason),
+        "job_relevance": _build_score(reason),
+        "unique_features": _build_score(reason),
+        "maintainability": _build_score(reason),
+    }
+    return {
+        "resume_analysis": resume,
+        "cover_letter_analysis": cover,
+        "portfolio_analysis": portfolio,
+        "overall_summary": {"total_score": 0, "recommendation": reason},
+    }
+
+# ===== 내용 기반 문서 유형 분류기 =====
+def classify_document_type_by_content(text: str) -> Dict[str, object]:
+    """간단한 규칙 기반으로 문서 유형(resume/cover_letter/portfolio)을 분류합니다."""
+    text_lower = text.lower()
+
+    # 한국어/영어 키워드 세트
+    resume_keywords = [
+        "경력", "이력", "프로젝트", "학력", "기술", "스킬", "자격증", "근무", "담당", "성과",
+        "경험", "요약", "핵심역량", "phone", "email", "github", "linkedin",
+        "experience", "education", "skills", "projects", "certificate"
+    ]
+    cover_letter_keywords = [
+        "지원동기", "성장배경", "입사", "포부", "저는", "배우며", "하고자", "기여", "관심",
+        "동기", "열정", "왜", "왜 우리", "motiv", "cover letter", "passion"
+    ]
+    portfolio_keywords = [
+        "포트폴리오", "작품", "시연", "데모", "링크", "이미지", "스샷", "캡처", "레포지토리",
+        "repository", "demo", "screenshot", "figma", "behance", "dribbble"
+    ]
+
+    def score_keywords(keywords: List[str]) -> float:
+        score = 0.0
+        for kw in keywords:
+            # 단어 경계 우선, 없으면 포함 검사
+            if re.search(rf"\b{re.escape(kw)}\b", text_lower) or kw in text_lower:
+                score += 1.0
+        # 섹션 헤더 보너스
+        section_headers = ["경력", "학력", "프로젝트", "skills", "experience", "education"]
+        if any(h in text for h in section_headers):
+            score += 0.5
+        # 연락처 패턴 보너스 (이력서 지표)
+        if re.search(r"[0-9]{2,3}-[0-9]{3,4}-[0-9]{4}", text) or re.search(r"\b[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}\b", text_lower):
+            score += 0.7
+        return score
+
+    resume_score = score_keywords(resume_keywords)
+    cover_letter_score = sum(1.0 for kw in cover_letter_keywords if kw in text_lower)
+    portfolio_score = sum(1.0 for kw in portfolio_keywords if kw in text_lower)
+
+    scores = {
+        "resume": resume_score,
+        "cover_letter": cover_letter_score,
+        "portfolio": portfolio_score,
+    }
+
+    detected_type = max(scores.items(), key=lambda x: x[1])[0]
+    max_score = scores[detected_type]
+    # 간단한 신뢰도 정규화 (최대 10점 가정)
+    confidence = min(round(max_score / 10.0, 2), 1.0)
+
+    return {"detected_type": detected_type, "confidence": confidence, "scores": scores}
 
 # 허용된 파일 타입
 ALLOWED_EXTENSIONS = {
@@ -99,39 +215,61 @@ def validate_file(file: UploadFile) -> bool:
     return True
 
 async def extract_text_from_file(file_path: str, file_ext: str) -> str:
-    """파일에서 텍스트 추출"""
+    """파일에서 텍스트 추출 (다중 백업 전략)"""
     try:
         if file_ext == '.txt':
             async with aiofiles.open(file_path, 'r', encoding='utf-8') as f:
                 return await f.read()
         elif file_ext == '.pdf':
-            # PDF 텍스트 추출 (PyPDF2 또는 pdfplumber 사용)
+            # 1차: PyPDF2
             try:
                 import PyPDF2
                 text = ""
                 with open(file_path, 'rb') as pdf_file:
                     pdf_reader = PyPDF2.PdfReader(pdf_file)
                     for page in pdf_reader.pages:
-                        text += page.extract_text() + "\n"
-                return text
-            except ImportError:
-                # PyPDF2가 설치되지 않은 경우 기본 텍스트 반환
-                return "PDF 파일입니다. 텍스트 추출을 위해 PyPDF2를 설치해주세요."
-        elif file_ext in ['.doc', '.docx']:
-            # Word 문서 텍스트 추출 (python-docx 사용)
+                        extracted = page.extract_text() or ""
+                        text += extracted + ("\n" if extracted else "")
+                if text.strip():
+                    return text
+            except Exception:
+                pass
+            # 2차: pdfplumber
             try:
-                from docx import Document
-                doc = Document(file_path)
+                import pdfplumber  # type: ignore
                 text = ""
-                for paragraph in doc.paragraphs:
-                    text += paragraph.text + "\n"
+                with pdfplumber.open(file_path) as pdf:
+                    for p in pdf.pages:
+                        extracted = p.extract_text() or ""
+                        text += extracted + ("\n" if extracted else "")
+                if text.strip():
+                    return text
+            except Exception:
+                pass
+            # 실패 시 빈 문자열 반환
+            return ""
+        elif file_ext in ['.doc', '.docx']:
+            # 1차: python-docx
+            try:
+                from docx import Document  # type: ignore
+                doc = Document(file_path)
+                text = "\n".join([p.text for p in doc.paragraphs if p.text])
+                if text.strip():
+                    return text
+            except Exception:
+                pass
+            # 2차: docx2txt
+            try:
+                import docx2txt  # type: ignore
+                text = docx2txt.process(file_path) or ""
                 return text
-            except ImportError:
-                return "Word 문서입니다. 텍스트 추출을 위해 python-docx를 설치해주세요."
+            except Exception:
+                pass
+            return ""
         else:
-            return "지원하지 않는 파일 형식입니다."
+            return ""
     except Exception as e:
-        return f"파일 읽기 오류: {str(e)}"
+        return ""
 
 async def generate_summary_with_gemini(content: str, summary_type: str = "general") -> SummaryResponse:
     """Gemini API를 사용하여 요약 생성"""
@@ -222,359 +360,6 @@ async def generate_summary_with_gemini(content: str, summary_type: str = "genera
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"요약 생성 실패: {str(e)}")
 
-async def generate_detailed_analysis_with_gemini(content: str, document_type: str = "resume") -> DetailedAnalysisResponse:
-    """Gemini API를 사용하여 상세 분석 생성"""
-    if not GOOGLE_API_KEY:
-        raise HTTPException(status_code=500, detail="Gemini API 키가 설정되지 않았습니다.")
-    
-    start_time = datetime.now()
-    
-    try:
-        # 문서 타입에 따른 맞춤형 프롬프트 생성
-        if document_type == "resume":
-            analysis_prompt = f"""
-[ROLE] 채용담당자로서 이력서를 분석하고 점수화하세요.
-
-[분석 기준] 0~10점 평가, 간단한 피드백 작성
-
-[이력서 분석 항목]
-1. basic_info_completeness (기본정보 완성도)
-2. job_relevance (직무 적합성)
-3. experience_clarity (경력 명확성)
-4. tech_stack_clarity (기술스택 명확성)
-5. project_recency (프로젝트 최신성)
-6. achievement_metrics (성과 지표)
-7. readability (가독성)
-8. typos_and_errors (오탈자)
-9. update_freshness (최신성)
-
-[출력] JSON만:
-{{
-  "resume_analysis": {{
-    "basic_info_completeness": {{"score": 0, "feedback": ""}},
-    "job_relevance": {{"score": 0, "feedback": ""}},
-    "experience_clarity": {{"score": 0, "feedback": ""}},
-    "tech_stack_clarity": {{"score": 0, "feedback": ""}},
-    "project_recency": {{"score": 0, "feedback": ""}},
-    "achievement_metrics": {{"score": 0, "feedback": ""}},
-    "readability": {{"score": 0, "feedback": ""}},
-    "typos_and_errors": {{"score": 0, "feedback": ""}},
-    "update_freshness": {{"score": 0, "feedback": ""}}
-  }},
-  "cover_letter_analysis": {{}},
-  "portfolio_analysis": {{}},
-  "overall_summary": {{"total_score": 0, "recommendation": ""}}
-}}
-
-[문서] {content}
-"""
-        elif document_type == "cover_letter":
-            analysis_prompt = f"""
-[ROLE] 당신은 채용담당자입니다. 입력된 자기소개서를 아래 기준에 따라 분석하고 점수화해야 합니다.
-
-[분석 기준]
-- 각 항목은 0~10점으로 평가 (10점 = 매우 우수, 0점 = 전혀 충족하지 않음)
-- 각 항목별로 개선이 필요한 부분을 간단히 피드백으로 작성
-- 점수와 피드백은 JSON 형식으로 출력
-
-[자기소개서 분석 기준]
-1. motivation_relevance (지원 동기 직무/회사와의 연결성)
-2. problem_solving_STAR (STAR 기법 적용 여부)
-3. quantitative_impact (정량적 성과 언급 여부)
-4. job_understanding (직무 이해도)
-5. unique_experience (차별화된 경험)
-6. logical_flow (논리 구조)
-7. keyword_diversity (전문 용어 다양성)
-8. sentence_readability (문장 가독성)
-9. typos_and_errors (오탈자 여부)
-
-[출력 형식]
-아래 JSON 스키마에 맞춰 출력:
-{{
-  "resume_analysis": {{}},
-  "cover_letter_analysis": {{
-    "motivation_relevance": {{"score": 0, "feedback": ""}},
-    "problem_solving_STAR": {{"score": 0, "feedback": ""}},
-    "quantitative_impact": {{"score": 0, "feedback": ""}},
-    "job_understanding": {{"score": 0, "feedback": ""}},
-    "unique_experience": {{"score": 0, "feedback": ""}},
-    "logical_flow": {{"score": 0, "feedback": ""}},
-    "keyword_diversity": {{"score": 0, "feedback": ""}},
-    "sentence_readability": {{"score": 0, "feedback": ""}},
-    "typos_and_errors": {{"score": 0, "feedback": ""}}
-  }},
-  "portfolio_analysis": {{}},
-  "overall_summary": {{
-    "total_score": 0,
-    "recommendation": ""
-  }}
-}}
-
-[입력 문서]
-{content}
-
-[요구사항]
-- 점수는 반드시 0~10 정수
-- feedback은 간단하고 구체적으로 작성
-- JSON만 출력
-"""
-        elif document_type == "portfolio":
-            analysis_prompt = f"""
-[ROLE] 당신은 채용담당자입니다. 입력된 포트폴리오를 아래 기준에 따라 분석하고 점수화해야 합니다.
-
-[분석 기준]
-- 각 항목은 0~10점으로 평가 (10점 = 매우 우수, 0점 = 전혀 충족하지 않음)
-- 각 항목별로 개선이 필요한 부분을 간단히 피드백으로 작성
-- 점수와 피드백은 JSON 형식으로 출력
-
-[포트폴리오 분석 기준]
-1. project_overview (프로젝트 개요 명확성)
-2. tech_stack (사용 기술 스택)
-3. personal_contribution (개인 기여도 명확성)
-4. achievement_metrics (정량적 성과 여부)
-5. visual_quality (시각 자료 품질)
-6. documentation_quality (문서화 수준)
-7. job_relevance (직무 관련성)
-8. unique_features (독창적 기능/아이디어)
-9. maintainability (유지보수성)
-
-[출력 형식]
-아래 JSON 스키마에 맞춰 출력:
-{{
-  "resume_analysis": {{}},
-  "cover_letter_analysis": {{}},
-  "portfolio_analysis": {{
-    "project_overview": {{"score": 0, "feedback": ""}},
-    "tech_stack": {{"score": 0, "feedback": ""}},
-    "personal_contribution": {{"score": 0, "feedback": ""}},
-    "achievement_metrics": {{"score": 0, "feedback": ""}},
-    "visual_quality": {{"score": 0, "feedback": ""}},
-    "documentation_quality": {{"score": 0, "feedback": ""}},
-    "job_relevance": {{"score": 0, "feedback": ""}},
-    "unique_features": {{"score": 0, "feedback": ""}},
-    "maintainability": {{"score": 0, "feedback": ""}}
-  }},
-  "overall_summary": {{
-    "total_score": 0,
-    "recommendation": ""
-  }}
-}}
-
-[입력 문서]
-{content}
-
-[요구사항]
-- 점수는 반드시 0~10 정수
-- feedback은 간단하고 구체적으로 작성
-- JSON만 출력
-"""
-        else:
-            # 기본 프롬프트 (기존과 동일)
-            analysis_prompt = f"""
-[ROLE] 당신은 채용담당자입니다. 입력된 문서({document_type})를 아래 기준에 따라 분석하고 점수화해야 합니다.
-
-[분석 기준]
-- 각 항목은 0~10점으로 평가 (10점 = 매우 우수, 0점 = 전혀 충족하지 않음)
-- 각 항목별로 개선이 필요한 부분을 간단히 피드백으로 작성
-- 점수와 피드백은 JSON 형식으로 출력
-
-[이력서 분석 기준]
-1. basic_info_completeness (이름, 연락처, 이메일, GitHub/LinkedIn 여부)
-2. job_relevance (직무 적합성)
-3. experience_clarity (경력 설명 명확성)
-4. tech_stack_clarity (기술 스택 명확성)
-5. project_recency (프로젝트 최신성)
-6. achievement_metrics (정량적 성과 지표 여부)
-7. readability (가독성)
-8. typos_and_errors (오탈자 여부)
-9. update_freshness (최신 수정 여부)
-
-[자기소개서 분석 기준]
-1. motivation_relevance (지원 동기 직무/회사와의 연결성)
-2. problem_solving_STAR (STAR 기법 적용 여부)
-3. quantitative_impact (정량적 성과 언급 여부)
-4. job_understanding (직무 이해도)
-5. unique_experience (차별화된 경험)
-6. logical_flow (논리 구조)
-7. keyword_diversity (전문 용어 다양성)
-8. sentence_readability (문장 가독성)
-9. typos_and_errors (오탈자 여부)
-
-[포트폴리오 분석 기준]
-1. project_overview (프로젝트 개요 명확성)
-2. tech_stack (사용 기술 스택)
-3. personal_contribution (개인 기여도 명확성)
-4. achievement_metrics (정량적 성과 여부)
-5. visual_quality (시각 자료 품질)
-6. documentation_quality (문서화 수준)
-7. job_relevance (직무 관련성)
-8. unique_features (독창적 기능/아이디어)
-9. maintainability (유지보수성)
-
-[출력 형식]
-아래 JSON 스키마에 맞춰 출력:
-{{
-  "resume_analysis": {{
-    "basic_info_completeness": {{"score": 0, "feedback": ""}},
-    "job_relevance": {{"score": 0, "feedback": ""}},
-    "experience_clarity": {{"score": 0, "feedback": ""}},
-    "tech_stack_clarity": {{"score": 0, "feedback": ""}},
-    "project_recency": {{"score": 0, "feedback": ""}},
-    "achievement_metrics": {{"score": 0, "feedback": ""}},
-    "readability": {{"score": 0, "feedback": ""}},
-    "typos_and_errors": {{"score": 0, "feedback": ""}},
-    "update_freshness": {{"score": 0, "feedback": ""}}
-  }},
-  "cover_letter_analysis": {{
-    "motivation_relevance": {{"score": 0, "feedback": ""}},
-    "problem_solving_STAR": {{"score": 0, "feedback": ""}},
-    "quantitative_impact": {{"score": 0, "feedback": ""}},
-    "job_understanding": {{"score": 0, "feedback": ""}},
-    "unique_experience": {{"score": 0, "feedback": ""}},
-    "logical_flow": {{"score": 0, "feedback": ""}},
-    "keyword_diversity": {{"score": 0, "feedback": ""}},
-    "sentence_readability": {{"score": 0, "feedback": ""}},
-    "typos_and_errors": {{"score": 0, "feedback": ""}}
-  }},
-  "portfolio_analysis": {{
-    "project_overview": {{"score": 0, "feedback": ""}},
-    "tech_stack": {{"score": 0, "feedback": ""}},
-    "personal_contribution": {{"score": 0, "feedback": ""}},
-    "achievement_metrics": {{"score": 0, "feedback": ""}},
-    "visual_quality": {{"score": 0, "feedback": ""}},
-    "documentation_quality": {{"score": 0, "feedback": ""}},
-    "job_relevance": {{"score": 0, "feedback": ""}},
-    "unique_features": {{"score": 0, "feedback": ""}},
-    "maintainability": {{"score": 0, "feedback": ""}}
-  }},
-  "overall_summary": {{
-    "total_score": 0,
-    "recommendation": ""
-  }}
-}}
-
-[입력 문서]
-{content}
-
-[요구사항]
-- 점수는 반드시 0~10 정수
-- feedback은 간단하고 구체적으로 작성
-- JSON만 출력
-"""
-        
-        # Gemini API 호출
-        response = await asyncio.to_thread(
-            model.generate_content,
-            analysis_prompt
-        )
-        
-        # 응답 검증
-        if not response or not response.text or response.text.strip() == "":
-            raise HTTPException(status_code=500, detail="Gemini API에서 빈 응답을 받았습니다.")
-        
-        response_text = response.text.strip()
-        print(f"Gemini API 응답: {response_text[:200]}...")  # 디버깅용 로그
-        
-        # Markdown 코드 블록 제거 (정규식 사용으로 속도 향상)
-        import re
-        response_text = re.sub(r'^```json\s*|\s*```$', '', response_text, flags=re.MULTILINE)
-        response_text = response_text.strip()
-        print(f"정리된 응답: {response_text[:200]}...")  # 디버깅용 로그
-        
-        # JSON 파싱 (최적화)
-        import json
-        try:
-            analysis_result = json.loads(response_text)
-            
-            # 응답 구조 검증 (빠른 검증)
-            if not isinstance(analysis_result, dict):
-                raise ValueError("응답이 딕셔너리 형식이 아닙니다.")
-            
-            # 문서 타입별로만 필요한 키 확인 (속도 향상)
-            if document_type == "resume":
-                if "resume_analysis" not in analysis_result:
-                    raise ValueError("이력서 분석 결과가 응답에 없습니다.")
-            elif document_type == "cover_letter":
-                if "cover_letter_analysis" not in analysis_result:
-                    raise ValueError("자기소개서 분석 결과가 응답에 없습니다.")
-            elif document_type == "portfolio":
-                if "portfolio_analysis" not in analysis_result:
-                    raise ValueError("포트폴리오 분석 결과가 응답에 없습니다.")
-            
-            if "overall_summary" not in analysis_result:
-                raise ValueError("전체 요약이 응답에 없습니다.")
-            
-            # 전체 점수 계산 (문서 타입별로만 계산하여 속도 향상)
-            total_score = 0
-            count = 0
-            
-            if document_type == "resume" and "resume_analysis" in analysis_result:
-                for value in analysis_result["resume_analysis"].values():
-                    if isinstance(value, dict) and "score" in value:
-                        total_score += value["score"]
-                        count += 1
-            elif document_type == "cover_letter" and "cover_letter_analysis" in analysis_result:
-                for value in analysis_result["cover_letter_analysis"].values():
-                    if isinstance(value, dict) and "score" in value:
-                        total_score += value["score"]
-                        count += 1
-            elif document_type == "portfolio" and "portfolio_analysis" in analysis_result:
-                for value in analysis_result["portfolio_analysis"].values():
-                    if isinstance(value, dict) and "score" in value:
-                        total_score += value["score"]
-                        count += 1
-            
-            # 평균 점수 계산 (소수점 포함)
-            if count > 0:
-                average_score = round(total_score / count, 1)
-            else:
-                average_score = 0
-            
-            # 추천사항 생성
-            if document_type == "resume":
-                if average_score >= 8:
-                    recommendation = "전반적으로 우수한 이력서입니다. 현재 상태를 유지하세요."
-                elif average_score >= 6:
-                    recommendation = "양호한 수준이지만 몇 가지 개선점이 있습니다. 피드백을 참고하여 수정하세요."
-                else:
-                    recommendation = "전반적인 개선이 필요합니다. 각 항목별 피드백을 참고하여 체계적으로 수정하세요."
-            elif document_type == "cover_letter":
-                if average_score >= 8:
-                    recommendation = "매우 우수한 자기소개서입니다. 현재 상태를 유지하세요."
-                elif average_score >= 6:
-                    recommendation = "양호한 수준이지만 몇 가지 개선점이 있습니다. 피드백을 참고하여 수정하세요."
-                else:
-                    recommendation = "전반적인 개선이 필요합니다. 각 항목별 피드백을 참고하여 체계적으로 수정하세요."
-            elif document_type == "portfolio":
-                if average_score >= 8:
-                    recommendation = "매우 우수한 포트폴리오입니다. 현재 상태를 유지하세요."
-                elif average_score >= 6:
-                    recommendation = "양호한 수준이지만 몇 가지 개선점이 있습니다. 피드백을 참고하여 수정하세요."
-                else:
-                    recommendation = "전반적인 개선이 필요합니다. 각 항목별 피드백을 참고하여 체계적으로 수정하세요."
-            else:
-                recommendation = "문서 분석이 완료되었습니다."
-            
-            analysis_result["overall_summary"]["total_score"] = average_score
-            analysis_result["overall_summary"]["recommendation"] = recommendation
-            
-            processing_time = (datetime.now() - start_time).total_seconds()
-            print(f"분석 처리 완료: {processing_time:.2f}초")
-            
-            return DetailedAnalysisResponse(**analysis_result)
-            
-        except json.JSONDecodeError as e:
-            print(f"JSON 파싱 오류: {e}")
-            print(f"응답 내용: {response_text}")
-            raise HTTPException(status_code=500, detail=f"분석 결과 파싱 실패: {str(e)}")
-        except ValueError as e:
-            print(f"응답 구조 오류: {e}")
-            print(f"응답 내용: {response_text}")
-            raise HTTPException(status_code=500, detail=f"분석 결과 구조 오류: {str(e)}")
-        
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"상세 분석 생성 실패: {str(e)}")
-
 @router.post("/file")
 async def upload_and_summarize_file(
     file: UploadFile = File(...),
@@ -610,11 +395,10 @@ async def upload_and_summarize_file(
             # 파일에서 텍스트 추출
             extracted_text = await extract_text_from_file(temp_file_path, file_ext)
             
-            if not extracted_text or extracted_text.strip() == "":
-                raise HTTPException(
-                    status_code=400,
-                    detail="파일에서 텍스트를 추출할 수 없습니다."
-                )
+            # 텍스트 추출 실패 시에도 더미 분석으로 계속 진행 (사용자 경험 개선)
+            if not extracted_text or str(extracted_text).strip() == "":
+                print("⚠️ 텍스트 추출 실패: 빈 내용 감지 → 더미 분석으로 계속 진행합니다.")
+                extracted_text = "[EMPTY_CONTENT] 텍스트 추출 실패 (스캔 PDF/이미지 기반 문서일 수 있습니다.)"
             
             # Gemini API로 요약 생성
             summary_result = await generate_summary_with_gemini(extracted_text, summary_type)
@@ -639,104 +423,6 @@ async def upload_and_summarize_file(
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"파일 처리 실패: {str(e)}")
-
-@router.post("/analyze")
-async def analyze_documents(
-    file: UploadFile = File(...),
-    document_type: str = Form("resume")  # resume, cover_letter, portfolio
-):
-    """파일 업로드 및 상세 분석"""
-    try:
-        # 파일 유효성 검사
-        if not validate_file(file):
-            raise HTTPException(
-                status_code=400, 
-                detail="지원하지 않는 파일 형식입니다. PDF, DOC, DOCX, TXT 파일만 업로드 가능합니다."
-            )
-        
-        # 파일 크기 확인
-        file_size = 0
-        content = await file.read()
-        file_size = len(content)
-        
-        if file_size > MAX_FILE_SIZE:
-            raise HTTPException(
-                status_code=400,
-                detail="파일 크기가 너무 큽니다. 최대 10MB까지 업로드 가능합니다."
-            )
-        
-        # 임시 파일로 저장
-        file_ext = os.path.splitext(file.filename.lower())[1]
-        with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
-            temp_file.write(content)
-            temp_file_path = temp_file.name
-        
-        try:
-            # 파일에서 텍스트 추출
-            extracted_text = await extract_text_from_file(temp_file_path, file_ext)
-            
-            if not extracted_text or extracted_text.strip() == "":
-                raise HTTPException(
-                    status_code=400,
-                    detail="파일에서 텍스트를 추출할 수 없습니다."
-                )
-            
-            # Gemini API로 상세 분석 생성
-            analysis_result = await generate_detailed_analysis_with_gemini(extracted_text, document_type)
-            
-            # 문서 타입에 따라 해당하는 분석 결과만 반환
-            if document_type == "resume":
-                return {
-                    "filename": file.filename,
-                    "file_size": file_size,
-                    "extracted_text_length": len(extracted_text),
-                    "document_type": document_type,
-                    "analysis_result": {
-                        "resume_analysis": analysis_result.resume_analysis,
-                        "overall_summary": analysis_result.overall_summary
-                    }
-                }
-            elif document_type == "cover_letter":
-                return {
-                    "filename": file.filename,
-                    "file_size": file_size,
-                    "extracted_text_length": len(extracted_text),
-                    "document_type": document_type,
-                    "analysis_result": {
-                        "cover_letter_analysis": analysis_result.cover_letter_analysis,
-                        "overall_summary": analysis_result.overall_summary
-                    }
-                }
-            elif document_type == "portfolio":
-                return {
-                    "filename": file.filename,
-                    "file_size": file_size,
-                    "extracted_text_length": len(extracted_text),
-                    "document_type": document_type,
-                    "analysis_result": {
-                        "portfolio_analysis": analysis_result.portfolio_analysis,
-                        "overall_summary": analysis_result.overall_summary
-                    }
-                }
-            else:
-                # 기본값: 전체 결과 반환
-                return {
-                    "filename": file.filename,
-                    "file_size": file_size,
-                    "extracted_text_length": len(extracted_text),
-                    "document_type": document_type,
-                    "analysis_result": analysis_result.dict()
-                }
-            
-        finally:
-            # 임시 파일 삭제
-            if os.path.exists(temp_file_path):
-                os.unlink(temp_file_path)
-                
-    except HTTPException:
-        raise
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"파일 분석 실패: {str(e)}")
 
 @router.post("/summarize")
 async def summarize_text(request: SummaryRequest):

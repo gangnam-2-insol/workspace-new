@@ -766,53 +766,26 @@ async def check_resume_similarity(resume_id: str):
     """특정 이력서의 유사도 체크 (다른 모든 이력서와 비교)"""
     try:
         print(f"[INFO] 유사도 체크 요청 - resume_id: {resume_id}")
-        
-        # SimilarityService를 통한 청킹 기반 유사도 분석
-        result = await similarity_service.find_similar_resumes_by_chunks(resume_id, db.applicants, limit=50)
+        # ObjectId 변환 시도
+        try:
+            object_id = ObjectId(resume_id)
+            print(f"[SUCCESS] ObjectId 변환 성공: {object_id}")
+        except Exception as oid_error:
+            print(f"[ERROR] ObjectId 변환 실패: {oid_error}")
+            raise HTTPException(status_code=400, detail=f"잘못된 resume_id 형식: {resume_id}")
         
         # 현재 이력서 정보 조회
         current_resume = await db.applicants.find_one({"_id": object_id})
         print(f"[INFO] 데이터베이스 조회 결과: {current_resume is not None}")
         
-        # 청킹 기반 API 응답 형식에 맞게 변환
-        similarity_results = []
-        for similar in result["data"]["similar_resumes"]:
-            # 청킹 상세 정보에서 필드별 유사도 추출
-            chunk_details = similar.get("chunk_details", {})
-            field_similarities = {
-                "growthBackground": 0.0,
-                "motivation": 0.0,
-                "careerHistory": 0.0
-            }
+        if not current_resume:
+            # 데이터베이스에 있는 모든 resume ID들 확인
+            all_resumes = await db.applicants.find({}, {"_id": 1, "name": 1}).to_list(100)
+            print(f"📋 데이터베이스의 모든 이력서 ID들:")
+            for resume in all_resumes:
+                print(f"  - {resume['_id']} ({resume.get('name', 'Unknown')})")
             
-            # 청크 매칭에서 필드별 최고 점수 추출
-            for chunk_key, chunk_info in chunk_details.items():
-                if "growth_background" in chunk_key:
-                    field_similarities["growthBackground"] = max(field_similarities["growthBackground"], chunk_info["score"])
-                elif "motivation" in chunk_key:
-                    field_similarities["motivation"] = max(field_similarities["motivation"], chunk_info["score"])
-                elif "career_history" in chunk_key:
-                    field_similarities["careerHistory"] = max(field_similarities["careerHistory"], chunk_info["score"])
-            
-            similarity_result = {
-                "resume_id": similar["resume"]["_id"],
-                "applicant_name": similar["resume"].get("name", "알 수 없음"),
-                "position": similar["resume"].get("position", ""),
-                "department": similar["resume"].get("department", ""),
-                "overall_similarity": round(similar["similarity_score"], 4),
-                "field_similarities": {
-                    "growthBackground": round(field_similarities["growthBackground"], 4),
-                    "motivation": round(field_similarities["motivation"], 4),
-                    "careerHistory": round(field_similarities["careerHistory"], 4)
-                },
-                "chunk_matches": similar.get("chunk_matches", 0),
-                "chunk_details": chunk_details,
-                "is_high_similarity": similar["similarity_score"] > 0.7,
-                "is_moderate_similarity": 0.4 <= similar["similarity_score"] <= 0.7,
-                "is_low_similarity": similar["similarity_score"] < 0.4,
-                "llm_analysis": similar.get("llm_analysis")
-            }
-            similarity_results.append(similarity_result)
+            raise HTTPException(status_code=404, detail=f"이력서를 찾을 수 없습니다. 요청된 ID: {resume_id}")
         
         # 다른 모든 이력서 조회 (현재 이력서 제외)
         other_resumes = await db.applicants.find({"_id": {"$ne": ObjectId(resume_id)}}).to_list(1000)
