@@ -20,6 +20,53 @@ class GithubSummaryResponse(BaseModel):
     source: str
     summary: str
     detailed_analysis: Optional[Dict] = None
+    # 인터랙티브 차트를 위한 원시 데이터
+    language_stats: Optional[Dict[str, int]] = None
+    language_total_bytes: Optional[int] = None
+    original_language_stats: Optional[Dict[str, int]] = None  # 원본 언어 통계
+    # 고급 분석(경량): 코드 내용 간단 파싱/아키텍처 추정/품질 지표/의존성 그래프
+    advanced_analysis: Optional[Dict] = None
+
+class LanguageChartResponse(BaseModel):
+    language_stats: Dict[str, int]  # 언어별 통계
+    total_bytes: int  # 총 바이트 수
+    original_stats: Optional[Dict[str, int]] = None  # 원본 통계 (기타 분류 전)
+
+def process_language_stats(language_stats: Dict[str, int], total_bytes: int) -> Dict[str, int]:
+    """언어 통계를 처리하여 8개 이상이거나 3% 이하인 언어들을 '기타'로 분류"""
+    if not language_stats:
+        return language_stats
+    
+    entries = sorted(language_stats.items(), key=lambda x: x[1], reverse=True)
+    
+    # 3% 이하인 언어들을 찾기
+    small_languages = [(name, value) for name, value in entries if (value / total_bytes) * 100 <= 3]
+    
+    # 8개 이상이거나 3% 이하인 언어가 여러 개인 경우 처리
+    if len(entries) > 8 or len(small_languages) > 1:
+        # 3% 이하인 언어들을 제외하고 상위 언어들 선택
+        significant_languages = [(name, value) for name, value in entries if (value / total_bytes) * 100 > 3]
+        top_languages = significant_languages[:7]
+        
+        # 나머지 언어들을 '기타'로 분류
+        others = []
+        for name, value in entries:
+            percentage = (value / total_bytes) * 100
+            if percentage <= 3 or not any(top_name == name for top_name, _ in top_languages):
+                others.append((name, value))
+        
+        # 결과 구성 - 기타를 맨 마지막에 배치
+        result = {}
+        for name, value in top_languages:
+            result[name] = value
+        if others:
+            others_sum = sum(value for _, value in others)
+            result['기타'] = others_sum
+        
+        return result
+    else:
+        # 기존 로직: 상위 7개만 표시
+        return dict(entries[:7])
 
 class RepositoryAnalysis(BaseModel):
     project_overview: Dict
@@ -443,6 +490,58 @@ async def generate_detailed_analysis(repo_data: Dict, languages: Dict, files: Li
         'deployment_info': deployment_info
     }
 
+def _estimate_code_metrics_from_files(files: List[Dict]) -> Dict:
+    """파일 목록 위주의 경량 품질 메트릭 추정치.
+    - 라인 수/함수 수를 직접 세지 않고, 파일 개수/확장자 분포로 가늠
+    - 빠른 응답 유지가 목적이므로 정밀도보다 응답속도를 우선
+    """
+    from collections import Counter
+    extensions = [f.get('name','').split('.')[-1].lower() for f in (files or []) if '.' in f.get('name','')]
+    ext_counter = Counter(extensions)
+    total_files = len(files or [])
+    probable_test_files = [n for n in (f.get('name','').lower() for f in (files or [])) if 'test' in n or 'spec' in n]
+    metrics = {
+        'estimated_total_files': total_files,
+        'extension_distribution': dict(ext_counter),
+        'has_tests': len(probable_test_files) > 0,
+        'complexity_indicator': 'low' if total_files < 50 else ('medium' if total_files < 200 else 'high')
+    }
+    return metrics
+
+def _detect_architecture_pattern_from_structure(file_structure: Dict) -> Dict:
+    """간단한 디렉토리명 규칙 기반 아키텍처/패턴 추정.
+    - MVC/MVVM/Layered 등 키워드 매칭 수준
+    """
+    text = json.dumps(file_structure, ensure_ascii=False).lower() if file_structure else ''
+    pattern = None
+    indicators: List[str] = []
+    if any(k in text for k in ['controller', 'controllers']) and any(k in text for k in ['model', 'models']):
+        pattern = 'MVC'
+        indicators = ['controllers', 'models']
+    elif any(k in text for k in ['service', 'services']) and any(k in text for k in ['repository', 'repositories']):
+        pattern = 'Layered'
+        indicators = ['services', 'repositories']
+    elif any(k in text for k in ['viewmodel', 'view-model', 'vm']):
+        pattern = 'MVVM'
+        indicators = ['viewmodel']
+    return {
+        'pattern': pattern or 'Unknown',
+        'confidence': 70 if pattern else 30,
+        'indicators': indicators
+    }
+
+def _build_dependency_graph_from_hints(hints: Dict[str, List[str]]) -> Dict:
+    """의존성 힌트로부터 간단한 그래프 데이터 구성.
+    - 노드: direct deps, 간단히 타입 분류
+    - 엣지: 동일 카테고리간 연결은 생략(시각 단순화)
+    """
+    deps = list(sorted(set((hints or {}).get('external_libraries', []))))
+    nodes = [{'id': d, 'group': 'library'} for d in deps]
+    return {
+        'nodes': nodes,
+        'edges': []
+    }
+
 async def generate_unified_summary(username: str, repo_name: Optional[str] = None, profile_readme: Optional[Dict] = None, repos_data: Optional[List[Dict]] = None) -> List[Dict]:
     """통합된 요약 생성 함수 - README와 레포 데이터를 모두 처리"""
     api_key = os.getenv('GEMINI_API_KEY')
@@ -711,6 +810,76 @@ async def summarize_with_llm(text: str, lines: int = 7) -> List[Dict]:
     # 임시로 'unknown' 사용
     return await generate_unified_summary('unknown', None, {'text': text}, None)
 
+
+
+async def generate_user_language_chart(username: str, token: Optional[str] = None) -> LanguageChartResponse:
+    """사용자의 모든 레포지토리 언어 통계를 수집"""
+    try:
+        # 사용자의 모든 레포지토리 가져오기
+        repos = await fetch_user_repos(username, token)
+        if not repos:
+            raise HTTPException(status_code=404, detail="공개 리포지토리를 찾을 수 없습니다.")
+        
+        # 모든 레포지토리의 언어 통계 수집
+        all_languages = {}
+        total_bytes = 0
+        
+        # 상위 10개 레포지토리만 분석 (성능 최적화)
+        top_repos = [r for r in repos if not r.get('fork')][:10]
+        
+        for repo in top_repos:
+            owner_login = repo.get('owner', {}).get('login', username)
+            try:
+                repo_languages = await fetch_repo_languages(owner_login, repo['name'], token)
+                for lang, bytes_count in repo_languages.items():
+                    all_languages[lang] = all_languages.get(lang, 0) + bytes_count
+                    total_bytes += bytes_count
+            except Exception as e:
+                print(f"레포지토리 {repo['name']} 언어 통계 수집 실패: {e}")
+                continue
+        
+        if not all_languages:
+            raise HTTPException(status_code=404, detail="언어 통계를 찾을 수 없습니다.")
+        
+        # 언어 통계 처리
+        processed_languages = process_language_stats(all_languages, total_bytes)
+        
+        return LanguageChartResponse(
+            language_stats=processed_languages,
+            total_bytes=total_bytes,
+            original_stats=all_languages
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"언어 통계 수집 중 오류가 발생했습니다: {str(e)}")
+
+async def generate_repo_language_chart(username: str, repo_name: str, token: Optional[str] = None) -> LanguageChartResponse:
+    """특정 레포지토리의 언어 통계를 수집"""
+    try:
+        # 레포지토리 언어 통계 가져오기
+        languages = await fetch_repo_languages(username, repo_name, token)
+        
+        if not languages:
+            raise HTTPException(status_code=404, detail="언어 통계를 찾을 수 없습니다.")
+        
+        total_bytes = sum(languages.values())
+        
+        # 언어 통계 처리
+        processed_languages = process_language_stats(languages, total_bytes)
+        
+        return LanguageChartResponse(
+            language_stats=processed_languages,
+            total_bytes=total_bytes,
+            original_stats=languages
+        )
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"언어 통계 수집 중 오류가 발생했습니다: {str(e)}")
+
 @router.post("/github/summary", response_model=GithubSummaryResponse)
 async def github_summary(request: GithubSummaryRequest):
     """GitHub 사용자 요약"""
@@ -748,6 +917,25 @@ async def github_summary(request: GithubSummaryRequest):
         profile_api_url = f"https://api.github.com/users/{username}"
         
         print(f"최종 처리 - username: {username}, repo_name: {request.repo_name}")
+        
+        # 언어 통계 데이터 생성
+        language_stats: Dict[str, int] = {}
+        language_total_bytes: int = 0
+        try:
+            if request.repo_name:
+                # 특정 레포지토리 언어 통계
+                chart_response = await generate_repo_language_chart(username, request.repo_name, github_token)
+                language_stats = chart_response.language_stats
+                language_total_bytes = chart_response.total_bytes
+            else:
+                # 사용자 전체 언어 통계
+                chart_response = await generate_user_language_chart(username, github_token)
+                language_stats = chart_response.language_stats
+                language_total_bytes = chart_response.total_bytes
+        except Exception as e:
+            print(f"언어 통계 수집 실패: {e}")
+            language_stats = {}
+            language_total_bytes = 0
         
         # 통일된 검색 로직: 항상 동일한 우선순위로 분석 수행
         # 1. 특정 저장소가 지정된 경우에도 '전체 레포 분석 파이프라인'을 재사용하여 일관된 결과 생성
@@ -799,6 +987,14 @@ async def github_summary(request: GithubSummaryRequest):
                     'llm_hints': dep_hints.get('llm_hints', [])
                 }
 
+                # 경량 고급 분석 구성 (최상위 파일 기반 추정)
+                files_est = top_level_files if not isinstance(top_level_files, Exception) else []
+                advanced_analysis = {
+                    'code_metrics': _estimate_code_metrics_from_files(files_est),
+                    'architecture_pattern': {'pattern': 'Unknown', 'confidence': 30, 'indicators': []},
+                    'dependency_graph': _build_dependency_graph_from_hints(dep_hints)
+                }
+
                 # 멀티 레포 분석 프롬프트를 사용하되, 대상 레포만 전달하여 동일한 추출 품질 확보
                 summaries = await generate_unified_summary(username, None, None, [analysis_item])
 
@@ -806,7 +1002,11 @@ async def github_summary(request: GithubSummaryRequest):
                     profileUrl=profile_url,
                     profileApiUrl=profile_api_url,
                     source=f'repos_meta_filtered_{request.repo_name}',
-                    summary=json.dumps(summaries, ensure_ascii=False)
+                    summary=json.dumps(summaries, ensure_ascii=False),
+                    language_stats=language_stats,
+                    language_total_bytes=language_total_bytes,
+                    original_language_stats=chart_response.original_stats,
+                    advanced_analysis=advanced_analysis
                 )
 
             except httpx.HTTPStatusError as e:
@@ -824,7 +1024,11 @@ async def github_summary(request: GithubSummaryRequest):
                 profileUrl=profile_url,
                 profileApiUrl=profile_api_url,
                 source='profile_readme',
-                summary=json.dumps(summaries, ensure_ascii=False)
+                summary=json.dumps(summaries, ensure_ascii=False),
+                language_stats=language_stats,
+                language_total_bytes=language_total_bytes,
+                original_language_stats=chart_response.original_stats,
+                advanced_analysis={'note': 'profile_readme mode: advanced analysis limited'}
             )
         
         # 3. 리포지토리 메타데이터 분석 (프로필 README가 없는 경우)
@@ -867,7 +1071,11 @@ async def github_summary(request: GithubSummaryRequest):
             profileUrl=profile_url,
             profileApiUrl=profile_api_url,
             source='repos_meta',
-            summary=json.dumps(summaries, ensure_ascii=False)
+            summary=json.dumps(summaries, ensure_ascii=False),
+            language_stats=language_stats,
+            language_total_bytes=language_total_bytes,
+            original_language_stats=chart_response.original_stats,
+            advanced_analysis={'note': 'repos_meta mode: advanced analysis limited'}
         )
         
     except HTTPException:
@@ -942,16 +1150,35 @@ async def github_repo_analysis(request: GithubSummaryRequest):
         detailed_analysis = await generate_detailed_analysis(
             repo_data, languages, files, commits, issues, pulls, readme_text
         )
+
+        # 고급(경량) 분석 생성: 코드 메트릭/패턴/의존성 그래프
+        dep_hints = await collect_dependency_hints(owner_login, request.repo_name, files, github_token)
+        advanced_analysis = {
+            'code_metrics': _estimate_code_metrics_from_files(files),
+            'architecture_pattern': _detect_architecture_pattern_from_structure(detailed_analysis.get('file_structure')),
+            'dependency_graph': _build_dependency_graph_from_hints(dep_hints)
+        }
         
         # 통합 요약 생성
         summaries = await generate_unified_summary(username, request.repo_name, None, [detailed_analysis])
         
+        # 언어 통계 데이터 생성 (repo 전용)
+        try:
+            chart_response = await generate_repo_language_chart(owner_login, request.repo_name, github_token)
+            language_stats = chart_response.language_stats
+            language_total_bytes = chart_response.total_bytes
+        except Exception:
+            language_stats = languages or {}
+            language_total_bytes = sum((languages or {}).values()) if languages else 0
+
         return GithubSummaryResponse(
             profileUrl=profile_url,
             profileApiUrl=profile_api_url,
             source=f'repo_analysis_{request.repo_name}',
             summary=json.dumps(summaries, ensure_ascii=False),
-            detailed_analysis=detailed_analysis
+            language_stats=language_stats,
+            language_total_bytes=language_total_bytes,
+            advanced_analysis=advanced_analysis
         )
         
     except httpx.HTTPStatusError as e:
