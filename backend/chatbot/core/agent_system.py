@@ -75,10 +75,25 @@ class IntentDetectionNode:
                 extracted_fields = classification_result['fields']
                 print(f"🎯 [의도 감지] 2단계 분류 결과: 채용공고 (신뢰도: {confidence})")
             else:
-                intent = "chat"
-                confidence = 0.8
-                extracted_fields = {}
-                print(f"🎯 [의도 감지] 2단계 분류 결과: 일반 대화")
+                # 보강: 규칙/사전 기반 향상 추출기로 재확인
+                try:
+                    print(f"🔁 [보강] 의미 기반 분류가 채용이 아님 → 규칙 기반 필드 추출 시도")
+                    extracted_fields_fallback = enhanced_extractor.extract_fields_enhanced(user_input)
+                    if extracted_fields_fallback and len(extracted_fields_fallback) > 0:
+                        intent = "recruit"
+                        confidence = max(classification_result.get('confidence', 0.5), 0.6)
+                        extracted_fields = extracted_fields_fallback
+                        print(f"🎯 [보강] 규칙 기반 추출로 채용공고 판정 (필드 {len(extracted_fields)}개)")
+                    else:
+                        intent = "chat"
+                        confidence = 0.8
+                        extracted_fields = {}
+                        print(f"🎯 [의도 감지] 2단계 분류 결과: 일반 대화")
+                except Exception as _e:
+                    intent = "chat"
+                    confidence = 0.8
+                    extracted_fields = {}
+                    print(f"⚠️ [보강 실패] 규칙 기반 추출 중 오류: {_e}")
             
         else:
             # 일반 모드에서는 기존 로직 사용
@@ -762,11 +777,11 @@ class AgentSystem:
         self.fallback = FallbackNode()
         self.formatter = ResponseFormatterNode()
         
-    def process_request(self, user_input: str, conversation_history: List[Dict[str, str]] = None, session_id: str = None) -> Dict[str, Any]:
+    def process_request(self, user_input: str, conversation_history: List[Dict[str, str]] = None, session_id: str = None, mode: str = "chat") -> Dict[str, Any]:
         """사용자 요청을 처리하고 결과를 반환합니다."""
         try:
             # 1단계: 의도 분류
-            intent_result = self.intent_detector.run({"user_input": user_input})
+            intent_result = self.intent_detector.run({"user_input": user_input, "mode": mode})
             intent = intent_result["intent"]
             confidence = intent_result["confidence"]
             extracted_fields = intent_result["extracted_fields"]
@@ -789,8 +804,17 @@ class AgentSystem:
             # 3단계: 응답 포맷팅
             final_response = self.formatter.format_response(tool_result, intent, error)
             
-            # 4단계: 채용공고 관련 필드 추출 (채용 관련인 경우)
-            # extracted_fields = {} # 이 부분은 이미 위에서 처리되었으므로 주석 처리
+            # 4단계: 채용공고 관련 필드 추출 보강
+            # 의도가 chat로 남더라도 프론트 연동을 위해 필드가 추출되면 함께 전달
+            if not extracted_fields:
+                try:
+                    fallback_fields = enhanced_extractor.extract_fields_enhanced(user_input)
+                    if fallback_fields:
+                        extracted_fields = fallback_fields
+                        # 필드가 추출되었으면 의도를 recruit로 승격하여 프론트 자동입력 트리거
+                        intent = "recruit"
+                except Exception:
+                    pass
             
             return {
                 "success": True,

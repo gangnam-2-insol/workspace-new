@@ -1,6 +1,6 @@
 class AIChatbotService {
   constructor() {
-    this.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+    this.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8002';
   }
 
   // AI 챗봇 세션 시작
@@ -9,7 +9,7 @@ class AIChatbotService {
       const response = await fetch(`${this.baseURL}/api/chatbot/start`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           page,
@@ -35,7 +35,7 @@ class AIChatbotService {
       const response = await fetch(`${this.baseURL}/api/chatbot/ask`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           session_id: sessionId,
@@ -63,7 +63,7 @@ class AIChatbotService {
       const response = await fetch(`${this.baseURL}/api/chatbot/conversation`, {
         method: 'POST',
         headers: {
-          'Content-Type': 'application/json; charset=utf-8',
+          'Content-Type': 'application/json',
         },
         body: JSON.stringify({
           session_id: sessionId,

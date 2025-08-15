@@ -2434,12 +2434,12 @@ const ApplicantManagement = () => {
       setPortfolioView('select');
     }
     
-    // 자소서 타입일 때만 유사도 체크 실행
-    if (type === 'coverLetter') {
+    // 이력서 타입일 때만 유사도 체크 실행
+    if (type === 'resume') {
       setDocumentModal(prev => ({ ...prev, isLoadingSimilarity: true }));
       
       try {
-      const response = await fetch(`${API_BASE_URL}/api/coverletter/similarity-check/${applicant.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/resume/similarity-check/${applicant.id}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -3332,7 +3332,7 @@ const ApplicantManagement = () => {
                 )}
 
                 {/* 이력서/자소서 기존 로직 */}
-                {documentModal.type === 'coverLetter' && documentModal.isOriginal && (
+                {documentModal.type === 'resume' && documentModal.isOriginal && (
                   <>
                     <DocumentSection>
                       <DocumentSectionTitle>지원자 기본정보</DocumentSectionTitle>
@@ -3396,7 +3396,7 @@ const ApplicantManagement = () => {
                   </>
                 )}
 
-                {documentModal.type === 'resume' && documentModal.applicant.documents?.resume && (
+                {documentModal.type === 'resume' && !documentModal.isOriginal && documentModal.applicant.documents?.resume && (
                   <>
                     <DocumentSection>
                       <DocumentSectionTitle>개인정보</DocumentSectionTitle>
@@ -3463,6 +3463,28 @@ const ApplicantManagement = () => {
                   </>
                 )}
 
+                {documentModal.type === 'coverLetter' && documentModal.applicant.documents?.coverLetter && (
+                  <>
+                    <DocumentSection>
+                      <DocumentSectionTitle>지원 동기</DocumentSectionTitle>
+                      <DocumentText>{documentModal.applicant.documents.coverLetter.motivation}</DocumentText>
+                    </DocumentSection>
+
+                    <DocumentSection>
+                      <DocumentSectionTitle>나의 강점</DocumentSectionTitle>
+                      <DocumentList>
+                        {(documentModal.applicant.documents.coverLetter.strengths || []).map((strength, index) => (
+                          <DocumentListItem key={index}>{strength}</DocumentListItem>
+                        ))}
+                      </DocumentList>
+                    </DocumentSection>
+
+                    <DocumentSection>
+                      <DocumentSectionTitle>향후 목표</DocumentSectionTitle>
+                      <DocumentText>{documentModal.applicant.documents.coverLetter.goals}</DocumentText>
+                    </DocumentSection>
+                  </>
+                )}
 
                 {documentModal.type === 'portfolio' && documentModal.applicant.documents?.portfolio && (
                   <>
@@ -3496,7 +3518,7 @@ const ApplicantManagement = () => {
                   </>
                 )}
 
-                {documentModal.type === 'coverLetter' && !documentModal.isOriginal && (
+                {documentModal.type === 'resume' && !documentModal.isOriginal && (
                   <>
                     {/* 유사도 체크 결과 섹션 */}
                     <DocumentSection>
@@ -3505,7 +3527,7 @@ const ApplicantManagement = () => {
                       {documentModal.isLoadingSimilarity && (
                         <DocumentCard>
                           <DocumentCardText>
-                            📊 다른 자소서들과의 유사도를 분석 중입니다...
+                            📊 다른 이력서들과의 유사도를 분석 중입니다...
                           </DocumentCardText>
                         </DocumentCard>
                       )}
@@ -3578,7 +3600,7 @@ const ApplicantManagement = () => {
                           {/* 상위 유사 이력서들 */}
                           {documentModal.similarityData.top_similar.length > 0 && (
                             <DocumentCard>
-                              <DocumentCardTitle>🎯 가장 유사한 자소서 TOP 5</DocumentCardTitle>
+                              <DocumentCardTitle>🎯 가장 유사한 이력서 TOP 5</DocumentCardTitle>
                               {documentModal.similarityData.top_similar.map((similar, index) => (
                                 <div key={similar.resume_id} style={{
                                   padding: '12px',
@@ -3648,13 +3670,13 @@ const ApplicantManagement = () => {
                       )}
                     </DocumentSection>
 
-                    {/* 자소서 요약 섹션 */}
+                    {/* 기존 이력서 요약 섹션 */}
                     {!documentModal.applicant.documents?.resume && (
                       <DocumentSection>
-                        <DocumentSectionTitle>자소서 요약</DocumentSectionTitle>
+                        <DocumentSectionTitle>이력서 요약</DocumentSectionTitle>
                         <DocumentCard>
                           <DocumentCardText>
-                            현재 이 지원자의 상세 자소서 정보는 등록되지 않았습니다.<br/>
+                            현재 이 지원자의 상세 이력서 정보는 등록되지 않았습니다.<br/>
                             <strong>원본보기</strong> 버튼을 클릭하면 DB에 저장된 지원자의 모든 정보를 확인할 수 있습니다.
                           </DocumentCardText>
                         </DocumentCard>

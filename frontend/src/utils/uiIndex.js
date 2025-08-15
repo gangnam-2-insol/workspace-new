@@ -35,7 +35,10 @@ const SYNONYM_GROUPS = [
   ['검색', '찾기', 'search', 'find', 'lookup'],
   ['삭제', '제거', '지우기', '지워', '삭제하기', 'delete', 'remove', 'trash'],
   ['확인', 'ok', '확정', 'confirm', 'yes'],
-  ['취소', 'cancel', '닫기', 'close', 'back']
+  ['취소', 'cancel', '닫기', 'close', 'back'],
+  // PDF/OCR 도메인 강화
+  ['pdf', 'pdfocr', 'ocr', '스캔', '스캐너', '문서인식', '문자인식', '문서', '텍스트추출', '추출', '인식'],
+  ['업로드', 'upload', '파일선택', 'file', 'choose file', '파일 올리기']
 ];
 
 const SYNONYM_INDEX = (() => {
@@ -53,7 +56,7 @@ function normalizeWord(word) {
   let w = String(word || '').normalize('NFC').toLowerCase();
   w = w.replace(/[\p{P}\p{S}]+/gu, ''); // 문장부호 제거
   // 흔한 종결/요청 표현 제거
-  w = w.replace(/(해주세요|해줘|해주|해요|하라|하기|하도록|해|하여)$/g, '');
+  w = w.replace(/(해주세요|해줘|해주|해요|하라|하기|하도록|해|하여|클릭|click)/g, '');
   // 조사/어미(간단) 제거: 을 를 이 가 은 는 의 에 에서 과 와 로 으로 도 만 까지 부터 등
   w = w.replace(/(을|를|이|가|은|는|의|에|에서|과|와|로|으로|도|만|까지|부터)$/g, '');
   return w.trim();
@@ -119,6 +122,15 @@ function inferRole(el) {
   const explicit = el.getAttribute && el.getAttribute('role');
   if (explicit) return explicit;
   const tag = (el.tagName || '').toUpperCase();
+  // 접근성/상호작용 힌트로 버튼 추정
+  try {
+    const hasOnClick = !!(el.getAttribute && el.getAttribute('onclick'));
+    const tabIndex = el.getAttribute && el.getAttribute('tabindex');
+    const className = (el.className || '').toString().toLowerCase();
+    if (hasOnClick || tabIndex === '0' || /btn|button|clickable/.test(className)) {
+      return 'button';
+    }
+  } catch (_) {}
   if (tag === 'A') return 'link';
   if (tag === 'BUTTON') return 'button';
   if (tag === 'INPUT') return 'input';
@@ -135,64 +147,6 @@ function stableHash(str) {
     h = Math.imul(h, 16777619);
   }
   return (h >>> 0).toString(36);
-}
-
-// 고유 ID 부여
-let hiremeIdSeq = 0;
-function assignHiremeId(el) {
-  try {
-    if (!el || !el.setAttribute) return;
-    if (el.getAttribute('data-hireme-id')) return;
-    const basis = `${el.tagName}:${el.className || ''}:${el.id || ''}:${extractReadableText(el)}`;
-    const id = `hmu_${stableHash(basis)}_${++hiremeIdSeq}`;
-    el.setAttribute('data-hireme-id', id);
-  } catch (_) {}
-}
-
-function getElementName(el) {
-  try {
-    const aria = el.getAttribute && (el.getAttribute('aria-label') || el.getAttribute('aria-labelledby'));
-    if (aria) return normalizeText(aria);
-    const title = el.getAttribute && el.getAttribute('title');
-    if (title) return normalizeText(title);
-    const alt = el.getAttribute && el.getAttribute('alt');
-    if (alt) return normalizeText(alt);
-    const placeholder = el.getAttribute && el.getAttribute('placeholder');
-    if (placeholder) return normalizeText(placeholder);
-    const name = el.getAttribute && el.getAttribute('name');
-    if (name) return normalizeText(name);
-    const text = extractReadableText(el);
-    if (text) return text;
-    return '';
-  } catch (_) {
-    return '';
-  }
-}
-
-function collectContextTexts(el) {
-  const contexts = [];
-  try {
-    // 가장 가까운 heading 텍스트
-    const heading = el.closest && el.closest('section,article,div,form')?.querySelector?.('h1,h2,h3,h4,h5,h6,.title,.heading');
-    if (heading) contexts.push(normalizeText(heading.innerText || heading.textContent || ''));
-  } catch(_) {}
-  try {
-    // 연결된 label
-    const id = el.getAttribute && el.getAttribute('id');
-    if (id) {
-      const label = document.querySelector(`label[for="${CSS.escape(id)}"]`);
-      if (label) contexts.push(normalizeText(label.innerText || label.textContent || ''));
-    }
-  } catch(_) {}
-  try {
-    // 부모 컨테이너의 캡션성 텍스트
-    const parent = el.closest && el.closest('li, .card, .row, .item, .field, .form-group');
-    if (parent) {
-      const txt = normalizeText(parent.innerText || parent.textContent || '');
-      if (txt && txt.length <= 200) contexts.push(txt);
-    }
-  } catch(_) {}
-  return Array.from(new Set(contexts.filter(Boolean)));
 }
 
 export function normalizeUrlKey(url) {
@@ -218,8 +172,6 @@ export function computeLayoutFingerprint(doc = document) {
 
 function buildRobustSelector(el) {
   // 1) data-testid/aria-label/id
-  const hmu = el.getAttribute && el.getAttribute('data-hireme-id');
-  if (hmu) return `[data-hireme-id="${CSS.escape(hmu)}"]`;
   const dt = el.getAttribute && el.getAttribute('data-testid');
   if (dt) return `[data-testid="${CSS.escape(dt)}"]`;
   const aria = el.getAttribute && el.getAttribute('aria-label');
@@ -249,27 +201,25 @@ function buildRobustSelector(el) {
 export function getUIMap(doc = document) {
   const urlKey = normalizeUrlKey(doc.location ? doc.location.href : window.location.href);
   const elements = [];
-  const nodes = Array.from(doc.querySelectorAll('a,button,input,select,textarea,[role=button],[role=link]'));
+  const nodes = Array.from(doc.querySelectorAll(
+    'a,button,input,select,textarea,[role=button],[role=link],[tabindex="0"],[onclick],label,span[role=button]'
+  ));
   for (const el of nodes) {
     if (!isVisible(el)) continue;
     const role = inferRole(el);
     const text = extractReadableText(el);
-    const name = getElementName(el);
-    const contextTexts = collectContextTexts(el);
     const rect = el.getBoundingClientRect();
     elements.push({
       tag: el.tagName,
       role,
       text,
-      name,
       selector: buildRobustSelector(el),
-      attributes: pick(el, ['data-testid','aria-label','name','type','placeholder','title','alt','data-hireme-id']),
+      attributes: pick(el, ['data-testid','aria-label','name','type','placeholder']),
       bounds: { x: rect.x, y: rect.y, w: rect.width, h: rect.height },
       visible: true,
       stableId: el.dataset ? el.dataset.testid : undefined,
-      fingerprintPart: `${el.tagName}:${role}:${normalizeText(text || name)}`,
-      weight: role === 'button' ? 1.0 : 0.6,
-      context: contextTexts
+      fingerprintPart: `${el.tagName}:${role}:${normalizeText(text)}`,
+      weight: role === 'button' ? 1.0 : 0.6
     });
   }
   return {
@@ -343,7 +293,7 @@ export function resolveByQuery(query, kind, page) {
   let bestScore = 0;
   for (const e of page.elements) {
     if (!roleSet.has(e.role)) continue;
-    const bagText = [e.text, e.name, e.attributes?.['aria-label'], e.attributes?.['title'], e.attributes?.['alt'], e.attributes?.['name'], e.attributes?.['placeholder'], Array.isArray(e.context) ? e.context.join(' ') : '']
+    const bagText = [e.text, e.attributes?.['aria-label'], e.attributes?.['name'], e.attributes?.['placeholder']]
       .filter(Boolean)
       .map(v => String(v).toLowerCase())
       .join(' ');
@@ -367,8 +317,6 @@ export function resolveByQuery(query, kind, page) {
     score += avgSim * 0.7;
     // 3) 역할 가산
     if (e.role === 'button') score += 0.1;
-    // 4) 고유 ID가 있으면 약간 가산 (안정성)
-    if (e.attributes && e.attributes['data-hireme-id']) score += 0.05;
     if (score > bestScore) { bestScore = score; best = e; }
   }
   if (bestScore >= 0.6) return best;
@@ -429,7 +377,6 @@ export async function ensureUiIndexIfNeeded(href = window.location.href, verbose
     console.debug('[UIIndex] urlKey:', key, 'cache?', !!cached, 'shouldRefresh?', diag.should, 'reason:', diag.reason);
   }
   if (!cached || diag.should) {
-    try { instrumentInteractiveElements(document); } catch(_) {}
     const page = getUIMap(document);
     cacheUI(page);
     if (verbose) {
@@ -443,30 +390,6 @@ export async function ensureUiIndexIfNeeded(href = window.location.href, verbose
   return cached;
 }
 
-// DOM 내 인터랙티브 요소에 자동 보강 속성 부여 (최초 1회 + 필요 시 재호출)
-export function instrumentInteractiveElements(doc = document) {
-  try {
-    const nodes = Array.from(doc.querySelectorAll('a,button,input,select,textarea,[role=button],[role=link]'));
-    for (const el of nodes) {
-      assignHiremeId(el);
-      // aria-label 자동 보강 (없을 때만)
-      try {
-        if (!el.getAttribute('aria-label')) {
-          const name = getElementName(el);
-          if (name && name.length <= 80) el.setAttribute('aria-label', name);
-        }
-      } catch(_) {}
-      // data-hireme-name 제공 (검색 가속)
-      try {
-        if (!el.getAttribute('data-hireme-name')) {
-          const nm = getElementName(el);
-          if (nm) el.setAttribute('data-hireme-name', nm);
-        }
-      } catch(_) {}
-    }
-  } catch(_) {}
-}
-
 export default {
   normalizeUrlKey,
   computeLayoutFingerprint,
@@ -478,8 +401,5 @@ export default {
   resolveByQuery,
   ensureUiIndexIfNeeded
 };
-
-
-
 
 

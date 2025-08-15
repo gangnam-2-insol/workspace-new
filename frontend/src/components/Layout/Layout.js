@@ -3,22 +3,23 @@ import { Link, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { 
-  FiHome, 
-  FiFileText, 
-  FiVideo, 
-  FiCalendar,
-  FiCode, 
-  FiEdit3, 
-  FiUsers, 
-  FiUser, 
-  FiSettings,
-  FiMenu,
-  FiX,
-  FiBell,
-  FiSearch,
-  FiBriefcase,
-  FiUserCheck,
-  FiGitBranch
+	FiHome, 
+	FiFileText, 
+	FiVideo, 
+	FiCalendar,
+	FiCode, 
+	FiEdit3, 
+	FiUsers, 
+	FiUser, 
+	FiSettings,
+	FiMenu,
+	FiX,
+	FiBell,
+	FiSearch,
+	FiBriefcase,
+	FiUserCheck,
+	FiGitBranch,
+	FiMessageCircle
 } from 'react-icons/fi';
 
 const LayoutContainer = styled.div`
@@ -270,6 +271,9 @@ const Layout = ({ children }) => {
             <IconButton>
               <FiBell size={20} />
             </IconButton>
+				<IconButton title="채팅" onClick={() => window.dispatchEvent(new Event('openAgentChatbot'))}>
+					<FiMessageCircle size={20} />
+				</IconButton>
             <div style={{
               width: '40px',
               height: '40px',

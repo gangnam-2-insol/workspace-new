@@ -24,8 +24,7 @@ class LLMService:
                                          original_resume: Dict[str, Any], 
                                          similar_resume: Dict[str, Any],
                                          similarity_score: float,
-                                         chunk_details: Optional[Dict] = None,
-                                         document_type: str = "resume") -> Dict[str, Any]:
+                                         chunk_details: Optional[Dict] = None) -> Dict[str, Any]:
         """
         두 이력서 간의 유사성을 분석하고 어떤 부분이 유사한지 설명합니다.
         
@@ -39,10 +38,9 @@ class LLMService:
             Dict[str, Any]: 유사성 분석 결과
         """
         try:
-            document_name = "자소서" if document_type == "coverletter" else "이력서"
             print(f"[LLMService] === 유사성 분석 시작 ===")
-            print(f"[LLMService] 원본 {document_name}: {original_resume.get('name', 'Unknown')}")
-            print(f"[LLMService] 유사 {document_name}: {similar_resume.get('name', 'Unknown')}")
+            print(f"[LLMService] 원본 이력서: {original_resume.get('name', 'Unknown')}")
+            print(f"[LLMService] 유사 이력서: {similar_resume.get('name', 'Unknown')}")
             print(f"[LLMService] 유사도 점수: {similarity_score:.3f}")
             
             # 이력서에서 주요 정보 추출
@@ -182,8 +180,7 @@ class LLMService:
     
     async def analyze_plagiarism_risk(self, 
                                     original_resume: Dict[str, Any], 
-                                    similar_resumes: List[Dict[str, Any]],
-                                    document_type: str = "resume") -> Dict[str, Any]:
+                                    similar_resumes: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
         표절 위험도를 분석합니다.
         
@@ -195,13 +192,12 @@ class LLMService:
             Dict[str, Any]: 표절 위험도 분석 결과
         """
         try:
-            document_name = "자소서" if document_type == "coverletter" else "이력서"
             print(f"[LLMService] === 표절 위험도 분석 시작 ===")
-            print(f"[LLMService] 원본 {document_name}: {original_resume.get('name', 'Unknown')}")
-            print(f"[LLMService] 유사한 {document_name} 수: {len(similar_resumes)}")
+            print(f"[LLMService] 원본 이력서: {original_resume.get('name', 'Unknown')}")
+            print(f"[LLMService] 유사한 이력서 수: {len(similar_resumes)}")
             
             if not similar_resumes:
-                print(f"[LLMService] 유사한 {document_name}가 없음 - LOW 위험도 반환")
+                print(f"[LLMService] 유사한 이력서가 없음 - LOW 위험도 반환")
                 return {
                     "success": True,
                     "risk_level": "LOW",

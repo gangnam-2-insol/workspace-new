@@ -94,27 +94,37 @@ class EnhancedFieldExtractor:
         ]
 
     def extract_fields_enhanced(self, user_input: str) -> Dict[str, Any]:
-        """향상된 필드 추출 (AI + 사전 + 규칙 결합)"""
+        """향상된 필드 추출 (AI + 사전 + 규칙 결합)
+        실패 시에도 규칙 기반 결과는 반드시 반환"""
+        print(f"\n🔍 [향상된 필드 추출 시작] 사용자 입력: {user_input}")
+        
+        # 1단계: 규칙 기반 초기 추출 (항상 수행)
+        initial_fields = {}
         try:
-            print(f"\n🔍 [향상된 필드 추출 시작] 사용자 입력: {user_input}")
-            
-            # 1단계: 규칙 기반 초기 추출
             initial_fields = self._rule_based_extraction(user_input)
-            print(f"🔍 [1단계] 규칙 기반 추출 결과: {initial_fields}")
-            
-            # 2단계: AI 기반 보완 추출
+        except Exception as e:
+            print(f"⚠️ [규칙 기반 추출 오류] {e}")
+            initial_fields = {}
+        print(f"🔍 [1단계] 규칙 기반 추출 결과: {initial_fields}")
+        
+        # 2단계: AI 기반 보완 추출 (실패해도 규칙 결과 유지)
+        ai_fields: Dict[str, Any] = {}
+        try:
             ai_fields = self._ai_based_extraction(user_input)
             print(f"🔍 [2단계] AI 기반 추출 결과: {ai_fields}")
-            
-            # 3단계: 결과 병합 및 정리
-            final_fields = self._merge_and_clean_fields(initial_fields, ai_fields)
-            print(f"🔍 [3단계] 최종 병합 결과: {final_fields}")
-            
-            return final_fields
-            
         except Exception as e:
-            print(f"❌ [향상된 필드 추출 오류] {e}")
-            return {}
+            print(f"⚠️ [AI 기반 추출 오류] {e}")
+            ai_fields = {}
+        
+        # 3단계: 결과 병합 및 정리
+        try:
+            final_fields = self._merge_and_clean_fields(initial_fields, ai_fields)
+        except Exception as e:
+            print(f"⚠️ [병합 단계 오류] {e}")
+            final_fields = initial_fields
+        
+        print(f"🔍 [3단계] 최종 병합 결과: {final_fields}")
+        return final_fields
 
     def _rule_based_extraction(self, user_input: str) -> Dict[str, Any]:
         """규칙 기반 초기 추출"""
@@ -129,6 +139,15 @@ class EnhancedFieldExtractor:
             if 'position' in fields:
                 break
         
+        # 1-1. 일반 직무 패턴 (담당자/매니저 등)
+        try:
+            position_match = re.search(r'([가-힣A-Za-z]+)\s*(담당자|매니저|전문가)', user_input)
+            if position_match:
+                # 예: 마케팅 담당자, 운영 매니저
+                fields['position'] = f"{position_match.group(1)} {position_match.group(2)}".strip()
+        except Exception:
+            pass
+
         # 2. 기술스택 추출 (사전 매칭)
         tech_stack = []
         for tech_name, variations in self.tech_dictionary.items():
@@ -179,6 +198,22 @@ class EnhancedFieldExtractor:
             if location in user_input:
                 fields['location'] = location
                 break
+
+        # 6. 인원수 추출 (예: 1명, 2명)
+        try:
+            m = re.search(r'(\d+)\s*명', user_input)
+            if m:
+                fields['headcount'] = f"{m.group(1)}명"
+        except Exception:
+            pass
+
+        # 7. 경력 키워드 추출 (신입/경력/시니어 등)
+        if '신입' in user_input:
+            fields.setdefault('experience', '신입')
+        elif '시니어' in user_input:
+            fields.setdefault('experience', '시니어')
+        elif '경력' in user_input:
+            fields.setdefault('experience', '경력')
         
         return fields
 

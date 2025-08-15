@@ -179,7 +179,13 @@ const FloatingChatbot = ({ page, onFieldUpdate, onComplete, onPageAction }) => {
     };
 
     const handleShowFloatingChatbot = () => {
-      console.log('플로팅 챗봇이 다시 보입니다.');
+      console.log('플로팅 챗봇 열기 요청 수신');
+      setIsOpen(true);
+      sessionStorage.setItem('chatbotWasOpen', 'true');
+      // 입력창 포커스
+      setTimeout(() => {
+        focusInput();
+      }, 200);
     };
 
     const handleStartFreeTextMode = () => {
@@ -747,7 +753,7 @@ const FloatingChatbot = ({ page, onFieldUpdate, onComplete, onPageAction }) => {
           '지원자 관리': {
             path: '/applicants',
             keywords: [
-              '지원자', '지원자관리', '지원자목록', '지원자보기', '지원자확인', '지원자검토',
+              '지원자', '지원자관리', '지원자 관리', '지원자목록', '지원자보기', '지원자확인', '지원자검토',
               'applicant', 'candidate', '지원자리스트', '지원자명단', '지원자현황',
               '지원자통계', '지원자분석', '지원자평가', '지원자검색',
               '지원자필터', '지원자상태', '지원자관리시스템'
