@@ -14,7 +14,10 @@ import traceback
 from langgraph_agent import agent
 from admin_mode import is_admin_mode
 from langgraph_tools import tool_manager
-from database import database
+try:
+    from database import database  # 선택적 의존성: 없으면 None 처리
+except Exception:
+    database = None  # MongoDB 휴지통 기능 비활성화
 from langgraph_config import config as lg_config
 
 router = APIRouter(prefix="/api/langgraph-agent", tags=["LangGraph Agent"])

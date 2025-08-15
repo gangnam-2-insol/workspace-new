@@ -1855,18 +1855,18 @@ const FloatingChatbot = ({ page, onFieldUpdate, onComplete, onPageAction }) => {
       try {
         console.log('[FloatingChatbot] 랭그래프 Agent 호출');
         
-        const response = await fetch('/api/langgraph-agent', {
+        const response = await fetch('/api/langgraph-agent/chat', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
           },
           body: JSON.stringify({
-            message: messageString,
-            conversation_history: messages.map(msg => ({
-              role: msg.type === 'user' ? 'user' : 'assistant',
-              content: msg.content
-            })),
-            session_id: langgraphSessionId
+            user_input: messageString,
+            session_id: langgraphSessionId,
+            context: {
+              current_page: window.location.pathname,
+              user_agent: navigator.userAgent
+            }
           }),
         });
 

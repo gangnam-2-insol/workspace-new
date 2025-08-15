@@ -16,15 +16,19 @@ class LangGraphApiService {
    */
   async callLangGraphAgent(userInput, conversationHistory, sessionId) {
     try {
-      const response = await fetch(`${this.baseURL}/api/langgraph/agent`, {
+      const response = await fetch(`${this.baseURL}/api/langgraph-agent/chat`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: userInput,
-          conversation_history: conversationHistory,
-          session_id: sessionId
+          user_input: userInput,
+          session_id: sessionId,
+          context: {
+            current_page: window.location.pathname,
+            user_agent: navigator.userAgent,
+            history_length: Array.isArray(conversationHistory) ? conversationHistory.length : 0
+          }
         })
       });
 

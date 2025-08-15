@@ -221,15 +221,18 @@ const TextBasedRegistration = ({
     try {
       console.log('🤖 랭그래프 Agent 호출:', message);
       
-      const response = await fetch('/api/langgraph-agent', {
+      const response = await fetch('/api/langgraph-agent/chat', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({
-          message: message,
-          conversation_history: [],
-          session_id: sessionId
+          user_input: message,
+          session_id: sessionId,
+          context: {
+            current_page: window.location.pathname,
+            user_agent: navigator.userAgent
+          }
         }),
       });
 
