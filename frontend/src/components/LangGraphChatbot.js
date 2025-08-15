@@ -617,7 +617,7 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
                 console.debug('[Action][dom.request]', { action: a, args });
                 if (a === 'dumpUI') {
                   const href = window.location.href;
-                  const page = await ensureUiIndexIfNeeded(href, true);
+                  const page = await ensureUiIndexIfNeeded(href, true, { includeHidden: true, forceRebuild: true });
                   const list = page.elements.slice(0, 200).map((e, i) => `${i+1}. [${e.role}] ${e.text || e.attributes?.['aria-label'] || e.selector}`);
                   const content = `현재 페이지 UI 요소 ${page.elements.length}개 중 상위 200개:\n\n` + list.join('\n');
                   setMessages(prev => [...prev, { id: Date.now()+2, content, isUser: false, timestamp: new Date().toISOString() }]);
@@ -626,7 +626,7 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
                 // selector가 비어 있고 자연어 질의가 있을 경우 UI 인덱스에서 해석 시도
                 if (!args.selector && args.query) {
                   try {
-                    const page = await ensureUiIndexIfNeeded(window.location.href, true);
+                    const page = await ensureUiIndexIfNeeded(window.location.href, true, { includeHidden: true });
                     const kind = a === 'typeText' ? 'type' : 'click';
                     const target = resolveByQuery(args.query, kind, page);
                     if (target) args.selector = target.selector;
@@ -644,11 +644,23 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
                   return; // 범위 확장 응답을 사용자에게 요청하고 종료
                 }
                 if (a === 'click') {
-                  const el = document.querySelector(args.selector);
+                  let el = document.querySelector(args.selector);
                   if (el) {
                     try { window.HireMeUI?.highlightOnce?.(el); } catch(_) {}
                     el.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
                     setTimeout(() => el.click(), 150);
+                  } else {
+                    // 첫 시도 실패 시: 강제 인덱스 재빌드 후 한번 더 시도
+                    try {
+                      await ensureUiIndexIfNeeded(window.location.href, true, { includeHidden: true, forceRebuild: true });
+                      await new Promise(r => setTimeout(r, 120));
+                      el = document.querySelector(args.selector);
+                      if (el) {
+                        try { window.HireMeUI?.highlightOnce?.(el); } catch(_) {}
+                        el.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+                        setTimeout(() => el.click(), 150);
+                      }
+                    } catch(_) {}
                   }
                 } else if (a === 'typeText') {
                   const el = document.querySelector(args.selector);

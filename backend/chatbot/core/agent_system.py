@@ -819,16 +819,21 @@ class AgentSystem:
                 print("🎯 [DOM] 액션 감지됨!")
                 intent = "dom_action"
                 action_type = "click" if has_click else "view" if has_view else "input"
-                
-                response = {
-                    "action": "dom_action",
-                    "type": action_type,
-                    "target": target or user_input,
-                    "original_input": user_input,
-                    "success": True
+                dom_target = (target or user_input).strip()
+
+                # 프론트 표준 포맷(react_agent_response)으로 응답
+                payload = {
+                    "success": True,
+                    "response": f"DOM 액션 '{action_type}'을(를) 실행합니다.",
+                    "type": "react_agent_response",
+                    "page_action": {
+                        "action": "dom",
+                        "dom_action": "click" if action_type == "click" else ("view" if action_type == "view" else "typeText"),
+                        "args": {"query": dom_target}
+                    }
                 }
-                print(f"🎯 [DOM] 응답 생성: {response}")
-                tool_result = json.dumps(response)
+                print(f"🎯 [DOM] 응답 생성: {payload}")
+                tool_result = json.dumps(payload, ensure_ascii=False)
             elif intent == "search":
                 tool_result = self.web_search.process_search(user_input)
             elif intent == "calc":
