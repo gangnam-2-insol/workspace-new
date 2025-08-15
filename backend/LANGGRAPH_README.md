@@ -27,7 +27,7 @@ LangGraph를 이용한 모듈화된 지능형 에이전트 챗봇입니다. 이 
 ## 파일 구조
 
 ```
-admin/backend/
+backend/
 ├── langgraph_agent.py      # 메인 에이전트 클래스
 ├── langgraph_router.py     # FastAPI 라우터
 ├── langgraph_config.py     # 설정 관리
@@ -48,14 +48,62 @@ pip install -r requirements.txt
 `.env` 파일에 다음을 추가:
 
 ```env
-GOOGLE_API_KEY=your_gemini_api_key_here
+# LangGraph 에이전트(대화/분류용)
+GOOGLE_API_KEY=your_google_genai_api_key
+
+# 툴 내부 LLM 유틸(네비게이션 경로 추론 등)에서 사용
+GEMINI_API_KEY=your_gemini_api_key
 ```
 
 ### 3. 서버 실행
 
 ```bash
-cd admin/backend
+cd backend
 python main.py
+```
+
+## 아키텍처 흐름도
+
+<!-- 이미지 버전 -->
+![Agent Architecture](../docs/diagrams/agent-architecture.svg)
+
+```mermaid
+flowchart TD
+U["사용자"] --> API["백엔드 API /api/langgraph-agent/chat"]
+API --> AGENT["LangGraph 에이전트"]
+
+subgraph "LangGraph 에이전트"
+START --> CLASSIFY["입력 분류"]
+CLASSIFY -->|"일반"| GENERAL["일반 대화"]
+CLASSIFY -->|"툴"| TOOL["툴 실행"]
+GENERAL --> RESP["응답 생성"]
+TOOL --> RESP
+RESP --> END
+end
+
+subgraph "의도 분류"
+QUICK["경량 분류(토큰/청크)"] --> LLM["LLM 분류(의도, 경로)"]
+end
+
+LLM --> CLASSIFY
+
+TOOL -.-> TM["툴 관리자"]
+
+subgraph "툴 관리자"
+NAV["navigate"] --> NAVPAY["페이지 액션: {action:navigate, target}"]
+DOM["dom_action"] --> DOMPAY["페이지 액션: {action:dom, ...}"]
+SJ["search_jobs"] --> SJTXT["텍스트 응답"]
+AR["analyze_resume"] --> ARTXT["텍스트 응답"]
+CP["create_portfolio"] --> CPTXT["텍스트 응답"]
+SA["submit_application"] --> SATXT["텍스트 응답"]
+GUI["get_user_info"] --> GUITXT["텍스트 응답"]
+GIS["get_interview_schedule"] --> GISTXT["텍스트 응답"]
+end
+
+RESP --> OUT["어시스턴트 JSON/텍스트"]
+OUT --> FE["프론트 LangGraphChatbot"]
+FE -->|"page_action.navigate"| NAVACT["라우터 이동(navigate(target))"]
+FE -->|"page_action.dom"| DOMACT["DOM 액션 실행"]
 ```
 
 ## API 엔드포인트
@@ -93,6 +141,8 @@ const data = await response.json();
 console.log(data.message); // 에이전트 응답
 ```
 
+### 상세 흐름도 (스타일 버전) // 이미지 별도
+
 ### 2. 툴 사용
 
 ```javascript
@@ -122,7 +172,65 @@ print(config.llm_temperature)  # 0.7
 
 # 툴 설정
 print(config.available_tools)  # ["search_jobs", "analyze_resume", ...]
+
+# 경량 의도 분류(토큰/청크 기반)
+from langgraph_config import quick_intent_classify
+print(quick_intent_classify("지원자 관리로 이동해줘"))  # ("tool", 0.xx)
 ```
+
+## 사용 중인 툴과 정책
+
+### 툴 목록(설명 요약)
+- navigate: 자연어/JSON 기반 페이지 이동. 허용 라우트 화이트리스트 내에서만 이동. 응답 문구 예: "페이지를 /resume으로 이동합니다. (navigate 툴 적용)"
+- dom_action: 클릭/입력/제출/체크/옵션 선택/스크롤/텍스트 조회/존재 확인 등 DOM 액션 JSON 생성. 프론트가 실행
+- search_jobs: 모의 채용 검색 결과 요약 반환
+- analyze_resume: 이력서 텍스트에서 기술/연차 추출 및 추천/매칭도 산출
+- create_portfolio: 포트폴리오 ID 생성 및 안내
+- submit_application: 지원서 제출 처리 결과 반환
+- get_user_info: 사용자 프로필 요약
+- get_interview_schedule: 예정 면접 일정 요약
+- create_function_tool: 동적 툴 생성/등록(관리자 전용)
+
+### 실행 정책
+- 공개 허용(화이트리스트): navigate, dom_action
+- 그 외 툴: 관리자 모드이거나 승인된 동적 툴(trusted)만 실행 가능
+- 허용 라우트(allowed_routes): `/`, `/job-posting`, `/new-posting`, `/resume`, `/applicants`, `/interview`, `/interview-calendar`, `/portfolio`, `/cover-letter`, `/talent`, `/users`, `/settings`
+
+참고: 세부 동작/정책은 `docs/langgraph-tools.md`에도 정리되어 있습니다.
+
+## 관리자 전용 가이드(문서 통합)
+
+다음 내용은 별도 관리자용 문서를 통합한 요약입니다.
+
+### 1) 관리자 모드
+- 목적: 위험/동적 기능(예: 동적 툴 생성) 사용 권한 제어
+- 활성화/비활성: 백엔드 `admin_mode.is_admin_mode(session_id)` 체크를 통해 권한 판정(프론트 `AdminToolsManager` UI와 연계 가능)
+
+### 2) 동적 툴 관리(create_function_tool)
+- 기능: 간단한 안전 샘플 코드를 파일로 저장하고 인덱스 업데이트 후 런타임 등록
+- 입력(JSON): `{ "name": "echo_tool", "description": "설명" }`
+- 저장 위치: 정책의 `storage_dir`(기본값 `admin/backend/dynamic_tools/`)
+- 인덱스: `index.json`에 툴 메타(name, description, trusted)
+- 신뢰 플래그(trusted): 관리자 승인 시 `true`로 설정하면 공개 툴 화이트리스트 외에도 실행 허용
+
+관련 API(내부):
+- 생성: `create_dynamic_tool(name, code, description)`
+- 수정: `update_dynamic_tool(name, code?, description?)`
+- 삭제: `delete_dynamic_tool(name)`
+- 신뢰 변경: `set_dynamic_trusted(name, trusted)`
+- 로드: 서버 기동 시 `load_dynamic_tools()`
+
+보안 정책:
+- 금지 패턴(예): `fork`, `popen`, `remove(`, `rmdir(`, `unlink(`, `system(` 등 금지 토큰 검사
+- `exec` 사용은 샌드박스된 내장만 허용하고 위험 코드 차단
+
+### 3) 공개 툴 화이트리스트
+- `allowed_public_tools = ["navigate", "dom_action"]`
+- 이외 툴은 관리자 모드 또는 trusted 동적 툴만 실행 허용
+
+### 4) 프론트 관리자 패널
+- 컴포넌트: `frontend/src/components/AdminToolsManager.js`
+- 기능(예): 동적 툴 생성/목록/신뢰 설정 등 관리 UI 제공(프로젝트 구성에 따라 제한될 수 있음)
 
 ### 2. 툴 관리 (`langgraph_tools.py`)
 
@@ -145,9 +253,9 @@ result = tool_manager.execute_tool("my_custom_tool", "테스트 쿼리")
 
 새로운 기능을 추가하려면:
 
-1. `langgraph_config.py`에 설정 추가
-2. `langgraph_tools.py`에 툴 구현
-3. `langgraph_agent.py`에서 워크플로우 수정 (필요시)
+1. `langgraph_config.py`에 설정/토큰/라우트 추가
+2. `langgraph_tools.py`에 툴 구현 (navigate는 LLM으로 허용 라우트 중 선택)
+3. `langgraph_agent.py`에서 분류/흐름 보정 (필요시)
 
 ## 다른 프로젝트에서 사용하기
 
@@ -242,6 +350,13 @@ function Header() {
 }
 ```
 
+## 네비게이션 정책
+
+- 허용 라우트(화이트리스트):
+  - `/`, `/job-posting`, `/new-posting`, `/resume`, `/applicants`, `/interview`, `/interview-calendar`, `/portfolio`, `/cover-letter`, `/talent`, `/users`, `/settings`
+- navigate 툴은 LLM이 위 목록 중 하나만 선택하도록 강제합니다.
+- 응답 문구 예시: "페이지를 /resume으로 이동합니다. (navigate 툴 적용)"
+
 ## 트러블슈팅
 
 ### 1. LLM 초기화 실패
@@ -316,3 +431,5 @@ llm_max_tokens: int = 1000    # 최대 토큰 수 제한
 3. Commit your changes (`git commit -m 'Add some amazing feature'`)
 4. Push to the branch (`git push origin feature/amazing-feature`)
 5. Open a Pull Request
+
+

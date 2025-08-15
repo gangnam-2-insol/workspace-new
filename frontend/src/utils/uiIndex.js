@@ -35,7 +35,10 @@ const SYNONYM_GROUPS = [
   ['검색', '찾기', 'search', 'find', 'lookup'],
   ['삭제', '제거', '지우기', '지워', '삭제하기', 'delete', 'remove', 'trash'],
   ['확인', 'ok', '확정', 'confirm', 'yes'],
-  ['취소', 'cancel', '닫기', 'close', 'back']
+  ['취소', 'cancel', '닫기', 'close', 'back'],
+  // PDF/OCR 도메인 강화
+  ['pdf', 'pdfocr', 'ocr', '스캔', '스캐너', '문서인식', '문자인식', '문서', '텍스트추출', '추출', '인식'],
+  ['업로드', 'upload', '파일선택', 'file', 'choose file', '파일 올리기']
 ];
 
 const SYNONYM_INDEX = (() => {
@@ -53,7 +56,7 @@ function normalizeWord(word) {
   let w = String(word || '').normalize('NFC').toLowerCase();
   w = w.replace(/[\p{P}\p{S}]+/gu, ''); // 문장부호 제거
   // 흔한 종결/요청 표현 제거
-  w = w.replace(/(해주세요|해줘|해주|해요|하라|하기|하도록|해|하여)/g, '');
+  w = w.replace(/(해주세요|해줘|해주|해요|하라|하기|하도록|해|하여|클릭|click)/g, '');
   // 조사/어미(간단) 제거: 을 를 이 가 은 는 의 에 에서 과 와 로 으로 도 만 까지 부터 등
   w = w.replace(/(을|를|이|가|은|는|의|에|에서|과|와|로|으로|도|만|까지|부터)$/g, '');
   return w.trim();
@@ -119,6 +122,15 @@ function inferRole(el) {
   const explicit = el.getAttribute && el.getAttribute('role');
   if (explicit) return explicit;
   const tag = (el.tagName || '').toUpperCase();
+  // 접근성/상호작용 힌트로 버튼 추정
+  try {
+    const hasOnClick = !!(el.getAttribute && el.getAttribute('onclick'));
+    const tabIndex = el.getAttribute && el.getAttribute('tabindex');
+    const className = (el.className || '').toString().toLowerCase();
+    if (hasOnClick || tabIndex === '0' || /btn|button|clickable/.test(className)) {
+      return 'button';
+    }
+  } catch (_) {}
   if (tag === 'A') return 'link';
   if (tag === 'BUTTON') return 'button';
   if (tag === 'INPUT') return 'input';
@@ -189,7 +201,9 @@ function buildRobustSelector(el) {
 export function getUIMap(doc = document) {
   const urlKey = normalizeUrlKey(doc.location ? doc.location.href : window.location.href);
   const elements = [];
-  const nodes = Array.from(doc.querySelectorAll('a,button,input,select,textarea,[role=button],[role=link]'));
+  const nodes = Array.from(doc.querySelectorAll(
+    'a,button,input,select,textarea,[role=button],[role=link],[tabindex="0"],[onclick],label,span[role=button]'
+  ));
   for (const el of nodes) {
     if (!isVisible(el)) continue;
     const role = inferRole(el);

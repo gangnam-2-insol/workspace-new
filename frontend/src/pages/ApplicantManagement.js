@@ -32,68 +32,6 @@ import DetailedAnalysisModal from '../components/DetailedAnalysisModal';
 import GithubSummaryPanel from './PortfolioSummary/GithubSummaryPanel';
 import PortfolioSummaryPanel from './PortfolioSummary/PortfolioSummaryPanel';
 
-// 평균 점수 계산 함수
-const calculateAverageScore = (analysisData) => {
-  if (!analysisData || typeof analysisData !== 'object') return 0;
-  
-  const scores = Object.values(analysisData)
-    .filter(item => item && typeof item === 'object' && 'score' in item)
-    .map(item => item.score);
-  
-  if (scores.length === 0) return 0;
-  
-  const total = scores.reduce((sum, score) => sum + score, 0);
-  return Math.round((total / scores.length) * 10) / 10; // 소수점 첫째자리까지
-};
-
-// 이력서 분석 항목 라벨 함수
-const getResumeAnalysisLabel = (key) => {
-  const labels = {
-    basic_info_completeness: '기본정보 완성도',
-    job_relevance: '직무 적합성',
-    experience_clarity: '경력 명확성',
-    tech_stack_clarity: '기술스택 명확성',
-    project_recency: '프로젝트 최신성',
-    achievement_metrics: '성과 지표',
-    readability: '가독성',
-    typos_and_errors: '오탈자',
-    update_freshness: '최신성'
-  };
-  return labels[key] || key;
-};
-
-// 자기소개서 분석 항목 라벨 함수
-const getCoverLetterAnalysisLabel = (key) => {
-  const labels = {
-    motivation_relevance: '지원 동기',
-    problem_solving_STAR: 'STAR 기법',
-    quantitative_impact: '정량적 성과',
-    job_understanding: '직무 이해도',
-    unique_experience: '차별화 경험',
-    logical_flow: '논리적 흐름',
-    keyword_diversity: '키워드 다양성',
-    sentence_readability: '문장 가독성',
-    typos_and_errors: '오탈자'
-  };
-  return labels[key] || key;
-};
-
-// 포트폴리오 분석 항목 라벨 함수
-const getPortfolioAnalysisLabel = (key) => {
-  const labels = {
-    project_overview: '프로젝트 개요',
-    tech_stack: '기술 스택',
-    personal_contribution: '개인 기여도',
-    achievement_metrics: '성과 지표',
-    visual_quality: '시각적 품질',
-    documentation_quality: '문서화 품질',
-    job_relevance: '직무 관련성',
-    unique_features: '독창적 기능',
-    maintainability: '유지보수성'
-  };
-  return labels[key] || key;
-};
-
 // API 서비스 추가
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
 
@@ -786,16 +724,6 @@ const DocumentUploadContainer = styled.div`
   gap: 16px;
 `;
 
-const DocumentUploadLabel = styled.div`
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-`;
-
 const DocumentTypeSection = styled.div`
   display: flex;
   flex-direction: column;
@@ -946,117 +874,10 @@ const ResumeAnalysisScore = styled.span`
   font-size: 16px;
   font-weight: 600;
   color: ${props => {
-    if (props.score >= 8) return '#28a745';
-    if (props.score >= 6) return '#ffc107';
+    if (props.score >= 90) return '#28a745';
+    if (props.score >= 80) return '#ffc107';
     return '#dc3545';
   }};
-`;
-
-// 새로운 분석 섹션 스타일 컴포넌트들
-const ResumeAnalysisSubSection = styled.div`
-  margin: 20px 0;
-  padding: 16px;
-  background: var(--background-primary);
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-`;
-
-const ResumeAnalysisSubTitle = styled.h4`
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 16px;
-  padding-bottom: 8px;
-  border-bottom: 2px solid var(--primary-color);
-`;
-
-const ResumeAnalysisGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
-  gap: 16px;
-  margin-bottom: 16px;
-`;
-
-const ResumeAnalysisGridItem = styled.div`
-  padding: 12px;
-  background: var(--background-secondary);
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
-`;
-
-const ResumeAnalysisGridLabel = styled.div`
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 8px;
-`;
-
-const ResumeAnalysisGridScore = styled.div`
-  font-size: 14px;
-  font-weight: 600;
-  color: ${props => {
-    if (props.score >= 8) return '#28a745';
-    if (props.score >= 6) return '#ffc107';
-    return '#dc3545';
-  }};
-  margin-bottom: 8px;
-`;
-
-const ResumeAnalysisGridFeedback = styled.div`
-  font-size: 12px;
-  color: var(--text-secondary);
-  line-height: 1.4;
-`;
-
-const ScoreVisualization = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-top: 8px;
-`;
-
-const ScoreBar = styled.div`
-  flex: 1;
-  height: 6px;
-  background: #e9ecef;
-  border-radius: 3px;
-  overflow: hidden;
-  position: relative;
-`;
-
-const ScoreFill = styled.div`
-  height: 100%;
-  background: ${props => {
-    if (props.score >= 8) return '#28a745';
-    if (props.score >= 6) return '#ffc107';
-    return '#dc3545';
-  }};
-  width: ${props => (props.score / 10) * 100}%;
-  border-radius: 3px;
-  transition: width 0.3s ease;
-`;
-
-const ScorePercentage = styled.span`
-  font-size: 11px;
-  font-weight: 600;
-  color: ${props => {
-    if (props.score >= 8) return '#28a745';
-    if (props.score >= 6) return '#ffc107';
-    return '#dc3545';
-  }};
-  min-width: 30px;
-  text-align: right;
-`;
-
-const ResumeAnalysisSummary = styled.div`
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--primary-color);
-  text-align: center;
-  padding: 12px;
-  background: var(--background-secondary);
-  border-radius: 6px;
-  border: 1px solid var(--border-color);
 `;
 
 const AnalysisScoreDisplay = styled.div`
@@ -2412,15 +2233,10 @@ const ApplicantManagement = () => {
   // 새 이력서 등록 모달 상태
   const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
   const [resumeFile, setResumeFile] = useState(null);
-  const [coverLetterFile, setCoverLetterFile] = useState(null);
-  const [portfolioFile, setPortfolioFile] = useState(null);
   const [documentType, setDocumentType] = useState('이력서');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
   const [isDragOver, setIsDragOver] = useState(false);
-  const [isDragOverResume, setIsDragOverResume] = useState(false);
-  const [isDragOverCoverLetter, setIsDragOverCoverLetter] = useState(false);
-  const [isDragOverPortfolio, setIsDragOverPortfolio] = useState(false);
   const [showDetailedAnalysis, setShowDetailedAnalysis] = useState(false);
   const [resumeData, setResumeData] = useState({
     name: '',
@@ -2618,12 +2434,12 @@ const ApplicantManagement = () => {
       setPortfolioView('select');
     }
     
-    // 자소서 타입일 때만 유사도 체크 실행
-    if (type === 'coverLetter') {
+    // 이력서 타입일 때만 유사도 체크 실행
+    if (type === 'resume') {
       setDocumentModal(prev => ({ ...prev, isLoadingSimilarity: true }));
       
       try {
-      const response = await fetch(`${API_BASE_URL}/api/coverletter/similarity-check/${applicant.id}`, {
+      const response = await fetch(`${API_BASE_URL}/api/resume/similarity-check/${applicant.id}`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json'
@@ -2766,83 +2582,58 @@ const ApplicantManagement = () => {
   const handleResumeModalClose = () => {
     setIsResumeModalOpen(false);
     setResumeFile(null);
-    setCoverLetterFile(null);
-    setPortfolioFile(null);
     setDocumentType('이력서');
     setIsAnalyzing(false);
     setAnalysisResult(null);
     setIsDragOver(false);
-    setIsDragOverResume(false);
-    setIsDragOverCoverLetter(false);
-    setIsDragOverPortfolio(false);
   };
 
   // 드래그 앤 드롭 이벤트 핸들러들
-  const handleDragOver = (e, type) => {
+  const handleDragOver = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (type === 'resume') {
-      setIsDragOverResume(true);
-    } else if (type === 'coverLetter') {
-      setIsDragOverCoverLetter(true);
-    } else if (type === 'portfolio') {
-      setIsDragOverPortfolio(true);
-    }
+    setIsDragOver(true);
   };
 
-  const handleDragLeave = (e, type) => {
+  const handleDragLeave = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    if (type === 'resume') {
-      setIsDragOverResume(false);
-    } else if (type === 'coverLetter') {
-      setIsDragOverCoverLetter(false);
-    } else if (type === 'portfolio') {
-      setIsDragOverPortfolio(false);
-    }
+    setIsDragOver(false);
   };
 
-  const handleDrop = (e, type) => {
+  const handleDrop = (e) => {
     e.preventDefault();
     e.stopPropagation();
-    
-    if (type === 'resume') {
-      setIsDragOverResume(false);
-    } else if (type === 'coverLetter') {
-      setIsDragOverCoverLetter(false);
-    } else if (type === 'portfolio') {
-      setIsDragOverPortfolio(false);
-    }
+    setIsDragOver(false);
     
     const files = e.dataTransfer.files;
     if (files && files.length > 0) {
       const file = files[0];
-      // 모든 파일 허용 (확장자 제한 없음)
-      // 실제 문서 유형은 백엔드에서 내용 분석으로 판별
-      if (type === 'resume') {
+      // 파일 타입 검증
+      const allowedTypes = ['.pdf', '.doc', '.docx', '.txt'];
+      const fileExtension = '.' + file.name.split('.').pop().toLowerCase();
+      
+      if (allowedTypes.includes(fileExtension)) {
         setResumeFile(file);
-      } else if (type === 'coverLetter') {
-        setCoverLetterFile(file);
-      } else if (type === 'portfolio') {
-        setPortfolioFile(file);
+        console.log('드래그 앤 드롭으로 파일이 업로드되었습니다:', file.name);
+        // 성공 메시지 표시 (선택사항)
+        // alert(`${file.name} 파일이 성공적으로 업로드되었습니다.`);
+      } else {
+        alert('지원하지 않는 파일 형식입니다. PDF, DOC, DOCX, TXT 파일만 업로드 가능합니다.');
       }
-      console.log(`${type} 파일이 드래그 앤 드롭으로 업로드되었습니다:`, file.name);
     }
   };
 
-  const handleFileChange = (event, type) => {
+  const handleFileChange = (event) => {
     const file = event.target.files[0];
     if (file) {
-      // 파일 확장자만 검증하고, 파일명 기반 검증은 제거
-      // 실제 문서 유형은 백엔드에서 내용 분석으로 판별
-      if (type === 'resume') {
-        setResumeFile(file);
-      } else if (type === 'coverLetter') {
-        setCoverLetterFile(file);
-      } else if (type === 'portfolio') {
-        setPortfolioFile(file);
+      setResumeFile(file);
+      // 파일명에서 기본 정보 추출 시도
+      const fileName = file.name.toLowerCase();
+      if (fileName.includes('이력서') || fileName.includes('resume')) {
+        // 파일명에서 정보 추출 로직
+        console.log('이력서 파일이 선택되었습니다:', file.name);
       }
-      console.log(`${type} 파일이 선택되었습니다:`, file.name);
     }
   };
 
@@ -2863,8 +2654,8 @@ const ApplicantManagement = () => {
 
   const handleResumeSubmit = async () => {
     try {
-      if (!resumeFile && !coverLetterFile) {
-        alert('이력서 또는 자기소개서 중 하나 이상을 선택해주세요.');
+      if (!resumeFile) {
+        alert('이력서 파일을 선택해주세요.');
         return;
       }
 
@@ -2872,149 +2663,52 @@ const ApplicantManagement = () => {
       setIsAnalyzing(true);
       setAnalysisResult(null);
 
-      // 모든 파일을 하나씩 분석
-      let allAnalysisResults = {};
-      let uploadedFiles = [];
-      let analysisCount = 0;
+      // FormData 생성 - 상세 분석 API 사용
+      const formData = new FormData();
+      formData.append('file', resumeFile);
+      formData.append('document_type', documentType.toLowerCase()); // resume, cover_letter, portfolio
+
+      // 상세 분석 API 호출
+      const response = await fetch(`${API_BASE_URL}/api/upload/analyze`, {
+        method: 'POST',
+        body: formData,
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '파일 분석에 실패했습니다.');
+      }
+
+      const result = await response.json();
       
-      if (resumeFile) {
-        try {
-          const formData = new FormData();
-          formData.append('file', resumeFile);
-          formData.append('document_type', 'resume');
-          
-          const response = await fetch(`${API_BASE_URL}/api/upload/analyze`, {
-            method: 'POST',
-            body: formData,
-          });
-          
-          if (response.ok) {
-            const result = await response.json();
-            if (result.analysis_result && result.analysis_result.resume_analysis) {
-              allAnalysisResults.resume_analysis = result.analysis_result.resume_analysis;
-              uploadedFiles.push('이력서');
-              analysisCount++;
-            }
-          }
-        } catch (error) {
-          console.error('이력서 분석 실패:', error);
-        }
-      }
+      // 상세 분석 결과 처리
+      const analysisData = result.analysis_result;
       
-      if (coverLetterFile) {
-        try {
-          const formData = new FormData();
-          formData.append('file', coverLetterFile);
-          formData.append('document_type', 'cover_letter');
-          
-          const response = await fetch(`${API_BASE_URL}/api/upload/analyze`, {
-            method: 'POST',
-            body: formData,
-          });
-          
-          if (response.ok) {
-            const result = await response.json();
-            if (result.analysis_result && result.analysis_result.cover_letter_analysis) {
-              allAnalysisResults.cover_letter_analysis = result.analysis_result.cover_letter_analysis;
-              uploadedFiles.push('자기소개서');
-              analysisCount++;
-            }
-          }
-        } catch (error) {
-          console.error('자기소개서 분석 실패:', error);
-        }
-      }
-      
-      // 포트폴리오는 현재 입력 UI를 숨겼으므로 분석에서 제외
-      
-      if (analysisCount === 0) {
-        throw new Error('모든 파일 분석에 실패했습니다. 파일을 다시 확인해주세요.');
-      }
-
-      // 가중 평균 계산
-      // - 공고 적합도(job_relevance) 버킷: 가중치 5
-      // - 나머지 전체 버킷: 가중치 5
-      const jobRelScores = [];
-      const otherScores = [];
-
-      // 이력서 분석
-      if (allAnalysisResults.resume_analysis) {
-        Object.entries(allAnalysisResults.resume_analysis).forEach(([key, val]) => {
-          if (val && typeof val === 'object' && 'score' in val) {
-            if (key === 'job_relevance') jobRelScores.push(Number(val.score) || 0);
-            else otherScores.push(Number(val.score) || 0);
-          }
-        });
-      }
-
-      // 자기소개서 분석(모두 '기타' 버킷)
-      if (allAnalysisResults.cover_letter_analysis) {
-        Object.values(allAnalysisResults.cover_letter_analysis).forEach(val => {
-          if (val && typeof val === 'object' && 'score' in val) {
-            otherScores.push(Number(val.score) || 0);
-          }
-        });
-      }
-
-      // 포트폴리오 분석
-      if (allAnalysisResults.portfolio_analysis) {
-        Object.entries(allAnalysisResults.portfolio_analysis).forEach(([key, val]) => {
-          if (val && typeof val === 'object' && 'score' in val) {
-            if (key === 'job_relevance') jobRelScores.push(Number(val.score) || 0);
-            else otherScores.push(Number(val.score) || 0);
-          }
-        });
-      }
-
-      const avg = (arr) => arr.length > 0 ? arr.reduce((s, v) => s + v, 0) / arr.length : null;
-      const jobRelAvg = avg(jobRelScores);
-      const otherAvg = avg(otherScores);
-
-      const wJob = 5;
-      const wOther = 5;
-      let averageScore = 0;
-      if (jobRelAvg != null && otherAvg != null) {
-        averageScore = Math.round(((jobRelAvg * wJob + otherAvg * wOther) / (wJob + wOther)) * 10) / 10;
-      } else if (jobRelAvg != null) {
-        averageScore = Math.round(jobRelAvg * 10) / 10;
-      } else if (otherAvg != null) {
-        averageScore = Math.round(otherAvg * 10) / 10;
-      } else {
-        averageScore = 0;
-      }
-      
-      // 추천사항 생성
-      let recommendation = '';
-      if (averageScore >= 8) {
-        recommendation = `전반적으로 우수한 ${uploadedFiles.join(', ')}입니다. 현재 상태를 유지하세요.`;
-      } else if (averageScore >= 6) {
-        recommendation = `양호한 수준이지만 몇 가지 개선점이 있습니다. 피드백을 참고하여 수정하세요.`;
-      } else {
-        recommendation = `전반적인 개선이 필요합니다. 각 항목별 피드백을 참고하여 체계적으로 수정하세요.`;
-      }
-      
-      allAnalysisResults.overall_summary = {
-        total_score: averageScore,
-        recommendation: recommendation
-      };
-
-      // 통합 분석 결과 생성
+      // 이력서 분석 결과 생성
       const analysisResult = {
-        filename: uploadedFiles.join(', '),
-        fileSize: (resumeFile?.size || 0) + (coverLetterFile?.size || 0) + (portfolioFile?.size || 0),
-        extractedTextLength: 0,
-        analysis_result: allAnalysisResults
+        documentType: documentType,
+        fileName: result.filename,
+        analysisDate: new Date().toLocaleString(),
+        summary: `AI 상세 분석 완료 - 총점: ${analysisData.overall_summary.total_score}/10`,
+        skills: extractSkillsFromAnalysis(analysisData, documentType),
+        experience: extractExperienceFromAnalysis(analysisData, documentType),
+        education: extractEducationFromAnalysis(analysisData, documentType),
+        recommendations: extractRecommendationsFromAnalysis(analysisData, documentType),
+        score: analysisData.overall_summary.total_score * 10, // 0-100 점수로 변환
+        processingTime: result.processing_time || 0,
+        extractedTextLength: result.extracted_text_length,
+        detailedAnalysis: analysisData // 상세 분석 데이터 추가
       };
 
       setAnalysisResult(analysisResult);
       setIsAnalyzing(false);
 
       // 성공 메시지
-      alert('통합 분석이 완료되었습니다!');
+      alert(`${documentType} 상세 분석이 완료되었습니다!`);
       
     } catch (error) {
-      console.error('파일 분석 실패:', error);
-      alert(`파일 분석에 실패했습니다: ${error.message}`);
+      console.error('이력서 분석 실패:', error);
+      alert(`이력서 분석에 실패했습니다: ${error.message}`);
       setIsAnalyzing(false);
     }
   };
@@ -3638,7 +3332,7 @@ const ApplicantManagement = () => {
                 )}
 
                 {/* 이력서/자소서 기존 로직 */}
-                {documentModal.type === 'coverLetter' && documentModal.isOriginal && (
+                {documentModal.type === 'resume' && documentModal.isOriginal && (
                   <>
                     <DocumentSection>
                       <DocumentSectionTitle>지원자 기본정보</DocumentSectionTitle>
@@ -3702,7 +3396,7 @@ const ApplicantManagement = () => {
                   </>
                 )}
 
-                {documentModal.type === 'resume' && documentModal.applicant.documents?.resume && (
+                {documentModal.type === 'resume' && !documentModal.isOriginal && documentModal.applicant.documents?.resume && (
                   <>
                     <DocumentSection>
                       <DocumentSectionTitle>개인정보</DocumentSectionTitle>
@@ -3769,6 +3463,28 @@ const ApplicantManagement = () => {
                   </>
                 )}
 
+                {documentModal.type === 'coverLetter' && documentModal.applicant.documents?.coverLetter && (
+                  <>
+                    <DocumentSection>
+                      <DocumentSectionTitle>지원 동기</DocumentSectionTitle>
+                      <DocumentText>{documentModal.applicant.documents.coverLetter.motivation}</DocumentText>
+                    </DocumentSection>
+
+                    <DocumentSection>
+                      <DocumentSectionTitle>나의 강점</DocumentSectionTitle>
+                      <DocumentList>
+                        {(documentModal.applicant.documents.coverLetter.strengths || []).map((strength, index) => (
+                          <DocumentListItem key={index}>{strength}</DocumentListItem>
+                        ))}
+                      </DocumentList>
+                    </DocumentSection>
+
+                    <DocumentSection>
+                      <DocumentSectionTitle>향후 목표</DocumentSectionTitle>
+                      <DocumentText>{documentModal.applicant.documents.coverLetter.goals}</DocumentText>
+                    </DocumentSection>
+                  </>
+                )}
 
                 {documentModal.type === 'portfolio' && documentModal.applicant.documents?.portfolio && (
                   <>
@@ -3802,7 +3518,7 @@ const ApplicantManagement = () => {
                   </>
                 )}
 
-                {documentModal.type === 'coverLetter' && !documentModal.isOriginal && (
+                {documentModal.type === 'resume' && !documentModal.isOriginal && (
                   <>
                     {/* 유사도 체크 결과 섹션 */}
                     <DocumentSection>
@@ -3811,7 +3527,7 @@ const ApplicantManagement = () => {
                       {documentModal.isLoadingSimilarity && (
                         <DocumentCard>
                           <DocumentCardText>
-                            📊 다른 자소서들과의 유사도를 분석 중입니다...
+                            📊 다른 이력서들과의 유사도를 분석 중입니다...
                           </DocumentCardText>
                         </DocumentCard>
                       )}
@@ -3884,7 +3600,7 @@ const ApplicantManagement = () => {
                           {/* 상위 유사 이력서들 */}
                           {documentModal.similarityData.top_similar.length > 0 && (
                             <DocumentCard>
-                              <DocumentCardTitle>🎯 가장 유사한 자소서 TOP 5</DocumentCardTitle>
+                              <DocumentCardTitle>🎯 가장 유사한 이력서 TOP 5</DocumentCardTitle>
                               {documentModal.similarityData.top_similar.map((similar, index) => (
                                 <div key={similar.resume_id} style={{
                                   padding: '12px',
@@ -3954,13 +3670,13 @@ const ApplicantManagement = () => {
                       )}
                     </DocumentSection>
 
-                    {/* 자소서 요약 섹션 */}
+                    {/* 기존 이력서 요약 섹션 */}
                     {!documentModal.applicant.documents?.resume && (
                       <DocumentSection>
-                        <DocumentSectionTitle>자소서 요약</DocumentSectionTitle>
+                        <DocumentSectionTitle>이력서 요약</DocumentSectionTitle>
                         <DocumentCard>
                           <DocumentCardText>
-                            현재 이 지원자의 상세 자소서 정보는 등록되지 않았습니다.<br/>
+                            현재 이 지원자의 상세 이력서 정보는 등록되지 않았습니다.<br/>
                             <strong>원본보기</strong> 버튼을 클릭하면 DB에 저장된 지원자의 모든 정보를 확인할 수 있습니다.
                           </DocumentCardText>
                         </DocumentCard>
@@ -4144,20 +3860,29 @@ const ApplicantManagement = () => {
               <ResumeModalBody>
                 <ResumeFormSection>
                   <ResumeFormTitle>문서 업로드</ResumeFormTitle>
-                  
-                  {/* 이력서 업로드 */}
                   <DocumentUploadContainer>
-                    <DocumentUploadLabel>📄 이력서</DocumentUploadLabel>
+                    <DocumentTypeSection>
+                      <DocumentTypeLabel>문서 유형</DocumentTypeLabel>
+                      <DocumentTypeSelect
+                        value={documentType}
+                        onChange={(e) => setDocumentType(e.target.value)}
+                      >
+                        <option value="이력서">이력서</option>
+                        <option value="자소서">자소서</option>
+                        <option value="포트폴리오">포트폴리오</option>
+                      </DocumentTypeSelect>
+                    </DocumentTypeSection>
+                    
                     <FileUploadArea
-                      isDragOver={isDragOverResume}
-                      onDragOver={(e) => handleDragOver(e, 'resume')}
-                      onDragLeave={(e) => handleDragLeave(e, 'resume')}
-                      onDrop={(e) => handleDrop(e, 'resume')}
+                      isDragOver={isDragOver}
+                      onDragOver={handleDragOver}
+                      onDragLeave={handleDragLeave}
+                      onDrop={handleDrop}
                     >
                       <FileUploadInput
                         type="file"
                         accept=".pdf,.doc,.docx,.txt"
-                        onChange={(e) => handleFileChange(e, 'resume')}
+                        onChange={handleFileChange}
                         id="resume-file"
                       />
                       <FileUploadLabel htmlFor="resume-file">
@@ -4168,15 +3893,15 @@ const ApplicantManagement = () => {
                           </FileSelected>
                         ) : (
                           <FileUploadPlaceholder>
-                            {isDragOverResume ? (
+                            {isDragOver ? (
                               <FiFile size={32} style={{ color: 'var(--primary-color)' }} />
                             ) : (
                               <FiFileText size={24} />
                             )}
                             <span>
-                              {isDragOverResume 
+                              {isDragOver 
                                 ? '파일을 여기에 놓으세요' 
-                                : '이력서 파일을 선택하거나 드래그하세요'
+                                : `${documentType} 파일을 선택하거나 드래그하세요`
                               }
                             </span>
                             <small>PDF, DOC, DOCX, TXT 파일 지원</small>
@@ -4185,90 +3910,6 @@ const ApplicantManagement = () => {
                       </FileUploadLabel>
                     </FileUploadArea>
                   </DocumentUploadContainer>
-
-                  {/* 자기소개서 업로드 */}
-                  <DocumentUploadContainer>
-                    <DocumentUploadLabel>✍️ 자기소개서</DocumentUploadLabel>
-                    <FileUploadArea
-                      isDragOver={isDragOverCoverLetter}
-                      onDragOver={(e) => handleDragOver(e, 'coverLetter')}
-                      onDragLeave={(e) => handleDragLeave(e, 'coverLetter')}
-                      onDrop={(e) => handleDrop(e, 'coverLetter')}
-                    >
-                      <FileUploadInput
-                        type="file"
-                        accept=".pdf,.doc,.docx,.txt"
-                        onChange={(e) => handleFileChange(e, 'coverLetter')}
-                        id="cover-letter-file"
-                      />
-                      <FileUploadLabel htmlFor="cover-letter-file">
-                        {coverLetterFile ? (
-                          <FileSelected>
-                            <FiFile size={20} />
-                            <span>{coverLetterFile.name}</span>
-                          </FileSelected>
-                        ) : (
-                          <FileUploadPlaceholder>
-                            {isDragOverCoverLetter ? (
-                              <FiFile size={32} style={{ color: 'var(--primary-color)' }} />
-                            ) : (
-                              <FiFileText size={24} />
-                            )}
-                            <span>
-                              {isDragOverCoverLetter 
-                                ? '파일을 여기에 놓으세요' 
-                                : '자기소개서 파일을 선택하거나 드래그하세요'
-                              }
-                            </span>
-                            <small>PDF, DOC, DOCX, TXT 파일 지원</small>
-                          </FileUploadPlaceholder>
-                        )}
-                      </FileUploadLabel>
-                    </FileUploadArea>
-                  </DocumentUploadContainer>
-
-                  {/* 포트폴리오 업로드 - 임시 비활성화 */}
-                  {false && (
-                  <DocumentUploadContainer>
-                    <DocumentUploadLabel>🎨 포트폴리오</DocumentUploadLabel>
-                    <FileUploadArea
-                      isDragOver={isDragOverPortfolio}
-                      onDragOver={(e) => handleDragOver(e, 'portfolio')}
-                      onDragLeave={(e) => handleDragLeave(e, 'portfolio')}
-                      onDrop={(e) => handleDrop(e, 'portfolio')}
-                    >
-                      <FileUploadInput
-                        type="file"
-                        accept=".pdf,.doc,.docx,.txt"
-                        onChange={(e) => handleFileChange(e, 'portfolio')}
-                        id="portfolio-file"
-                      />
-                      <FileUploadLabel htmlFor="portfolio-file">
-                        {portfolioFile ? (
-                          <FileSelected>
-                            <FiFile size={20} />
-                            <span>{portfolioFile.name}</span>
-                          </FileSelected>
-                        ) : (
-                          <FileUploadPlaceholder>
-                            {isDragOverPortfolio ? (
-                              <FiFile size={32} style={{ color: 'var(--primary-color)' }} />
-                            ) : (
-                              <FiFileText size={24} />
-                            )}
-                            <span>
-                              {isDragOverPortfolio 
-                                ? '파일을 여기에 놓으세요' 
-                                : '포트폴리오 파일을 선택하거나 드래그하세요'
-                              }
-                            </span>
-                            <small>PDF, DOC, DOCX, TXT 파일 지원</small>
-                          </FileUploadPlaceholder>
-                        )}
-                      </FileUploadLabel>
-                    </FileUploadArea>
-                  </DocumentUploadContainer>
-                  )}
                 </ResumeFormSection>
 
 
@@ -4286,54 +3927,59 @@ const ApplicantManagement = () => {
 
               {analysisResult && (
                 <ResumeAnalysisSection>
-                  <ResumeAnalysisTitle>통합 분석 결과</ResumeAnalysisTitle>
+                  <ResumeAnalysisTitle>분석 결과</ResumeAnalysisTitle>
                   <ResumeAnalysisContent>
                     <ResumeAnalysisItem>
-                      <ResumeAnalysisLabel>업로드된 문서:</ResumeAnalysisLabel>
-                      <ResumeAnalysisValue>{analysisResult.filename}</ResumeAnalysisValue>
+                      <ResumeAnalysisLabel>문서 유형:</ResumeAnalysisLabel>
+                      <ResumeAnalysisValue>{analysisResult.documentType}</ResumeAnalysisValue>
+                    </ResumeAnalysisItem>
+                    <ResumeAnalysisItem>
+                      <ResumeAnalysisLabel>파일명:</ResumeAnalysisLabel>
+                      <ResumeAnalysisValue>{analysisResult.fileName}</ResumeAnalysisValue>
                     </ResumeAnalysisItem>
                     <ResumeAnalysisItem>
                       <ResumeAnalysisLabel>분석 일시:</ResumeAnalysisLabel>
-                      <ResumeAnalysisValue>{new Date().toLocaleString('ko-KR')}</ResumeAnalysisValue>
+                      <ResumeAnalysisValue>{analysisResult.analysisDate}</ResumeAnalysisValue>
                     </ResumeAnalysisItem>
-                    
-                    {/* 타입 불일치 경고 메시지 */}
-                    {analysisResult.wrong_placement && (
-                      <ResumeAnalysisItem style={{ border: '2px solid #ff6b6b', backgroundColor: '#fff5f5' }}>
-                        <ResumeAnalysisLabel style={{ color: '#d63031' }}>
-                          ⚠️ 문서 타입 불일치 경고
-                        </ResumeAnalysisLabel>
-                        <ResumeAnalysisValue style={{ color: '#d63031', fontWeight: 'bold' }}>
-                          {analysisResult.placement_message}
-                        </ResumeAnalysisValue>
-                        <ResumeAnalysisValue style={{ fontSize: '14px', color: '#666', marginTop: '8px' }}>
-                          감지된 타입: {analysisResult.detected_type} (신뢰도: {analysisResult.detected_confidence}%)
-                        </ResumeAnalysisValue>
-                      </ResumeAnalysisItem>
-                    )}
-                    
-                    {/* 분석 결과 요약 - 표시 비활성화 */}
-                    {false && (
-                      <ResumeAnalysisItem>
-                        <ResumeAnalysisLabel>📊 분석 요약:</ResumeAnalysisLabel>
-                        <ResumeAnalysisValue>
-                          총 {Object.keys(analysisResult.analysis_result).filter(key => 
-                            key !== 'overall_summary' && 
-                            analysisResult.analysis_result[key] && 
-                            Object.keys(analysisResult.analysis_result[key]).length > 0
-                          ).length}개 문서 분석 완료
-                        </ResumeAnalysisValue>
-                      </ResumeAnalysisItem>
-                    )}
-                    
-                    {/* 상세 분석 버튼 */}
                     <ResumeAnalysisItem>
-                      <ResumeAnalysisLabel>상세 분석:</ResumeAnalysisLabel>
-                      <DetailedAnalysisButton onClick={() => setShowDetailedAnalysis(true)}>
-                        <FiBarChart2 size={16} />
-                        상세 분석 결과 보기
-                      </DetailedAnalysisButton>
+                      <ResumeAnalysisLabel>적합도 점수:</ResumeAnalysisLabel>
+                      <ResumeAnalysisScore score={analysisResult.score}>
+                        {analysisResult.score}점
+                      </ResumeAnalysisScore>
                     </ResumeAnalysisItem>
+                    {selectedApplicant?.analysisScore && (
+                      <ResumeAnalysisItem>
+                        <ResumeAnalysisLabel>AI 분석 점수:</ResumeAnalysisLabel>
+                        <ResumeAnalysisScore score={selectedApplicant.analysisScore}>
+                          {selectedApplicant.analysisScore}점
+                        </ResumeAnalysisScore>
+                      </ResumeAnalysisItem>
+                    )}
+                    <ResumeAnalysisItem>
+                      <ResumeAnalysisLabel>추출된 기술:</ResumeAnalysisLabel>
+                      <ResumeAnalysisSkills>
+                        {(analysisResult.skills || []).map((skill, index) => (
+                          <ResumeSkillTag key={index}>{skill}</ResumeSkillTag>
+                        ))}
+                      </ResumeAnalysisSkills>
+                    </ResumeAnalysisItem>
+                    <ResumeAnalysisItem>
+                      <ResumeAnalysisLabel>추천 사항:</ResumeAnalysisLabel>
+                      <ResumeAnalysisRecommendations>
+                        {(analysisResult.recommendations || []).map((rec, index) => (
+                          <ResumeRecommendationItem key={index}>• {rec}</ResumeRecommendationItem>
+                        ))}
+                      </ResumeAnalysisRecommendations>
+                    </ResumeAnalysisItem>
+                    {analysisResult.detailedAnalysis && (
+                      <ResumeAnalysisItem>
+                        <ResumeAnalysisLabel>상세 분석:</ResumeAnalysisLabel>
+                        <DetailedAnalysisButton onClick={() => setShowDetailedAnalysis(true)}>
+                          <FiBarChart2 size={16} />
+                          상세 분석 결과 보기
+                        </DetailedAnalysisButton>
+                      </ResumeAnalysisItem>
+                    )}
                   </ResumeAnalysisContent>
                 </ResumeAnalysisSection>
               )}
@@ -4359,9 +4005,7 @@ const ApplicantManagement = () => {
         onClose={() => setShowDetailedAnalysis(false)}
         analysisData={{
           ...analysisResult,
-          analysisScore: selectedApplicant?.analysisScore,
-          fileName: analysisResult?.filename || '업로드된 문서',
-          analysisDate: new Date().toLocaleDateString('ko-KR')
+          analysisScore: selectedApplicant?.analysisScore
         }}
       />
     </Container>
