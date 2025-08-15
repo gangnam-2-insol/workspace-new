@@ -767,15 +767,32 @@ async def check_resume_similarity(resume_id: str):
     try:
         print(f"[API] 이력서 유사도 체크 요청 - resume_id: {resume_id}")
         
-        # SimilarityService를 통한 유사도 분석
-        result = await similarity_service.find_similar_resumes(resume_id, db.applicants, limit=50)
+        # SimilarityService를 통한 청킹 기반 유사도 분석
+        result = await similarity_service.find_similar_resumes_by_chunks(resume_id, db.applicants, limit=50)
         
         if not result["success"]:
             raise HTTPException(status_code=500, detail="유사도 분석에 실패했습니다.")
         
-        # 기존 API 응답 형식에 맞게 변환
+        # 청킹 기반 API 응답 형식에 맞게 변환
         similarity_results = []
         for similar in result["data"]["similar_resumes"]:
+            # 청킹 상세 정보에서 필드별 유사도 추출
+            chunk_details = similar.get("chunk_details", {})
+            field_similarities = {
+                "growthBackground": 0.0,
+                "motivation": 0.0,
+                "careerHistory": 0.0
+            }
+            
+            # 청크 매칭에서 필드별 최고 점수 추출
+            for chunk_key, chunk_info in chunk_details.items():
+                if "growth_background" in chunk_key:
+                    field_similarities["growthBackground"] = max(field_similarities["growthBackground"], chunk_info["score"])
+                elif "motivation" in chunk_key:
+                    field_similarities["motivation"] = max(field_similarities["motivation"], chunk_info["score"])
+                elif "career_history" in chunk_key:
+                    field_similarities["careerHistory"] = max(field_similarities["careerHistory"], chunk_info["score"])
+            
             similarity_result = {
                 "resume_id": similar["resume"]["_id"],
                 "applicant_name": similar["resume"].get("name", "알 수 없음"),
@@ -783,10 +800,12 @@ async def check_resume_similarity(resume_id: str):
                 "department": similar["resume"].get("department", ""),
                 "overall_similarity": round(similar["similarity_score"], 4),
                 "field_similarities": {
-                    "growthBackground": round(similar["similarity_score"], 4),
-                    "motivation": round(similar["similarity_score"], 4),
-                    "careerHistory": round(similar["similarity_score"], 4)
+                    "growthBackground": round(field_similarities["growthBackground"], 4),
+                    "motivation": round(field_similarities["motivation"], 4),
+                    "careerHistory": round(field_similarities["careerHistory"], 4)
                 },
+                "chunk_matches": similar.get("chunk_matches", 0),
+                "chunk_details": chunk_details,
                 "is_high_similarity": similar["similarity_score"] > 0.7,
                 "is_moderate_similarity": 0.4 <= similar["similarity_score"] <= 0.7,
                 "is_low_similarity": similar["similarity_score"] < 0.4,
