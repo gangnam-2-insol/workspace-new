@@ -688,49 +688,19 @@ class FallbackNode:
 🤝 추가 도움이 필요하시면 언제든 말씀해주세요!"""
                     
             else:
-                # 일반적인 대화
-                if "안녕" in user_input or "hello" in user_input:
-                    result = "안녕하세요! 👋 무엇을 도와드릴까요? 채용 관련 질문이나 일반적인 대화 모두 환영합니다! 😊"
-                    
-                elif "도움" in user_input or "help" in user_input:
-                    result = """🤖 AI 어시스턴트 도움말:
-
-🎯 주요 기능:
-• 채용공고 등록 및 관리
-• 이력서 분석
-• 면접 일정 관리
-• 지원자 추천
-
-🔍 검색 기능:
-• 최신 개발 트렌드
-• 채용 동향 정보
-• 기술 정보
-
-🧮 계산 기능:
-• 연봉/월급 계산
-• 수식 계산
-• 퍼센트 계산
-
-📋 데이터 조회:
-• 저장된 채용공고
-• 지원자 정보
-• 면접 일정
-
-💬 일반 대화:
-• 채용 관련 상담
-• 일반적인 질문
-• 친근한 대화
-
-💡 사용법:
-• 자연스럽게 질문해주세요
-• 구체적인 내용을 요청하면 더 정확한 답변을 드릴 수 있습니다
-• 이모지도 사용 가능합니다! 😊"""
-                    
-                elif "감사" in user_input or "고마워" in user_input:
-                    result = "천만에요! 😊 도움이 되어서 기쁩니다. 추가로 궁금한 것이 있으시면 언제든 말씀해주세요! 🙏"
-                    
-                else:
-                    result = "안녕하세요! 😊 무엇을 도와드릴까요? 채용 관련 질문이나 일반적인 대화 모두 환영합니다! 💬"
+                # 일반 대화: 하드코딩된 고정 멘트 대신 LLM으로 자연스러운 답변 생성
+                try:
+                    prompt = (
+                        "당신은 HireMe의 한국어 AI 비서입니다.\n"
+                        "사용자의 일상 대화에도 자연스럽고 간결하게 응답하세요.\n"
+                        "지나친 이모지/홍보/반복 멘트(예: 추가 질문 안내)는 피하고, 질문 의도가 모호하면 한 문장으로 되물어보세요.\n"
+                        f"사용자: {user_input}\n"
+                        "어시스턴트:"
+                    )
+                    response = model.generate_content(prompt)
+                    result = response.text or "네, 알겠습니다. 더 구체적으로 말씀해 주실 수 있을까요?"
+                except Exception:
+                    result = "네, 알겠습니다. 더 구체적으로 말씀해 주실 수 있을까요?"
             
             return result
             
@@ -757,8 +727,8 @@ class ResponseFormatterNode:
                     additional_msg = "\n\n📝 채용공고 수정이나 추가 요청이 있으시면 말씀해주세요!"
                 elif intent == "db":
                     additional_msg = "\n\n📋 다른 데이터 조회가 필요하시면 말씀해주세요!"
-                else:  # chat
-                    additional_msg = "\n\n💬 추가 질문이 있으시면 언제든 말씀해주세요!"
+                else:  # chat은 꼬리 문구를 붙이지 않음 (반복 멘트 방지)
+                    additional_msg = ""
                 
                 return f"{tool_result}{additional_msg}"
             

@@ -123,8 +123,8 @@ const HeaderText = styled.div`
   }
   p {
     margin: 0;
-    font-size: 14px;
-    opacity: 1;
+    font-size: 12px;
+    opacity: 0.8;
   }
 `;
 
@@ -170,7 +170,7 @@ const Message = styled(motion.div)`
   max-width: 80%;
   padding: 12px 16px;
   border-radius: 18px;
-  font-size: 16px;
+  font-size: 14px;
   line-height: 1.4;
   word-wrap: break-word;
   white-space: pre-wrap; /* 줄바꿈 문자 보존 */
@@ -182,7 +182,7 @@ const Message = styled(motion.div)`
     border-bottom-right-radius: 4px;
   ` : `
     background: #f8f9fa;
-    color: #111;
+    color: #333;
     border-bottom-left-radius: 4px;
   `}
 `;
@@ -191,13 +191,13 @@ const ToolIndicator = styled.div`
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 14px;
-  color: #333;
-  margin-top: 6px;
-  padding: 0;
-  background: transparent;
-  border-radius: 0;
-  width: auto;
+  font-size: 12px;
+  color: #667eea;
+  margin-top: 4px;
+  padding: 4px 8px;
+  background: rgba(102, 126, 234, 0.1);
+  border-radius: 12px;
+  width: fit-content;
 `;
 
 const ChatInput = styled.div`
@@ -267,8 +267,8 @@ const SendButton = styled.button`
     transform: none;
   }
 
-  .lgc-send-base { width: 100%; display: flex; align-items: center; justify-content: center; }
-  .lgc-send-fly { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+  .lgc-send-base { width: 100%; margin-right: 5px; display: flex; align-items: center; justify-content: center; }
+  .lgc-send-fly { position: absolute; top: 30%; left: 30%; transform: translate(-50%, -50%); pointer-events: none; }
   .lgc-send-trail { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border-radius: 50%; background: rgba(255,255,255,0.9); pointer-events: none; }
 `;
 
@@ -292,8 +292,8 @@ const Dot = styled(motion.div)`
 const WelcomeMessage = styled.div`
   text-align: center;
   padding: 20px;
-  color: #111;
-  font-size: 16px;
+  color: #666;
+  font-size: 14px;
   line-height: 1.5;
 `;
 
@@ -312,6 +312,14 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
   const [isSendAnimating, setIsSendAnimating] = useState(false);
   const wsRef = useRef(null);
 	const navigate = useNavigate();
+  // 환영 메시지 중복 표시 방지 (세션당 1회)
+  const hasWelcomedRef = useRef(false);
+  const [shouldShowWelcome, setShouldShowWelcome] = useState(false);
+  useEffect(() => {
+    try {
+      hasWelcomedRef.current = sessionStorage.getItem('lgc_welcome_shown') === '1';
+    } catch (_) {}
+  }, []);
   
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -333,6 +341,17 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
   useEffect(() => {
     checkAgentHealth();
   }, []);
+
+  // 첫 렌더에서 환영 메시지 한 번 표시 후 플래그 저장
+  useEffect(() => {
+    if (isOpen && messages.length === 0 && !hasWelcomedRef.current) {
+      setShouldShowWelcome(true);
+      hasWelcomedRef.current = true;
+      try { sessionStorage.setItem('lgc_welcome_shown', '1'); } catch (_) {}
+    } else {
+      setShouldShowWelcome(false);
+    }
+  }, [isOpen, messages.length]);
 
   // 자동 오픈 제거: 페이지 로드시 챗봇이 자동으로 열리지 않도록 함
 
@@ -363,8 +382,9 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
   const resolveNavigationPath = (text) => {
     const lower = String(text || '').toLowerCase();
 
+    // 명시적인 이동/열기류 동사만 허용 (보여/보여줘 제거)
     const moveVerbs = [
-      '이동', '넘어가', '넘어 가', '가 ', '가자', '열어', '열기', '열어줘', '보여', '페이지', '메뉴',
+      '이동', '넘어가', '넘어 가', '가 ', '가자', '열어', '열기', '열어줘', '페이지', '메뉴',
       'move', 'go', 'open', 'navigate'
     ];
 
@@ -387,8 +407,8 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
 
     for (const r of routes) {
       if (r.keywords.some(k => lower.includes(k.toLowerCase()))) {
-        // 이동 의도가 명시된 경우 우선 처리, 없더라도 정확 매칭이면 허용
-        if (hasMoveVerb || lower.trim() === r.keywords[0].toLowerCase()) {
+        // 이동 의도가 명시된 경우에만 이동 처리 (정확 매칭 폴백 제거)
+        if (hasMoveVerb) {
           return r.path;
         }
       }
@@ -483,6 +503,18 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
         setIsLoading(false);
         // 페이지 이동 후 UI 인덱스 수집 시도
         setTimeout(() => { try { ensureUiIndexIfNeeded(window.location.href, true); } catch(_) {} }, 400);
+        // 백엔드에도 힌트를 전달하여 최종 판단 일치성 확보
+        try {
+          await fetch('/api/langgraph-agent/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_input: userMessage.content,
+              session_id: sessionId,
+              context: { current_page: window.location.pathname, user_agent: navigator.userAgent, is_navigation_candidate: true }
+            })
+          });
+        } catch(_) {}
         return;
       }
     } catch(_) {}
@@ -703,6 +735,10 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
     }
     setMessages([]);
     setSessionId(null);
+    // 채팅창 새로고침 시 환영 메시지 1회 재표시
+    try { sessionStorage.removeItem('lgc_welcome_shown'); } catch (_) {}
+    hasWelcomedRef.current = false;
+    setShouldShowWelcome(true);
 	// 기록 삭제 후 입력창 포커스
 	setTimeout(() => {
 		inputRef.current?.focus();
@@ -717,6 +753,10 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
       setIsOpenInternal(next);
     }
     if (next) {
+      // 창을 다시 열 때 메시지가 비어있다면 환영 메시지 재표시 (세션 플래그 초기화는 clearChat에서 수행)
+      if (messages.length === 0 && hasWelcomedRef.current === false) {
+        setShouldShowWelcome(true);
+      }
       setTimeout(() => {
         inputRef.current?.focus();
       }, 300);
@@ -747,7 +787,7 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
               opacity: 1, 
               y: 0, 
               scale: 1,
-              height: isMinimized ? '64px' : '600px',
+              height: isMinimized ? '64px' : '700px',
               width: isMinimized ? '64px' : '400px',
               borderRadius: isMinimized ? '50%' : '20px',
               padding: isMinimized ? '0px' : undefined
@@ -798,7 +838,7 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
             ) : (
               <>
                 <ChatBody className="lgc-body">
-                  {messages.length === 0 && (
+                  {messages.length === 0 && shouldShowWelcome && (
                     <WelcomeMessage className="lgc-welcome">
                       안녕하세요!<br /> 
                       저는 HireMe AI 어시스턴트입니다. 🤖<br />
