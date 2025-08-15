@@ -19,7 +19,7 @@ class LangGraphConfig(BaseSettings):
     max_conversation_history: int = 10
     session_timeout_minutes: int = 30
     max_sessions_per_user: int = 5
-    enable_keyword_routing: bool = False
+    enable_keyword_routing: bool = True
     # 공개적으로 허용되는 안전 툴 화이트리스트
     allowed_public_tools: List[str] = ["navigate", "dom_action"]
     # 네비게이션 허용 라우트(프론트 내부 경로)

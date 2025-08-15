@@ -4,7 +4,7 @@
 
 class LangGraphApiService {
   constructor() {
-    this.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+    this.baseURL = process.env.REACT_APP_API_URL || 'http://localhost:8010';
   }
 
   /**

@@ -14,7 +14,7 @@ const TitleRecommendationModal = ({
   const [error, setError] = useState(null);
 
   // API URL 설정
-  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
+  const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8010';
 
   // 모달이 열릴 때 AI 제목 추천 요청
   useEffect(() => {

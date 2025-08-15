@@ -4693,21 +4693,21 @@ src\pages\TalentRecommendation\TalentRecommendation.js
 [39m[22m
 
 webpack compiled with [1m[33m1 warning[39m[22m
-Proxy error: Could not proxy request /api/pdf-ocr/upload-pdf from localhost:3001 to http://localhost:8000/.
+Proxy error: Could not proxy request /api/pdf-ocr/upload-pdf from localhost:3010 to http://localhost:8010/.
 See https://nodejs.org/api/errors.html#errors_common_system_errors for more information (ECONNREFUSED).
 
-Proxy error: Could not proxy request /api/pdf-ocr/upload-pdf from localhost:3001 to http://localhost:8000/.
+Proxy error: Could not proxy request /api/pdf-ocr/upload-pdf from localhost:3010 to http://localhost:8010/.
 See https://nodejs.org/api/errors.html#errors_common_system_errors for more information (ECONNREFUSED).
 
-Proxy error: Could not proxy request /api/pdf-ocr/upload-pdf from localhost:3001 to http://localhost:8000/.
+Proxy error: Could not proxy request /api/pdf-ocr/upload-pdf from localhost:3010 to http://localhost:8010/.
 See https://nodejs.org/api/errors.html#errors_common_system_errors for more information (ECONNREFUSED).
 
-Proxy error: Could not proxy request /api/pdf-ocr/upload-pdf from localhost:3001 to http://localhost:8000/.
+Proxy error: Could not proxy request /api/pdf-ocr/upload-pdf from localhost:3010 to http://localhost:8010/.
 See https://nodejs.org/api/errors.html#errors_common_system_errors for more information (ECONNREFUSED).
 
-Proxy error: Could not proxy request /api/pdf-ocr/upload-pdf from localhost:3001 to http://localhost:8000/.
+Proxy error: Could not proxy request /api/pdf-ocr/upload-pdf from localhost:3010 to http://localhost:8010/.
 See https://nodejs.org/api/errors.html#errors_common_system_errors for more information (ECONNREFUSED).
 
-Proxy error: Could not proxy request /api/pdf-ocr/upload-pdf from localhost:3001 to http://localhost:8000/.
+Proxy error: Could not proxy request /api/pdf-ocr/upload-pdf from localhost:3010 to http://localhost:8010/.
 See https://nodejs.org/api/errors.html#errors_common_system_errors for more information (ECONNREFUSED).
 

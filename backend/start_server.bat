@@ -17,7 +17,7 @@ if not exist ".env" (
 )
 
 REM Start the server
-echo Starting server on http://localhost:8000
+echo Starting server on http://localhost:8010
 echo Press Ctrl+C to stop the server
 echo.
 python main.py

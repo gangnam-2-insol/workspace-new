@@ -765,35 +765,17 @@ async def get_similarity_metrics():
 async def check_resume_similarity(resume_id: str):
     """특정 이력서의 유사도 체크 (다른 모든 이력서와 비교)"""
     try:
-        print(f"[INFO] 유사도 체크 요청 - resume_id: {resume_id}")
+        print(f"[API] 이력서 유사도 체크 요청 - resume_id: {resume_id}")
         
-        # SimilarityService를 통한 청킹 기반 유사도 분석
-        result = await similarity_service.find_similar_resumes_by_chunks(resume_id, db.applicants, limit=50)
+        # SimilarityService를 통한 유사도 분석
+        result = await similarity_service.find_similar_resumes(resume_id, db.applicants, limit=50)
         
-        # 현재 이력서 정보 조회
-        current_resume = await db.applicants.find_one({"_id": object_id})
-        print(f"[INFO] 데이터베이스 조회 결과: {current_resume is not None}")
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail="유사도 분석에 실패했습니다.")
         
-        # 청킹 기반 API 응답 형식에 맞게 변환
+        # 기존 API 응답 형식에 맞게 변환
         similarity_results = []
         for similar in result["data"]["similar_resumes"]:
-            # 청킹 상세 정보에서 필드별 유사도 추출
-            chunk_details = similar.get("chunk_details", {})
-            field_similarities = {
-                "growthBackground": 0.0,
-                "motivation": 0.0,
-                "careerHistory": 0.0
-            }
-            
-            # 청크 매칭에서 필드별 최고 점수 추출
-            for chunk_key, chunk_info in chunk_details.items():
-                if "growth_background" in chunk_key:
-                    field_similarities["growthBackground"] = max(field_similarities["growthBackground"], chunk_info["score"])
-                elif "motivation" in chunk_key:
-                    field_similarities["motivation"] = max(field_similarities["motivation"], chunk_info["score"])
-                elif "career_history" in chunk_key:
-                    field_similarities["careerHistory"] = max(field_similarities["careerHistory"], chunk_info["score"])
-            
             similarity_result = {
                 "resume_id": similar["resume"]["_id"],
                 "applicant_name": similar["resume"].get("name", "알 수 없음"),
@@ -801,12 +783,10 @@ async def check_resume_similarity(resume_id: str):
                 "department": similar["resume"].get("department", ""),
                 "overall_similarity": round(similar["similarity_score"], 4),
                 "field_similarities": {
-                    "growthBackground": round(field_similarities["growthBackground"], 4),
-                    "motivation": round(field_similarities["motivation"], 4),
-                    "careerHistory": round(field_similarities["careerHistory"], 4)
+                    "growthBackground": round(similar["similarity_score"], 4),
+                    "motivation": round(similar["similarity_score"], 4),
+                    "careerHistory": round(similar["similarity_score"], 4)
                 },
-                "chunk_matches": similar.get("chunk_matches", 0),
-                "chunk_details": chunk_details,
                 "is_high_similarity": similar["similarity_score"] > 0.7,
                 "is_moderate_similarity": 0.4 <= similar["similarity_score"] <= 0.7,
                 "is_low_similarity": similar["similarity_score"] < 0.4,
@@ -814,125 +794,136 @@ async def check_resume_similarity(resume_id: str):
             }
             similarity_results.append(similarity_result)
         
-        # 다른 모든 이력서 조회 (현재 이력서 제외)
-        other_resumes = await db.applicants.find({"_id": {"$ne": ObjectId(resume_id)}}).to_list(1000)
+        # 통계 정보 계산
+        high_similarity_count = len([r for r in similarity_results if r["is_high_similarity"]])
+        moderate_similarity_count = len([r for r in similarity_results if r["is_moderate_similarity"]])
+        low_similarity_count = len([r for r in similarity_results if r["is_low_similarity"]])
         
-        # 현재 이력서의 비교 텍스트 (유사도 계산 필드)
-        current_fields = {
-            "growthBackground": current_resume.get("growthBackground", ""),
-            "motivation": current_resume.get("motivation", ""),
-            "careerHistory": current_resume.get("careerHistory", "")
+        return {
+            "current_resume": result["data"]["original_resume"],
+            "similarity_results": similarity_results,
+            "statistics": {
+                "total_compared": len(similarity_results),
+                "high_similarity_count": high_similarity_count,
+                "moderate_similarity_count": moderate_similarity_count,
+                "low_similarity_count": low_similarity_count,
+                "average_similarity": round(sum([r["overall_similarity"] for r in similarity_results]) / len(similarity_results) if similarity_results else 0, 4)
+            },
+            "top_similar": similarity_results[:5] if similarity_results else [],
+            "plagiarism_analysis": result["data"].get("plagiarism_analysis"),
+            "analysis_timestamp": datetime.now().isoformat()
         }
         
-        # 전체 텍스트 조합
-        current_text = " ".join([text for text in current_fields.values() if text])
+    except Exception as e:
+        print(f"[API] 이력서 유사도 체크 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"유사도 체크 실패: {str(e)}")
+
+# 자소서 유사도 체크 API
+@app.post("/api/coverletter/similarity-check/{applicant_id}")
+async def check_coverletter_similarity(applicant_id: str):
+    """특정 자소서의 유사도 체크 (다른 모든 자소서와 비교)"""
+    try:
+        print(f"[API] 자소서 유사도 체크 요청 - applicant_id: {applicant_id}")
+        
+        # ObjectId 검증
+        try:
+            object_id = ObjectId(applicant_id)
+        except Exception:
+            raise HTTPException(status_code=400, detail=f"잘못된 applicant_id 형식: {applicant_id}")
+        
+        # 지원자 존재 확인
+        current_applicant = await db.applicants.find_one({"_id": object_id})
+        if not current_applicant:
+            raise HTTPException(status_code=404, detail=f"지원자를 찾을 수 없습니다. 요청된 ID: {applicant_id}")
+        
+        # 자소서 데이터 확인 (motivation과 growthBackground 필드를 자소서로 간주)
+        current_motivation = current_applicant.get("motivation", "")
+        current_growth = current_applicant.get("growthBackground", "")
+        current_coverletter = f"{current_motivation}\n\n{current_growth}".strip()
+        
+        if not current_coverletter:
+            raise HTTPException(status_code=404, detail="자소서 데이터가 없습니다.")
+        
+        # SimilarityService의 텍스트 유사도 계산을 사용하여 자소서 비교
+        other_applicants = await db.applicants.find({
+            "_id": {"$ne": ObjectId(applicant_id)},
+            "$or": [
+                {"motivation": {"$exists": True, "$ne": ""}},
+                {"growthBackground": {"$exists": True, "$ne": ""}}
+            ]
+        }).to_list(1000)
         
         similarity_results = []
         
-        for other_resume in other_resumes:
-            other_id = str(other_resume["_id"])
+        for other_applicant in other_applicants:
+            other_id = str(other_applicant["_id"])
+            other_motivation = other_applicant.get("motivation", "")
+            other_growth = other_applicant.get("growthBackground", "")
+            other_coverletter = f"{other_motivation}\n\n{other_growth}".strip()
             
-            # 다른 이력서의 비교 텍스트
-            other_fields = {
-                "growthBackground": other_resume.get("growthBackground", ""),
-                "motivation": other_resume.get("motivation", ""), 
-                "careerHistory": other_resume.get("careerHistory", "")
-            }
-            other_text = " ".join([text for text in other_fields.values() if text])
+            if not other_coverletter:
+                continue
             
-            # 실제 유사도 계산 사용
+            # SimilarityService를 통한 텍스트 유사도 계산
+            current_data = {"motivation": current_motivation, "growthBackground": current_growth}
+            other_data = {"motivation": other_motivation, "growthBackground": other_growth}
+            
             try:
-                print(f"💫 이력서 간 유사도 계산 시작: {resume_id} vs {other_id}")
+                overall_similarity = similarity_service._calculate_text_similarity(current_data, other_data)
+                if overall_similarity is None:
+                    overall_similarity = 0.0
                 
-                # SimilarityService의 텍스트 유사도 계산 메서드 직접 호출
-                text_similarity = similarity_service._calculate_text_similarity(current_resume, other_resume)
-                overall_similarity = text_similarity if text_similarity is not None else 0.0
+                print(f"💫 자소서 유사도: {applicant_id} vs {other_id} = {overall_similarity:.3f}")
                 
-                print(f"📊 텍스트 유사도 결과: {overall_similarity:.3f}")
-                
-                # 필드별 유사도 계산
-                field_similarities = {}
-                for field_name in current_fields.keys():
-                    if current_fields[field_name] and other_fields[field_name]:
-                        # 필드별 개별 텍스트 유사도 계산
-                        field_sim = similarity_service._calculate_text_similarity(
-                            {field_name: current_fields[field_name]},
-                            {field_name: other_fields[field_name]}
+                # LLM 분석 (30% 이상 유사할 때만)
+                llm_analysis = None
+                if overall_similarity >= 0.3:
+                    try:
+                        llm_analysis = await similarity_service.llm_service.analyze_similarity_reasoning(
+                            original_resume=current_applicant,
+                            similar_resume=other_applicant,
+                            similarity_score=overall_similarity,
+                            document_type="자소서"
                         )
-                        field_similarities[field_name] = field_sim if field_sim is not None else 0.0
-                        print(f"📋 {field_name} 유사도: {field_similarities[field_name]:.3f}")
-                    else:
-                        field_similarities[field_name] = 0.0
-                        
-            except Exception as e:
-                print(f"[ERROR] 유사도 계산 중 오류 발생: {e}")
-                import traceback
-                traceback.print_exc()
+                    except Exception as llm_error:
+                        print(f"[API] LLM 분석 중 오류: {llm_error}")
+                        llm_analysis = {
+                            "success": False,
+                            "error": str(llm_error),
+                            "analysis": "LLM 분석에 실패했습니다."
+                        }
                 
-                # 오류 시 기본값 사용
-                import random
-                overall_similarity = random.uniform(0.1, 0.9)
-                field_similarities = {}
-                for field_name in current_fields.keys():
-                    if current_fields[field_name] and other_fields[field_name]:
-                        field_similarities[field_name] = random.uniform(0.0, 1.0)
-                    else:
-                        field_similarities[field_name] = 0.0
-            
-            # LLM 분석 추가 (유사도가 일정 수준 이상일 때만)
-            llm_analysis = None
-            
-            if overall_similarity >= 0.3:  # 30% 이상 유사할 때만 LLM 분석
-                try:
-                    print(f"[API] LLM 분석 시작 - 유사도: {overall_similarity:.3f}")
-                    llm_analysis = await similarity_service.llm_service.analyze_similarity_reasoning(
-                        original_resume=current_resume,
-                        similar_resume=other_resume,
-                        similarity_score=overall_similarity
-                    )
-                    print(f"[API] LLM 분석 완료")
-                except Exception as llm_error:
-                    print(f"[API] LLM 분석 중 오류: {llm_error}")
-                    llm_analysis = {
-                        "success": False,
-                        "error": str(llm_error),
-                        "analysis": "LLM 분석에 실패했습니다."
-                    }
-            
-            similarity_result = {
-                "resume_id": other_id,
-                "applicant_name": other_resume.get("name", "알 수 없음"),
-                "position": other_resume.get("position", ""),
-                "department": other_resume.get("department", ""),
-                "overall_similarity": round(overall_similarity, 4),
-                "field_similarities": {
-                    "growthBackground": round(field_similarities["growthBackground"], 4),
-                    "motivation": round(field_similarities["motivation"], 4),
-                    "careerHistory": round(field_similarities["careerHistory"], 4)
-                },
-                "is_high_similarity": overall_similarity > 0.7,
-                "is_moderate_similarity": 0.4 <= overall_similarity <= 0.7,
-                "is_low_similarity": overall_similarity < 0.4,
-                "llm_analysis": llm_analysis
-            }
-            
-            similarity_results.append(similarity_result)
+                similarity_result = {
+                    "resume_id": other_id,
+                    "applicant_name": other_applicant.get("name", "알 수 없음"),
+                    "position": other_applicant.get("position", ""),
+                    "department": other_applicant.get("department", ""),
+                    "overall_similarity": round(overall_similarity, 4),
+                    "is_high_similarity": overall_similarity > 0.7,
+                    "is_moderate_similarity": 0.4 <= overall_similarity <= 0.7,
+                    "is_low_similarity": overall_similarity < 0.4,
+                    "llm_analysis": llm_analysis
+                }
+                similarity_results.append(similarity_result)
+                
+            except Exception as e:
+                print(f"[API] 자소서 유사도 계산 중 오류: {e}")
+                continue
         
         # 유사도 높은 순으로 정렬
         similarity_results.sort(key=lambda x: x["overall_similarity"], reverse=True)
         
-        # 전체 표절 위험도 분석 추가
+        # 표절 위험도 분석
         plagiarism_analysis = None
         high_similarity_results = [r for r in similarity_results if r["overall_similarity"] >= 0.3]
         
         if high_similarity_results:
             try:
-                print(f"[API] 표절 위험도 분석 시작")
                 plagiarism_analysis = await similarity_service.llm_service.analyze_plagiarism_risk(
-                    original_resume=current_resume,
-                    similar_resumes=high_similarity_results
+                    original_resume=current_applicant,
+                    similar_resumes=high_similarity_results,
+                    document_type="자소서"
                 )
-                print(f"[API] 표절 위험도 분석 완료")
             except Exception as plag_error:
                 print(f"[API] 표절 위험도 분석 중 오류: {plag_error}")
                 plagiarism_analysis = {
@@ -949,10 +940,10 @@ async def check_resume_similarity(resume_id: str):
         
         return {
             "current_resume": {
-                "id": resume_id,
-                "name": current_resume.get("name", ""),
-                "position": current_resume.get("position", ""),
-                "department": current_resume.get("department", "")
+                "id": applicant_id,
+                "name": current_applicant.get("name", ""),
+                "position": current_applicant.get("position", ""),
+                "department": current_applicant.get("department", "")
             },
             "similarity_results": similarity_results,
             "statistics": {
@@ -968,7 +959,8 @@ async def check_resume_similarity(resume_id: str):
         }
         
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"유사도 체크 실패: {str(e)}")
+        print(f"[API] 자소서 유사도 체크 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"자소서 유사도 체크 실패: {str(e)}")
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8010)

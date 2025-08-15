@@ -29,7 +29,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY ./backend .
 
 # 포트 노출
-EXPOSE 8000
+EXPOSE 8010
 
 # 개발 서버 실행
-CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+CMD ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8010", "--reload"]
