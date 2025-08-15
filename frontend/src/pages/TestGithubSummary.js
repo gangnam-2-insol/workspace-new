@@ -7,6 +7,7 @@ const TestGithubSummary = () => {
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
   const [showAllFields, setShowAllFields] = useState(false);
+  const [progress, setProgress] = useState({ current: 0, total: 4, step: '' });
 
   // GitHub URL 파싱 함수 (백엔드와 동일한 로직)
   const parseGithubUrl = (url) => {
@@ -38,7 +39,10 @@ const TestGithubSummary = () => {
       setError('GitHub 아이디 또는 GitHub URL을 입력하세요');
       return;
     }
+    
     setLoading(true);
+    setProgress({ current: 1, total: 4, step: 'GitHub 프로필 정보 확인 중...' });
+    
     try {
       // URL 파싱하여 요청 데이터 구성
       let requestData = { username: username.trim() };
@@ -53,22 +57,51 @@ const TestGithubSummary = () => {
         }
       }
       
+      // 2단계: 레포지토리 정보 수집
+      setProgress({ current: 2, total: 4, step: '레포지토리 정보 수집 중...' });
+      
       const res = await fetch((process.env.REACT_APP_API_URL || 'http://localhost:8000') + '/api/github/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData)
       });
+      
+      // 3단계: 코드 분석
+      setProgress({ current: 3, total: 4, step: '코드 구조 및 언어 분석 중...' });
+      
       const data = await res.json();
       if (!res.ok) {
-        // 백엔드에서 detail만 내려올 수도 있으니 보강
-        const msg = data?.message || data?.detail || '요약 요청 실패';
-        throw new Error(msg);
+        // 개선된 오류 메시지 처리
+        let errorMessage = '분석 중 오류가 발생했습니다.';
+        
+        if (data?.detail) {
+          if (data.detail.includes('404') || data.detail.includes('찾을 수 없습니다')) {
+            errorMessage = '레포지토리를 찾을 수 없습니다. URL과 접근 권한을 확인해주세요.';
+          } else if (data.detail.includes('403') || data.detail.includes('권한')) {
+            errorMessage = '비공개 레포지토리입니다. 접근 권한이 필요합니다.';
+          } else if (data.detail.includes('rate limit') || data.detail.includes('제한')) {
+            errorMessage = 'GitHub API 제한에 도달했습니다. 잠시 후 다시 시도해주세요.';
+          } else if (data.detail.includes('timeout') || data.detail.includes('시간 초과')) {
+            errorMessage = '요청이 시간 초과되었습니다. 네트워크 상태를 확인해주세요.';
+          } else {
+            errorMessage = data.detail;
+          }
+        } else if (data?.message) {
+          errorMessage = data.message;
+        }
+        
+        throw new Error(errorMessage);
       }
+      
+      // 4단계: 결과 생성
+      setProgress({ current: 4, total: 4, step: '분석 결과 생성 중...' });
+      
       setResult(data);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
+      setProgress({ current: 0, total: 4, step: '' });
     }
   };
 
@@ -78,6 +111,14 @@ const TestGithubSummary = () => {
       background: '#f8f9fa',
       // padding: '20px'
     }}>
+      <style>
+        {`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}
+      </style>
       <div style={{ 
         maxWidth: 900, 
         margin: '0 auto', 
@@ -134,30 +175,165 @@ const TestGithubSummary = () => {
               fontWeight: 'bold',
               cursor: loading ? 'not-allowed' : 'pointer',
               transition: 'transform 0.2s ease',
-              minWidth: '120px'
+              minWidth: '120px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
             }}
             onMouseOver={(e) => !loading && (e.target.style.transform = 'translateY(-2px)')}
             onMouseOut={(e) => !loading && (e.target.style.transform = 'translateY(0)')}
           >
-            {loading ? '⏳ 분석 중...' : '🚀 분석하기'}
+            {loading ? (
+              <>
+                <div style={{ 
+                  width: '16px', 
+                  height: '16px', 
+                  borderRadius: '50%', 
+                  border: '2px solid white',
+                  borderTop: '2px solid transparent',
+                  animation: 'spin 1s linear infinite'
+                }} />
+                분석 중...
+              </>
+            ) : (
+              <>
+                <span>🚀</span>
+                분석하기
+              </>
+            )}
           </button>
         </form>
       </div>
+
+      {/* 진행 상황 표시 */}
+      {loading && progress.current > 0 && (
+        <div style={{ 
+          background: 'white', 
+          borderRadius: '12px', 
+          padding: '20px', 
+          boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+          marginBottom: '20px',
+          border: '1px solid #e1e5e9'
+        }}>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'center', 
+            gap: '12px',
+            marginBottom: '12px'
+          }}>
+            <div style={{ 
+              width: '20px', 
+              height: '20px', 
+              borderRadius: '50%', 
+              border: '2px solid #2c3e50',
+              borderTop: '2px solid transparent',
+              animation: 'spin 1s linear infinite'
+            }} />
+            <span style={{ 
+              fontSize: '16px', 
+              fontWeight: '600', 
+              color: '#2c3e50' 
+            }}>
+              분석 진행 중...
+            </span>
+          </div>
+          
+          <div style={{ marginBottom: '8px' }}>
+            <div style={{ 
+              fontSize: '14px', 
+              color: '#666', 
+              marginBottom: '4px' 
+            }}>
+              {progress.step}
+            </div>
+            <div style={{ 
+              width: '100%', 
+              height: '6px', 
+              backgroundColor: '#e1e5e9', 
+              borderRadius: '3px',
+              overflow: 'hidden'
+            }}>
+              <div style={{ 
+                width: `${(progress.current / progress.total) * 100}%`,
+                height: '100%',
+                backgroundColor: '#2c3e50',
+                borderRadius: '3px',
+                transition: 'width 0.3s ease'
+              }} />
+            </div>
+          </div>
+          
+          <div style={{ 
+            fontSize: '12px', 
+            color: '#999',
+            textAlign: 'right' 
+          }}>
+            {progress.current} / {progress.total} 단계
+          </div>
+        </div>
+      )}
 
       {error && (
         <div style={{ 
           background: '#fee', 
           color: '#c33', 
-          padding: '15px', 
-          borderRadius: '8px', 
+          padding: '20px', 
+          borderRadius: '12px', 
           marginBottom: '20px',
           border: '1px solid #fcc',
-          display: 'flex',
-          alignItems: 'center',
-          gap: '10px'
+          boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
         }}>
-          <span style={{ fontSize: '20px' }}>⚠️</span>
-          <span>{error}</span>
+          <div style={{ 
+            display: 'flex', 
+            alignItems: 'flex-start', 
+            gap: '12px',
+            marginBottom: '12px'
+          }}>
+            <span style={{ fontSize: '20px', marginTop: '2px' }}>⚠️</span>
+            <div style={{ flex: 1 }}>
+              <div style={{ 
+                fontSize: '16px', 
+                fontWeight: '600', 
+                marginBottom: '8px' 
+              }}>
+                분석 중 오류가 발생했습니다
+              </div>
+              <div style={{ 
+                fontSize: '14px', 
+                lineHeight: '1.5',
+                marginBottom: '12px'
+              }}>
+                {error}
+              </div>
+              
+              {/* 해결 방법 제안 */}
+              <div style={{ 
+                background: '#fff3cd', 
+                border: '1px solid #ffeaa7', 
+                borderRadius: '8px', 
+                padding: '12px',
+                fontSize: '13px',
+                color: '#856404'
+              }}>
+                <div style={{ fontWeight: '600', marginBottom: '4px' }}>💡 해결 방법:</div>
+                <ul style={{ margin: 0, paddingLeft: '16px' }}>
+                  {error.includes('찾을 수 없습니다') && (
+                    <li>GitHub URL이 올바른지 확인해주세요</li>
+                  )}
+                  {error.includes('비공개') && (
+                    <li>비공개 레포지토리의 경우 접근 권한이 필요합니다</li>
+                  )}
+                  {error.includes('API 제한') && (
+                    <li>잠시 후 다시 시도하거나 GitHub 토큰을 사용해주세요</li>
+                  )}
+                  {error.includes('시간 초과') && (
+                    <li>네트워크 연결을 확인하고 다시 시도해주세요</li>
+                  )}
+                  <li>GitHub 아이디 또는 레포지토리 URL을 다시 입력해보세요</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
@@ -433,77 +609,6 @@ const TestGithubSummary = () => {
             </div>
           ) : null}
           
-          {result && result.advanced_analysis && (
-            <div style={{ 
-              margin: '25px 0', 
-              background: 'white', 
-              borderRadius: '12px', 
-              padding: '20px',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.06)'
-            }}>
-              <h3 style={{ 
-                margin: '0 0 16px 0', 
-                color: '#333', 
-                fontSize: '20px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '10px'
-              }}>
-                🧪 고급 분석 (경량)
-              </h3>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))', gap: 16 }}>
-                {/* 코드 메트릭 */}
-                {result.advanced_analysis.code_metrics && (
-                  <div style={{ background: '#f8f9fa', border: '1px solid #e1e5e9', borderRadius: 8, padding: 16 }}>
-                    <div style={{ fontWeight: 700, marginBottom: 10 }}>코드 품질 메트릭</div>
-                    <div style={{ color: '#444', fontSize: 14, lineHeight: 1.8 }}>
-                      <div>추정 파일 수: <b>{result.advanced_analysis.code_metrics.estimated_total_files}</b></div>
-                      <div>테스트 파일 존재: <b>{result.advanced_analysis.code_metrics.has_tests ? '예' : '아니오'}</b></div>
-                      <div>복잡도 지표: <b>{result.advanced_analysis.code_metrics.complexity_indicator}</b></div>
-                      {result.advanced_analysis.code_metrics.extension_distribution && (
-                        <div style={{ marginTop: 8 }}>
-                          확장자 분포: {Object.entries(result.advanced_analysis.code_metrics.extension_distribution)
-                            .map(([k,v]) => `${k}: ${v}`).join(', ')}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {/* 아키텍처 패턴 */}
-                {result.advanced_analysis.architecture_pattern && (
-                  <div style={{ background: '#f8f9fa', border: '1px solid #e1e5e9', borderRadius: 8, padding: 16 }}>
-                    <div style={{ fontWeight: 700, marginBottom: 10 }}>아키텍처 패턴</div>
-                    <div style={{ color: '#444', fontSize: 14, lineHeight: 1.8 }}>
-                      <div>패턴: <b>{result.advanced_analysis.architecture_pattern.pattern}</b></div>
-                      {'confidence' in result.advanced_analysis.architecture_pattern && (
-                        <div>신뢰도: <b>{result.advanced_analysis.architecture_pattern.confidence}%</b></div>
-                      )}
-                      {Array.isArray(result.advanced_analysis.architecture_pattern.indicators) && result.advanced_analysis.architecture_pattern.indicators.length > 0 && (
-                        <div>지표: {result.advanced_analysis.architecture_pattern.indicators.join(', ')}</div>
-                      )}
-                    </div>
-                  </div>
-                )}
-                {/* 의존성 그래프 (간단 목록) */}
-                {result.advanced_analysis.dependency_graph && Array.isArray(result.advanced_analysis.dependency_graph.nodes) && (
-                  <div style={{ background: '#f8f9fa', border: '1px solid #e1e5e9', borderRadius: 8, padding: 16 }}>
-                    <div style={{ fontWeight: 700, marginBottom: 10 }}>의존성</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      {result.advanced_analysis.dependency_graph.nodes.map((n, i) => (
-                        <span key={i} style={{ background: 'white', border: '1px solid #dee2e6', borderRadius: 999, padding: '6px 10px', fontSize: 13 }}>
-                          {n.id}
-                        </span>
-                      ))}
-                      {(!result.advanced_analysis.dependency_graph.nodes || result.advanced_analysis.dependency_graph.nodes.length === 0) && (
-                        <span style={{ color: '#777', fontSize: 13 }}>표시할 의존성이 없습니다</span>
-                      )}
-                    </div>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           <div>
             <div style={{ 
               display: 'flex', 
@@ -599,129 +704,110 @@ const TestGithubSummary = () => {
                         
                                                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
                            {/* 주제 */}
-                           {(showAllFields || (summary.주제 && summary.주제 !== '정보 없음')) && (
-                             <div style={{ 
-                               padding: '15px', 
-                               background: '#e8f4f8', 
-                               borderRadius: '8px',
-                               border: '1px solid #d1ecf1',
-                               color: showAllFields && (!summary.주제 || summary.주제 === '정보 없음') ? '#999' : '#0c5460',
-                               opacity: showAllFields && (!summary.주제 || summary.주제 === '정보 없음') ? 0.6 : 1
-                             }}>
-                               <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>🎯 주제</div>
-                               <div style={{ fontWeight: 'bold' }}>
-                                 {summary.주제 || (showAllFields ? '정보 없음' : '')}
-                               </div>
+                           <div style={{ 
+                             padding: '15px', 
+                             background: '#e8f4f8', 
+                             borderRadius: '8px',
+                             border: '1px solid #d1ecf1',
+                             color: (!summary.주제 || summary.주제 === '정보 없음') ? '#999' : '#0c5460',
+                             opacity: (!summary.주제 || summary.주제 === '정보 없음') ? 0.6 : 1
+                           }}>
+                             <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>🎯 주제</div>
+                             <div style={{ fontWeight: 'bold' }}>
+                               {summary.주제 || '정보 없음'}
                              </div>
-                           )}
+                           </div>
                            
                            {/* 기술 스택 */}
-                           {(showAllFields || (summary['기술 스택'] && summary['기술 스택'] !== '정보 없음' && 
-                            (Array.isArray(summary['기술 스택']) ? summary['기술 스택'].length > 0 : true))) && (
-                             <div style={{ 
-                               padding: '15px', 
-                               background: '#f8f9fa', 
-                               borderRadius: '8px',
-                               border: '1px solid #dee2e6',
-                               color: showAllFields && (!summary['기술 스택'] || summary['기술 스택'] === '정보 없음' || 
-                                (Array.isArray(summary['기술 스택']) && summary['기술 스택'].length === 0)) ? '#999' : '#495057',
-                               opacity: showAllFields && (!summary['기술 스택'] || summary['기술 스택'] === '정보 없음' || 
-                                (Array.isArray(summary['기술 스택']) && summary['기술 스택'].length === 0)) ? 0.6 : 1
-                             }}>
-                               <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>⚙️ 기술 스택</div>
-                               <div style={{ fontWeight: 'bold' }}>
-                                 {(() => {
-                                   const techStack = summary['기술 스택'];
-                                   if (!techStack || techStack === '정보 없음' || 
-                                       (Array.isArray(techStack) && techStack.length === 0)) {
-                                     return showAllFields ? '정보 없음' : '';
-                                   }
-                                   return Array.isArray(techStack) ? techStack.join(', ') : techStack;
-                                 })()}
-                               </div>
+                           <div style={{ 
+                             padding: '15px', 
+                             background: '#f8f9fa', 
+                             borderRadius: '8px',
+                             border: '1px solid #dee2e6',
+                             color: (!summary['기술 스택'] || summary['기술 스택'] === '정보 없음' || 
+                              (Array.isArray(summary['기술 스택']) && summary['기술 스택'].length === 0)) ? '#999' : '#495057',
+                             opacity: (!summary['기술 스택'] || summary['기술 스택'] === '정보 없음' || 
+                              (Array.isArray(summary['기술 스택']) && summary['기술 스택'].length === 0)) ? 0.6 : 1
+                           }}>
+                             <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>⚙️ 기술 스택</div>
+                             <div style={{ fontWeight: 'bold' }}>
+                               {(() => {
+                                 const techStack = summary['기술 스택'];
+                                 if (!techStack || techStack === '정보 없음' || 
+                                     (Array.isArray(techStack) && techStack.length === 0)) {
+                                   return '정보 없음';
+                                 }
+                                 return Array.isArray(techStack) ? techStack.join(', ') : techStack;
+                               })()}
                              </div>
-                           )}
+                           </div>
                            
                            {/* 주요 기능 */}
-                           {(showAllFields || (summary['주요 기능'] && summary['주요 기능'] !== '정보 없음' && 
-                            (Array.isArray(summary['주요 기능']) ? summary['주요 기능'].length > 0 : true))) && (
-                             <div style={{ 
-                               padding: '15px', 
-                               background: '#e8f5e8', 
-                               borderRadius: '8px',
-                               border: '1px solid #d4edda',
-                               color: showAllFields && (!summary['주요 기능'] || summary['주요 기능'] === '정보 없음' || 
-                                (Array.isArray(summary['주요 기능']) && summary['주요 기능'].length === 0)) ? '#999' : '#155724',
-                               opacity: showAllFields && (!summary['주요 기능'] || summary['주요 기능'] === '정보 없음' || 
-                                (Array.isArray(summary['주요 기능']) && summary['주요 기능'].length === 0)) ? 0.6 : 1
-                             }}>
-                               <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>🚀 주요 기능</div>
-                               <div style={{ fontWeight: 'bold' }}>
-                                 {(() => {
-                                   const features = summary['주요 기능'];
-                                   if (!features || features === '정보 없음' || 
-                                       (Array.isArray(features) && features.length === 0)) {
-                                     return showAllFields ? '정보 없음' : '';
-                                   }
-                                   return Array.isArray(features) ? features.join(', ') : features;
-                                 })()}
-                               </div>
+                           <div style={{ 
+                             padding: '15px', 
+                             background: '#e8f5e8', 
+                             borderRadius: '8px',
+                             border: '1px solid #d4edda',
+                             color: (!summary['주요 기능'] || summary['주요 기능'] === '정보 없음' || 
+                              (Array.isArray(summary['주요 기능']) && summary['주요 기능'].length === 0)) ? '#999' : '#155724',
+                             opacity: (!summary['주요 기능'] || summary['주요 기능'] === '정보 없음' || 
+                              (Array.isArray(summary['주요 기능']) && summary['주요 기능'].length === 0)) ? 0.6 : 1
+                           }}>
+                             <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>🚀 주요 기능</div>
+                             <div style={{ fontWeight: 'bold' }}>
+                               {(() => {
+                                 const features = summary['주요 기능'];
+                                 if (!features || features === '정보 없음' || 
+                                     (Array.isArray(features) && features.length === 0)) {
+                                   return '정보 없음';
+                                 }
+                                 return Array.isArray(features) ? features.join(', ') : features;
+                               })()}
                              </div>
-                           )}
+                           </div>
                            
                            {/* 아키텍처 구조 */}
-                           {(showAllFields || (summary['아키텍처 구조'] && 
-                             summary['아키텍처 구조'] !== '정보 없음' && 
-                             !summary['아키텍처 구조'].includes('파악하기 어렵습니다') &&
-                             !summary['아키텍처 구조'].includes('확인되지 않습니다'))) && (
-                             <div style={{ 
-                               padding: '15px', 
-                               background: '#fff3cd', 
-                               borderRadius: '8px',
-                               border: '1px solid #ffeaa7',
-                               color: showAllFields && (!summary['아키텍처 구조'] || 
-                                 summary['아키텍처 구조'] === '정보 없음' ||
-                                 summary['아키텍처 구조'].includes('파악하기 어렵습니다') ||
-                                 summary['아키텍처 구조'].includes('확인되지 않습니다')) ? '#999' : '#856404',
-                               opacity: showAllFields && (!summary['아키텍처 구조'] || 
-                                 summary['아키텍처 구조'] === '정보 없음' ||
-                                 summary['아키텍처 구조'].includes('파악하기 어렵습니다') ||
-                                 summary['아키텍처 구조'].includes('확인되지 않습니다')) ? 0.6 : 1
-                             }}>
-                               <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>🏗️ 아키텍처 구조</div>
-                               <div style={{ fontWeight: 'bold' }}>
-                                 {(() => {
-                                   const archInfo = summary['아키텍처 구조'];
-                                   if (!archInfo || archInfo === '정보 없음' ||
-                                       archInfo.includes('파악하기 어렵습니다') ||
-                                       archInfo.includes('확인되지 않습니다')) {
-                                     return showAllFields ? '정보 없음' : '';
-                                   }
-                                   return archInfo;
-                                 })()}
-                               </div>
+                           <div style={{ 
+                             padding: '15px', 
+                             background: '#fff3cd', 
+                             borderRadius: '8px',
+                             border: '1px solid #ffeaa7',
+                             color: (!summary['아키텍처 구조'] || 
+                               summary['아키텍처 구조'] === '정보 없음' ||
+                               summary['아키텍처 구조'].includes('파악하기 어렵습니다') ||
+                               summary['아키텍처 구조'].includes('확인되지 않습니다')) ? '#999' : '#856404',
+                             opacity: (!summary['아키텍처 구조'] || 
+                               summary['아키텍처 구조'] === '정보 없음' ||
+                               summary['아키텍처 구조'].includes('파악하기 어렵습니다') ||
+                               summary['아키텍처 구조'].includes('확인되지 않습니다')) ? 0.6 : 1
+                           }}>
+                             <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>🏗️ 아키텍처 구조</div>
+                             <div style={{ fontWeight: 'bold' }}>
+                               {(() => {
+                                 const archInfo = summary['아키텍처 구조'];
+                                 if (!archInfo || archInfo === '정보 없음' ||
+                                     archInfo.includes('파악하기 어렵습니다') ||
+                                     archInfo.includes('확인되지 않습니다')) {
+                                   return '정보 없음';
+                                 }
+                                 return archInfo;
+                               })()}
                              </div>
-                           )}
+                           </div>
                            
-                           {/* 외부 라이브러리 */}
-                           {(showAllFields || (() => {
-                             const libraries = summary['외부 라이브러리'];
-                             return libraries && 
-                               libraries !== '정보 없음' && 
-                               libraries !== '' && 
-                               (Array.isArray(libraries) ? libraries.length > 0 : true);
-                           })()) && (
+                           {/* 외부 라이브러리 - 전체 보기에서만 표시 */}
+                           {showAllFields && (
                              <div style={{ 
                                padding: '15px', 
                                background: '#f8f9fa', 
                                borderRadius: '8px',
                                border: '1px solid #dee2e6',
-                               color: showAllFields && (() => {
+                               color: (() => {
                                  const libraries = summary['외부 라이브러리'];
                                  return !libraries || libraries === '정보 없음' || libraries === '' || 
                                    (Array.isArray(libraries) && libraries.length === 0);
                                })() ? '#999' : '#495057',
-                               opacity: showAllFields && (() => {
+                               opacity: (() => {
                                  const libraries = summary['외부 라이브러리'];
                                  return !libraries || libraries === '정보 없음' || libraries === '' || 
                                    (Array.isArray(libraries) && libraries.length === 0);
@@ -733,7 +819,7 @@ const TestGithubSummary = () => {
                                    const libraries = summary['외부 라이브러리'];
                                    if (!libraries || libraries === '정보 없음' || libraries === '' || 
                                        (Array.isArray(libraries) && libraries.length === 0)) {
-                                     return showAllFields ? '정보 없음' : '';
+                                     return '정보 없음';
                                    }
                                    return Array.isArray(libraries) ? libraries.join(', ') : libraries;
                                  })()}
@@ -741,27 +827,27 @@ const TestGithubSummary = () => {
                              </div>
                            )}
                            
-                           {/* LLM 모델 정보 */}
-                           {(showAllFields || (summary['LLM 모델 정보'] && 
-                             summary['LLM 모델 정보'] !== '정보 없음' && 
-                             !summary['LLM 모델 정보'].includes('확인되지 않습니다') &&
-                             !summary['LLM 모델 정보'].includes('직접적으로 확인되지 않습니다') &&
-                             !summary['LLM 모델 정보'].includes('파악하기 어렵습니다'))) && (
+                           {/* LLM 모델 정보 - 전체 보기에서만 표시 */}
+                           {showAllFields && (
                              <div style={{ 
                                padding: '15px', 
                                background: '#e2e3e5', 
                                borderRadius: '8px',
                                border: '1px solid #d6d8db',
-                               color: showAllFields && (!summary['LLM 모델 정보'] || 
-                                 summary['LLM 모델 정보'] === '정보 없음' ||
-                                 summary['LLM 모델 정보'].includes('확인되지 않습니다') ||
-                                 summary['LLM 모델 정보'].includes('직접적으로 확인되지 않습니다') ||
-                                 summary['LLM 모델 정보'].includes('파악하기 어렵습니다')) ? '#999' : '#383d41',
-                               opacity: showAllFields && (!summary['LLM 모델 정보'] || 
-                                 summary['LLM 모델 정보'] === '정보 없음' ||
-                                 summary['LLM 모델 정보'].includes('확인되지 않습니다') ||
-                                 summary['LLM 모델 정보'].includes('직접적으로 확인되지 않습니다') ||
-                                 summary['LLM 모델 정보'].includes('파악하기 어렵습니다')) ? 0.6 : 1
+                               color: (() => {
+                                 const llmInfo = summary['LLM 모델 정보'];
+                                 return !llmInfo || llmInfo === '정보 없음' ||
+                                   llmInfo.includes('확인되지 않습니다') ||
+                                   llmInfo.includes('직접적으로 확인되지 않습니다') ||
+                                   llmInfo.includes('파악하기 어렵습니다');
+                               })() ? '#999' : '#383d41',
+                               opacity: (() => {
+                                 const llmInfo = summary['LLM 모델 정보'];
+                                 return !llmInfo || llmInfo === '정보 없음' ||
+                                   llmInfo.includes('확인되지 않습니다') ||
+                                   llmInfo.includes('직접적으로 확인되지 않습니다') ||
+                                   llmInfo.includes('파악하기 어렵습니다');
+                               })() ? 0.6 : 1
                              }}>
                                <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>🤖 LLM 모델 정보</div>
                                <div style={{ fontWeight: 'bold' }}>
@@ -771,7 +857,7 @@ const TestGithubSummary = () => {
                                        llmInfo.includes('확인되지 않습니다') ||
                                        llmInfo.includes('직접적으로 확인되지 않습니다') ||
                                        llmInfo.includes('파악하기 어렵습니다')) {
-                                     return showAllFields ? '정보 없음' : '';
+                                     return '정보 없음';
                                    }
                                    return llmInfo;
                                  })()}
@@ -813,129 +899,110 @@ const TestGithubSummary = () => {
                       }}>
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
                           {/* 주제 */}
-                          {(showAllFields || (summaries.주제 && summaries.주제 !== '정보 없음')) && (
-                            <div style={{ 
-                              padding: '15px', 
-                              background: '#e8f4f8', 
-                              borderRadius: '8px',
-                              border: '1px solid #d1ecf1',
-                              color: showAllFields && (!summaries.주제 || summaries.주제 === '정보 없음') ? '#999' : '#0c5460',
-                              opacity: showAllFields && (!summaries.주제 || summaries.주제 === '정보 없음') ? 0.6 : 1
-                            }}>
-                              <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>🎯 주제</div>
-                              <div style={{ fontWeight: 'bold' }}>
-                                {summaries.주제 || (showAllFields ? '정보 없음' : '')}
-                              </div>
+                          <div style={{ 
+                            padding: '15px', 
+                            background: '#e8f4f8', 
+                            borderRadius: '8px',
+                            border: '1px solid #d1ecf1',
+                            color: (!summaries.주제 || summaries.주제 === '정보 없음') ? '#999' : '#0c5460',
+                            opacity: (!summaries.주제 || summaries.주제 === '정보 없음') ? 0.6 : 1
+                          }}>
+                            <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>🎯 주제</div>
+                            <div style={{ fontWeight: 'bold' }}>
+                              {summaries.주제 || '정보 없음'}
                             </div>
-                          )}
+                          </div>
                           
                           {/* 기술 스택 */}
-                          {(showAllFields || (summaries['기술 스택'] && summaries['기술 스택'] !== '정보 없음' && 
-                           (Array.isArray(summaries['기술 스택']) ? summaries['기술 스택'].length > 0 : true))) && (
-                            <div style={{ 
-                              padding: '15px', 
-                              background: '#f8f9fa', 
-                              borderRadius: '8px',
-                              border: '1px solid #dee2e6',
-                              color: showAllFields && (!summaries['기술 스택'] || summaries['기술 스택'] === '정보 없음' || 
-                               (Array.isArray(summaries['기술 스택']) && summaries['기술 스택'].length === 0)) ? '#999' : '#495057',
-                              opacity: showAllFields && (!summaries['기술 스택'] || summaries['기술 스택'] === '정보 없음' || 
-                               (Array.isArray(summaries['기술 스택']) && summaries['기술 스택'].length === 0)) ? 0.6 : 1
-                            }}>
-                              <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>⚙️ 기술 스택</div>
-                              <div style={{ fontWeight: 'bold' }}>
-                                {(() => {
-                                  const techStack = summaries['기술 스택'];
-                                  if (!techStack || techStack === '정보 없음' || 
-                                      (Array.isArray(techStack) && techStack.length === 0)) {
-                                    return showAllFields ? '정보 없음' : '';
-                                  }
-                                  return Array.isArray(techStack) ? techStack.join(', ') : techStack;
-                                })()}
-                              </div>
+                          <div style={{ 
+                            padding: '15px', 
+                            background: '#f8f9fa', 
+                            borderRadius: '8px',
+                            border: '1px solid #dee2e6',
+                            color: (!summaries['기술 스택'] || summaries['기술 스택'] === '정보 없음' || 
+                             (Array.isArray(summaries['기술 스택']) && summaries['기술 스택'].length === 0)) ? '#999' : '#495057',
+                            opacity: (!summaries['기술 스택'] || summaries['기술 스택'] === '정보 없음' || 
+                             (Array.isArray(summaries['기술 스택']) && summaries['기술 스택'].length === 0)) ? 0.6 : 1
+                          }}>
+                            <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>⚙️ 기술 스택</div>
+                            <div style={{ fontWeight: 'bold' }}>
+                              {(() => {
+                                const techStack = summaries['기술 스택'];
+                                if (!techStack || techStack === '정보 없음' || 
+                                    (Array.isArray(techStack) && techStack.length === 0)) {
+                                  return '정보 없음';
+                                }
+                                return Array.isArray(techStack) ? techStack.join(', ') : techStack;
+                              })()}
                             </div>
-                          )}
+                          </div>
                           
                           {/* 주요 기능 */}
-                          {(showAllFields || (summaries['주요 기능'] && summaries['주요 기능'] !== '정보 없음' && 
-                           (Array.isArray(summaries['주요 기능']) ? summaries['주요 기능'].length > 0 : true))) && (
-                            <div style={{ 
-                              padding: '15px', 
-                              background: '#e8f5e8', 
-                              borderRadius: '8px',
-                              border: '1px solid #d4edda',
-                              color: showAllFields && (!summaries['주요 기능'] || summaries['주요 기능'] === '정보 없음' || 
-                               (Array.isArray(summaries['주요 기능']) && summaries['주요 기능'].length === 0)) ? '#999' : '#155724',
-                              opacity: showAllFields && (!summaries['주요 기능'] || summaries['주요 기능'] === '정보 없음' || 
-                               (Array.isArray(summaries['주요 기능']) && summaries['주요 기능'].length === 0)) ? 0.6 : 1
-                            }}>
-                              <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>🚀 주요 기능</div>
-                              <div style={{ fontWeight: 'bold' }}>
-                                {(() => {
-                                  const features = summaries['주요 기능'];
-                                  if (!features || features === '정보 없음' || 
-                                      (Array.isArray(features) && features.length === 0)) {
-                                    return showAllFields ? '정보 없음' : '';
-                                  }
-                                  return Array.isArray(features) ? features.join(', ') : features;
-                                })()}
-                              </div>
+                          <div style={{ 
+                            padding: '15px', 
+                            background: '#e8f5e8', 
+                            borderRadius: '8px',
+                            border: '1px solid #d4edda',
+                            color: (!summaries['주요 기능'] || summaries['주요 기능'] === '정보 없음' || 
+                             (Array.isArray(summaries['주요 기능']) && summaries['주요 기능'].length === 0)) ? '#999' : '#155724',
+                            opacity: (!summaries['주요 기능'] || summaries['주요 기능'] === '정보 없음' || 
+                             (Array.isArray(summaries['주요 기능']) && summaries['주요 기능'].length === 0)) ? 0.6 : 1
+                          }}>
+                            <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>🚀 주요 기능</div>
+                            <div style={{ fontWeight: 'bold' }}>
+                              {(() => {
+                                const features = summaries['주요 기능'];
+                                if (!features || features === '정보 없음' || 
+                                    (Array.isArray(features) && features.length === 0)) {
+                                  return '정보 없음';
+                                }
+                                return Array.isArray(features) ? features.join(', ') : features;
+                              })()}
                             </div>
-                          )}
+                          </div>
                           
                           {/* 아키텍처 구조 */}
-                          {(showAllFields || (summaries['아키텍처 구조'] && 
-                            summaries['아키텍처 구조'] !== '정보 없음' && 
-                            !summaries['아키텍처 구조'].includes('파악하기 어렵습니다') &&
-                            !summaries['아키텍처 구조'].includes('확인되지 않습니다'))) && (
-                            <div style={{ 
-                              padding: '15px', 
-                              background: '#fff3cd', 
-                              borderRadius: '8px',
-                              border: '1px solid #ffeaa7',
-                              color: showAllFields && (!summaries['아키텍처 구조'] || 
-                                summaries['아키텍처 구조'] === '정보 없음' ||
-                                summaries['아키텍처 구조'].includes('파악하기 어렵습니다') ||
-                                summaries['아키텍처 구조'].includes('확인되지 않습니다')) ? '#999' : '#856404',
-                              opacity: showAllFields && (!summaries['아키텍처 구조'] || 
-                                summaries['아키텍처 구조'] === '정보 없음' ||
-                                summaries['아키텍처 구조'].includes('파악하기 어렵습니다') ||
-                                summaries['아키텍처 구조'].includes('확인되지 않습니다')) ? 0.6 : 1
-                            }}>
-                              <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>🏗️ 아키텍처 구조</div>
-                              <div style={{ fontWeight: 'bold' }}>
-                                {(() => {
-                                  const archInfo = summaries['아키텍처 구조'];
-                                  if (!archInfo || archInfo === '정보 없음' ||
-                                      archInfo.includes('파악하기 어렵습니다') ||
-                                      archInfo.includes('확인되지 않습니다')) {
-                                    return showAllFields ? '정보 없음' : '';
-                                  }
-                                  return archInfo;
-                                })()}
-                              </div>
+                          <div style={{ 
+                            padding: '15px', 
+                            background: '#fff3cd', 
+                            borderRadius: '8px',
+                            border: '1px solid #ffeaa7',
+                            color: (!summaries['아키텍처 구조'] || 
+                              summaries['아키텍처 구조'] === '정보 없음' ||
+                              summaries['아키텍처 구조'].includes('파악하기 어렵습니다') ||
+                              summaries['아키텍처 구조'].includes('확인되지 않습니다')) ? '#999' : '#856404',
+                            opacity: (!summaries['아키텍처 구조'] || 
+                              summaries['아키텍처 구조'] === '정보 없음' ||
+                              summaries['아키텍처 구조'].includes('파악하기 어렵습니다') ||
+                              summaries['아키텍처 구조'].includes('확인되지 않습니다')) ? 0.6 : 1
+                          }}>
+                            <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>🏗️ 아키텍처 구조</div>
+                            <div style={{ fontWeight: 'bold' }}>
+                              {(() => {
+                                const archInfo = summaries['아키텍처 구조'];
+                                if (!archInfo || archInfo === '정보 없음' ||
+                                    archInfo.includes('파악하기 어렵습니다') ||
+                                    archInfo.includes('확인되지 않습니다')) {
+                                  return '정보 없음';
+                                }
+                                return archInfo;
+                              })()}
                             </div>
-                          )}
+                          </div>
                           
-                          {/* 외부 라이브러리 */}
-                          {(showAllFields || (() => {
-                            const libraries = summaries['외부 라이브러리'];
-                            return libraries && 
-                              libraries !== '정보 없음' && 
-                              libraries !== '' && 
-                              (Array.isArray(libraries) ? libraries.length > 0 : true);
-                          })()) && (
+                          {/* 외부 라이브러리 - 전체 보기에서만 표시 */}
+                          {showAllFields && (
                             <div style={{ 
                               padding: '15px', 
                               background: '#f8f9fa', 
                               borderRadius: '8px',
                               border: '1px solid #dee2e6',
-                              color: showAllFields && (() => {
+                              color: (() => {
                                 const libraries = summaries['외부 라이브러리'];
                                 return !libraries || libraries === '정보 없음' || libraries === '' || 
                                   (Array.isArray(libraries) && libraries.length === 0);
                               })() ? '#999' : '#495057',
-                              opacity: showAllFields && (() => {
+                              opacity: (() => {
                                 const libraries = summaries['외부 라이브러리'];
                                 return !libraries || libraries === '정보 없음' || libraries === '' || 
                                   (Array.isArray(libraries) && libraries.length === 0);
@@ -947,7 +1014,7 @@ const TestGithubSummary = () => {
                                   const libraries = summaries['외부 라이브러리'];
                                   if (!libraries || libraries === '정보 없음' || libraries === '' || 
                                       (Array.isArray(libraries) && libraries.length === 0)) {
-                                    return showAllFields ? '정보 없음' : '';
+                                    return '정보 없음';
                                   }
                                   return Array.isArray(libraries) ? libraries.join(', ') : libraries;
                                 })()}
@@ -955,27 +1022,27 @@ const TestGithubSummary = () => {
                             </div>
                           )}
                           
-                          {/* LLM 모델 정보 */}
-                          {(showAllFields || (summaries['LLM 모델 정보'] && 
-                            summaries['LLM 모델 정보'] !== '정보 없음' && 
-                            !summaries['LLM 모델 정보'].includes('확인되지 않습니다') &&
-                            !summaries['LLM 모델 정보'].includes('직접적으로 확인되지 않습니다') &&
-                            !summaries['LLM 모델 정보'].includes('파악하기 어렵습니다'))) && (
+                          {/* LLM 모델 정보 - 전체 보기에서만 표시 */}
+                          {showAllFields && (
                             <div style={{ 
                               padding: '15px', 
                               background: '#e2e3e5', 
                               borderRadius: '8px',
                               border: '1px solid #d6d8db',
-                              color: showAllFields && (!summaries['LLM 모델 정보'] || 
-                                summaries['LLM 모델 정보'] === '정보 없음' ||
-                                summaries['LLM 모델 정보'].includes('확인되지 않습니다') ||
-                                summaries['LLM 모델 정보'].includes('직접적으로 확인되지 않습니다') ||
-                                summaries['LLM 모델 정보'].includes('파악하기 어렵습니다')) ? '#999' : '#383d41',
-                              opacity: showAllFields && (!summaries['LLM 모델 정보'] || 
-                                summaries['LLM 모델 정보'] === '정보 없음' ||
-                                summaries['LLM 모델 정보'].includes('확인되지 않습니다') ||
-                                summaries['LLM 모델 정보'].includes('직접적으로 확인되지 않습니다') ||
-                                summaries['LLM 모델 정보'].includes('파악하기 어렵습니다')) ? 0.6 : 1
+                              color: (() => {
+                                const llmInfo = summaries['LLM 모델 정보'];
+                                return !llmInfo || llmInfo === '정보 없음' ||
+                                  llmInfo.includes('확인되지 않습니다') ||
+                                  llmInfo.includes('직접적으로 확인되지 않습니다') ||
+                                  llmInfo.includes('파악하기 어렵습니다');
+                              })() ? '#999' : '#383d41',
+                              opacity: (() => {
+                                const llmInfo = summaries['LLM 모델 정보'];
+                                return !llmInfo || llmInfo === '정보 없음' ||
+                                  llmInfo.includes('확인되지 않습니다') ||
+                                  llmInfo.includes('직접적으로 확인되지 않습니다') ||
+                                  llmInfo.includes('파악하기 어렵습니다');
+                              })() ? 0.6 : 1
                             }}>
                               <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>🤖 LLM 모델 정보</div>
                               <div style={{ fontWeight: 'bold' }}>
@@ -985,7 +1052,7 @@ const TestGithubSummary = () => {
                                       llmInfo.includes('확인되지 않습니다') ||
                                       llmInfo.includes('직접적으로 확인되지 않습니다') ||
                                       llmInfo.includes('파악하기 어렵습니다')) {
-                                    return showAllFields ? '정보 없음' : '';
+                                    return '정보 없음';
                                   }
                                   return llmInfo;
                                 })()}
