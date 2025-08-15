@@ -30,6 +30,7 @@ class ToolManager:
         self.tools = {}
         self._register_default_tools()
         self._llm = None
+        self._dynamic_loaded = False
     
     def _register_default_tools(self):
         """기본 툴들 등록"""
@@ -65,6 +66,11 @@ class ToolManager:
     
     def execute_tool(self, tool_name: str, query: str, context: Dict[str, Any] = None) -> str:
         """툴 실행"""
+        # 필요 시 동적 툴을 지연 로드하여 시작 속도 개선
+        try:
+            self.load_dynamic_tools()
+        except Exception:
+            pass
         # 관리자 모드 권한 검사 (create_function_tool, 동적 코드 관련)
         def _is_admin_mode(session_id: str) -> bool:
             try:
@@ -208,6 +214,8 @@ class ToolManager:
 
     def load_dynamic_tools(self) -> None:
         """저장소에서 동적 툴 로드"""
+        if self._dynamic_loaded:
+            return
         base = self._dynamic_tools_dir()
         index = self._read_index()
         for item in index.get('tools', []):
@@ -217,6 +225,7 @@ class ToolManager:
                 func = self._load_function_from_file(file_path)
                 if func:
                     self.register_tool(name, func)
+        self._dynamic_loaded = True
 
     def _load_function_from_file(self, file_path: str):
         """파일에서 안전한 run(query, context) 함수 로드"""

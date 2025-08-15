@@ -79,7 +79,10 @@ class IntentDetectionNode:
                 try:
                     print(f"🔁 [보강] 의미 기반 분류가 채용이 아님 → 규칙 기반 필드 추출 시도")
                     extracted_fields_fallback = enhanced_extractor.extract_fields_enhanced(user_input)
-                    if extracted_fields_fallback and len(extracted_fields_fallback) > 0:
+                    # 실제 값이 있는 필드만 카운트
+                    valid_fields = {k: v for k, v in extracted_fields_fallback.items() 
+                                  if v is not None and v != "" and v != "null"}
+                    if valid_fields:
                         intent = "recruit"
                         confidence = max(classification_result.get('confidence', 0.5), 0.6)
                         extracted_fields = extracted_fields_fallback
@@ -688,49 +691,19 @@ class FallbackNode:
 🤝 추가 도움이 필요하시면 언제든 말씀해주세요!"""
                     
             else:
-                # 일반적인 대화
-                if "안녕" in user_input or "hello" in user_input:
-                    result = "안녕하세요! 👋 무엇을 도와드릴까요? 채용 관련 질문이나 일반적인 대화 모두 환영합니다! 😊"
-                    
-                elif "도움" in user_input or "help" in user_input:
-                    result = """🤖 AI 어시스턴트 도움말:
-
-🎯 주요 기능:
-• 채용공고 등록 및 관리
-• 이력서 분석
-• 면접 일정 관리
-• 지원자 추천
-
-🔍 검색 기능:
-• 최신 개발 트렌드
-• 채용 동향 정보
-• 기술 정보
-
-🧮 계산 기능:
-• 연봉/월급 계산
-• 수식 계산
-• 퍼센트 계산
-
-📋 데이터 조회:
-• 저장된 채용공고
-• 지원자 정보
-• 면접 일정
-
-💬 일반 대화:
-• 채용 관련 상담
-• 일반적인 질문
-• 친근한 대화
-
-💡 사용법:
-• 자연스럽게 질문해주세요
-• 구체적인 내용을 요청하면 더 정확한 답변을 드릴 수 있습니다
-• 이모지도 사용 가능합니다! 😊"""
-                    
-                elif "감사" in user_input or "고마워" in user_input:
-                    result = "천만에요! 😊 도움이 되어서 기쁩니다. 추가로 궁금한 것이 있으시면 언제든 말씀해주세요! 🙏"
-                    
-                else:
-                    result = "안녕하세요! 😊 무엇을 도와드릴까요? 채용 관련 질문이나 일반적인 대화 모두 환영합니다! 💬"
+                # 일반 대화: 하드코딩된 고정 멘트 대신 LLM으로 자연스러운 답변 생성
+                try:
+                    prompt = (
+                        "당신은 HireMe의 한국어 AI 비서입니다.\n"
+                        "사용자의 일상 대화에도 자연스럽고 간결하게 응답하세요.\n"
+                        "지나친 이모지/홍보/반복 멘트(예: 추가 질문 안내)는 피하고, 질문 의도가 모호하면 한 문장으로 되물어보세요.\n"
+                        f"사용자: {user_input}\n"
+                        "어시스턴트:"
+                    )
+                    response = model.generate_content(prompt)
+                    result = response.text or "네, 알겠습니다. 더 구체적으로 말씀해 주실 수 있을까요?"
+                except Exception:
+                    result = "네, 알겠습니다. 더 구체적으로 말씀해 주실 수 있을까요?"
             
             return result
             
@@ -757,8 +730,8 @@ class ResponseFormatterNode:
                     additional_msg = "\n\n📝 채용공고 수정이나 추가 요청이 있으시면 말씀해주세요!"
                 elif intent == "db":
                     additional_msg = "\n\n📋 다른 데이터 조회가 필요하시면 말씀해주세요!"
-                else:  # chat
-                    additional_msg = "\n\n💬 추가 질문이 있으시면 언제든 말씀해주세요!"
+                else:  # chat은 꼬리 문구를 붙이지 않음 (반복 멘트 방지)
+                    additional_msg = ""
                 
                 return f"{tool_result}{additional_msg}"
             
@@ -786,11 +759,82 @@ class AgentSystem:
             confidence = intent_result["confidence"]
             extracted_fields = intent_result["extracted_fields"]
             
-            # 2단계: 도구 선택 및 실행
+            # 2단계: DOM 액션 의도 감지
+            print("\n" + "="*50)
+            print("🔍 [DOM 액션 감지 디버깅]")
+            print("="*50)
+            
+            from langgraph_config import is_dom_action_intent
+            
+            # 입력 전처리
+            text = user_input.lower()
+            print(f"\n1️⃣ 입력 전처리:")
+            print(f"  원본: {user_input}")
+            print(f"  전처리: {text}")
+            
+            # 액션 키워드 체크
+            click_words = ["클릭", "선택", "누르", "체크"]
+            view_words = ["보여줘", "보기", "확인", "조회", "열람"]
+            has_click = any(w in text for w in click_words)
+            has_view = any(w in text for w in view_words)
+            
+            print(f"\n2️⃣ 키워드 체크:")
+            print(f"  클릭 키워드: {[w for w in click_words if w in text]}")
+            print(f"  보기 키워드: {[w for w in view_words if w in text]}")
+            print(f"  클릭 감지: {'✅' if has_click else '❌'}")
+            print(f"  보기 감지: {'✅' if has_view else '❌'}")
+            
+            # 대상 추출 시도
+            print(f"\n3️⃣ 대상 추출:")
+            name_match = re.search(r'([가-힣]{2,4})\s*(지원자|님|의|을|를|에게)?', text)
+            doc_match = re.search(r'(자소서|이력서|포트폴리오|분석\s*결과|상세\s*정보)', text)
+            
+            target = None
+            if name_match:
+                target = name_match.group(1)
+                print(f"  이름 패턴 매칭: ✅ -> {target}")
+            else:
+                print("  이름 패턴 매칭: ❌")
+                
+            if doc_match:
+                target = doc_match.group(1).strip()
+                print(f"  문서 패턴 매칭: ✅ -> {target}")
+            else:
+                print("  문서 패턴 매칭: ❌")
+            
+            # DOM 액션 판정
+            is_dom_action = is_dom_action_intent(user_input)
+            print(f"\n4️⃣ 최종 판정:")
+            print(f"  is_dom_action_intent: {'✅' if is_dom_action else '❌'}")
+            print(f"  has_click/view: {'✅' if (has_click or has_view) else '❌'}")
+            print(f"  추출된 대상: {target or '없음'}")
+            print("="*50 + "\n")
+            
+            # 3단계: 도구 선택 및 실행
             tool_result = ""
             error = ""
             
-            if intent == "search":
+            if is_dom_action or has_click or has_view:
+                # DOM 액션 처리
+                print("🎯 [DOM] 액션 감지됨!")
+                intent = "dom_action"
+                action_type = "click" if has_click else "view" if has_view else "input"
+                dom_target = (target or user_input).strip()
+
+                # 프론트 표준 포맷(react_agent_response)으로 응답
+                payload = {
+                    "success": True,
+                    "response": f"DOM 액션 '{action_type}'을(를) 실행합니다.",
+                    "type": "react_agent_response",
+                    "page_action": {
+                        "action": "dom",
+                        "dom_action": "click" if action_type == "click" else ("view" if action_type == "view" else "typeText"),
+                        "args": {"query": dom_target}
+                    }
+                }
+                print(f"🎯 [DOM] 응답 생성: {payload}")
+                tool_result = json.dumps(payload, ensure_ascii=False)
+            elif intent == "search":
                 tool_result = self.web_search.process_search(user_input)
             elif intent == "calc":
                 tool_result = self.calculator.process_calculation(user_input)
@@ -804,15 +848,12 @@ class AgentSystem:
             # 3단계: 응답 포맷팅
             final_response = self.formatter.format_response(tool_result, intent, error)
             
-            # 4단계: 채용공고 관련 필드 추출 보강
-            # 의도가 chat로 남더라도 프론트 연동을 위해 필드가 추출되면 함께 전달
-            if not extracted_fields:
+            # 4단계: 채용공고 관련 필드 추출 보강 (채용 의도일 때만)
+            if not extracted_fields and intent == "recruit":
                 try:
                     fallback_fields = enhanced_extractor.extract_fields_enhanced(user_input)
                     if fallback_fields:
                         extracted_fields = fallback_fields
-                        # 필드가 추출되었으면 의도를 recruit로 승격하여 프론트 자동입력 트리거
-                        intent = "recruit"
                 except Exception:
                     pass
             

@@ -98,7 +98,7 @@
 
 ### 환경/설정
 
-- 포트: 프런트 3001, 백엔드 8000(기억 정보 기준). 프런트 서비스는 기본 `http://localhost:8000`을 가정하며 `REACT_APP_API_URL`로 재정의 가능.
+- 포트: 프런트 3001, 백엔드 8000. 프런트 서비스는 기본 `http://localhost:8000`을 가정하며 `REACT_APP_API_URL`로 재정의 가능. [[memory:6051659]]
 - LLM: `GOOGLE_API_KEY` 필요. 모델/파라미터는 `backend/langgraph_config.py`에서 관리.
 
 ---

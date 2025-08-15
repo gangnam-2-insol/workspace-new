@@ -48,31 +48,38 @@ class LangGraphAgent:
     """모듈화된 LangGraph 에이전트 클래스"""
     
     def __init__(self):
-        self.llm = self._initialize_llm()
+        # LLM은 지연 초기화(첫 요청 시)로 변경하여 서버 기동 시간을 단축
+        self.llm = None
         self.graph = self._build_graph()
         self.sessions = {}
-        # 서버 기동 시 동적 툴 로드
-        try:
-            tool_manager.load_dynamic_tools()
-        except Exception as e:
-            print(f"동적 툴 로드 실패: {e}")
+        # 동적 툴 로드는 최초 필요 시점에 수행 (lazy)
         
     def _initialize_llm(self):
-        """LLM 초기화"""
+        """LLM 초기화: gemini-1.5-pro 강제 고정 + 모델명 로깅"""
         try:
             api_key = os.getenv("GOOGLE_API_KEY")
             if not api_key:
                 raise ValueError("GOOGLE_API_KEY not found")
-            
-            return ChatGoogleGenerativeAI(
-                model=config.llm_model,
+
+            # 모델 강제 고정 (환경변수/설정 무시)
+            model_name = "gemini-1.5-pro"
+            llm = ChatGoogleGenerativeAI(
+                model=model_name,
                 google_api_key=api_key,
                 temperature=config.llm_temperature,
                 max_tokens=config.llm_max_tokens
             )
+            print(f"[LLM] Initialized model={model_name}")
+            return llm
         except Exception as e:
             print(f"LLM 초기화 실패: {e}")
             return None
+
+    def _ensure_llm(self):
+        """필요 시 LLM을 지연 초기화"""
+        if self.llm is None:
+            self.llm = self._initialize_llm()
+        return self.llm
     
     def _build_graph(self):
         """LangGraph 워크플로우 구축"""
@@ -114,8 +121,22 @@ class LangGraphAgent:
         quick_intent, quick_score = quick_intent_classify(user_input)
         state["confidence"] = float(max(min(quick_score, 1.0), 0.0))
 
-        # 1) LLM 기반 의도 분류 (경량 결과를 힌트로 사용)
-        intent, target = self._classify_with_llm(user_input)
+        # 1) 분류 결정: quick 확신 낮을 때만 LLM 호출
+        context = state.get("context") or {}
+        nav_hint = bool(context.get("is_navigation_candidate", False))
+        ambiguous = 0.4 <= float(quick_score) <= 0.6
+
+        if ambiguous or nav_hint:
+            intent, target = self._classify_with_llm(user_input)
+        else:
+            # quick만으로 결정
+            if quick_intent in ("navigate",):
+                intent, target = "navigate", None
+            elif quick_intent in ("tool",):
+                intent, target = "tool", None
+            else:
+                intent, target = "general", None
+
         state["llm_intent"] = intent
         state["llm_target"] = target
 
@@ -168,7 +189,7 @@ class LangGraphAgent:
     def _general_conversation(self, state: AgentState) -> AgentState:
         """일반 대화 처리"""
         try:
-            if not self.llm:
+            if not self._ensure_llm():
                 state["messages"].append({
                     "role": "assistant",
                     "content": "죄송합니다. AI 서비스를 사용할 수 없습니다.",
@@ -176,9 +197,9 @@ class LangGraphAgent:
                 })
                 return state
             
-            # 대화 히스토리 구성
+            # 대화 히스토리 구성 (맥락 강화: 최근 10개 사용)
             messages = []
-            for msg in state["messages"][-5:]:  # 최근 5개 메시지만 사용
+            for msg in state["messages"][-10:]:  # 최근 10개 메시지만 사용
                 if msg["role"] == "user":
                     messages.append(HumanMessage(content=msg["content"]))
                 elif msg["role"] == "assistant":
@@ -318,7 +339,7 @@ class LangGraphAgent:
         반환: (intent, target) where intent in {navigate, tool, general}
         """
         try:
-            if not self.llm:
+            if not self._ensure_llm():
                 if is_navigate_intent(user_input):
                     return "navigate", None
                 if is_tool_request(user_input):

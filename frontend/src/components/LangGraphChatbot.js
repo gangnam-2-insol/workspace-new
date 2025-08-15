@@ -267,8 +267,8 @@ const SendButton = styled.button`
     transform: none;
   }
 
-  .lgc-send-base { width: 100%; display: flex; align-items: center; justify-content: center; }
-  .lgc-send-fly { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+  .lgc-send-base { width: 100%; margin-right: 5px; display: flex; align-items: center; justify-content: center; }
+  .lgc-send-fly { position: absolute; top: 30%; left: 30%; transform: translate(-50%, -50%); pointer-events: none; }
   .lgc-send-trail { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); border-radius: 50%; background: rgba(255,255,255,0.9); pointer-events: none; }
 `;
 
@@ -312,6 +312,14 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
   const [isSendAnimating, setIsSendAnimating] = useState(false);
   const wsRef = useRef(null);
 	const navigate = useNavigate();
+  // 환영 메시지 중복 표시 방지 (세션당 1회)
+  const hasWelcomedRef = useRef(false);
+  const [shouldShowWelcome, setShouldShowWelcome] = useState(false);
+  useEffect(() => {
+    try {
+      hasWelcomedRef.current = sessionStorage.getItem('lgc_welcome_shown') === '1';
+    } catch (_) {}
+  }, []);
   
   const messagesEndRef = useRef(null);
   const inputRef = useRef(null);
@@ -333,6 +341,17 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
   useEffect(() => {
     checkAgentHealth();
   }, []);
+
+  // 첫 렌더에서 환영 메시지 한 번 표시 후 플래그 저장
+  useEffect(() => {
+    if (isOpen && messages.length === 0 && !hasWelcomedRef.current) {
+      setShouldShowWelcome(true);
+      hasWelcomedRef.current = true;
+      try { sessionStorage.setItem('lgc_welcome_shown', '1'); } catch (_) {}
+    } else {
+      setShouldShowWelcome(false);
+    }
+  }, [isOpen, messages.length]);
 
   // 자동 오픈 제거: 페이지 로드시 챗봇이 자동으로 열리지 않도록 함
 
@@ -363,8 +382,9 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
   const resolveNavigationPath = (text) => {
     const lower = String(text || '').toLowerCase();
 
+    // 명시적인 이동/열기류 동사만 허용 (보여/보여줘 제거)
     const moveVerbs = [
-      '이동', '넘어가', '넘어 가', '가 ', '가자', '열어', '열기', '열어줘', '보여', '페이지', '메뉴',
+      '이동', '넘어가', '넘어 가', '가 ', '가자', '열어', '열기', '열어줘', '페이지', '메뉴',
       'move', 'go', 'open', 'navigate'
     ];
 
@@ -387,8 +407,8 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
 
     for (const r of routes) {
       if (r.keywords.some(k => lower.includes(k.toLowerCase()))) {
-        // 이동 의도가 명시된 경우 우선 처리, 없더라도 정확 매칭이면 허용
-        if (hasMoveVerb || lower.trim() === r.keywords[0].toLowerCase()) {
+        // 이동 의도가 명시된 경우에만 이동 처리 (정확 매칭 폴백 제거)
+        if (hasMoveVerb) {
           return r.path;
         }
       }
@@ -475,7 +495,7 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
         const label = labelForPath(navPath);
         const botNotice = {
           id: Date.now() + 3,
-          content: `${label} 페이지로 이동합니다. (navigate 툴 적용) 🚀`,
+          content: `${label} 페이지로 이동합니다.\n(navigate 툴 적용) 🚀`,
           isUser: false,
           timestamp: new Date().toISOString(),
         };
@@ -483,6 +503,18 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
         setIsLoading(false);
         // 페이지 이동 후 UI 인덱스 수집 시도
         setTimeout(() => { try { ensureUiIndexIfNeeded(window.location.href, true); } catch(_) {} }, 400);
+        // 백엔드에도 힌트를 전달하여 최종 판단 일치성 확보
+        try {
+          await fetch('/api/langgraph-agent/chat', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              user_input: userMessage.content,
+              session_id: sessionId,
+              context: { current_page: window.location.pathname, user_agent: navigator.userAgent, is_navigation_candidate: true }
+            })
+          });
+        } catch(_) {}
         return;
       }
     } catch(_) {}
@@ -585,7 +617,7 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
                 console.debug('[Action][dom.request]', { action: a, args });
                 if (a === 'dumpUI') {
                   const href = window.location.href;
-                  const page = await ensureUiIndexIfNeeded(href, true);
+                  const page = await ensureUiIndexIfNeeded(href, true, { includeHidden: true, forceRebuild: true });
                   const list = page.elements.slice(0, 200).map((e, i) => `${i+1}. [${e.role}] ${e.text || e.attributes?.['aria-label'] || e.selector}`);
                   const content = `현재 페이지 UI 요소 ${page.elements.length}개 중 상위 200개:\n\n` + list.join('\n');
                   setMessages(prev => [...prev, { id: Date.now()+2, content, isUser: false, timestamp: new Date().toISOString() }]);
@@ -594,7 +626,7 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
                 // selector가 비어 있고 자연어 질의가 있을 경우 UI 인덱스에서 해석 시도
                 if (!args.selector && args.query) {
                   try {
-                    const page = await ensureUiIndexIfNeeded(window.location.href, true);
+                    const page = await ensureUiIndexIfNeeded(window.location.href, true, { includeHidden: true });
                     const kind = a === 'typeText' ? 'type' : 'click';
                     const target = resolveByQuery(args.query, kind, page);
                     if (target) args.selector = target.selector;
@@ -612,11 +644,23 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
                   return; // 범위 확장 응답을 사용자에게 요청하고 종료
                 }
                 if (a === 'click') {
-                  const el = document.querySelector(args.selector);
+                  let el = document.querySelector(args.selector);
                   if (el) {
                     try { window.HireMeUI?.highlightOnce?.(el); } catch(_) {}
                     el.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
                     setTimeout(() => el.click(), 150);
+                  } else {
+                    // 첫 시도 실패 시: 강제 인덱스 재빌드 후 한번 더 시도
+                    try {
+                      await ensureUiIndexIfNeeded(window.location.href, true, { includeHidden: true, forceRebuild: true });
+                      await new Promise(r => setTimeout(r, 120));
+                      el = document.querySelector(args.selector);
+                      if (el) {
+                        try { window.HireMeUI?.highlightOnce?.(el); } catch(_) {}
+                        el.scrollIntoView?.({ behavior: 'smooth', block: 'center' });
+                        setTimeout(() => el.click(), 150);
+                      }
+                    } catch(_) {}
                   }
                 } else if (a === 'typeText') {
                   const el = document.querySelector(args.selector);
@@ -703,6 +747,10 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
     }
     setMessages([]);
     setSessionId(null);
+    // 채팅창 새로고침 시 환영 메시지 1회 재표시
+    try { sessionStorage.removeItem('lgc_welcome_shown'); } catch (_) {}
+    hasWelcomedRef.current = false;
+    setShouldShowWelcome(true);
 	// 기록 삭제 후 입력창 포커스
 	setTimeout(() => {
 		inputRef.current?.focus();
@@ -717,6 +765,10 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
       setIsOpenInternal(next);
     }
     if (next) {
+      // 창을 다시 열 때 메시지가 비어있다면 환영 메시지 재표시 (세션 플래그 초기화는 clearChat에서 수행)
+      if (messages.length === 0 && hasWelcomedRef.current === false) {
+        setShouldShowWelcome(true);
+      }
       setTimeout(() => {
         inputRef.current?.focus();
       }, 300);
@@ -747,7 +799,7 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
               opacity: 1, 
               y: 0, 
               scale: 1,
-              height: isMinimized ? '64px' : '600px',
+              height: isMinimized ? '64px' : '700px',
               width: isMinimized ? '64px' : '400px',
               borderRadius: isMinimized ? '50%' : '20px',
               padding: isMinimized ? '0px' : undefined
@@ -798,7 +850,7 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
             ) : (
               <>
                 <ChatBody className="lgc-body">
-                  {messages.length === 0 && (
+                  {messages.length === 0 && shouldShowWelcome && (
                     <WelcomeMessage className="lgc-welcome">
                       안녕하세요!<br /> 
                       저는 HireMe AI 어시스턴트입니다. 🤖<br />
@@ -870,7 +922,7 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
                   >
                     {/* 기본 아이콘 */}
                     <span className="lgc-send-base" style={{ opacity: isSendAnimating ? 0 : 1 }}>
-                      <FiSend size={20} />
+                      <FiSend size={24} />
                     </span>
                     {/* 날아가는 복제 아이콘 */}
                     {isSendAnimating && (
@@ -887,7 +939,7 @@ const LangGraphChatbot = ({ isOpen: isOpenProp, onOpenChange }) => {
                           }}
                           transition={{ duration: 0.95, ease: 'easeOut' }}
                         >
-                          <FiSend size={22} />
+                          <FiSend size={24} />
                         </motion.div>
                         {/* 트레일 2개 */}
                         <motion.div

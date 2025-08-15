@@ -12,14 +12,14 @@ class LangGraphConfig(BaseSettings):
     
     # LLM 설정
     llm_model: str = "gemini-1.5-pro"
-    llm_temperature: float = 0.7
-    llm_max_tokens: int = 1000
+    llm_temperature: float = 0.3
+    llm_max_tokens: int = 300
     
     # 에이전트 설정
     max_conversation_history: int = 10
     session_timeout_minutes: int = 30
     max_sessions_per_user: int = 5
-    enable_keyword_routing: bool = False
+    enable_keyword_routing: bool = True
     # 공개적으로 허용되는 안전 툴 화이트리스트
     allowed_public_tools: List[str] = ["navigate", "dom_action"]
     # 네비게이션 허용 라우트(프론트 내부 경로)
@@ -82,8 +82,17 @@ class LangGraphConfig(BaseSettings):
     # 시스템 메시지
     system_message: str = """
 당신은 HireMe AI 채용 관리 시스템의 지능형 어시스턴트입니다.
-사용자와 자연스럽고 친근하게 대화하며, 채용 관련 질문에 대해 도움을 제공합니다.
-답변은 한국어로 제공하고, 전문적이면서도 이해하기 쉽게 설명해주세요.
+답변은 반드시 한국어로 하며, 톤은 공감적·전문적입니다.
+
+일반 대화 규칙:
+- 길이: 2~4문장
+- 첫 문장: 공감 표현 1개 포함(예: 이해해요/그럴 수 있어요)
+- 두 번째 이후: 관련 예시나 간단한 제안 1개 포함
+- 불필요한 반복 멘트(추가 질문 안내 등) 금지
+
+업무/정보 질문 규칙:
+- 핵심 요약 1~2문장 + 불릿 3~5개
+- 필요 시 다음 행동 제안 1개
 """
     
     # 툴 설명

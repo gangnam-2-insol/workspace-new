@@ -198,14 +198,14 @@ function buildRobustSelector(el) {
   return parts.length ? parts.join('>') : el.tagName.toLowerCase();
 }
 
-export function getUIMap(doc = document) {
+export function getUIMap(doc = document, includeHidden = false) {
   const urlKey = normalizeUrlKey(doc.location ? doc.location.href : window.location.href);
   const elements = [];
   const nodes = Array.from(doc.querySelectorAll(
     'a,button,input,select,textarea,[role=button],[role=link],[tabindex="0"],[onclick],label,span[role=button]'
   ));
   for (const el of nodes) {
-    if (!isVisible(el)) continue;
+    if (!includeHidden && !isVisible(el)) continue;
     const role = inferRole(el);
     const text = extractReadableText(el);
     const rect = el.getBoundingClientRect();
@@ -369,15 +369,16 @@ function findClosestActionNearText(rawQuery) {
   return bestSel;
 }
 
-export async function ensureUiIndexIfNeeded(href = window.location.href, verbose = false) {
+export async function ensureUiIndexIfNeeded(href = window.location.href, verbose = false, options = {}) {
+  const { forceRebuild = false, includeHidden = false } = options || {};
   const key = normalizeUrlKey(href);
   const cached = getCachedUI(key);
   const diag = diagnoseRefresh(cached, document);
   if (verbose) {
     console.debug('[UIIndex] urlKey:', key, 'cache?', !!cached, 'shouldRefresh?', diag.should, 'reason:', diag.reason);
   }
-  if (!cached || diag.should) {
-    const page = getUIMap(document);
+  if (forceRebuild || !cached || diag.should) {
+    const page = getUIMap(document, includeHidden === true);
     cacheUI(page);
     if (verbose) {
       console.debug('[UIIndex] built index', { urlKey: page.urlKey, capturedAt: page.capturedAt, elements: page.elements.length });
@@ -390,6 +391,11 @@ export async function ensureUiIndexIfNeeded(href = window.location.href, verbose
   return cached;
 }
 
+export async function rebuildUiIndex(href = window.location.href, verbose = false, options = {}) {
+  const opts = { ...(options || {}), forceRebuild: true };
+  return ensureUiIndexIfNeeded(href, verbose, opts);
+}
+
 export default {
   normalizeUrlKey,
   computeLayoutFingerprint,
@@ -399,7 +405,8 @@ export default {
   shouldRefresh,
   diagnoseRefresh,
   resolveByQuery,
-  ensureUiIndexIfNeeded
+  ensureUiIndexIfNeeded,
+  rebuildUiIndex
 };
 
 
