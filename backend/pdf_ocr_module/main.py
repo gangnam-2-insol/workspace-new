@@ -8,15 +8,15 @@ from typing import Any, Dict, List
 from .ai_analyzer import analyze_text, extract_keywords, summarize_text, extract_fields, clean_text
 from .config import Settings
 from .embedder import embed_texts, get_embedding
-from .ocr_engine import ocr_images, ocr_images_with_quality
+from .ocr_engine import ocr_images, ocr_images_with_quality, ocr_images_with_openai
 from .pdf_extractor import extract_text_with_layout
 from .pdf_processor import save_pdf_pages_to_images, create_thumbnails
-from .storage import save_document_to_mongo, save_to_db
+from .storage import save_document_to_mongo, save_to_db, save_to_hireme_applicants
 from .utils import ensure_directories, write_json, file_sha256
 from .vector_storage import upsert_embeddings, store_vector
 
 
-def process_pdf(pdf_path: str | Path) -> Dict[str, Any]:
+async def process_pdf(pdf_path: str | Path) -> Dict[str, Any]:
     settings = Settings()
     ensure_directories(settings)
 
@@ -31,27 +31,46 @@ def process_pdf(pdf_path: str | Path) -> Dict[str, Any]:
     layout = extract_text_with_layout(pdf_path)
 
     # 2) PDF -> 이미지
-    page_image_dir = settings.images_dir / pdf_path.stem
-    image_paths: List[Path] = save_pdf_pages_to_images(pdf_path, page_image_dir, settings)
-    thumb_paths: List[Path] = create_thumbnails(image_paths)
+    try:
+        page_image_dir = settings.images_dir / pdf_path.stem
+        print(f"이미지 저장 디렉토리: {page_image_dir}")
+        image_paths: List[Path] = save_pdf_pages_to_images(pdf_path, page_image_dir, settings)
+        print(f"생성된 이미지 파일 수: {len(image_paths)}")
+        thumb_paths: List[Path] = create_thumbnails(image_paths)
+        print(f"생성된 썸네일 파일 수: {len(thumb_paths)}")
+    except Exception as e:
+        print(f"PDF 이미지 변환 중 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
-    # 2) 이미지 -> 텍스트 (OCR)
-    ocr_outputs = ocr_images_with_quality(image_paths, settings)
-    page_texts: List[str] = []
-    # 내장 텍스트가 있으면 우선 사용, 부족하면 OCR 보완
-    for i in range(len(image_paths)):
-        page_spans = next((p.get("spans", []) for p in layout.get("pages", []) if p.get("page") == i + 1), [])
-        embedded_text = " ".join([s.get("text", "") for s in page_spans]).strip()
-        ocr_text = ocr_outputs[i]["result"]["text"]
-        chosen = embedded_text if len(embedded_text) >= max(50, len(ocr_text) * 0.5) else ocr_text
-        page_texts.append(chosen)
-    full_text: str = "\n\n".join(page_texts)
+    # 2) 이미지 -> 텍스트 (OCR) - OpenAI GPT-4o-mini 사용
+    try:
+        print(f"OCR 처리 시작: {len(image_paths)}개 이미지")
+        ocr_outputs = await ocr_images_with_openai(image_paths, settings)
+        print(f"OCR 처리 완료: {len(ocr_outputs)}개 결과")
+        
+        page_texts: List[str] = []
+        # 내장 텍스트가 있으면 우선 사용, 부족하면 OCR 보완
+        for i in range(len(image_paths)):
+            page_spans = next((p.get("spans", []) for p in layout.get("pages", []) if p.get("page") == i + 1), [])
+            embedded_text = " ".join([s.get("text", "") for s in page_spans]).strip()
+            ocr_text = ocr_outputs[i]["result"]["text"]
+            chosen = embedded_text if len(embedded_text) >= max(50, len(ocr_text) * 0.5) else ocr_text
+            page_texts.append(chosen)
+        full_text: str = "\n\n".join(page_texts)
+        print(f"텍스트 추출 완료: {len(full_text)} 문자")
+    except Exception as e:
+        print(f"OCR 처리 중 오류: {e}")
+        import traceback
+        traceback.print_exc()
+        raise
 
     # 3) 텍스트 분석 (요약/키워드) - 인덱싱 단계에서는 비활성화 가능
     if settings.index_generate_summary or settings.index_generate_keywords:
-        analysis = analyze_text(full_text, settings)
-        _summary = summarize_text(full_text) if settings.index_generate_summary else ""
-        _keywords = extract_keywords(full_text) if settings.index_generate_keywords else []
+        analysis = await analyze_text(full_text, settings)
+        _summary = analysis.get("summary", "") if settings.index_generate_summary else ""
+        _keywords = analysis.get("keywords", []) if settings.index_generate_keywords else []
     else:
         analysis = {"summary": "", "keywords": [], "clean_text": full_text}
         _summary = ""
@@ -127,8 +146,8 @@ def process_pdf(pdf_path: str | Path) -> Dict[str, Any]:
         try:
             ef = extract_fields(ch["text"])  # type: ignore[arg-type]
             if isinstance(ef, dict):
-                emails = list(ef.get("email") or [])
-                phones = list(ef.get("phone") or [])
+                emails = list(ef.get("emails") or [])  # "email" -> "emails"로 수정
+                phones = list(ef.get("phones") or [])  # "phone" -> "phones"로 수정
                 if emails:
                     meta["email_count"] = int(len(emails))
                     meta["first_email"] = str(emails[0])
@@ -154,7 +173,7 @@ def process_pdf(pdf_path: str | Path) -> Dict[str, Any]:
             documents=documents,
         )
 
-    # 6) MongoDB 저장
+    # 6) MongoDB 저장 - Hireme DB의 applicants 컬렉션에 저장
     fields = extract_fields(full_text)
     document = {
         "doc_id": str(uuid.uuid4()),
@@ -165,7 +184,7 @@ def process_pdf(pdf_path: str | Path) -> Dict[str, Any]:
         "pages": [
             {
                 "page": i + 1,
-                "clean_text": analyze_text(t, settings).get("clean_text", t),
+                "clean_text": t,  # 임시로 원본 텍스트 사용
                 "quality_score": float(ocr_outputs[i]["result"].get("quality") or 0.0),
                 "trace": {
                     "attempts": ocr_outputs[i].get("attempts", []),
@@ -179,6 +198,9 @@ def process_pdf(pdf_path: str | Path) -> Dict[str, Any]:
         "keywords": analysis.get("keywords", []) or _keywords,
         "created_at": datetime.utcnow(),
     }
+    # Hireme DB의 applicants 컬렉션에 저장
+    hireme_id = save_to_hireme_applicants(document, settings)
+    # 기존 pdf_ocr DB에도 백업 저장
     inserted_id = save_document_to_mongo(document, settings)
 
     # 페이지 단위 몽고 저장(원본 텍스트+클린): 필요시 검증용
@@ -194,6 +216,7 @@ def process_pdf(pdf_path: str | Path) -> Dict[str, Any]:
 
     return {
         "mongo_id": inserted_id,
+        "hireme_id": hireme_id,  # Hireme DB ID 추가
         "file_name": pdf_path.name,
         "num_pages": len(page_texts),
         "full_text": full_text,  # 전체 텍스트 추가

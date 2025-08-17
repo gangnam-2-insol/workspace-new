@@ -5,7 +5,7 @@ AI 서비스 클래스
 import os
 from typing import Dict, Any, List, Optional
 from dotenv import load_dotenv
-import google.generativeai as genai
+from openai import AsyncOpenAI
 
 from ..models.request_models import ChatbotRequest, ConversationRequest
 from ..models.response_models import ChatbotResponse, ConversationResponse
@@ -16,18 +16,22 @@ class AIService:
     """AI 관련 서비스 클래스"""
     
     def __init__(self):
-        self.gemini_service = None
-        self._init_gemini_service()
+        self.openai_client = None
+        self._init_openai_service()
     
-    def _init_gemini_service(self):
-        """Gemini 서비스 초기화"""
+    def _init_openai_service(self):
+        """OpenAI 서비스 초기화"""
         try:
-            from gemini_service import GeminiService
-            self.gemini_service = GeminiService("gemini-1.5-pro")
-            print("[SUCCESS] Gemini 서비스 초기화 성공")
+            api_key = os.getenv("OPENAI_API_KEY")
+            if api_key:
+                self.openai_client = AsyncOpenAI(api_key=api_key)
+                print("[SUCCESS] OpenAI 서비스 초기화 성공")
+            else:
+                print("[ERROR] OPENAI_API_KEY가 설정되지 않았습니다")
+                self.openai_client = None
         except Exception as e:
-            print(f"[ERROR] Gemini 서비스 초기화 실패: {e}")
-            self.gemini_service = None
+            print(f"[ERROR] OpenAI 서비스 초기화 실패: {e}")
+            self.openai_client = None
     
     async def handle_ai_assistant_request(self, request: ChatbotRequest) -> ChatbotResponse:
         """AI 어시스턴트 요청 처리"""
@@ -112,9 +116,13 @@ class AIService:
     async def _call_ai_api(self, prompt: str, conversation_history: List[Dict[str, Any]] = None) -> str:
         """AI API 호출"""
         try:
-            if self.gemini_service:
-                response = await self.gemini_service.generate_text_async(prompt)
-                return response
+            if self.openai_client:
+                response = await self.openai_client.chat.completions.create(
+                    model="gpt-4o-mini",
+                    messages=[{"role": "user", "content": prompt}],
+                    max_tokens=500
+                )
+                return response.choices[0].message.content
             else:
                 return "AI 서비스를 사용할 수 없습니다. 기본 응답을 제공합니다."
         except Exception as e:
