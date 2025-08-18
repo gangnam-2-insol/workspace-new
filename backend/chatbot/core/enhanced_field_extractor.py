@@ -6,15 +6,21 @@ AI 추론 + 사전 매칭 + 규칙 기반 결합 방식
 import re
 import json
 from typing import Dict, List, Any, Optional
-import google.generativeai as genai
+try:
+    from openai_service import OpenAIService
+except ImportError:
+    OpenAIService = None
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Gemini AI 설정
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-model = genai.GenerativeModel('gemini-1.5-pro')
+# OpenAI 설정
+try:
+    openai_service = OpenAIService(model_name="gpt-3.5-turbo") if OpenAIService else None
+except Exception as e:
+    print(f"OpenAI 서비스 초기화 실패: {e}")
+    openai_service = None
 
 class EnhancedFieldExtractor:
     def __init__(self):
@@ -221,25 +227,45 @@ class EnhancedFieldExtractor:
         """AI 기반 보완 추출"""
         try:
             prompt = f"""
-다음 채용공고 텍스트에서 채용 관련 정보를 JSON 형태로 추출해주세요.
+당신은 채용공고 정보 추출 전문가입니다. 다음 텍스트에서 채용 관련 정보를 추출해주세요.
 
 텍스트: {user_input}
 
-다음 필드들을 추출해주세요:
-- position: 직무명 (예: 프론트엔드 개발자, 백엔드 개발자)
-- tech_stack: 기술스택 배열 (예: ["React", "TypeScript", "JavaScript"])
-- experience: 경력 요구사항 (예: "2년", "신입", "시니어")
-- requirements: 자격요건 배열 (예: ["웹 개발 경험", "커뮤니케이션 능력"])
-- preferences: 우대조건 배열 (예: ["애자일 경험", "팀 협업 능력"])
-- salary: 급여 정보 (예: "면접 후 결정", "3000만원")
-- location: 근무지 (예: "서울", "부산")
-- company_type: 회사 유형 (예: "스타트업", "대기업")
+반드시 다음 JSON 형식으로만 응답하세요. 다른 설명은 포함하지 마세요:
 
-추출할 수 없는 필드는 null로 설정하고, JSON 형식으로만 응답해주세요.
+{{
+  "position": "백엔드 개발자",
+  "tech_stack": ["Python", "Django", "AWS"],
+  "experience": "3년 이상",
+  "requirements": ["컴퓨터 관련 학과 졸업", "웹 개발 경험"],
+  "preferences": ["AWS 경험자 우대", "스타트업 경험"],
+  "salary": "연봉 4000만원",
+  "location": "서울",
+  "company_type": "스타트업"
+}}
+
+중요:
+- JSON만 응답하고 다른 텍스트는 포함하지 마세요
+- 정보를 찾을 수 없는 필드는 null로 설정하세요
+- 배열 필드(tech_stack, requirements, preferences)는 반드시 배열로 반환하세요
 """
 
-            response = model.generate_content(prompt)
-            result_text = response.text.strip()
+            if openai_service:
+                try:
+                    # 새로운 이벤트 루프 생성하여 사용
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        response = loop.run_until_complete(openai_service.generate_json_response(prompt))
+                        result_text = response.strip() if response else ""
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    print(f"AI 호출 중 오류: {e}")
+                    result_text = ""
+            else:
+                result_text = ""
             
             # JSON 파싱
             try:

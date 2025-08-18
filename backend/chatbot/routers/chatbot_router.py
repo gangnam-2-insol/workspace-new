@@ -12,7 +12,7 @@ import os
 from dotenv import load_dotenv
 import traceback
 import re
-import google.generativeai as genai
+from openai import OpenAI
 import numpy as np
 
 from ..models.request_models import (

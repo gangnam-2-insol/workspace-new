@@ -8,7 +8,7 @@ import json
 import math
 from typing import Dict, Any, List, Optional, TypedDict, Annotated
 from dataclasses import dataclass
-import google.generativeai as genai
+from openai_service import OpenAIService
 import os
 from dotenv import load_dotenv
 from datetime import datetime
@@ -35,9 +35,12 @@ except (ImportError, TypeError, Exception) as e:
 
 load_dotenv()
 
-# Gemini AI 설정
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-model = genai.GenerativeModel('gemini-1.5-pro')
+# OpenAI 설정
+try:
+    openai_service = OpenAIService(model_name="gpt-3.5-turbo")
+except Exception as e:
+    print(f"OpenAI 서비스 초기화 실패: {e}")
+    openai_service = None
 
 # 상태 정의 (LangGraph용)
 class AgentState(TypedDict):
@@ -284,7 +287,7 @@ def detect_mixed_intent(text: str) -> tuple[bool, list[str], list[str], float]:
     # 기본 반환값
     return False, [], [], 0.0
 
-def intent_detection_node(state: AgentState) -> AgentState:
+async def intent_detection_node(state: AgentState) -> AgentState:
     """의도 분류 노드"""
     try:
         user_input = state["user_input"].lower()
@@ -343,8 +346,11 @@ def intent_detection_node(state: AgentState) -> AgentState:
 """
         
         prompt = f"{system_prompt}\n\n사용자 입력: {user_input}"
-        response = model.generate_content(prompt)
-        intent = response.text.strip().lower()
+        if openai_service:
+            response = await openai_service.generate_response(prompt)
+            intent = response.strip().lower()
+        else:
+            intent = "chat"
         
         # 유효한 의도인지 확인
         valid_intents = ["search", "calc", "db", "recruit", "chat"]
@@ -363,7 +369,7 @@ def intent_detection_node(state: AgentState) -> AgentState:
         state["intent"] = "chat"
         return state
 
-def info_handler_node(state: AgentState) -> AgentState:
+async def info_handler_node(state: AgentState) -> AgentState:
     """정보 요청 처리 노드"""
     try:
         user_input = state["user_input"]
@@ -374,9 +380,12 @@ def info_handler_node(state: AgentState) -> AgentState:
 """
         
         prompt = f"{system_prompt}\n\n사용자 질문: {user_input}"
-        response = model.generate_content(prompt)
+        if openai_service:
+            response = await openai_service.generate_response(prompt)
+        else:
+            response = "죄송합니다. AI 서비스를 사용할 수 없습니다."
         
-        state["tool_result"] = response.text
+        state["tool_result"] = response
         state["current_node"] = "info_handler"
         return state
         
@@ -456,7 +465,7 @@ def ui_controller_node(state: AgentState) -> AgentState:
         state["error"] = f"UI 컨트롤 중 오류: {str(e)}"
         return state
 
-def resume_analyzer_node(state: AgentState) -> AgentState:
+async def resume_analyzer_node(state: AgentState) -> AgentState:
     """이력서 분석 노드"""
     try:
         user_input = state["user_input"]
@@ -471,9 +480,12 @@ def resume_analyzer_node(state: AgentState) -> AgentState:
 """
         
         prompt = f"{system_prompt}\n\n분석 요청: {user_input}"
-        response = model.generate_content(prompt)
+        if openai_service:
+            response = await openai_service.generate_response(prompt)
+        else:
+            response = "죄송합니다. AI 서비스를 사용할 수 없습니다."
         
-        state["tool_result"] = response.text
+        state["tool_result"] = response
         state["current_node"] = "resume_analyzer"
         return state
         
@@ -576,7 +588,7 @@ def calculator_node(state: AgentState) -> AgentState:
         state["error"] = f"계산 중 오류: {str(e)}"
         return state
 
-def recruitment_node(state: AgentState) -> AgentState:
+async def recruitment_node(state: AgentState) -> AgentState:
     """채용공고 작성 노드"""
     try:
         user_input = state["user_input"]
@@ -630,8 +642,10 @@ def recruitment_node(state: AgentState) -> AgentState:
 답변은 한국어로 작성하고, 이모지를 적절히 사용하여 가독성을 높여주세요.
 """
         
-        response = model.generate_content(prompt)
-        result = response.text
+        if openai_service:
+            result = await openai_service.generate_response(prompt)
+        else:
+            result = "죄송합니다. AI 서비스를 사용할 수 없습니다."
         
         state["tool_result"] = result
         state["current_node"] = "recruitment"
@@ -776,7 +790,7 @@ def response_formatter_node(state: AgentState) -> AgentState:
         state["error"] = f"응답 포매팅 중 오류: {str(e)}"
         return state
 
-def intent_revalidation_node(state: AgentState) -> AgentState:
+async def intent_revalidation_node(state: AgentState) -> AgentState:
     """의도 재검증 노드"""
     try:
         user_input = state["user_input"]
@@ -826,8 +840,11 @@ UI 액션:
             current_intent=current_intent
         )
         
-        response = model.generate_content(prompt)
-        revalidated_intent = response.text.strip().lower()
+        if openai_service:
+            response = await openai_service.generate_response(prompt)
+            revalidated_intent = response.strip().lower()
+        else:
+            revalidated_intent = current_intent
         
         if revalidated_intent in ["info_request", "ui_action"]:
             state["intent"] = revalidated_intent
@@ -920,7 +937,7 @@ def analyze_intent_parts(text: str, context: dict = None) -> tuple[str, str, flo
                 return last_intent, text, confidence * 0.7  # 이전 의도 유지 (가장 낮은 신뢰도)
         return "chat", text, confidence
 
-def mixed_intent_handler_node(state: AgentState) -> AgentState:
+async def mixed_intent_handler_node(state: AgentState) -> AgentState:
     """혼합 의도 처리 노드"""
     try:
         user_input = state["user_input"]
@@ -993,7 +1010,7 @@ def mixed_intent_handler_node(state: AgentState) -> AgentState:
             
             # 3.3 의도별 처리
             if intent == "info_request":
-                sub_state = info_handler_node(sub_state)
+                sub_state = await info_handler_node(sub_state)
                 if sub_state.get("tool_result"):
                     combined_results.append({
                         "type": "info",
@@ -1009,7 +1026,7 @@ def mixed_intent_handler_node(state: AgentState) -> AgentState:
                         }
                     })
             elif intent == "ui_action":
-                sub_state = action_handler_node(sub_state)
+                sub_state = await action_handler_node(sub_state)
                 if sub_state.get("tool_result"):
                     combined_results.append({
                         "type": "action",
