@@ -377,6 +377,32 @@ async def get_applicants(skip: int = 0, limit: int = 20):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"지원자 목록 조회 실패: {str(e)}")
 
+# 개별 지원자 조회 API
+@app.get("/api/applicants/{applicant_id}")
+async def get_applicant(applicant_id: str):
+    try:
+        # MongoDB ObjectId로 조회 시도
+        try:
+            applicant = await db.applicants.find_one({"_id": ObjectId(applicant_id)})
+        except:
+            # ObjectId 변환 실패시 문자열로 조회
+            applicant = await db.applicants.find_one({"_id": applicant_id})
+        
+        if not applicant:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다.")
+        
+        # MongoDB의 _id를 id로 변환
+        applicant["id"] = str(applicant["_id"])
+        del applicant["_id"]
+        if "resume_id" in applicant and applicant["resume_id"]:
+            applicant["resume_id"] = str(applicant["resume_id"])
+        
+        return Resume(**applicant)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"지원자 조회 실패: {str(e)}")
+
 # 지원자 통계 API
 @app.get("/api/applicants/stats/overview")
 async def get_applicant_stats():
@@ -916,7 +942,7 @@ async def check_resume_similarity(resume_id: str):
                     field_similarities["careerHistory"] = max(field_similarities["careerHistory"], chunk_info["score"])
             
             similarity_result = {
-                "resume_id": similar["resume"]["_id"],
+                "resume_id": str(similar["resume"]["_id"]),
                 "applicant_name": similar["resume"].get("name", "알 수 없음"),
                 "position": similar["resume"].get("position", ""),
                 "department": similar["resume"].get("department", ""),

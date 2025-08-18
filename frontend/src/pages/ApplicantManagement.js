@@ -2537,6 +2537,38 @@ const ApplicantManagement = () => {
     setPortfolioView('select');
   };
 
+  const handleSimilarApplicantClick = async (similarData) => {
+    try {
+      // 유사한 지원자의 ID를 사용해서 전체 지원자 정보를 가져옴
+      const response = await fetch(`${API_BASE_URL}/api/applicants/${similarData.resume_id}`);
+      if (response.ok) {
+        const applicantData = await response.json();
+        
+        // 현재 모달의 타입을 기억해둠 (자소서에서 클릭했으면 자소서를, 이력서에서 클릭했으면 이력서를)
+        const currentModalType = documentModal.type;
+        
+        // 현재 모달을 닫고 새로운 모달을 열기
+        setDocumentModal({ isOpen: false, type: '', applicant: null, isOriginal: false, similarityData: null, isLoadingSimilarity: false });
+        
+        // 약간의 딜레이 후에 새로운 모달 열기 (부드러운 전환을 위해)
+        setTimeout(() => {
+          setDocumentModal({
+            isOpen: true,
+            type: currentModalType, // 현재 모달의 타입을 유지
+            applicant: applicantData,
+            isOriginal: true,
+            similarityData: null,
+            isLoadingSimilarity: false
+          });
+        }, 100);
+      } else {
+        console.error('지원자 정보를 가져오는 데 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('지원자 정보 요청 중 오류:', error);
+    }
+  };
+
   const handleFilterClick = () => {
     setFilterModal(true);
   };
@@ -3680,7 +3712,18 @@ const ApplicantManagement = () => {
                                   margin: '8px 0',
                                   border: `2px solid ${similar.is_high_similarity ? '#ff4757' : similar.is_moderate_similarity ? '#ffa502' : '#2ed573'}`,
                                   borderRadius: '8px',
-                                  backgroundColor: similar.is_high_similarity ? '#fff5f5' : similar.is_moderate_similarity ? '#fffbf0' : '#f0fff4'
+                                  backgroundColor: similar.is_high_similarity ? '#fff5f5' : similar.is_moderate_similarity ? '#fffbf0' : '#f0fff4',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s ease'
+                                }}
+                                onClick={() => handleSimilarApplicantClick(similar)}
+                                onMouseEnter={(e) => {
+                                  e.target.style.transform = 'translateY(-2px)';
+                                  e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
+                                }}
+                                onMouseLeave={(e) => {
+                                  e.target.style.transform = 'translateY(0)';
+                                  e.target.style.boxShadow = 'none';
                                 }}>
                                   <div style={{fontWeight: 'bold', marginBottom: '4px'}}>
                                     #{index + 1}. {similar.applicant_name} ({similar.position})
