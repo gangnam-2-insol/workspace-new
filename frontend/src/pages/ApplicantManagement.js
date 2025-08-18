@@ -25,7 +25,8 @@ import {
   FiBarChart2,
   FiCamera,
   FiGitBranch,
-  FiArrowLeft
+  FiArrowLeft,
+  FiUsers
 } from 'react-icons/fi';
 import DetailedAnalysisModal from '../components/DetailedAnalysisModal';
 import GithubSummaryPanel from './PortfolioSummary/GithubSummaryPanel';
@@ -158,6 +159,20 @@ const api = {
       return await response.json();
     } catch (error) {
       console.error('지원자 통계 조회 오류:', error);
+      throw error;
+    }
+  },
+
+  // 유사한 지원자 추천 조회
+  getSimilarApplicants: async (applicantId, limit = 5) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/similar?limit=${limit}`);
+      if (!response.ok) {
+        throw new Error('유사한 지원자 조회 실패');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('유사한 지원자 조회 오류:', error);
       throw error;
     }
   }
@@ -2308,6 +2323,10 @@ const ApplicantManagement = () => {
     skills: []
   });
 
+  // 유사한 지원자 추천 관련 상태
+  const [similarApplicants, setSimilarApplicants] = useState([]);
+  const [loadingSimilar, setLoadingSimilar] = useState(false);
+
   // 메모이제이션된 필터링된 지원자 목록
   const filteredApplicants = useMemo(() => {
     return (applicants || []).filter(applicant => {
@@ -2358,6 +2377,13 @@ const ApplicantManagement = () => {
   useEffect(() => {
     updateLocalStats();
   }, [applicants]);
+
+  // 지원자 상세 모달이 열릴 때 유사한 지원자 조회
+  useEffect(() => {
+    if (isModalOpen && selectedApplicant) {
+      handleShowSimilarApplicants(selectedApplicant);
+    }
+  }, [isModalOpen, selectedApplicant]);
 
   // 지원자 데이터 로드 (페이지네이션 지원)
   const loadApplicants = useCallback(async (page = 0, append = false) => {
@@ -2885,6 +2911,22 @@ const ApplicantManagement = () => {
     return ['문서 분석이 완료되었습니다.'];
   };
 
+  // 유사한 지원자 조회 핸들러
+  const handleShowSimilarApplicants = async (applicant) => {
+    if (!applicant?.id) return;
+    
+    try {
+      setLoadingSimilar(true);
+      const similarData = await api.getSimilarApplicants(applicant.id);
+      setSimilarApplicants(similarData.similar_applicants || similarData || []);
+    } catch (error) {
+      console.error('유사한 지원자 조회 오류:', error);
+      setSimilarApplicants([]);
+    } finally {
+      setLoadingSimilar(false);
+    }
+  };
+
   return (
     <Container>
       <Header>
@@ -3306,6 +3348,125 @@ const ApplicantManagement = () => {
                   포트폴리오
                 </DocumentButton>
               </DocumentButtons>
+
+              {/* 유사한 지원자 추천 섹션 */}
+              <SummarySection>
+                <SummaryTitle>
+                  <FiUsers size={20} />
+                  유사한 지원자 추천
+                </SummaryTitle>
+                
+                {loadingSimilar ? (
+                  <div style={{ textAlign: 'center', padding: '20px', color: '#666' }}>
+                    유사한 지원자를 찾는 중...
+                  </div>
+                ) : similarApplicants.length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                    {similarApplicants.map((similar, index) => (
+                      <div key={(similar.applicant && (similar.applicant.id || similar.applicant._id)) || similar.id || index} style={{
+                        background: 'white',
+                        border: '1px solid #e9ecef',
+                        borderRadius: '8px',
+                        padding: '16px',
+                        transition: 'all 0.2s',
+                        cursor: 'pointer'
+                      }}
+                      onClick={() => {
+                        const targetApplicant = similar.applicant || similar;
+                        setSelectedApplicant(targetApplicant);
+                        setSimilarApplicants([]);
+                      }}
+                      onMouseEnter={(e) => {
+                        const el = e.currentTarget;
+                        el.style.borderColor = '#007bff';
+                        el.style.boxShadow = '0 2px 8px rgba(0, 123, 255, 0.1)';
+                      }}
+                      onMouseLeave={(e) => {
+                        const el = e.currentTarget;
+                        el.style.borderColor = '#e9ecef';
+                        el.style.boxShadow = 'none';
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                          <div style={{ fontWeight: '600', color: '#333', fontSize: '16px' }}>
+                            {(similar.applicant && (similar.applicant.name || similar.applicant.applicant_name)) || similar.name || ''}
+                          </div>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <span style={{
+                              background: '#007bff',
+                              color: 'white',
+                              padding: '4px 8px',
+                              borderRadius: '12px',
+                              fontSize: '12px',
+                              fontWeight: '500'
+                            }}>
+                              {(similar.applicant && similar.applicant.position) || similar.position || '직무 미상'}
+                            </span>
+                            <span style={{
+                              background: '#28a745',
+                              color: 'white',
+                              padding: '4px 8px',
+                              borderRadius: '12px',
+                              fontSize: '12px',
+                              fontWeight: '500'
+                            }}>
+                              유사도: {typeof similar.similarity_score === 'number' ? `${(similar.similarity_score * 100).toFixed(1)}%` : 'N/A'}
+                            </span>
+                          </div>
+                        </div>
+                        
+                        <div style={{ fontSize: '14px', color: '#666', marginBottom: '8px' }}>
+                          <strong>기술스택:</strong> {(similar.applicant && similar.applicant.skills) || similar.skills || '-'}
+                        </div>
+                        
+                        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                          {((similar.applicant && similar.applicant.resume_analysis) || similar.resume_analysis) && (
+                            <span style={{
+                              background: '#f3f4f6',
+                              color: '#495057',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: '500'
+                            }}>
+                              이력서: {((similar.applicant && similar.applicant.resume_analysis) || similar.resume_analysis).score || '-'}
+                            </span>
+                          )}
+                          {((similar.applicant && similar.applicant.cover_letter_analysis) || similar.cover_letter_analysis) && (
+                            <span style={{
+                              background: '#f3f4f6',
+                              color: '#495057',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: '500'
+                            }}>
+                              자기소개서: {((similar.applicant && similar.applicant.cover_letter_analysis) || similar.cover_letter_analysis).score || '-'}
+                            </span>
+                          )}
+                          {((similar.applicant && similar.applicant.portfolio_analysis) || similar.portfolio_analysis) && (
+                            <span style={{
+                              background: '#f3f4f6',
+                              color: '#495057',
+                              padding: '2px 6px',
+                              borderRadius: '4px',
+                              fontSize: '11px',
+                              fontWeight: '500'
+                            }}>
+                              포트폴리오: {((similar.applicant && similar.applicant.portfolio_analysis) || similar.portfolio_analysis).score || '-'}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div style={{ textAlign: 'center', padding: '20px', color: '#6c757d' }}>
+                    <FiUsers size={32} style={{ color: '#dee2e6', marginBottom: '8px' }} />
+                    <p style={{ margin: '0 0 4px 0', fontSize: '14px' }}>유사한 지원자를 찾을 수 없습니다.</p>
+                    <small style={{ fontSize: '12px', color: '#adb5bd' }}>기술스택이나 직무가 다른 지원자일 수 있습니다.</small>
+                  </div>
+                )}
+              </SummarySection>
             </ModalContent>
           </ModalOverlay>
         )}

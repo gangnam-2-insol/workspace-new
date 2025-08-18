@@ -104,6 +104,20 @@ const api = {
       console.error('지원자 통계 조회 오류:', error);
       throw error;
     }
+  },
+
+  // 유사한 지원자 추천 조회
+  getSimilarApplicants: async (applicantId, limit = 5) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/similar?limit=${limit}`);
+      if (!response.ok) {
+        throw new Error('유사한 지원자 조회 실패');
+      }
+      return await response.json();
+    } catch (error) {
+      console.error('유사한 지원자 조회 오류:', error);
+      throw error;
+    }
   }
 };
 

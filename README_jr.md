@@ -83,6 +83,52 @@ GET /api/resumes?page=1&limit=10&sort=created_at&order=desc
 GET /api/resume/{resume_id}
 ```
 
+### 3-1. 유사한 지원자 추천 (간단 추천)
+```
+GET /api/applicants/{applicant_id}/similar?limit=5
+```
+설명: DB에 저장된 지원자의 `position`, `department`, `experience`, `skills` 4개 필드만을 사용하여 가중치 기반(Jaccard + 중요 키워드 보너스, skills는 콤마 분리 Jaccard)으로 유사한 지원자를 추천합니다. 구현은 `backend/similarity_service.py`의 `recommend_similar_applicants`에서 처리되며, 엔드포인트는 해당 서비스를 호출합니다.
+
+유사도 산식(가중합):
+- position 0.3 + skills 0.3 + department 0.2 + experience 0.2
+- 최소 임계값(threshold) 0.3 이상만 후보로 포함
+
+응답 예시:
+```json
+{
+  "success": true,
+  "original_applicant_id": "68999dda47ea917329ee7aba",
+  "original_applicant_name": "김민수",
+  "similar_applicants": [
+    {
+      "applicant": {
+        "id": "68999dda47ea917329ee7abe",
+        "name": "박영희",
+        "position": "프론트엔드 개발자",
+        "department": "개발팀",
+        "experience": "3-5년",
+        "skills": "React, TypeScript, JavaScript"
+      },
+      "similarity_score": 0.537,
+      "similarity_breakdown": {
+        "position": 0.6,
+        "department": 0.5,
+        "skills": 0.55,
+        "experience": 0.45
+      }
+    }
+  ],
+  "total_found": 12,
+  "criteria": {
+    "position_weight": 0.3,
+    "skills_weight": 0.3,
+    "department_weight": 0.2,
+    "experience_weight": 0.2,
+    "minimum_threshold": 0.3
+  }
+}
+```
+
 ### 4. 유사 이력서 검색
 ```
 POST /api/resume/search

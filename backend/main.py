@@ -403,6 +403,60 @@ async def get_applicant(applicant_id: str):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"지원자 조회 실패: {str(e)}")
 
+@app.get("/api/applicants/{applicant_id}/similar")
+async def get_similar_applicants(applicant_id: str, limit: int = 5):
+    """유사한 지원자 추천 - SimilarityService 사용"""
+    try:
+        result = await similarity_service.recommend_similar_applicants(
+            applicant_id=applicant_id,
+            collection=db.applicants,
+            limit=limit,
+        )
+
+        if not result.get("success"):
+            status = result.get("status", 500)
+            raise HTTPException(status_code=status, detail=result.get("message", "추천 실패"))
+
+        # 서비스 응답을 받은 뒤 이름 포함하여 로깅
+        print(f"[API] 유사한 지원자 검색 요청: {result.get('original_applicant_name','Unknown')}({applicant_id}), limit={limit}")
+        print(f"[API] 유사한 지원자 {len(result.get('similar_applicants', []))}명 발견")
+        return result
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"유사한 지원자 추천 실패: {str(e)}")
+
+def calculate_text_similarity(text1: str, text2: str) -> float:
+    """두 텍스트 간의 간단한 유사도 계산 (Jaccard 유사도 기반)"""
+    if not text1 or not text2:
+        return 0.0
+    
+    # 텍스트를 단어로 분할
+    words1 = set(text1.lower().split())
+    words2 = set(text2.lower().split())
+    
+    # Jaccard 유사도 계산 (교집합 / 합집합)
+    intersection = len(words1.intersection(words2))
+    union = len(words1.union(words2))
+    
+    if union == 0:
+        return 0.0
+    
+    jaccard_similarity = intersection / union
+    
+    # 추가적으로 공통 키워드에 가중치 부여
+    important_keywords = {
+        "python", "java", "javascript", "react", "vue", "angular", "node", "spring", 
+        "django", "flask", "mysql", "mongodb", "postgresql", "aws", "docker", "kubernetes",
+        "개발자", "엔지니어", "프론트엔드", "백엔드", "풀스택", "데이터", "분석", "ai", "ml"
+    }
+    
+    # 중요 키워드 매칭에 대한 보너스
+    common_important = words1.intersection(words2).intersection(important_keywords)
+    keyword_bonus = len(common_important) * 0.1  # 중요 키워드 하나당 0.1 보너스
+    
+    return min(jaccard_similarity + keyword_bonus, 1.0)
+
 # 지원자 통계 API
 @app.get("/api/applicants/stats/overview")
 async def get_applicant_stats():

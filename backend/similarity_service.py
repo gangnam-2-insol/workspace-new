@@ -40,6 +40,135 @@ class SimilarityService:
             'text': 0.3,      # 텍스트 검색 30%
             'keyword': 0.2    # 키워드 검색 20%
         }
+
+    async def recommend_similar_applicants(self, applicant_id: str, collection: Collection, limit: int = 5) -> Dict[str, Any]:
+        """
+        간단한 규칙 기반(직무/기술스택/부서/경력)으로 유사한 지원자를 추천합니다.
+
+        기존 main.py의 `/api/applicants/{id}/similar` 엔드포인트 로직을 서비스로 이전한 구현입니다.
+
+        Returns:
+            Dict[str, Any]: 기존 API와 동일한 응답 포맷
+        """
+        try:
+            # 원본 지원자 조회 (ObjectId/문자열 모두 허용)
+            try:
+                original = await collection.find_one({"_id": ObjectId(applicant_id)})
+            except Exception:
+                original = await collection.find_one({"_id": applicant_id})
+
+            if not original:
+                return {
+                    "success": False,
+                    "status": 404,
+                    "message": "지원자를 찾을 수 없습니다.",
+                }
+
+            original_position = (original.get("position") or "").lower()
+            original_department = (original.get("department") or "").lower()
+            original_skills = (original.get("skills") or "").lower()
+            original_experience = (original.get("experience") or "").lower()
+
+            # 자신을 제외한 모든 지원자 조회
+            others = await collection.find({
+                "_id": {"$ne": ObjectId(applicant_id) if ObjectId.is_valid(applicant_id) else applicant_id}
+            }).to_list(1000)
+
+            similar_applicants: List[Dict[str, Any]] = []
+
+            for other in others:
+                try:
+                    position_score = self._jaccard_with_keywords(original_position, (other.get("position") or "").lower())
+                    department_score = self._jaccard_with_keywords(original_department, (other.get("department") or "").lower())
+                    # 기술스택은 콤마 구분 기반 전용 계산식 사용
+                    skills_score = self._calculate_skills_similarity(original_skills, (other.get("skills") or "").lower())
+                    experience_score = self._jaccard_with_keywords(original_experience, (other.get("experience") or "").lower())
+
+                    overall = (
+                        position_score * 0.3 +
+                        skills_score * 0.3 +
+                        department_score * 0.2 +
+                        experience_score * 0.2
+                    )
+
+                    if overall >= 0.3:
+                        # 포맷 맞추기: id 문자열화 및 중간 필드 정리
+                        other_formatted = dict(other)
+                        other_formatted["id"] = str(other_formatted.get("_id"))
+                        if "_id" in other_formatted:
+                            del other_formatted["_id"]
+                        if other_formatted.get("resume_id"):
+                            other_formatted["resume_id"] = str(other_formatted["resume_id"])  # ObjectId 대비
+
+                        similar_applicants.append({
+                            "applicant": other_formatted,
+                            "similarity_score": round(overall, 3),
+                            "similarity_breakdown": {
+                                "position": round(position_score, 3),
+                                "department": round(department_score, 3),
+                                "skills": round(skills_score, 3),
+                                "experience": round(experience_score, 3),
+                            },
+                        })
+                except Exception as calc_err:
+                    print(f"[SimilarityService] 유사도 계산 실패({_id if (_id := other.get('_id')) else 'Unknown'}): {calc_err}")
+                    continue
+
+            similar_applicants.sort(key=lambda x: x["similarity_score"], reverse=True)
+            top_similar = similar_applicants[:limit]
+
+            return {
+                "success": True,
+                "original_applicant_id": applicant_id,
+                "original_applicant_name": original.get("name", "Unknown"),
+                "similar_applicants": top_similar,
+                "total_found": len(similar_applicants),
+                "criteria": {
+                    "position_weight": 0.3,
+                    "skills_weight": 0.3,
+                    "department_weight": 0.2,
+                    "experience_weight": 0.2,
+                    "minimum_threshold": 0.3,
+                },
+            }
+
+        except Exception as e:
+            print(f"[SimilarityService] 추천 실패: {e}")
+            return {
+                "success": False,
+                "status": 500,
+                "message": str(e),
+            }
+
+    def _jaccard_with_keywords(self, text1: str, text2: str) -> float:
+        """간단한 Jaccard 유사도 + 중요 키워드 보너스."""
+        try:
+            if not text1 or not text2:
+                return 0.0
+
+            words1 = set(text1.lower().split())
+            words2 = set(text2.lower().split())
+            if not words1 or not words2:
+                return 0.0
+
+            intersection = len(words1.intersection(words2))
+            union = len(words1.union(words2))
+            if union == 0:
+                return 0.0
+
+            jaccard = intersection / union
+
+            important_keywords = {
+                "python", "java", "javascript", "react", "vue", "angular", "node", "spring",
+                "django", "flask", "mysql", "mongodb", "postgresql", "aws", "docker", "kubernetes",
+                "개발자", "엔지니어", "프론트엔드", "백엔드", "풀스택", "데이터", "분석", "ai", "ml"
+            }
+            common_important = words1.intersection(words2).intersection(important_keywords)
+            keyword_bonus = len(common_important) * 0.1
+
+            return min(jaccard + keyword_bonus, 1.0)
+        except Exception:
+            return 0.0
     
     async def save_resume_chunks(self, resume: Dict[str, Any]) -> Dict[str, Any]:
         """
