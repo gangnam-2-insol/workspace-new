@@ -8,7 +8,6 @@ import json
 import math
 from typing import Dict, Any, List, Optional, TypedDict, Annotated
 from dataclasses import dataclass
-import google.generativeai as genai
 import os
 from dotenv import load_dotenv
 from datetime import datetime
@@ -35,9 +34,9 @@ except (ImportError, TypeError, Exception) as e:
 
 load_dotenv()
 
-# Gemini AI 설정
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-model = genai.GenerativeModel('gemini-1.5-pro')
+# OpenAI AI 설정
+from openai import AsyncOpenAI
+openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # 상태 정의 (LangGraph용)
 class AgentState(TypedDict):
@@ -343,8 +342,16 @@ def intent_detection_node(state: AgentState) -> AgentState:
 """
         
         prompt = f"{system_prompt}\n\n사용자 입력: {user_input}"
-        response = model.generate_content(prompt)
-        intent = response.text.strip().lower()
+        response = await openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_input}
+            ],
+            temperature=0.3,
+            max_tokens=50
+        )
+        intent = response.choices[0].message.content.strip().lower()
         
         # 유효한 의도인지 확인
         valid_intents = ["search", "calc", "db", "recruit", "chat"]
@@ -374,9 +381,17 @@ def info_handler_node(state: AgentState) -> AgentState:
 """
         
         prompt = f"{system_prompt}\n\n사용자 질문: {user_input}"
-        response = model.generate_content(prompt)
+        response = await openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_input}
+            ],
+            temperature=0.7,
+            max_tokens=500
+        )
         
-        state["tool_result"] = response.text
+        state["tool_result"] = response.choices[0].message.content
         state["current_node"] = "info_handler"
         return state
         
@@ -471,9 +486,17 @@ def resume_analyzer_node(state: AgentState) -> AgentState:
 """
         
         prompt = f"{system_prompt}\n\n분석 요청: {user_input}"
-        response = model.generate_content(prompt)
+        response = await openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_input}
+            ],
+            temperature=0.7,
+            max_tokens=500
+        )
         
-        state["tool_result"] = response.text
+        state["tool_result"] = response.choices[0].message.content
         state["current_node"] = "resume_analyzer"
         return state
         
@@ -630,8 +653,16 @@ def recruitment_node(state: AgentState) -> AgentState:
 답변은 한국어로 작성하고, 이모지를 적절히 사용하여 가독성을 높여주세요.
 """
         
-        response = model.generate_content(prompt)
-        result = response.text
+        response = await openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": "당신은 채용공고 작성 전문가입니다."},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.7,
+            max_tokens=1000
+        )
+        result = response.choices[0].message.content
         
         state["tool_result"] = result
         state["current_node"] = "recruitment"
@@ -826,8 +857,16 @@ UI 액션:
             current_intent=current_intent
         )
         
-        response = model.generate_content(prompt)
-        revalidated_intent = response.text.strip().lower()
+        response = await openai_client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": prompt}
+            ],
+            temperature=0.3,
+            max_tokens=50
+        )
+        revalidated_intent = response.choices[0].message.content.strip().lower()
         
         if revalidated_intent in ["info_request", "ui_action"]:
             state["intent"] = revalidated_intent

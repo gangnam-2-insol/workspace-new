@@ -9,19 +9,18 @@ import os
 from dotenv import load_dotenv
 import traceback
 import re
-import google.generativeai as genai
+from openai import AsyncOpenAI
 
 # 환경 변수 로드
 load_dotenv()
 
-# Gemini 모델 초기화
+# OpenAI 클라이언트 초기화
 try:
-    genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-    model = genai.GenerativeModel("gemini-1.5-pro")
-    print("Gemini 모델 초기화 성공")
+    client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
+    print("OpenAI 클라이언트 초기화 성공")
 except Exception as e:
-    print(f"Gemini 모델 초기화 실패: {e}")
-    model = None
+    print(f"OpenAI 클라이언트 초기화 실패: {e}")
+    client = None
 
 # 의도 감지 유틸리티
 HARDCODED_FIELDS = {
@@ -119,22 +118,20 @@ PROMPT_TEMPLATE = """
 # .env 파일 로드
 load_dotenv()
 
-# --- Gemini API 설정 추가 시작 ---
-import google.generativeai as genai
+# --- OpenAI API 설정 추가 시작 ---
+from openai import AsyncOpenAI
 
-# 환경 변수에서 Gemini API 키 로드
-GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY')
+# 환경 변수에서 OpenAI API 키 로드
+OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 
 # API 키가 없어도 기본 응답을 반환하도록 수정
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    # Gemini 모델 초기화
-    # 'gemini-1.5-pro'는 최신 텍스트 기반 모델입니다.
-    model = genai.GenerativeModel('gemini-1.5-pro')
+if OPENAI_API_KEY:
+    openai_client = AsyncOpenAI(api_key=OPENAI_API_KEY)
+    print("OpenAI 클라이언트 초기화 성공")
 else:
-    print("Warning: GOOGLE_API_KEY not found. Using fallback responses.")
-    model = None
-# --- Gemini API 설정 추가 끝 ---
+    print("Warning: OPENAI_API_KEY not found. Using fallback responses.")
+    openai_client = None
+# --- OpenAI API 설정 추가 끝 ---
 
 router = APIRouter()
 
@@ -524,7 +521,7 @@ async def handle_normal_request(request: ChatbotRequest):
             
         elif classification['type'] == 'question':
             # 3) GPT API 호출로 답변 생성
-            ai_response = await call_gemini_api(user_input, conversation_history_from_frontend)
+            ai_response = await call_openai_api(user_input, conversation_history_from_frontend)
             response = ChatbotResponse(
                 message=ai_response,
                 field=None,
@@ -786,7 +783,7 @@ async def generate_ai_assistant_response(user_input: str, field: Dict[str, Any],
 
 이 질문에 대해 채용 공고 작성에 도움이 되는 실무적인 답변을 제공해주세요.
 """
-            ai_response = await call_gemini_api(ai_assistant_context)
+            ai_response = await call_openai_api(ai_assistant_context)
             
             # 사용자 입력에서 value 추출 시도
             extracted_value = user_input.strip()
@@ -799,7 +796,7 @@ async def generate_ai_assistant_response(user_input: str, field: Dict[str, Any],
                 "confidence": classification['confidence']
             }
         except Exception as e:
-            print(f"[ERROR] Gemini API 호출 실패: {e}")
+            print(f"[ERROR] OpenAI API 호출 실패: {e}")
             return {
                 "message": f"{field_label}에 대한 질문이군요. 구체적으로 어떤 부분이 궁금하신가요?",
                 "value": None,
@@ -948,13 +945,13 @@ async def simulate_llm_response(user_input: str, current_field: str, session: Di
 
 이 질문에 대해 채용 공고 작성에 도움이 되는 실무적인 답변을 제공해주세요.
 """
-            ai_response = await call_gemini_api(ai_assistant_context)
+            ai_response = await call_openai_api(ai_assistant_context)
             return {
                 "message": ai_response,
                 "is_conversation": True
             }
         except Exception as e:
-            print(f"[ERROR] Gemini API 호출 실패: {e}")
+            print(f"[ERROR] OpenAI API 호출 실패: {e}")
             return {
                 "message": f"{current_field_label}에 대한 질문이군요. 구체적으로 어떤 부분이 궁금하신가요?",
                 "is_conversation": True
@@ -998,20 +995,20 @@ async def simulate_llm_response(user_input: str, current_field: str, session: Di
         print("[DEBUG] ===== simulate_llm_response 완료 =====")
         return result
 
-async def call_gemini_api(prompt: str, conversation_history: List[Dict[str, Any]] = None) -> str:
+async def call_openai_api(prompt: str, conversation_history: List[Dict[str, Any]] = None) -> str:
     """
-    Gemini API 호출 함수
+    OpenAI API 호출 함수
     """
     try:
-        if not model:
+        if not client:
             return "AI 서비스를 사용할 수 없습니다. 다시 시도해 주세요."
         
         # 대화 히스토리 구성
         messages = []
         if conversation_history:
             for msg in conversation_history:
-                role = 'user' if msg.get('type') == 'user' else 'model'
-                messages.append({"role": role, "parts": [{"text": msg.get('content', '')}]})
+                role = 'user' if msg.get('type') == 'user' else 'assistant'
+                messages.append({"role": role, "content": msg.get('content', '')})
         
         # 컨텍스트가 포함된 프롬프트 생성
         context_prompt = f"""
@@ -1038,35 +1035,20 @@ async def call_gemini_api(prompt: str, conversation_history: List[Dict[str, Any]
 위 질문에 대해 채용 전문가 관점에서 답변해주세요.
 """
 
-        messages.append({"role": "user", "parts": [{"text": context_prompt}]})
+        messages.append({"role": "user", "content": context_prompt})
         
-        # Gemini API 호출
-        response = await model.generate_content_async(
-            messages,
-            safety_settings=[
-                {
-                    "category": "HARM_CATEGORY_HARASSMENT",
-                    "threshold": "BLOCK_NONE"
-                },
-                {
-                    "category": "HARM_CATEGORY_HATE_SPEECH", 
-                    "threshold": "BLOCK_NONE"
-                },
-                {
-                    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                    "threshold": "BLOCK_NONE"
-                },
-                {
-                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                    "threshold": "BLOCK_NONE"
-                }
-            ]
+        # OpenAI API 호출
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=messages,
+            temperature=0.7,
+            max_tokens=1000
         )
         
-        return response.text
+        return response.choices[0].message.content
         
     except Exception as e:
-        print(f"[ERROR] Gemini API 호출 실패: {e}")
+        print(f"[ERROR] OpenAI API 호출 실패: {e}")
         return f"AI 응답을 가져오는 데 실패했습니다. 다시 시도해 주세요. (오류: {str(e)})"
 
 @router.post("/suggestions")
@@ -1233,8 +1215,8 @@ async def chat_endpoint(request: ChatbotRequest):
             }
             
         elif classification['type'] == 'question':
-            # 3) Gemini API 호출로 답변 생성
-            ai_response = await call_gemini_api(user_input, conversation_history)
+            # 3) OpenAI API 호출로 답변 생성
+            ai_response = await call_openai_api(user_input, conversation_history)
             response = {
                 "type": "answer",
                 "content": ai_response,

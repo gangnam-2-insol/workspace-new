@@ -14,7 +14,8 @@ import codecs
 from datetime import datetime
 from datetime import timedelta
 import csv
-from chatbot import chatbot_router, langgraph_router
+from chatbot import chatbot_router
+from langgraph_router import router as langgraph_agent_router
 from github import router as github_router
 from routers.upload import router as upload_router
 
@@ -65,9 +66,8 @@ async def add_charset_header(request, call_next):
 
 # 라우터 등록
 app.include_router(chatbot_router, prefix="/api/chatbot", tags=["chatbot"])
-app.include_router(langgraph_router, prefix="/api/langgraph", tags=["langgraph"])
-# 프론트엔드 호환을 위해 /api/langgraph-agent 프리픽스도 동일 라우터로 마운트
-app.include_router(langgraph_router, prefix="/api/langgraph-agent", tags=["langgraph-agent"])
+# LangGraph 에이전트 라우터는 자체적으로 prefix("/api/langgraph-agent")를 포함하고 있으므로 추가 prefix 없이 마운트
+app.include_router(langgraph_agent_router)
 app.include_router(github_router, prefix="/api", tags=["github"])
 app.include_router(upload_router, tags=["upload"])
 
@@ -80,7 +80,7 @@ client = AsyncIOMotorClient(MONGODB_URI)
 db = client.hireme
 
 # 환경 변수에서 API 키 로드
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY") 
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "resume-vectors")
 

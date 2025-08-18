@@ -490,12 +490,12 @@ async def generate_detailed_analysis(repo_data: Dict, languages: Dict, files: Li
 
 async def generate_unified_summary(username: str, repo_name: Optional[str] = None, profile_readme: Optional[Dict] = None, repos_data: Optional[List[Dict]] = None) -> List[Dict]:
     """통합된 요약 생성 함수 - README와 레포 데이터를 모두 처리"""
-    api_key = os.getenv('GEMINI_API_KEY')
+    api_key = os.getenv('OPENAI_API_KEY')
     if not api_key:
-        raise HTTPException(status_code=500, detail="GEMINI_API_KEY 환경변수가 설정되어 있지 않습니다.")
+        raise HTTPException(status_code=500, detail="OPENAI_API_KEY 환경변수가 설정되어 있지 않습니다.")
     
-    model = 'gemini-2.5-flash-lite'
-    endpoint = f'https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent?key={api_key}'
+    from openai import AsyncOpenAI
+    client = AsyncOpenAI(api_key=api_key)
     
     # 입력 데이터 구성
     input_data = {
@@ -656,27 +656,16 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
 
 각 레포지토리를 개별적으로 분석하여 배열 형태로 제공해주세요."""
     
-    payload = {
-        "contents": [
-            {
-                "role": "user",
-                "parts": [{"text": prompt}]
-            }
+    response = await client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[
+            {"role": "user", "content": prompt}
         ],
-        "generationConfig": {
-            "temperature": 0.3,
-            "maxOutputTokens": 2000
-        }
-    }
+        temperature=0.3,
+        max_tokens=2000
+    )
     
-    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
-        response = await client.post(endpoint, json=payload, headers={'Content-Type': 'application/json'})
-        response.raise_for_status()
-        data = response.json()
-        
-        candidate = data.get('candidates', [{}])[0]
-        parts = candidate.get('content', {}).get('parts', [])
-        response_text = ''.join(part.get('text', '') for part in parts).strip()
+    response_text = response.choices[0].message.content.strip()
         
         try:
             # JSON 응답 파싱 (마크다운 코드 블록 제거)

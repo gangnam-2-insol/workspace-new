@@ -121,3 +121,7 @@ admin/backend/__pycache__/chatbot_router.cpython-313.pyc
 # Data directories
 data/
 */data/
+
+# Documentation files
+AGENT_CHATBOT_READING.md
+*.md

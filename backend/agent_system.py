@@ -8,15 +8,14 @@ import json
 import math
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
-import google.generativeai as genai
+from openai import AsyncOpenAI
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Gemini AI 설정
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-model = genai.GenerativeModel('gemini-1.5-pro')
+# OpenAI AI 설정
+openai_client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 @dataclass
 class AgentState:
@@ -50,14 +49,22 @@ class IntentDetectionNode:
 분류 결과만 반환해주세요 (예: "search", "calc", "db", "recruit", "chat")
 """
     
-    def detect_intent(self, user_input: str) -> str:
+    async def detect_intent(self, user_input: str) -> str:
         try:
-            # Gemini AI를 사용하여 의도 분류
+            # OpenAI AI를 사용하여 의도 분류
             prompt = f"{self.system_prompt}\n\n사용자 입력: {user_input}"
-            response = model.generate_content(prompt)
+            response = await openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": self.system_prompt},
+                    {"role": "user", "content": user_input}
+                ],
+                temperature=0.3,
+                max_tokens=50
+            )
             
             # 응답에서 의도 추출
-            intent = response.text.strip().lower()
+            intent = response.choices[0].message.content.strip().lower()
             
             # 유효한 의도인지 확인
             valid_intents = ["search", "calc", "db", "recruit", "chat"]
@@ -320,8 +327,16 @@ class RecruitmentNode:
 답변은 한국어로 작성하고, 이모지를 적절히 사용하여 가독성을 높여주세요.
 """
             
-            response = model.generate_content(prompt)
-            return response.text
+            response = await openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "당신은 채용공고 작성 전문가입니다."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.7,
+                max_tokens=1000
+            )
+            return response.choices[0].message.content
             
         except Exception as e:
             print(f"채용공고 작성 중 오류: {str(e)}")

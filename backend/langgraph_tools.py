@@ -9,14 +9,22 @@ import json
 import re
 import os
 from pathlib import Path
+from langchain_core.messages import SystemMessage, HumanMessage
 
+<<<<<<< Updated upstream
 import importlib
+# admin_guide가 없는 환경에서도 동작하도록 폴백 정책 제공
 try:
-    _admin_guide = importlib.import_module('admin_guide')
-    admin_policy = getattr(_admin_guide, 'policy', {})
+    from admin_guide import policy as admin_policy  # 선택 의존성
 except Exception:
-    admin_policy = {'storage_dir': 'admin/backend/dynamic_tools', 'forbidden_patterns': []}
-
+    class _FallbackPolicy(dict):
+        def get(self, key, default=None):  # type: ignore[override]
+            return super().get(key, default)
+    # 안전 기본값들
+    admin_policy = _FallbackPolicy({
+        'storage_dir': 'admin/backend/dynamic_tools',
+        'forbidden_patterns': []
+    })
 from langgraph_config import config as lg_config
 try:
     from llm_service import LLMService  # 선택적 의존성: 없으면 LLM 경로 추론 비활성
@@ -158,11 +166,12 @@ class ToolManager:
                 "출력 형식: {\n  \"target\": \"<allowed_routes 중 하나>\"\n}\n"
                 "규칙: 정확히 하나만 고르고, 다른 말은 쓰지 말 것."
             )
-            # gemini sync 호출 사용 (LLMService 내부 모델)
-            response = llm.model.generate_content(
-                f"{system}\n\n{user_prompt}"
-            )
-            text_resp = getattr(response, 'text', None) or ''
+            # OpenAI API 호출 사용
+            response = await llm.ainvoke([
+                SystemMessage(content=system),
+                HumanMessage(content=user_prompt)
+            ])
+            text_resp = response.content if hasattr(response, 'content') else str(response)
             # 간단 JSON 파싱
             import json as _json
             target = None
