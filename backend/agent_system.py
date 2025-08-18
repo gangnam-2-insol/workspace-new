@@ -8,15 +8,14 @@ import json
 import math
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
-import google.generativeai as genai
+from openai import OpenAI
 import os
 from dotenv import load_dotenv
 
 load_dotenv()
 
-# Gemini AI 설정
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-model = genai.GenerativeModel('gemini-1.5-pro')
+# OpenAI 설정
+openai_client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 @dataclass
 class AgentState:
@@ -52,12 +51,19 @@ class IntentDetectionNode:
     
     def detect_intent(self, user_input: str) -> str:
         try:
-            # Gemini AI를 사용하여 의도 분류
+            # OpenAI를 사용하여 의도 분류
             prompt = f"{self.system_prompt}\n\n사용자 입력: {user_input}"
-            response = model.generate_content(prompt)
+            response = openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=50,
+                temperature=0.3
+            )
             
             # 응답에서 의도 추출
-            intent = response.text.strip().lower()
+            intent = response.choices[0].message.content.strip().lower()
             
             # 유효한 의도인지 확인
             valid_intents = ["search", "calc", "db", "recruit", "chat"]
@@ -320,8 +326,15 @@ class RecruitmentNode:
 답변은 한국어로 작성하고, 이모지를 적절히 사용하여 가독성을 높여주세요.
 """
             
-            response = model.generate_content(prompt)
-            return response.text
+            response = openai_client.chat.completions.create(
+                model="gpt-3.5-turbo",
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=1000,
+                temperature=0.7
+            )
+            return response.choices[0].message.content
             
         except Exception as e:
             print(f"채용공고 작성 중 오류: {str(e)}")

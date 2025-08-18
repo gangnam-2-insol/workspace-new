@@ -158,11 +158,17 @@ class ToolManager:
                 "출력 형식: {\n  \"target\": \"<allowed_routes 중 하나>\"\n}\n"
                 "규칙: 정확히 하나만 고르고, 다른 말은 쓰지 말 것."
             )
-            # gemini sync 호출 사용 (LLMService 내부 모델)
-            response = llm.model.generate_content(
-                f"{system}\n\n{user_prompt}"
+            # OpenAI 호출 사용 (LLMService 내부 client)
+            response = llm.client.chat.completions.create(
+                model=llm.model_name,
+                messages=[
+                    {"role": "system", "content": system},
+                    {"role": "user", "content": user_prompt}
+                ],
+                temperature=0.7,
+                max_tokens=500
             )
-            text_resp = getattr(response, 'text', None) or ''
+            text_resp = response.choices[0].message.content if response.choices else ''
             # 간단 JSON 파싱
             import json as _json
             target = None

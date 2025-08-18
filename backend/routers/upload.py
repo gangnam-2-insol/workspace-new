@@ -7,7 +7,9 @@ import tempfile
 import asyncio
 import aiofiles
 from datetime import datetime
-import google.generativeai as genai
+import sys
+sys.path.append('..')  # 상위 디렉토리의 openai_service.py 사용
+from openai_service import OpenAIService
 from pydantic import BaseModel
 import re
 
@@ -15,13 +17,15 @@ import re
 print(f"🔍 upload.py 현재 작업 디렉토리: {os.getcwd()}")
 print(f"🔍 upload.py .env 파일 존재 여부: {os.path.exists('.env')}")
 load_dotenv('.env')
-print(f"🔍 upload.py GOOGLE_API_KEY 로드 후: {os.getenv('GOOGLE_API_KEY')}")
+print(f"🔍 upload.py OPENAI_API_KEY 로드 후: {os.getenv('OPENAI_API_KEY')}")
 
-# Gemini API 설정
-GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
-if GOOGLE_API_KEY:
-    genai.configure(api_key=GOOGLE_API_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+# OpenAI API 설정
+try:
+    openai_service = OpenAIService(model_name="gpt-3.5-turbo")
+    print("OpenAI 서비스 초기화 성공")
+except Exception as e:
+    print(f"OpenAI 서비스 초기화 실패: {e}")
+    openai_service = None
 
 router = APIRouter(tags=["upload"])
 
@@ -271,10 +275,10 @@ async def extract_text_from_file(file_path: str, file_ext: str) -> str:
     except Exception as e:
         return ""
 
-async def generate_summary_with_gemini(content: str, summary_type: str = "general") -> SummaryResponse:
-    """Gemini API를 사용하여 요약 생성"""
-    if not GOOGLE_API_KEY:
-        raise HTTPException(status_code=500, detail="Gemini API 키가 설정되지 않았습니다.")
+async def generate_summary_with_openai(content: str, summary_type: str = "general") -> SummaryResponse:
+    """OpenAI API를 사용하여 요약 생성"""
+    if not openai_service:
+        raise HTTPException(status_code=500, detail="OpenAI API 키가 설정되지 않았습니다.")
     
     start_time = datetime.now()
     
@@ -324,13 +328,8 @@ async def generate_summary_with_gemini(content: str, summary_type: str = "genera
         
         prompt = prompts.get(summary_type, prompts["general"])
         
-        # Gemini API 호출
-        response = await asyncio.to_thread(
-            model.generate_content,
-            prompt
-        )
-        
-        summary = response.text.strip()
+        # OpenAI API 호출
+        summary = await openai_service.generate_response(prompt)
         
         # 키워드 추출을 위한 추가 요청
         keyword_prompt = f"""
@@ -341,12 +340,9 @@ async def generate_summary_with_gemini(content: str, summary_type: str = "genera
         키워드는 쉼표로 구분하여 나열해주세요.
         """
         
-        keyword_response = await asyncio.to_thread(
-            model.generate_content,
-            keyword_prompt
-        )
+        keyword_response = await openai_service.generate_response(keyword_prompt)
         
-        keywords = [kw.strip() for kw in keyword_response.text.split(',')]
+        keywords = [kw.strip() for kw in keyword_response.split(',')]
         
         processing_time = (datetime.now() - start_time).total_seconds()
         
@@ -400,8 +396,8 @@ async def upload_and_summarize_file(
                 print("⚠️ 텍스트 추출 실패: 빈 내용 감지 → 더미 분석으로 계속 진행합니다.")
                 extracted_text = "[EMPTY_CONTENT] 텍스트 추출 실패 (스캔 PDF/이미지 기반 문서일 수 있습니다.)"
             
-            # Gemini API로 요약 생성
-            summary_result = await generate_summary_with_gemini(extracted_text, summary_type)
+            # OpenAI API로 요약 생성
+            summary_result = await generate_summary_with_openai(extracted_text, summary_type)
             
             return {
                 "filename": file.filename,
@@ -431,7 +427,7 @@ async def summarize_text(request: SummaryRequest):
         if not request.content or len(request.content.strip()) == 0:
             raise HTTPException(status_code=400, detail="요약할 텍스트가 없습니다.")
         
-        summary_result = await generate_summary_with_gemini(
+        summary_result = await generate_summary_with_openai(
             request.content, 
             request.summary_type
         )
@@ -448,7 +444,7 @@ async def upload_health_check():
     """업로드 서비스 헬스 체크"""
     return {
         "status": "healthy",
-        "gemini_api_configured": bool(GOOGLE_API_KEY),
+        "openai_api_configured": bool(openai_service),
         "supported_formats": list(ALLOWED_EXTENSIONS.keys()),
         "max_file_size_mb": MAX_FILE_SIZE // (1024 * 1024)
     }
