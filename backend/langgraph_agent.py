@@ -11,7 +11,7 @@ from dotenv import load_dotenv
 
 # LangGraph imports
 from langgraph.graph import StateGraph, END, START
-from langchain_google_genai import ChatGoogleGenerativeAI
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, AIMessage, SystemMessage
 
 # 로컬 모듈 imports
@@ -55,17 +55,17 @@ class LangGraphAgent:
         # 동적 툴 로드는 최초 필요 시점에 수행 (lazy)
         
     def _initialize_llm(self):
-        """LLM 초기화: gemini-1.5-pro 강제 고정 + 모델명 로깅"""
+        """LLM 초기화: OpenAI API 사용"""
         try:
-            api_key = os.getenv("GOOGLE_API_KEY")
+            api_key = os.getenv("OPENAI_API_KEY")
             if not api_key:
-                raise ValueError("GOOGLE_API_KEY not found")
+                raise ValueError("OPENAI_API_KEY not found")
 
-            # 모델 강제 고정 (환경변수/설정 무시)
-            model_name = "gemini-1.5-pro"
-            llm = ChatGoogleGenerativeAI(
+            # OpenAI 모델 사용
+            model_name = config.llm_model
+            llm = ChatOpenAI(
                 model=model_name,
-                google_api_key=api_key,
+                openai_api_key=api_key,
                 temperature=config.llm_temperature,
                 max_tokens=config.llm_max_tokens
             )

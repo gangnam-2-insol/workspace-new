@@ -9,7 +9,10 @@ from .config import Settings
 import sys
 import os
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from gemini_service import GeminiService
+try:
+    from openai_service import OpenAIService
+except ImportError:
+    OpenAIService = None
 
 
 def analyze_text(text: str, settings: Settings) -> Dict[str, Any]:
@@ -80,7 +83,7 @@ def extract_basic_info(text: str) -> Dict[str, Any]:
     
     # Gemini AI를 사용한 분석 시도
     try:
-        gemini_service = GeminiService()
+        openai_service = OpenAIService(model_name="gpt-3.5-turbo") if OpenAIService else None
         
         # 비동기 함수를 동기적으로 실행
         loop = asyncio.new_event_loop()
@@ -119,7 +122,7 @@ def extract_basic_info(text: str) -> Dict[str, Any]:
 """
 
             ai_response = loop.run_until_complete(
-                gemini_service.generate_response(ai_prompt)
+                openai_service.generate_response(ai_prompt)
             )
             
             # JSON 파싱 시도
@@ -350,7 +353,7 @@ def analyze_with_ai(text: str, settings: Settings) -> Dict[str, Any]:
     """AI LLM을 사용해서 텍스트를 분석합니다."""
     try:
         # Gemini AI를 사용한 분석
-        gemini_service = GeminiService()
+        openai_service = OpenAIService(model_name="gpt-3.5-turbo") if OpenAIService else None
         
         # 비동기 함수를 동기적으로 실행
         loop = asyncio.new_event_loop()
@@ -420,15 +423,15 @@ JSON 형태로 응답해주세요:
 }}
 """
 
-            # Gemini AI 호출
+            # OpenAI 호출
             basic_info_response = loop.run_until_complete(
-                gemini_service.generate_response(basic_info_prompt)
+                openai_service.generate_response(basic_info_prompt)
             )
             summary_response = loop.run_until_complete(
-                gemini_service.generate_response(summary_prompt)
+                openai_service.generate_response(summary_prompt)
             )
             keywords_response = loop.run_until_complete(
-                gemini_service.generate_response(keywords_prompt)
+                openai_service.generate_response(keywords_prompt)
             )
             
             # JSON 파싱 시도

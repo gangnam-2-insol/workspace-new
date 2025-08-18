@@ -11,7 +11,7 @@ class LangGraphConfig(BaseSettings):
     """LangGraph 에이전트 설정 클래스"""
     
     # LLM 설정
-    llm_model: str = "gemini-1.5-pro"
+    llm_model: str = "gpt-3.5-turbo"
     llm_temperature: float = 0.3
     llm_max_tokens: int = 300
     

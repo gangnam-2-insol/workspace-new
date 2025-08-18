@@ -6,16 +6,22 @@
 import json
 import re
 from typing import Dict, List, Any, Tuple
-import google.generativeai as genai
+try:
+    from openai_service import OpenAIService
+except ImportError:
+    OpenAIService = None
 import os
 from dotenv import load_dotenv
 from collections import Counter, defaultdict
 
 load_dotenv()
 
-# Gemini AI 설정
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-model = genai.GenerativeModel('gemini-1.5-pro')
+# OpenAI 설정
+try:
+    openai_service = OpenAIService(model_name="gpt-3.5-turbo") if OpenAIService else None
+except Exception as e:
+    print(f"OpenAI 서비스 초기화 실패: {e}")
+    openai_service = None
 
 class SuggestionGenerator:
     def __init__(self):
@@ -222,49 +228,59 @@ class SuggestionGenerator:
             
             # AI에게 추천문구 생성 요청
             prompt = f"""
-다음 채용공고 텍스트를 바탕으로 각 필드별 추천 문구를 생성해주세요.
+당신은 채용공고 추천문구 생성 전문가입니다. 다음 텍스트를 바탕으로 추천 문구를 생성해주세요.
 
 원본 텍스트: {original_text}
 
-추출된 필드:
-{json.dumps(field_prompts, ensure_ascii=False, indent=2)}
+추출된 필드: {json.dumps(field_prompts, ensure_ascii=False, indent=2)}
 
-각 필드별로 2-3개의 추천 문구를 생성해주세요. 다음 JSON 형식으로 응답해주세요:
+반드시 다음 JSON 형식으로만 응답하세요. 다른 설명은 포함하지 마세요:
 
 {{
   "직무명": {{
-    "extracted": "추출된 값",
-    "suggestions": ["추천문구1", "추천문구2", "추천문구3"]
+    "extracted": "백엔드 개발자",
+    "suggestions": ["Python 백엔드 개발자", "웹 백엔드 엔지니어", "서버 개발자"]
   }},
   "자격요건": {{
-    "extracted": "추출된 값",
-    "suggestions": ["추천문구1", "추천문구2", "추천문구3"]
+    "extracted": "컴퓨터 관련 학과 졸업",
+    "suggestions": ["컴퓨터공학 또는 관련 학과 졸업", "웹 개발 경험 2년 이상", "Python 개발 경험"]
   }},
   "우대조건": {{
-    "extracted": "추출된 값", 
-    "suggestions": ["추천문구1", "추천문구2", "추천문구3"]
+    "extracted": "AWS 경험자 우대",
+    "suggestions": ["AWS 클라우드 서비스 경험자", "Docker/Kubernetes 경험자", "팀 협업 경험자"]
   }},
   "근무지": {{
-    "extracted": "추출된 값",
-    "suggestions": ["추천문구1", "추천문구2", "추천문구3"]
+    "extracted": "서울",
+    "suggestions": ["서울 강남구", "서울 및 수도권", "서울시 전체"]
   }},
   "연봉": {{
-    "extracted": "추출된 값",
-    "suggestions": ["추천문구1", "추천문구2", "추천문구3"]
+    "extracted": "4000만원",
+    "suggestions": ["연봉 4000-5000만원", "경력에 따라 협의", "성과에 따른 인센티브 제공"]
   }}
 }}
 
-추천 문구는:
-1. 명확하고 간결하게 작성
-2. 실제 채용공고에 적합한 톤앤매너
-3. 추출된 내용을 기반으로 하되 더 구체적으로 작성
-4. 한국어로 작성
-
-JSON 형식으로만 응답해주세요.
+중요:
+- JSON만 응답하고 다른 텍스트는 포함하지 마세요
+- 각 필드별로 2-3개의 실용적인 추천문구를 생성하세요
+- 한국어로 작성하세요
 """
 
-            response = model.generate_content(prompt)
-            result_text = response.text.strip()
+            if openai_service:
+                try:
+                    # 새로운 이벤트 루프 생성하여 사용
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        response = loop.run_until_complete(openai_service.generate_json_response(prompt))
+                        result_text = response.strip() if response else ""
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    print(f"AI 호출 중 오류: {e}")
+                    result_text = ""
+            else:
+                result_text = ""
             
             # JSON 파싱
             try:
