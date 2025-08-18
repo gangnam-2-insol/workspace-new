@@ -178,7 +178,7 @@ const NoResultsText = styled.p`
   margin: 0;
 `;
 
-const SimilarityModal = ({ isOpen, onClose, data, documentType = 'resume' }) => {
+const SimilarityModal = ({ isOpen, onClose, data, documentType = 'resume', onResumeClick }) => {
   if (!isOpen || !data) return null;
 
   const { original_resume, similar_resumes, total } = data;
@@ -186,6 +186,12 @@ const SimilarityModal = ({ isOpen, onClose, data, documentType = 'resume' }) => 
 
   const formatSimilarityScore = (score) => {
     return Math.round(score * 100);
+  };
+
+  const handleResumeClick = (resumeData) => {
+    if (onResumeClick && typeof onResumeClick === 'function') {
+      onResumeClick(resumeData);
+    }
   };
 
   return (
@@ -245,7 +251,10 @@ const SimilarityModal = ({ isOpen, onClose, data, documentType = 'resume' }) => 
             {similar_resumes.length > 0 ? (
               <SimilarResumesList>
                 {similar_resumes.map((item, index) => (
-                  <SimilarResumeCard key={index}>
+                  <SimilarResumeCard 
+                    key={index}
+                    onClick={() => handleResumeClick(item.resume)}
+                  >
                     <SimilarResumeHeader>
                       <SimilarResumeTitle>
                         <FiUser />
