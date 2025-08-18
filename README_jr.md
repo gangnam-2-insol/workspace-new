@@ -1,7 +1,7 @@
 # 이력서 분석 시스템 (RAG 적용)
 
 이력서 원본을 MongoDB에 저장하고, 임베딩된 벡터를 Pinecone 벡터 DB에 저장하는 시스템입니다.
-**RAG (Retrieval-Augmented Generation) 기술**을 적용하여 유사도 검색 결과를 **Gemini 1.5 Flash**가 자연어로 분석하고 설명합니다.
+**RAG (Retrieval-Augmented Generation) 기술**을 적용하여 유사도 검색 결과를 **OpenAI GPT-3.5-turbo**가 자연어로 분석하고 설명합니다.
 
 ## 설치 및 설정
 
@@ -15,7 +15,7 @@ pip install -r requirements.txt
 cp env.example .env
 ```
 `.env` 파일에서 다음 키들을 설정하세요:
-- `GEMINI_API_KEY`: Gemini API 키
+- `OPENAI_API_KEY`: OpenAI API 키
 - `PINECONE_API_KEY`: Pinecone API 키
 - `PINECONE_ENVIRONMENT`: Pinecone 환경 (예: gcp-starter)
 - `PINECONE_INDEX_NAME`: Pinecone 인덱스 이름
@@ -633,7 +633,7 @@ graph TD
     E3 --> F
     
     F --> G[전체 유사도 점수 산출<br>가중평균]
-    G --> H[LLM 분석 - Gemini 1.5 Flash]
+    G --> H[LLM 분석 - OpenAI GPT-3.5-turbo]
     H --> I[최종 결과 반환]
     
     style B fill:#e1f5fe
@@ -710,8 +710,8 @@ graph TD
 
 ## RAG (Retrieval-Augmented Generation) 시스템 🚀
 
-### LLM 서비스 (Gemini 1.5 Flash)
-- **AI 모델**: Google Gemini 1.5 Flash
+### LLM 서비스 (OpenAI GPT-3.5-turbo)
+- **AI 모델**: OpenAI GPT-3.5-turbo
 - **기능**: 유사도 분석 결과를 자연어로 설명
 - **처리 과정**:
   1. 유사도 검색 결과 수집
@@ -726,7 +726,7 @@ graph TD
     B --> C[청크별 유사한 이력서들 발견]
     C --> D[청크 매칭 세부 정보 수집]
     D --> E[LLM에게 청크 매칭 데이터 전달]
-    E --> F[AI 분석 실행 - Gemini 1.5 Flash]
+    E --> F[AI 분석 실행 - OpenAI GPT-3.5-turbo]
     F --> G[청크별 구체적 유사점 설명]
     G --> H[표절 위험도 평가]
     H --> I[필드별 유사도 정보 포함]
@@ -740,14 +740,11 @@ graph TD
 
 ### 환경변수 설정
 ```bash
-# 기존 환경변수
-GEMINI_API_KEY=your_gemini_api_key  # 변경: OpenAI → Gemini
+# 환경변수
+OPENAI_API_KEY=your_openai_api_key  # 변경: Gemini → OpenAI
 PINECONE_API_KEY=your_pinecone_api_key
 PINECONE_INDEX_NAME=resume-vectors
 MONGODB_URI=mongodb://localhost:27017/hireme
-
-# 새로 추가된 환경변수 (RAG용)
-# OPENAI_API_KEY는 더 이상 필요하지 않음
 ```
 
 ### LLM 분석 결과 예시
@@ -771,7 +768,7 @@ MONGODB_URI=mongodb://localhost:27017/hireme
 - ✅ AI 기반 이력서 분석 및 점수 부여
 
 ### 청킹 기반 RAG 유사도 분석 🔥
-- ✅ **Gemini 1.5 Flash**를 활용한 지능형 청킹 기반 유사도 분석
+- ✅ **OpenAI GPT-3.5-turbo**를 활용한 지능형 청킹 기반 유사도 분석
 - ✅ **청크별 구체적 유사점 설명**: 어떤 청크가 어떤 부분과 유사한지 자연어로 설명
 - ✅ **필드별 세밀한 분석**: 성장배경, 지원동기, 경력사항 각각의 청크별 유사성 분석
 - ✅ **표절 위험도 평가**: HIGH/MEDIUM/LOW 3단계 위험도 분석
