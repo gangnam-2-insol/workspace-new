@@ -1,7 +1,7 @@
 # 이력서 분석 시스템 (RAG 적용)
 
 이력서 원본을 MongoDB에 저장하고, 임베딩된 벡터를 Pinecone 벡터 DB에 저장하는 시스템입니다.
-**RAG (Retrieval-Augmented Generation) 기술**을 적용하여 유사도 검색 결과를 **Gemini 1.5 Flash**가 자연어로 분석하고 설명합니다.
+**RAG (Retrieval-Augmented Generation) 기술**을 적용하여 유사도 검색 결과를 **OpenAI GPT-3.5-turbo**가 자연어로 분석하고 설명합니다.
 
 ## 설치 및 설정
 
@@ -15,7 +15,7 @@ pip install -r requirements.txt
 cp env.example .env
 ```
 `.env` 파일에서 다음 키들을 설정하세요:
-- `GEMINI_API_KEY`: Gemini API 키
+- `OPENAI_API_KEY`: OpenAI API 키
 - `PINECONE_API_KEY`: Pinecone API 키
 - `PINECONE_ENVIRONMENT`: Pinecone 환경 (예: gcp-starter)
 - `PINECONE_INDEX_NAME`: Pinecone 인덱스 이름
@@ -373,9 +373,137 @@ POST /api/resume/similarity-check/68999dda47ea917329ee7aba
 }
 ```
 
-### 9. Similarity Service APIs
+### 9. 키워드 검색 APIs (BM25 기반) 🆕
 
-#### 9.1. 텍스트 유사도 비교
+#### 9.1. 키워드 기반 이력서 검색 🔥
+```
+POST /api/resume/search/keyword
+```
+**설명**: BM25 알고리즘과 한국어 형태소 분석을 통한 정확한 키워드 검색
+
+**요청:**
+```json
+{
+  "query": "React 프론트엔드 개발자",
+  "limit": 10
+}
+```
+
+**응답:**
+```json
+{
+  "success": true,
+  "message": "'React 프론트엔드 개발자' 검색 결과입니다.",
+  "data": {
+    "query": "React 프론트엔드 개발자",
+    "results": [
+      {
+        "bm25_score": 8.45,
+        "resume": {
+          "_id": "68999dda47ea917329ee7aba",
+          "name": "김민수",
+          "position": "프론트엔드 개발자",
+          "skills": "React, TypeScript, JavaScript"
+        },
+        "highlight": "**React** **프론트엔드** **개발자**로 3년간 근무하며..."
+      }
+    ],
+    "total": 5,
+    "search_method": "keyword_bm25",
+    "query_tokens": ["react", "프론트엔드", "개발자"]
+  }
+}
+```
+
+#### 9.2. 다중 하이브리드 검색 🔥
+```
+POST /api/resume/search/multi-hybrid
+```
+**설명**: 벡터 검색 + 텍스트 유사도 + 키워드 검색을 융합한 고도화된 검색
+
+**요청:**
+```json
+{
+  "query": "React 개발 경험 3년 이상",
+  "type": "resume",
+  "limit": 10
+}
+```
+
+**응답:**
+```json
+{
+  "success": true,
+  "message": "다중 하이브리드 검색 완료: 'React 개발 경험 3년 이상'",
+  "data": {
+    "query": "React 개발 경험 3년 이상",
+    "search_method": "multi_hybrid",
+    "weights": {
+      "vector": 0.5,
+      "text": 0.3,
+      "keyword": 0.2
+    },
+    "results": [
+      {
+        "final_score": 0.8743,
+        "vector_score": 0.92,
+        "text_score": 0.78,
+        "keyword_score": 0.85,
+        "original_keyword_score": 8.5,
+        "resume": {
+          "_id": "68999dda47ea917329ee7aba",
+          "name": "김민수",
+          "position": "프론트엔드 개발자"
+        },
+        "search_methods": ["vector", "text", "keyword"]
+      }
+    ],
+    "total": 8,
+    "vector_count": 12,
+    "keyword_count": 15
+  }
+}
+```
+
+#### 9.3. 키워드 검색 인덱스 관리
+```
+POST /api/resume/search/keyword/rebuild-index
+```
+**설명**: BM25 검색 인덱스 재구축
+
+**응답:**
+```json
+{
+  "success": true,
+  "message": "BM25 인덱스 구축이 완료되었습니다.",
+  "data": {
+    "total_documents": 150,
+    "index_created_at": "2025-08-18T10:30:00.000Z"
+  }
+}
+```
+
+#### 9.4. 키워드 검색 통계
+```
+GET /api/resume/search/keyword/stats
+```
+
+**응답:**
+```json
+{
+  "success": true,
+  "data": {
+    "indexed": true,
+    "total_documents": 150,
+    "index_created_at": "2025-08-18T10:30:00.000Z",
+    "average_doc_length": 245.6
+  }
+}
+```
+
+### 10. Similarity Service APIs
+
+#### 10.1. 텍스트 유사도 비교
 ```
 POST /api/similarity/compare
 ```
@@ -403,7 +531,7 @@ POST /api/similarity/compare
 }
 ```
 
-#### 8.2. 일괄 유사도 계산
+#### 10.2. 일괄 유사도 계산
 ```
 POST /api/similarity/batch
 ```
@@ -441,7 +569,7 @@ POST /api/similarity/batch
 }
 ```
 
-#### 8.3. 유사도 서비스 메트릭
+#### 10.3. 유사도 서비스 메트릭
 ```
 GET /api/similarity/metrics
 ```
@@ -576,7 +704,7 @@ GET /api/similarity/metrics
 
 ### 기본 이력서 처리
 1. 이력서 원본 정보를 `resumes` 컬렉션에 저장
-2. Gemini를 사용한 이력서 분석 및 점수 부여
+2. OpenAI GPT-3.5-turbo를 사용한 이력서 분석 및 점수 부여
 
 ### 청킹 기반 처리 🆕
 
@@ -633,7 +761,7 @@ graph TD
     E3 --> F
     
     F --> G[전체 유사도 점수 산출<br>가중평균]
-    G --> H[LLM 분석 - Gemini 1.5 Flash]
+    G --> H[LLM 분석 - OpenAI GPT-3.5-turbo]
     H --> I[최종 결과 반환]
     
     style B fill:#e1f5fe
@@ -708,10 +836,32 @@ graph TD
 - **청크 매칭 검증**: 각 필드의 청크들 간 최적 매칭으로 정확도 향상
 - **Pinecone 청크별 인덱싱**: 각 청크가 독립적으로 벡터 저장 및 검색
 
+## 다중 하이브리드 검색 시스템 🔥
+
+### 검색 방법별 특징 및 융합
+- **벡터 검색 (50% 가중치)**: 의미적 유사도 기반, 동의어/유의어 인식
+- **텍스트 검색 (30% 가중치)**: Jaccard 유사도 기반, 단어 중복도 계산  
+- **키워드 검색 (20% 가중치)**: BM25 알고리즘 기반, 정확한 키워드 매칭
+
+### BM25 키워드 검색 엔진
+- **알고리즘**: BM25 Okapi (Best Matching 25)
+- **형태소 분석**: Kiwi 분석기 (한국어 특화)
+- **복합어 처리**: IT 용어 복합어 사전 (프론트엔드, 머신러닝 등)
+- **불용어 제거**: 조사, 어미, 의미없는 단어 자동 필터링
+- **토큰화**: 의미있는 품사만 추출 (명사, 동사, 형용사, 외국어 등)
+
+### 융합 점수 계산 방식
+```
+최종점수 = (벡터점수 × 0.5) + (텍스트점수 × 0.3) + (정규화된키워드점수 × 0.2)
+```
+- **키워드 점수 정규화**: BM25 점수(0-10) → 0-1 범위로 변환
+- **결과 정렬**: 최종 융합 점수 기준 내림차순
+- **검색 방법 표시**: 각 결과별로 어떤 검색 방법이 매칭되었는지 표시
+
 ## RAG (Retrieval-Augmented Generation) 시스템 🚀
 
-### LLM 서비스 (Gemini 1.5 Flash)
-- **AI 모델**: Google Gemini 1.5 Flash
+### LLM 서비스 (OpenAI GPT-3.5-turbo)
+- **AI 모델**: OpenAI GPT-3.5-turbo
 - **기능**: 유사도 분석 결과를 자연어로 설명
 - **처리 과정**:
   1. 유사도 검색 결과 수집
@@ -726,7 +876,7 @@ graph TD
     B --> C[청크별 유사한 이력서들 발견]
     C --> D[청크 매칭 세부 정보 수집]
     D --> E[LLM에게 청크 매칭 데이터 전달]
-    E --> F[AI 분석 실행 - Gemini 1.5 Flash]
+    E --> F[AI 분석 실행 - OpenAI GPT-3.5-turbo]
     F --> G[청크별 구체적 유사점 설명]
     G --> H[표절 위험도 평가]
     H --> I[필드별 유사도 정보 포함]
@@ -740,14 +890,11 @@ graph TD
 
 ### 환경변수 설정
 ```bash
-# 기존 환경변수
-GEMINI_API_KEY=your_gemini_api_key  # 변경: OpenAI → Gemini
+# 환경변수
+OPENAI_API_KEY=your_openai_api_key  # 변경: Gemini → OpenAI
 PINECONE_API_KEY=your_pinecone_api_key
 PINECONE_INDEX_NAME=resume-vectors
 MONGODB_URI=mongodb://localhost:27017/hireme
-
-# 새로 추가된 환경변수 (RAG용)
-# OPENAI_API_KEY는 더 이상 필요하지 않음
 ```
 
 ### LLM 분석 결과 예시
@@ -771,7 +918,7 @@ MONGODB_URI=mongodb://localhost:27017/hireme
 - ✅ AI 기반 이력서 분석 및 점수 부여
 
 ### 청킹 기반 RAG 유사도 분석 🔥
-- ✅ **Gemini 1.5 Flash**를 활용한 지능형 청킹 기반 유사도 분석
+- ✅ **OpenAI GPT-3.5-turbo**를 활용한 지능형 청킹 기반 유사도 분석
 - ✅ **청크별 구체적 유사점 설명**: 어떤 청크가 어떤 부분과 유사한지 자연어로 설명
 - ✅ **필드별 세밀한 분석**: 성장배경, 지원동기, 경력사항 각각의 청크별 유사성 분석
 - ✅ **표절 위험도 평가**: HIGH/MEDIUM/LOW 3단계 위험도 분석
@@ -798,6 +945,16 @@ MONGODB_URI=mongodb://localhost:27017/hireme
 - ✅ 여러 텍스트의 일괄 유사도 비교
 - ✅ 임계값 기반 필터링
 - ✅ 성능 메트릭 및 사용량 통계 제공
+
+### 키워드 검색 서비스 기능 🆕
+- ✅ **BM25 알고리즘** 기반 정확한 키워드 매칭
+- ✅ **한국어 형태소 분석** (Kiwi 분석기 + Fallback 토크나이저)
+- ✅ **복합어 인식** (프론트엔드, 백엔드, 머신러닝 등)
+- ✅ **불용어 필터링** (조사, 어미, 의미없는 단어 제거)
+- ✅ **하이라이트 기능** (검색된 키워드 강조 표시)
+- ✅ **인덱스 관리** (자동 재구축, 통계 조회)
+- ✅ **다중 하이브리드 검색** (벡터 50% + 텍스트 30% + 키워드 20%)
+- ✅ **실시간 검색** (BM25 점수 기반 정렬)
 
 ## API 문서
 

@@ -5,6 +5,7 @@ from embedding_service import EmbeddingService
 from vector_service import VectorService
 from chunking_service import ChunkingService
 from llm_service import LLMService
+from keyword_search_service import KeywordSearchService
 import re
 from collections import Counter
 from datetime import datetime
@@ -22,6 +23,8 @@ class SimilarityService:
         self.vector_service = vector_service
         self.chunking_service = ChunkingService()
         self.llm_service = LLMService()
+        self.keyword_search_service = KeywordSearchService()
+        
         # 유사도 임계값 설정
         self.similarity_threshold = 0.3   # 30%로 설정
         # 필드별 최소 유사도 임계값 (성장배경, 지원동기, 경력사항만 사용)
@@ -29,6 +32,13 @@ class SimilarityService:
             'growthBackground': 0.2,   # 성장배경 20% 이상
             'motivation': 0.2,         # 지원동기 20% 이상
             'careerHistory': 0.2,      # 경력사항 20% 이상
+        }
+        
+        # 다중 검색 가중치 설정 (벡터 + 텍스트 + 키워드)
+        self.search_weights = {
+            'vector': 0.5,    # 벡터 검색 50%
+            'text': 0.3,      # 텍스트 검색 30%
+            'keyword': 0.2    # 키워드 검색 20%
         }
     
     async def save_resume_chunks(self, resume: Dict[str, Any]) -> Dict[str, Any]:
@@ -883,3 +893,228 @@ class SimilarityService:
         except Exception as e:
             print(f"[SimilarityService] 상호 유사도 계산 중 오류: {str(e)}")
             return None
+
+    async def search_resumes_multi_hybrid(self, query: str, collection: Collection, 
+                                        search_type: str = "resume", limit: int = 10) -> Dict[str, Any]:
+        """
+        다중 하이브리드 검색: 벡터 + 텍스트 + 키워드 검색을 결합합니다.
+        
+        Args:
+            query (str): 검색할 쿼리 텍스트
+            collection (Collection): MongoDB 컬렉션
+            search_type (str): 검색할 타입
+            limit (int): 반환할 최대 결과 수
+            
+        Returns:
+            Dict[str, Any]: 다중 하이브리드 검색 결과
+        """
+        try:
+            print(f"[SimilarityService] === 다중 하이브리드 검색 시작 ===")
+            print(f"[SimilarityService] 검색 쿼리: {query}")
+            print(f"[SimilarityService] 가중치 - 벡터: {self.search_weights['vector']}, "
+                  f"텍스트: {self.search_weights['text']}, 키워드: {self.search_weights['keyword']}")
+            
+            if not query or not query.strip():
+                raise ValueError("검색어를 입력해주세요.")
+            
+            # 1. 벡터 검색 수행
+            print(f"[SimilarityService] 1단계: 벡터 검색 수행")
+            vector_results = await self._perform_vector_search(query, collection, search_type, limit * 2)
+            
+            # 2. 키워드 검색 수행
+            print(f"[SimilarityService] 2단계: 키워드 검색 수행")
+            keyword_results = await self._perform_keyword_search(query, collection, limit * 2)
+            
+            # 3. 검색 결과 융합
+            print(f"[SimilarityService] 3단계: 검색 결과 융합")
+            fused_results = await self._fuse_search_results(
+                vector_results, keyword_results, collection, query, limit
+            )
+            
+            print(f"[SimilarityService] 최종 결과 수: {len(fused_results)}")
+            print(f"[SimilarityService] === 다중 하이브리드 검색 완료 ===")
+            
+            return {
+                "success": True,
+                "data": {
+                    "query": query,
+                    "search_method": "multi_hybrid",
+                    "weights": self.search_weights,
+                    "results": fused_results,
+                    "total": len(fused_results),
+                    "vector_count": len(vector_results),
+                    "keyword_count": len(keyword_results)
+                }
+            }
+            
+        except Exception as e:
+            print(f"[SimilarityService] 다중 하이브리드 검색 실패: {str(e)}")
+            raise e
+
+    async def _perform_vector_search(self, query: str, collection: Collection, 
+                                   search_type: str, limit: int) -> List[Dict[str, Any]]:
+        """벡터 검색을 수행합니다."""
+        try:
+            # 쿼리 임베딩 생성
+            query_embedding = await self.embedding_service.create_embedding(query)
+            if not query_embedding:
+                return []
+            
+            # Pinecone 벡터 검색
+            search_result = await self.vector_service.search_similar_vectors(
+                query_embedding=query_embedding,
+                top_k=limit,
+                filter_type=search_type
+            )
+            
+            # 결과 포맷팅
+            vector_results = []
+            for match in search_result["matches"]:
+                vector_results.append({
+                    "resume_id": match["metadata"]["resume_id"],
+                    "vector_score": match["score"],
+                    "search_method": "vector"
+                })
+            
+            print(f"[SimilarityService] 벡터 검색 결과: {len(vector_results)}개")
+            return vector_results
+            
+        except Exception as e:
+            print(f"[SimilarityService] 벡터 검색 실패: {str(e)}")
+            return []
+
+    async def _perform_keyword_search(self, query: str, collection: Collection, 
+                                    limit: int) -> List[Dict[str, Any]]:
+        """키워드 검색을 수행합니다."""
+        try:
+            # BM25 키워드 검색
+            keyword_result = await self.keyword_search_service.search_by_keywords(
+                query=query,
+                collection=collection,
+                limit=limit
+            )
+            
+            if not keyword_result["success"]:
+                return []
+            
+            # 결과 포맷팅
+            keyword_results = []
+            for result in keyword_result["results"]:
+                keyword_results.append({
+                    "resume_id": result["resume"]["_id"],
+                    "keyword_score": result["bm25_score"],
+                    "search_method": "keyword",
+                    "highlight": result.get("highlight", "")
+                })
+            
+            print(f"[SimilarityService] 키워드 검색 결과: {len(keyword_results)}개")
+            return keyword_results
+            
+        except Exception as e:
+            print(f"[SimilarityService] 키워드 검색 실패: {str(e)}")
+            return []
+
+    async def _fuse_search_results(self, vector_results: List[Dict[str, Any]], 
+                                 keyword_results: List[Dict[str, Any]], 
+                                 collection: Collection, query: str, 
+                                 limit: int) -> List[Dict[str, Any]]:
+        """여러 검색 결과를 융합합니다."""
+        try:
+            # 모든 unique resume_id 수집
+            all_resume_ids = set()
+            vector_scores = {}
+            keyword_scores = {}
+            
+            # 벡터 검색 결과 처리
+            for result in vector_results:
+                resume_id = result["resume_id"]
+                all_resume_ids.add(resume_id)
+                vector_scores[resume_id] = result["vector_score"]
+            
+            # 키워드 검색 결과 처리
+            for result in keyword_results:
+                resume_id = result["resume_id"]
+                all_resume_ids.add(resume_id)
+                keyword_scores[resume_id] = result["keyword_score"]
+            
+            # MongoDB에서 상세 정보 조회
+            resume_ids_obj = [ObjectId(rid) for rid in all_resume_ids]
+            resumes = list(collection.find({"_id": {"$in": resume_ids_obj}}))
+            
+            # 융합 점수 계산
+            fused_results = []
+            for resume in resumes:
+                resume_id = str(resume["_id"])
+                
+                # 각 검색 방법의 점수 가져오기 (없으면 0)
+                v_score = vector_scores.get(resume_id, 0.0)
+                k_score = keyword_scores.get(resume_id, 0.0)
+                
+                # 키워드 점수 정규화 (BM25 점수는 보통 0-10 범위)
+                k_score_normalized = min(k_score / 10.0, 1.0) if k_score > 0 else 0.0
+                
+                # 텍스트 유사도 계산 (기존 로직 활용)
+                text_score = 0.0
+                if v_score > 0:  # 벡터 검색에서 발견된 경우만
+                    # 간단한 텍스트 유사도 계산
+                    resume_text = self._extract_resume_text(resume).lower()
+                    query_words = set(query.lower().split())
+                    resume_words = set(resume_text.split())
+                    
+                    if query_words and resume_words:
+                        intersection = len(query_words.intersection(resume_words))
+                        union = len(query_words.union(resume_words))
+                        text_score = intersection / union if union > 0 else 0.0
+                
+                # 가중 평균으로 최종 점수 계산
+                final_score = (
+                    v_score * self.search_weights['vector'] +
+                    text_score * self.search_weights['text'] +
+                    k_score_normalized * self.search_weights['keyword']
+                )
+                
+                # 점수가 0보다 큰 경우만 포함
+                if final_score > 0:
+                    # 이력서 데이터 포맷팅
+                    resume["_id"] = str(resume["_id"])
+                    if "resume_id" in resume:
+                        resume["resume_id"] = str(resume["resume_id"])
+                    else:
+                        resume["resume_id"] = str(resume["_id"])
+                    
+                    if "created_at" in resume:
+                        resume["created_at"] = resume["created_at"].isoformat()
+                    
+                    fused_results.append({
+                        "final_score": final_score,
+                        "vector_score": v_score,
+                        "text_score": text_score,
+                        "keyword_score": k_score_normalized,
+                        "original_keyword_score": k_score,
+                        "resume": resume,
+                        "search_methods": [
+                            method for method, score in [
+                                ("vector", v_score), 
+                                ("text", text_score), 
+                                ("keyword", k_score_normalized)
+                            ] if score > 0
+                        ]
+                    })
+            
+            # 최종 점수 기준으로 정렬
+            fused_results.sort(key=lambda x: x["final_score"], reverse=True)
+            
+            # 상위 결과만 반환
+            final_results = fused_results[:limit]
+            
+            print(f"[SimilarityService] 융합 결과: {len(final_results)}개 (전체 후보: {len(fused_results)}개)")
+            for i, result in enumerate(final_results[:3]):  # 상위 3개만 로그
+                print(f"[SimilarityService] #{i+1}: {result['resume']['name']} "
+                      f"(최종:{result['final_score']:.3f}, V:{result['vector_score']:.3f}, "
+                      f"T:{result['text_score']:.3f}, K:{result['keyword_score']:.3f})")
+            
+            return final_results
+            
+        except Exception as e:
+            print(f"[SimilarityService] 검색 결과 융합 실패: {str(e)}")
+            return []
