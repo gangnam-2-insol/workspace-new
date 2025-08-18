@@ -177,13 +177,13 @@ const ScoreName = styled.div`
 `;
 
 const ScoreValue = styled.div`
+  font-size: 24px;
   font-weight: 700;
   color: ${props => {
     if (props.score >= 8) return '#28a745';
     if (props.score >= 6) return '#ffc107';
     return '#dc3545';
   }};
-  font-size: 16px;
 `;
 
 const ScoreFeedback = styled.div`
