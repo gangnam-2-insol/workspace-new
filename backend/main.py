@@ -760,6 +760,127 @@ async def get_similarity_metrics():
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"메트릭 조회 실패: {str(e)}")
 
+# 다중 하이브리드 검색 API 🆕
+@app.post("/api/resume/search/multi-hybrid")
+async def search_resumes_multi_hybrid(data: Dict[str, Any]):
+    """다중 하이브리드 검색: 벡터 + 텍스트 + 키워드 검색을 결합"""
+    try:
+        query = data.get("query", "")
+        search_type = data.get("type", "resume")
+        limit = data.get("limit", 10)
+        
+        print(f"[API] 다중 하이브리드 검색 요청 - 쿼리: '{query}', 제한: {limit}")
+        
+        if not query or not query.strip():
+            raise HTTPException(status_code=400, detail="검색어를 입력해주세요.")
+        
+        # SimilarityService의 다중 하이브리드 검색 실행
+        result = await similarity_service.search_resumes_multi_hybrid(
+            query=query,
+            collection=db.applicants,
+            search_type=search_type,
+            limit=limit
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail="다중 하이브리드 검색에 실패했습니다.")
+        
+        return {
+            "success": True,
+            "message": f"다중 하이브리드 검색 완료: '{query}'",
+            "data": result["data"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[API] 다중 하이브리드 검색 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"다중 하이브리드 검색 실패: {str(e)}")
+
+# 키워드 검색 API
+@app.post("/api/resume/search/keyword")
+async def search_resumes_keyword(data: Dict[str, Any]):
+    """키워드 기반 이력서 검색 (BM25)"""
+    try:
+        query = data.get("query", "")
+        limit = data.get("limit", 10)
+        
+        print(f"[API] 키워드 검색 요청 - 쿼리: '{query}', 제한: {limit}")
+        
+        if not query or not query.strip():
+            raise HTTPException(status_code=400, detail="검색어를 입력해주세요.")
+        
+        # KeywordSearchService를 통한 BM25 검색
+        result = await similarity_service.keyword_search_service.search_by_keywords(
+            query=query,
+            collection=db.applicants,
+            limit=limit
+        )
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result.get("message", "키워드 검색에 실패했습니다."))
+        
+        return {
+            "success": True,
+            "message": result["message"],
+            "data": {
+                "query": result["query"],
+                "results": result["results"],
+                "total": result["total"],
+                "search_method": "keyword_bm25",
+                "query_tokens": result.get("query_tokens", [])
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[API] 키워드 검색 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"키워드 검색 실패: {str(e)}")
+
+# 키워드 검색 인덱스 관리 API
+@app.post("/api/resume/search/keyword/rebuild-index")
+async def rebuild_keyword_index():
+    """키워드 검색 인덱스 재구축"""
+    try:
+        print(f"[API] 키워드 인덱스 재구축 요청")
+        
+        # KeywordSearchService를 통한 인덱스 재구축
+        result = await similarity_service.keyword_search_service.build_index(db.applicants)
+        
+        if not result["success"]:
+            raise HTTPException(status_code=500, detail=result.get("message", "인덱스 재구축에 실패했습니다."))
+        
+        return {
+            "success": True,
+            "message": result["message"],
+            "data": {
+                "total_documents": result["total_documents"],
+                "index_created_at": result["index_created_at"]
+            }
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[API] 키워드 인덱스 재구축 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"키워드 인덱스 재구축 실패: {str(e)}")
+
+@app.get("/api/resume/search/keyword/stats")
+async def get_keyword_search_stats():
+    """키워드 검색 인덱스 통계 조회"""
+    try:
+        stats = await similarity_service.keyword_search_service.get_index_stats()
+        
+        return {
+            "success": True,
+            "data": stats
+        }
+        
+    except Exception as e:
+        print(f"[API] 키워드 검색 통계 조회 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"키워드 검색 통계 조회 실패: {str(e)}")
+
 # 이력서 유사도 체크 API
 @app.post("/api/resume/similarity-check/{resume_id}")
 async def check_resume_similarity(resume_id: str):

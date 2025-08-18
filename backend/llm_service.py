@@ -1,5 +1,5 @@
 from typing import Dict, Any, Optional, List
-import google.generativeai as genai
+from openai import OpenAI
 import os
 from datetime import datetime
 
@@ -9,15 +9,15 @@ class LLMService:
         LLM 서비스 초기화
         """
         print(f"[LLMService] === LLM 서비스 초기화 시작 ===")
-        api_key = os.getenv("GEMINI_API_KEY")
+        api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
-            print(f"[LLMService] 경고: GEMINI_API_KEY 환경변수가 설정되지 않았습니다!")
+            print(f"[LLMService] 경고: OPENAI_API_KEY 환경변수가 설정되지 않았습니다!")
         else:
-            print(f"[LLMService] GEMINI_API_KEY 확인됨 (길이: {len(api_key)})")
+            print(f"[LLMService] OPENAI_API_KEY 확인됨 (길이: {len(api_key)})")
         
-        genai.configure(api_key=api_key)
-        self.model = genai.GenerativeModel('gemini-1.5-flash')
-        print(f"[LLMService] Gemini 모델 초기화 완료: gemini-1.5-flash")
+        self.client = OpenAI(api_key=api_key)
+        self.model_name = 'gpt-3.5-turbo'
+        print(f"[LLMService] OpenAI 클라이언트 초기화 완료: {self.model_name}")
         print(f"[LLMService] === LLM 서비스 초기화 완료 ===")
         
     async def analyze_similarity_reasoning(self, 
@@ -59,21 +59,22 @@ class LLMService:
             )
             print(f"[LLMService] 프롬프트 생성 완료 (길이: {len(prompt)})")
             
-            # Gemini API 호출
+            # OpenAI API 호출
             system_prompt = f"당신은 {document_type} 유사성 분석 전문가입니다. 두 {document_type}를 비교하여 구체적으로 어떤 부분이 유사한지 간결하고 명확하게 설명해주세요."
-            full_prompt = f"{system_prompt}\n\n{prompt}"
-            print(f"[LLMService] Gemini API 호출 시작...")
+            print(f"[LLMService] OpenAI API 호출 시작...")
             
-            response = self.model.generate_content(
-                full_prompt,
-                generation_config=genai.types.GenerationConfig(
-                    max_output_tokens=800,
-                    temperature=0.3
-                )
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=800,
+                temperature=0.3
             )
             
-            print(f"[LLMService] Gemini API 응답 수신 완료")
-            analysis_result = response.text
+            print(f"[LLMService] OpenAI API 응답 수신 완료")
+            analysis_result = response.choices[0].message.content
             print(f"[LLMService] 분석 결과 길이: {len(analysis_result) if analysis_result else 0}")
             print(f"[LLMService] 분석 결과 미리보기: {analysis_result[:100] if analysis_result else 'None'}...")
             
