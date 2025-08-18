@@ -3414,6 +3414,9 @@ const ApplicantManagement = () => {
                           </div>
                         </div>
                         
+                        <div style={{ fontSize: '14px', color: '#666', marginBottom: '6px' }}>
+                          <strong>경력:</strong> {(similar.applicant && similar.applicant.experience) || similar.experience || '-'}
+                        </div>
                         <div style={{ fontSize: '14px', color: '#666', marginBottom: '8px' }}>
                           <strong>기술스택:</strong> {(similar.applicant && similar.applicant.skills) || similar.skills || '-'}
                         </div>
