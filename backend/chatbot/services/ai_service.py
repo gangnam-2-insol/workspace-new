@@ -2,33 +2,37 @@
 AI 서비스 클래스
 """
 
-import os
-from typing import Dict, Any, List, Optional
-from dotenv import load_dotenv
-import google.generativeai as genai
+from __future__ import annotations
 
-from ..models.request_models import ChatbotRequest, ConversationRequest
-from ..models.response_models import ChatbotResponse, ConversationResponse
+import os
+from typing import Dict, Any, List
+from dotenv import load_dotenv
+from openai import AsyncOpenAI
+
+from ..models.chatbot_models import ChatbotRequest, ChatbotResponse, ConversationRequest, ConversationResponse
 
 load_dotenv()
 
 class AIService:
-    """AI 관련 서비스 클래스"""
-    
     def __init__(self):
-        self.gemini_service = None
-        self._init_gemini_service()
+        """AI 서비스 초기화"""
+        self.openai_client = None
+        self._init_openai_service()
     
-    def _init_gemini_service(self):
-        """Gemini 서비스 초기화"""
+    def _init_openai_service(self):
+        """OpenAI 서비스 초기화"""
         try:
-            from gemini_service import GeminiService
-            self.gemini_service = GeminiService("gemini-1.5-pro")
-            print("[SUCCESS] Gemini 서비스 초기화 성공")
+            api_key = os.getenv("OPENAI_API_KEY")
+            if api_key:
+                self.openai_client = AsyncOpenAI(api_key=api_key)
+                print("[SUCCESS] OpenAI 서비스 초기화 성공")
+            else:
+                print("[WARNING] OPENAI_API_KEY가 설정되지 않았습니다.")
+                self.openai_client = None
         except Exception as e:
-            print(f"[ERROR] Gemini 서비스 초기화 실패: {e}")
-            self.gemini_service = None
-    
+            print(f"[ERROR] OpenAI 서비스 초기화 실패: {e}")
+            self.openai_client = None
+
     async def handle_ai_assistant_request(self, request: ChatbotRequest) -> ChatbotResponse:
         """AI 어시스턴트 요청 처리"""
         try:
@@ -112,11 +116,46 @@ class AIService:
     async def _call_ai_api(self, prompt: str, conversation_history: List[Dict[str, Any]] = None) -> str:
         """AI API 호출"""
         try:
-            if self.gemini_service:
-                response = await self.gemini_service.generate_text_async(prompt)
-                return response
-            else:
-                return "AI 서비스를 사용할 수 없습니다. 기본 응답을 제공합니다."
+            if not self.openai_client:
+                return "AI 서비스를 사용할 수 없습니다. OPENAI_API_KEY가 설정되지 않았습니다."
+            
+            # 시스템 프롬프트
+            system_prompt = """당신은 채용 전문 어시스턴트입니다. 
+            사용자가 채용 공고 작성이나 채용 관련 질문을 할 때 전문적이고 실용적인 답변을 제공해주세요.
+            
+            주의사항:
+            - AI 모델에 대한 설명은 하지 마세요
+            - 채용 관련 실무적인 조언을 제공하세요
+            - 구체적이고 실용적인 답변을 해주세요
+            - 한국어로 답변해주세요
+            - 모든 답변은 핵심만 간단하게 요약해서 2~3줄 이내로 작성해주세요
+            - 불필요한 설명은 생략하고, 요점 위주로 간결하게 답변해주세요
+            - '주요 업무'를 작성할 때는 지원자 입장에서 직무 이해도가 높아지도록 구체적인 동사(예: 개발, 분석, 관리 등)를 사용하세요
+            - 각 업무는 "무엇을 한다 → 왜 한다" 구조로, 기대 성과까지 간결히 포함해서 자연스럽고 명확하게 서술하세요
+            - 번호가 있는 항목(1, 2, 3 등)은 각 줄마다 줄바꿈하여 출력해주세요"""
+            
+            # 메시지 구성
+            messages = [{"role": "system", "content": system_prompt}]
+            
+            # 대화 히스토리 추가
+            if conversation_history:
+                for msg in conversation_history[-6:]:  # 최근 3턴 (user + assistant)
+                    role = 'user' if msg.get('role') == 'user' else 'assistant'
+                    messages.append({"role": role, "content": msg.get('content', '')})
+            
+            # 현재 사용자 입력 추가
+            messages.append({"role": "user", "content": prompt})
+            
+            # OpenAI API 호출
+            response = await self.openai_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=messages,
+                max_tokens=1000,
+                temperature=0.7
+            )
+            
+            return response.choices[0].message.content or "응답을 생성할 수 없습니다."
+            
         except Exception as e:
             return f"AI API 호출 중 오류: {str(e)}"
     

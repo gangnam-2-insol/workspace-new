@@ -17,7 +17,7 @@ load_dotenv()
 # Gemini 모델 초기화
 try:
     genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-    model = genai.GenerativeModel('gemini-pro')
+    model = genai.GenerativeModel("gemini-1.5-pro")
     print("Gemini 모델 초기화 성공")
 except Exception as e:
     print(f"Gemini 모델 초기화 실패: {e}")
@@ -523,7 +523,7 @@ async def handle_normal_request(request: ChatbotRequest):
             return response
             
         elif classification['type'] == 'question':
-            # 3) Gemini API 호출로 답변 생성
+            # 3) GPT API 호출로 답변 생성
             ai_response = await call_gemini_api(user_input, conversation_history_from_frontend)
             response = ChatbotResponse(
                 message=ai_response,
