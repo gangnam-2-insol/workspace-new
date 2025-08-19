@@ -24,6 +24,8 @@ from routers.pdf_ocr import router as pdf_ocr_router
 from similarity_service import SimilarityService
 from embedding_service import EmbeddingService
 from vector_service import VectorService
+from talent_vectorization_service import TalentVectorizationService
+from openai_service import OpenAIService
 
 # Python 환경 인코딩 설정
 # 시스템 기본 인코딩을 UTF-8로 설정
@@ -91,6 +93,16 @@ vector_service = VectorService(
     index_name=PINECONE_INDEX_NAME
 )
 similarity_service = SimilarityService(embedding_service, vector_service)
+
+# OpenAI 서비스 초기화 (LLM 기반 추천 이유 생성용)
+try:
+    openai_service = OpenAIService(model_name="gpt-3.5-turbo")
+    print("[Main] OpenAI 서비스 초기화 성공 - LLM 기반 추천 이유 활성화")
+except Exception as e:
+    print(f"[Main] OpenAI 서비스 초기화 실패: {e} - 규칙 기반 추천 이유 사용")
+    openai_service = None
+
+talent_vectorization_service = TalentVectorizationService(embedding_service, vector_service, openai_service)
 
 # Pydantic 모델들
 class User(BaseModel):
@@ -1176,6 +1188,243 @@ async def check_resume_similarity(resume_id: str):
 async def check_coverletter_similarity(resume_id: str):
     """커버레터 유사도 체크 별칭 엔드포인트 (현재는 이력서 비교 로직 재사용)"""
     return await check_resume_similarity(resume_id)
+
+# 인재추천용 벡터화 API 엔드포인트들
+@app.post("/api/talent/vectorize/single/{applicant_id}")
+async def vectorize_single_applicant(applicant_id: str):
+    """단일 지원자 벡터화"""
+    try:
+        print(f"[API] 단일 지원자 벡터화 요청: {applicant_id}")
+        
+        # 지원자 정보 조회
+        collection = db["applicants"]
+        applicant = await collection.find_one({"_id": ObjectId(applicant_id)})
+        
+        if not applicant:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다.")
+        
+        # 벡터화 수행
+        vector_data = await talent_vectorization_service.vectorize_applicant_profile(applicant)
+        if not vector_data:
+            raise HTTPException(status_code=500, detail="벡터화에 실패했습니다.")
+        
+        # 벡터 저장
+        stored = await talent_vectorization_service.store_applicant_vector(vector_data)
+        if not stored:
+            raise HTTPException(status_code=500, detail="벡터 저장에 실패했습니다.")
+        
+        return {
+            "success": True,
+            "applicant_id": applicant_id,
+            "applicant_name": applicant.get("name", "Unknown"),
+            "vector_dimension": len(vector_data["vector"]),
+            "metadata": vector_data["metadata"],
+            "vectorized_at": vector_data["created_at"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[API] 벡터화 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"벡터화 처리 중 오류 발생: {str(e)}")
+
+@app.post("/api/talent/vectorize/batch")
+async def vectorize_all_applicants():
+    """모든 지원자 배치 벡터화"""
+    try:
+        print(f"[API] 전체 지원자 배치 벡터화 요청")
+        
+        # 모든 지원자 조회
+        collection = db["applicants"]
+        applicants = await collection.find({}).to_list(length=None)
+        
+        if not applicants:
+            return {
+                "success": True,
+                "message": "벡터화할 지원자가 없습니다.",
+                "total": 0,
+                "success_count": 0,
+                "error_count": 0
+            }
+        
+        # 배치 벡터화 수행
+        result = await talent_vectorization_service.batch_vectorize_applicants(applicants)
+        
+        return {
+            "success": True,
+            "message": f"{result['success']}명의 지원자 벡터화 완료",
+            "total": result["total"],
+            "success_count": result["success"],
+            "error_count": result["errors"],
+            "error_details": result["error_details"],
+            "completed_at": result["completed_at"]
+        }
+        
+    except Exception as e:
+        print(f"[API] 배치 벡터화 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"배치 벡터화 처리 중 오류 발생: {str(e)}")
+
+@app.get("/api/talent/vectors/status")
+async def get_vectorization_status():
+    """벡터화 상태 확인"""
+    try:
+        # 전체 지원자 수 조회
+        applicants_collection = db["applicants"]
+        total_applicants = await applicants_collection.count_documents({})
+        
+        # 벡터화된 지원자 수 조회 (vector_service를 통해)
+        # 현재 구현에서는 간단히 추정
+        vectorized_count = 0  # 실제로는 벡터 DB에서 조회해야 함
+        
+        return {
+            "total_applicants": total_applicants,
+            "vectorized_count": vectorized_count,
+            "vectorization_rate": round((vectorized_count / total_applicants * 100) if total_applicants > 0 else 0, 2),
+            "status": "ready" if vectorized_count == total_applicants else "partial" if vectorized_count > 0 else "not_started"
+        }
+        
+    except Exception as e:
+        print(f"[API] 벡터화 상태 조회 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"상태 조회 중 오류 발생: {str(e)}")
+
+@app.get("/api/talent/recommend/similar/{applicant_id}")
+async def recommend_similar_applicants(applicant_id: str, limit: int = 5):
+    """지원자 간 유사도 기반 추천"""
+    try:
+        print(f"[API] 유사 지원자 추천 요청: {applicant_id}, 추천수: {limit}")
+        
+        # 기준 지원자 정보 조회
+        collection = db["applicants"]
+        target_applicant = await collection.find_one({"_id": ObjectId(applicant_id)})
+        
+        if not target_applicant:
+            raise HTTPException(status_code=404, detail="기준 지원자를 찾을 수 없습니다.")
+        
+        # 벡터 저장소 상태 확인
+        vector_stats = vector_service.get_stats()
+        print(f"[API] 현재 벡터 저장소 상태: {vector_stats['total_vectors']}개 벡터")
+        
+        # 벡터가 부족하면 자동으로 다른 지원자들 벡터화
+        if vector_stats['total_vectors'] < 2:  # 최소 2명 이상 필요 (기준 + 비교대상)
+            print(f"[API] 벡터 부족 ({vector_stats['total_vectors']}개) - 자동 벡터화 시작")
+            
+            # 다른 지원자들 조회 (기준 지원자 제외)
+            other_applicants = await collection.find({
+                "_id": {"$ne": ObjectId(applicant_id)}
+            }).limit(10).to_list(length=10)  # 최대 10명
+            
+            # 기준 지원자도 포함시켜서 벡터화
+            all_applicants = [target_applicant] + other_applicants
+            
+            print(f"[API] {len(all_applicants)}명 지원자 벡터화 시작")
+            vectorization_result = await talent_vectorization_service.batch_vectorize_applicants(all_applicants)
+            print(f"[API] 벡터화 완료: 성공 {vectorization_result['success']}개, 실패 {vectorization_result['errors']}개")
+        
+        # 유사 지원자 추천 수행
+        recommendation_result = await talent_vectorization_service.recommend_similar_applicants(
+            target_applicant=target_applicant,
+            limit=limit
+        )
+        
+        if not recommendation_result["success"]:
+            raise HTTPException(status_code=500, detail=recommendation_result.get("error", "추천 실패"))
+        
+        return {
+            "success": True,
+            "message": f"{recommendation_result['total_found']}명의 유사 지원자를 찾았습니다.",
+            "target_applicant": recommendation_result["target_applicant"],
+            "recommendations": recommendation_result["recommendations"],
+            "total_found": recommendation_result["total_found"],
+            "search_timestamp": recommendation_result["search_timestamp"]
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[API] 유사 지원자 추천 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"추천 처리 중 오류 발생: {str(e)}")
+
+@app.get("/api/talent/recommend/by-skills")
+async def recommend_by_skills(skills: str, limit: int = 5):
+    """기술스택 기반 인재 추천"""
+    try:
+        print(f"[API] 기술스택 기반 추천 요청: {skills}, 추천수: {limit}")
+        
+        # 요청된 기술스택 파싱
+        requested_skills = [skill.strip() for skill in skills.split(",") if skill.strip()]
+        
+        if not requested_skills:
+            raise HTTPException(status_code=400, detail="유효한 기술스택을 입력해주세요.")
+        
+        # 지원자 검색 (MongoDB 쿼리)
+        collection = db["applicants"]
+        
+        # 기술스택이 포함된 지원자들 검색
+        skill_query = {
+            "$or": [
+                {"skills": {"$regex": skill, "$options": "i"}} 
+                for skill in requested_skills
+            ]
+        }
+        
+        matching_applicants = await collection.find(skill_query).limit(limit).to_list(length=None)
+        
+        if not matching_applicants:
+            return {
+                "success": True,
+                "message": "해당 기술스택을 가진 지원자를 찾을 수 없습니다.",
+                "requested_skills": requested_skills,
+                "recommendations": [],
+                "total_found": 0
+            }
+        
+        # 추천 결과 구성
+        recommendations = []
+        for applicant in matching_applicants:
+            applicant_skills = applicant.get("skills", "").split(",") if applicant.get("skills") else []
+            applicant_skills = [skill.strip() for skill in applicant_skills]
+            
+            # 매칭된 기술스택 계산
+            matched_skills = []
+            for req_skill in requested_skills:
+                for app_skill in applicant_skills:
+                    if req_skill.lower() in app_skill.lower():
+                        matched_skills.append(app_skill)
+                        break
+            
+            recommendation = {
+                "applicant_id": str(applicant["_id"]),
+                "applicant_name": applicant.get("name", "Unknown"),
+                "position": applicant.get("position", ""),
+                "department": applicant.get("department", ""),
+                "experience": applicant.get("experience", ""),
+                "all_skills": applicant_skills,
+                "matched_skills": matched_skills,
+                "match_score": len(matched_skills) / len(requested_skills),
+                "analysis_score": applicant.get("analysisScore", 0),
+                "status": applicant.get("status", "unknown"),
+                "recommendation_reason": f"{len(matched_skills)}/{len(requested_skills)} 기술 매칭: {', '.join(matched_skills[:3])}"
+            }
+            
+            recommendations.append(recommendation)
+        
+        # 매칭 점수 순으로 정렬
+        recommendations.sort(key=lambda x: x["match_score"], reverse=True)
+        
+        return {
+            "success": True,
+            "message": f"{len(recommendations)}명의 지원자를 찾았습니다.",
+            "requested_skills": requested_skills,
+            "recommendations": recommendations,
+            "total_found": len(recommendations),
+            "search_timestamp": datetime.now().isoformat()
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[API] 기술스택 추천 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"기술스택 추천 처리 중 오류 발생: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

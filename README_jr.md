@@ -83,7 +83,60 @@ GET /api/resumes?page=1&limit=10&sort=created_at&order=desc
 GET /api/resume/{resume_id}
 ```
 
-### 3-1. 유사한 지원자 추천 (간단 추천)
+### 3-1. 유사한 지원자 추천 (벡터 기반 AI 추천) 🔥🆕
+```
+GET /api/talent/recommend/similar/{applicant_id}?limit=5
+```
+**설명**: **Sentence-BERT 임베딩 벡터**와 **OpenAI GPT-3.5 기반 LLM**을 활용한 지능형 인재 추천 시스템입니다. 지원자의 전체 프로필(이름, 직무, 경력, 기술스택, 성장배경, 지원동기, 경력사항)을 **통합 벡터로 변환**하여 의미적 유사도를 계산하고, **AI가 개인화된 추천 이유**를 생성합니다.
+
+**주요 특징**:
+- ✅ **하이브리드 검색**: 벡터 유사도 + 메타데이터 필터링
+- ✅ **자동 벡터화**: 벡터가 없으면 실시간으로 다른 지원자들과 함께 벡터화
+- ✅ **LLM 기반 추천 이유**: 각 추천에 대해 구체적이고 개인화된 이유 생성
+- ✅ **실시간 처리**: 메모리 기반 벡터 저장소로 빠른 검색
+- ✅ **지능형 분석**: 직무, 기술스택, 경력 레벨을 종합적으로 고려
+
+**응답 예시**:
+```json
+{
+  "success": true,
+  "message": "3명의 유사 지원자를 찾았습니다.",
+  "target_applicant": {
+    "id": "68999dda47ea917329ee7abb",
+    "name": "이지혜",
+    "position": "백엔드",
+    "skills": ["Python", "Django", "PostgreSQL", "Redis"]
+  },
+  "recommendations": [
+    {
+      "applicant_name": "서동훈",
+      "position": "백엔드",
+      "department": "개발",
+      "experience": "신입",
+      "skills": ["Node.js", "Express", "MongoDB", "JavaScript"],
+      "similarity_score": 0.7845,
+      "analysis_score": 55,
+      "experience_level": "junior",
+      "recommendation_reason": "Python·Node.js 백엔드 개발 경험 공통"
+    },
+    {
+      "applicant_name": "박주랑",
+      "position": "백엔드",
+      "department": "개발", 
+      "experience": "신입",
+      "skills": ["Java", "Spring Boot", "MySQL", "Redis", "JPA"],
+      "similarity_score": 0.6532,
+      "analysis_score": 65,
+      "experience_level": "junior",
+      "recommendation_reason": "백엔드 개발자 신입 공통점"
+    }
+  ],
+  "total_found": 2,
+  "search_timestamp": "2025-08-19T10:30:00Z"
+}
+```
+
+### 3-2. 유사한 지원자 추천 (기존 가중치 기반)
 ```
 GET /api/applicants/{applicant_id}/similar?limit=5
 ```
@@ -547,7 +600,99 @@ GET /api/resume/search/keyword/stats
 }
 ```
 
-### 10. Similarity Service APIs
+### 10. 인재 추천 시스템 APIs (Talent Vectorization) 🔥🆕
+
+#### 10.1. 단일 지원자 벡터화
+```
+POST /api/talent/vectorize/single/{applicant_id}
+```
+**설명**: 특정 지원자의 프로필을 통합 벡터로 변환하여 저장합니다.
+
+**응답**:
+```json
+{
+  "success": true,
+  "message": "지원자 벡터화가 완료되었습니다.",
+  "applicant_id": "68999dda47ea917329ee7aba",
+  "applicant_name": "김민수",
+  "vector_dimension": 384,
+  "created_at": "2025-08-19T10:30:00Z"
+}
+```
+
+#### 10.2. 배치 지원자 벡터화
+```
+POST /api/talent/vectorize/batch
+```
+**요청**:
+```json
+{
+  "applicant_ids": ["68999dda47ea917329ee7aba", "68999dda47ea917329ee7abb"]
+}
+```
+
+**응답**:
+```json
+{
+  "success": true,
+  "message": "배치 벡터화가 완료되었습니다.",
+  "total": 2,
+  "success_count": 2,
+  "errors": 0,
+  "results": [
+    {
+      "applicant_id": "68999dda47ea917329ee7aba",
+      "applicant_name": "김민수",
+      "status": "success"
+    }
+  ],
+  "completed_at": "2025-08-19T10:30:00Z"
+}
+```
+
+#### 10.3. 벡터 저장소 상태 조회
+```
+GET /api/talent/vectors/status
+```
+**응답**:
+```json
+{
+  "success": true,
+  "total_vectors": 25,
+  "storage_type": "local_memory",
+  "index_name": "resume-vectors",
+  "last_updated": "2025-08-19T10:30:00Z"
+}
+```
+
+#### 10.4. 기술스택 기반 인재 추천
+```
+GET /api/talent/recommend/by-skills?skills=React,TypeScript&limit=5
+```
+**설명**: 특정 기술스택을 가진 지원자들을 추천합니다.
+
+**응답**:
+```json
+{
+  "success": true,
+  "message": "React, TypeScript 기술스택 기반 5명의 인재를 찾았습니다.",
+  "requested_skills": ["React", "TypeScript"],
+  "recommendations": [
+    {
+      "applicant_name": "김민수",
+      "position": "프론트엔드",
+      "skills": ["React", "JavaScript", "TypeScript", "CSS"],
+      "experience": "3년",
+      "analysis_score": 85,
+      "matching_skills": ["React", "TypeScript"],
+      "skills_match_score": 0.75
+    }
+  ],
+  "total_found": 3
+}
+```
+
+### 11. Similarity Service APIs
 
 #### 10.1. 텍스트 유사도 비교
 ```
@@ -882,6 +1027,76 @@ graph TD
 - **청크 매칭 검증**: 각 필드의 청크들 간 최적 매칭으로 정확도 향상
 - **Pinecone 청크별 인덱싱**: 각 청크가 독립적으로 벡터 저장 및 검색
 
+## 인재 추천 시스템 아키텍처 🔥🆕
+
+### 벡터 기반 인재 추천 시스템
+
+#### 핵심 컴포넌트
+- **TalentVectorizationService**: 지원자 프로필 벡터화 및 추천 로직
+- **EmbeddingService**: Sentence-BERT 기반 다국어 임베딩 생성
+- **VectorService**: 메모리 기반 벡터 저장소 및 코사인 유사도 검색
+- **OpenAI Service**: LLM 기반 개인화된 추천 이유 생성
+
+#### 벡터화 프로세스
+```mermaid
+graph TD
+    A[지원자 데이터 입력] --> B[통합 프로필 텍스트 생성]
+    B --> C[Sentence-BERT 임베딩]
+    C --> D[384차원 벡터 생성]
+    D --> E[메타데이터 구성]
+    E --> F[VectorService 저장]
+    F --> G[검색 인덱스 업데이트]
+    
+    style A fill:#e1f5fe
+    style C fill:#f3e5f5
+    style F fill:#e8f5e8
+```
+
+#### 추천 프로세스
+```mermaid
+graph TD
+    A[추천 요청] --> B[기준 지원자 벡터화]
+    B --> C[벡터 저장소 상태 확인]
+    C --> D{벡터 부족?}
+    D -->|Yes| E[자동 배치 벡터화]
+    D -->|No| F[유사도 검색 실행]
+    E --> F
+    F --> G[코사인 유사도 계산]
+    G --> H[상위 N개 선별]
+    H --> I[LLM 추천 이유 생성]
+    I --> J[최종 결과 반환]
+    
+    style D fill:#fff3e0
+    style E fill:#ffebee
+    style I fill:#f3e5f5
+    style J fill:#e8f5e8
+```
+
+#### 임베딩 모델 상세
+- **모델명**: `paraphrase-multilingual-MiniLM-L12-v2`
+- **벡터 차원**: 384차원
+- **특징**: 한국어 특화, 의미적 유사도 계산 최적화
+- **장점**: 문장 간 패러프레이즈 및 의미적 관계 인식
+
+#### 통합 프로필 텍스트 구성
+```
+"이름: {name} 희망직무: {position} 희망부서: {department} 경력: {experience} 
+보유기술: {skills} 성장배경: {growthBackground} 지원동기: {motivation} 
+경력사항: {careerHistory} 분석결과: {analysisResult}"
+```
+
+#### LLM 기반 추천 이유 생성
+- **모델**: OpenAI GPT-3.5-turbo
+- **프롬프트 최적화**: 25자 이내 간결한 추천 이유 생성
+- **폴백 메커니즘**: LLM 실패 시 규칙 기반으로 자동 전환
+- **예시 출력**: "React·TypeScript 공통 프론트엔드 경험"
+
+#### 성능 특징
+- **실시간 벡터화**: API 호출 시 필요에 따라 자동 벡터화
+- **메모리 기반 검색**: 빠른 응답속도 (평균 100ms 이내)
+- **자동 복구**: 벡터 손실 시 자동으로 재생성
+- **확장성**: 지원자 수 증가에 따른 선형적 성능 유지
+
 ## 다중 하이브리드 검색 시스템 🔥
 
 ### 검색 방법별 특징 및 융합
@@ -953,12 +1168,38 @@ PINECONE_INDEX_NAME=resume-vectors
 MONGODB_URI=mongodb://localhost:27017/hireme
 ```
 
-### LLM 서비스 파일 위치
+### 서비스 파일 위치
+
+#### LLM 서비스
 - **`backend/llm_service.py`**: LLM 관련 핵심 로직
   - `_build_similarity_analysis_prompt()`: 개선된 프롬프트 생성
   - `_parse_analysis_response()`: 응답 파싱 및 구조화
   - `_parse_section_keywords()`: 섹션별 키워드 파싱
   - `_extract_keywords_from_braces()`: 중괄호 내 키워드 추출
+
+#### 인재 추천 시스템 서비스 🆕
+- **`backend/talent_vectorization_service.py`**: 인재 추천 핵심 로직
+  - `vectorize_applicant_profile()`: 지원자 프로필 통합 벡터화
+  - `recommend_similar_applicants()`: 유사 지원자 추천 및 LLM 이유 생성
+  - `batch_vectorize_applicants()`: 배치 벡터화 처리
+  - `_create_integrated_profile_text()`: 통합 프로필 텍스트 생성
+  - `_create_profile_metadata()`: 검색용 메타데이터 구성
+  - `_generate_llm_recommendation_reason()`: LLM 기반 추천 이유 생성
+  - `_generate_simple_recommendation_reason()`: 규칙 기반 추천 이유 생성
+
+#### API 엔드포인트
+- **`backend/main.py`**: 인재 추천 API 엔드포인트
+  - `/api/talent/recommend/similar/{applicant_id}`: 유사 지원자 추천
+  - `/api/talent/vectorize/single/{applicant_id}`: 단일 지원자 벡터화
+  - `/api/talent/vectorize/batch`: 배치 지원자 벡터화
+  - `/api/talent/vectors/status`: 벡터 저장소 상태 조회
+  - `/api/talent/recommend/by-skills`: 기술스택 기반 추천
+
+#### 프론트엔드 연동
+- **`frontend/src/pages/ApplicantManagement.js`**: 지원자 관리 페이지
+  - 유사 지원자 추천 섹션 UI
+  - 실시간 추천 이유 표시
+  - 유사도 점수 및 경력 레벨 표시
 
 ### LLM 분석 결과 예시 (개선된 섹션별 키워드 추출) 🔥
 
@@ -1018,6 +1259,19 @@ MONGODB_URI=mongodb://localhost:27017/hireme
 - ✅ 이력서 상세 조회
 - ✅ 이력서 삭제 (원본 + 벡터)
 - ✅ AI 기반 이력서 분석 및 점수 부여
+
+### 벡터 기반 인재 추천 시스템 🔥🆕
+- ✅ **Sentence-BERT 기반 벡터 임베딩**: 다국어 지원 임베딩으로 의미적 유사도 계산
+- ✅ **통합 프로필 벡터화**: 이름, 직무, 기술스택, 성장배경, 지원동기, 경력사항 통합 분석
+- ✅ **실시간 자동 벡터화**: 벡터 부족 시 API 호출과 동시에 자동 벡터화 수행
+- ✅ **하이브리드 유사도 검색**: 벡터 유사도 + 메타데이터 필터링 + 경력 레벨 분석
+- ✅ **LLM 기반 개인화된 추천 이유**: OpenAI GPT-3.5로 각 추천에 대한 구체적 이유 생성
+- ✅ **메모리 기반 고속 검색**: 평균 100ms 이내 응답속도로 실시간 추천
+- ✅ **자동 폴백 시스템**: LLM 실패 시 규칙 기반 추천 이유로 자동 전환
+- ✅ **배치 처리 지원**: 다중 지원자 동시 벡터화 및 효율적 인덱싱
+- ✅ **기술스택 기반 추천**: 특정 기술을 가진 인재 검색 및 매칭 점수 제공
+- ✅ **경력 레벨 분류**: 신입/경력/시니어 자동 분류 및 유사 레벨 매칭
+- ✅ **프론트엔드 통합**: 지원자 상세 모달에서 실시간 유사 지원자 추천 표시
 
 ### 청킹 기반 RAG 유사도 분석 🔥
 - ✅ **OpenAI GPT-4o-mini**를 활용한 지능형 청킹 기반 유사도 분석

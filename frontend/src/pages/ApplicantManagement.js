@@ -166,7 +166,7 @@ const api = {
   // 유사한 지원자 추천 조회
   getSimilarApplicants: async (applicantId, limit = 5) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/similar?limit=${limit}`);
+      const response = await fetch(`${API_BASE_URL}/api/talent/recommend/similar/${applicantId}?limit=${limit}`);
       if (!response.ok) {
         throw new Error('유사한 지원자 조회 실패');
       }
@@ -2919,7 +2919,7 @@ const ApplicantManagement = () => {
     try {
       setLoadingSimilar(true);
       const similarData = await api.getSimilarApplicants(applicant.id);
-      setSimilarApplicants(similarData.similar_applicants || similarData || []);
+      setSimilarApplicants(similarData.recommendations || []);
     } catch (error) {
       console.error('유사한 지원자 조회 오류:', error);
       setSimilarApplicants([]);
@@ -3373,9 +3373,12 @@ const ApplicantManagement = () => {
                         cursor: 'pointer'
                       }}
                       onClick={() => {
-                        const targetApplicant = similar.applicant || similar;
-                        setSelectedApplicant(targetApplicant);
-                        setSimilarApplicants([]);
+                        // Find the full applicant data by name
+                        const targetApplicant = applicants.find(app => app.name === similar.applicant_name);
+                        if (targetApplicant) {
+                          setSelectedApplicant(targetApplicant);
+                          setSimilarApplicants([]);
+                        }
                       }}
                       onMouseEnter={(e) => {
                         const el = e.currentTarget;
@@ -3389,7 +3392,7 @@ const ApplicantManagement = () => {
                       }}>
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
                           <div style={{ fontWeight: '600', color: '#333', fontSize: '16px' }}>
-                            {(similar.applicant && (similar.applicant.name || similar.applicant.applicant_name)) || similar.name || ''}
+                            {similar.applicant_name || similar.name || ''}
                           </div>
                           <div style={{ display: 'flex', gap: '8px' }}>
                             <span style={{
@@ -3400,7 +3403,7 @@ const ApplicantManagement = () => {
                               fontSize: '12px',
                               fontWeight: '500'
                             }}>
-                              {(similar.applicant && similar.applicant.position) || similar.position || '직무 미상'}
+                              {similar.position || '직무 미상'}
                             </span>
                             <span style={{
                               background: '#28a745',
@@ -3416,14 +3419,19 @@ const ApplicantManagement = () => {
                         </div>
                         
                         <div style={{ fontSize: '14px', color: '#666', marginBottom: '6px' }}>
-                          <strong>경력:</strong> {(similar.applicant && similar.applicant.experience) || similar.experience || '-'}
+                          <strong>경력:</strong> {similar.experience || '-'}
                         </div>
-                        <div style={{ fontSize: '14px', color: '#666', marginBottom: '8px' }}>
-                          <strong>기술스택:</strong> {(similar.applicant && similar.applicant.skills) || similar.skills || '-'}
+                        <div style={{ fontSize: '14px', color: '#666', marginBottom: '6px' }}>
+                          <strong>기술스택:</strong> {Array.isArray(similar.skills) ? similar.skills.join(', ') : (similar.skills || '-')}
                         </div>
+                        {similar.recommendation_reason && (
+                          <div style={{ fontSize: '13px', color: '#6c757d', marginBottom: '8px', fontStyle: 'italic' }}>
+                            <strong>추천 이유:</strong> {similar.recommendation_reason}
+                          </div>
+                        )}
                         
                         <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                          {((similar.applicant && similar.applicant.resume_analysis) || similar.resume_analysis) && (
+                          {similar.analysis_score && (
                             <span style={{
                               background: '#f3f4f6',
                               color: '#495057',
@@ -3432,31 +3440,19 @@ const ApplicantManagement = () => {
                               fontSize: '11px',
                               fontWeight: '500'
                             }}>
-                              이력서: {((similar.applicant && similar.applicant.resume_analysis) || similar.resume_analysis).score || '-'}
+                              분석점수: {similar.analysis_score}
                             </span>
                           )}
-                          {((similar.applicant && similar.applicant.cover_letter_analysis) || similar.cover_letter_analysis) && (
+                          {similar.experience_level && (
                             <span style={{
-                              background: '#f3f4f6',
-                              color: '#495057',
+                              background: '#e3f2fd',
+                              color: '#1976d2',
                               padding: '2px 6px',
                               borderRadius: '4px',
                               fontSize: '11px',
                               fontWeight: '500'
                             }}>
-                              자기소개서: {((similar.applicant && similar.applicant.cover_letter_analysis) || similar.cover_letter_analysis).score || '-'}
-                            </span>
-                          )}
-                          {((similar.applicant && similar.applicant.portfolio_analysis) || similar.portfolio_analysis) && (
-                            <span style={{
-                              background: '#f3f4f6',
-                              color: '#495057',
-                              padding: '2px 6px',
-                              borderRadius: '4px',
-                              fontSize: '11px',
-                              fontWeight: '500'
-                            }}>
-                              포트폴리오: {((similar.applicant && similar.applicant.portfolio_analysis) || similar.portfolio_analysis).score || '-'}
+                              경력레벨: {similar.experience_level === 'junior' ? '주니어' : similar.experience_level === 'mid' ? '미드' : '시니어'}
                             </span>
                           )}
                         </div>
