@@ -7,7 +7,7 @@ const TestGithubSummary = () => {
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
   const [showAllFields, setShowAllFields] = useState(false);
-  const [progress, setProgress] = useState({ current: 0, total: 4, step: '' });
+  const [progress, setProgress] = useState({ current: 0, total: 5, step: '' });
 
   // GitHub URL 파싱 함수 (백엔드와 동일한 로직)
   const parseGithubUrl = (url) => {
@@ -41,7 +41,11 @@ const TestGithubSummary = () => {
     }
     
     setLoading(true);
-    setProgress({ current: 1, total: 4, step: 'GitHub 프로필 정보 확인 중...' });
+    await handleIntegratedAnalysis();
+  };
+
+  const handleIntegratedAnalysis = async () => {
+    setProgress({ current: 1, total: 5, step: 'GitHub 프로필 정보 확인 중...' });
     
     try {
       // URL 파싱하여 요청 데이터 구성
@@ -58,7 +62,7 @@ const TestGithubSummary = () => {
       }
       
       // 2단계: 레포지토리 정보 수집
-      setProgress({ current: 2, total: 4, step: '레포지토리 정보 수집 중...' });
+      setProgress({ current: 2, total: 5, step: '레포지토리 정보 수집 중...' });
       
       const res = await fetch((process.env.REACT_APP_API_URL || 'http://localhost:8000') + '/api/github/summary', {
         method: 'POST',
@@ -67,7 +71,7 @@ const TestGithubSummary = () => {
       });
       
       // 3단계: 코드 분석
-      setProgress({ current: 3, total: 4, step: '코드 구조 및 언어 분석 중...' });
+      setProgress({ current: 3, total: 5, step: '코드 구조 및 언어 분석 중...' });
       
       const data = await res.json();
       if (!res.ok) {
@@ -76,7 +80,13 @@ const TestGithubSummary = () => {
         
         if (data?.detail) {
           if (data.detail.includes('404') || data.detail.includes('찾을 수 없습니다')) {
-            errorMessage = '레포지토리를 찾을 수 없습니다. URL과 접근 권한을 확인해주세요.';
+            if (data.detail.includes('사용자')) {
+              errorMessage = 'GitHub 사용자를 찾을 수 없습니다. 사용자명을 확인해주세요.';
+            } else if (data.detail.includes('리포지토리') || data.detail.includes('저장소')) {
+              errorMessage = '레포지토리를 찾을 수 없습니다. URL과 접근 권한을 확인해주세요.';
+            } else {
+              errorMessage = '요청한 리소스를 찾을 수 없습니다. URL을 확인해주세요.';
+            }
           } else if (data.detail.includes('403') || data.detail.includes('권한')) {
             errorMessage = '비공개 레포지토리입니다. 접근 권한이 필요합니다.';
           } else if (data.detail.includes('rate limit') || data.detail.includes('제한')) {
@@ -93,17 +103,24 @@ const TestGithubSummary = () => {
         throw new Error(errorMessage);
       }
       
-      // 4단계: 결과 생성
-      setProgress({ current: 4, total: 4, step: '분석 결과 생성 중...' });
+      // 4단계: 아키텍처 분석 (특정 레포지토리가 있는 경우)
+      if (requestData.repo_name) {
+        setProgress({ current: 4, total: 5, step: 'AI 기반 아키텍처 분석 중...' });
+      }
+      
+      // 5단계: 결과 생성
+      setProgress({ current: 5, total: 5, step: '분석 결과 생성 중...' });
       
       setResult(data);
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
-      setProgress({ current: 0, total: 4, step: '' });
+      setProgress({ current: 0, total: 5, step: '' });
     }
   };
+
+
 
   return (
         <div style={{ 
@@ -134,6 +151,19 @@ const TestGithubSummary = () => {
         }}>
           <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 'bold' }}>🔍 GitHub 프로젝트 상세 분석</h1>
           <p style={{ margin: '10px 0 0 0', opacity: 0.9 }}>AI 기반 프로젝트 아키텍처 및 기술 스택 분석</p>
+          
+          <div style={{ 
+            marginTop: '15px',
+            padding: '10px',
+            background: 'rgba(52, 152, 219, 0.2)',
+            borderRadius: '6px',
+            fontSize: '13px',
+            opacity: 0.9
+          }}>
+            💡 통합 분석: 요약 분석과 아키텍처 분석이 자동으로 함께 수행됩니다.
+            <br />
+            특정 레포지토리 URL을 입력하면 더 상세한 아키텍처 분석이 포함됩니다.
+          </div>
         </div>
 
       <div style={{ 
@@ -866,28 +896,39 @@ const TestGithubSummary = () => {
                            )}
                          </div>
                         
-                        <div style={{ 
-                          marginTop: '20px', 
-                          padding: '15px', 
-                          background: '#f8f9fa', 
-                          borderRadius: '8px',
-                          textAlign: 'center'
-                        }}>
-                          <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>🔗 레포지토리 링크</div>
-                          <a 
-                            href={summary['레포 주소']} 
-                            target="_blank" 
-                            rel="noreferrer"
-                            style={{ 
+                        {/* 핵심파일 분석 정보 - 전체 보기에서만 표시 */}
+                        {showAllFields && result.detailed_analysis && (
+                          <div style={{ 
+                            marginTop: '20px', 
+                            padding: '15px', 
+                            background: 'linear-gradient(135deg, #f8f9fa 0%, #e8f4f8 100%)', 
+                            borderRadius: '8px',
+                            border: '2px solid #17a2b8'
+                          }}>
+                            <h5 style={{ 
+                              margin: '0 0 15px 0', 
                               color: '#2c3e50', 
-                              textDecoration: 'none',
-                              fontWeight: 'bold',
-                              fontSize: '16px'
-                            }}
-                          >
-                            {summary['레포 주소']}
-                          </a>
-                        </div>
+                              fontSize: '16px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: '8px'
+                            }}>
+                              📄 핵심파일 분석 정보
+                            </h5>
+                            
+                            <div style={{ 
+                              fontSize: '12px', 
+                              color: '#666',
+                              textAlign: 'center',
+                              padding: '8px',
+                              background: 'rgba(255,255,255,0.8)',
+                              borderRadius: '6px',
+                              marginBottom: '15px'
+                            }}>
+                              💡 핵심파일 선별 조회를 통해 의존성, 프레임워크, 빌드 도구를 자동으로 감지했습니다.
+                            </div>
+                          </div>
+                        )}
                       </div>
                     )) : (
                       <div style={{ 
@@ -1124,6 +1165,298 @@ const TestGithubSummary = () => {
           </div>
         </div>
       )}
+
+      {/* AI 기반 아키텍처 분석 결과 - 맨 아래에 배치 */}
+      {result && result.detailed_analysis?.architecture_analysis && result.detailed_analysis.architecture_analysis.total_repos_analyzed > 0 && (
+        <div style={{ 
+          marginTop: '20px', 
+          padding: '20px', 
+          background: 'linear-gradient(135deg, #f8f9fa 0%, #e8f4f8 100%)', 
+          borderRadius: '12px',
+          border: '2px solid #17a2b8'
+        }}>
+          <h5 style={{ 
+            margin: '0 0 20px 0', 
+            color: '#2c3e50', 
+            fontSize: '18px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '10px',
+            fontWeight: 'bold'
+          }}>
+            🤖 AI 기반 아키텍처 분석 결과
+          </h5>
+          
+          <div style={{ 
+            fontSize: '12px', 
+            color: '#666',
+            textAlign: 'center',
+            padding: '8px',
+            background: 'rgba(255,255,255,0.8)',
+            borderRadius: '6px',
+            marginBottom: '20px'
+          }}>
+            총 {result.detailed_analysis.architecture_analysis.total_repos_analyzed}개 레포지토리에 대해 AI 기반 아키텍처 분석을 수행했습니다.
+          </div>
+          
+          {result.detailed_analysis.architecture_analysis.architecture_results.map((arch, index) => (
+            <div key={index} style={{ 
+              marginBottom: '20px',
+              padding: '15px',
+              background: 'white',
+              borderRadius: '8px',
+              border: '1px solid #dee2e6',
+              boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
+            }}>
+              <div style={{ 
+                display: 'flex', 
+                justifyContent: 'space-between', 
+                alignItems: 'center',
+                marginBottom: '15px'
+              }}>
+                <h6 style={{ 
+                  margin: 0, 
+                  color: '#2c3e50', 
+                  fontSize: '16px',
+                  fontWeight: 'bold'
+                }}>
+                  📁 {arch.owner}/{arch.repo}
+                </h6>
+                <div style={{ 
+                  fontSize: '12px', 
+                  color: '#666',
+                  display: 'flex',
+                  gap: '10px'
+                }}>
+                  <span>⏱️ {arch.analysis_time.toFixed(2)}초</span>
+                  <span>📄 {arch.opened_files.length}개 파일</span>
+                </div>
+              </div>
+              
+              {/* 분석 실패 메시지 */}
+              {arch.topic === '분석 실패' && (
+                <div style={{ 
+                  marginBottom: '15px',
+                  padding: '10px', 
+                  background: '#f8d7da', 
+                  borderRadius: '6px',
+                  border: '1px solid #f5c6cb'
+                }}>
+                  <div style={{ fontSize: '13px', color: '#721c24', marginBottom: '5px', fontWeight: 'bold' }}>⚠️ 분석 실패</div>
+                  <div style={{ fontSize: '14px', color: '#721c24', lineHeight: '1.4' }}>
+                    이 레포지토리의 아키텍처 분석에 실패했습니다. 기본 메타데이터 분석 결과를 참고해주세요.
+                  </div>
+                </div>
+              )}
+              
+              {/* 분석 성공한 경우에만 상세 정보 표시 */}
+              {arch.topic !== '분석 실패' && (
+                <>
+                  <div style={{ 
+                    display: 'grid', 
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                    gap: '10px',
+                    marginBottom: '15px'
+                  }}>
+                    {/* 기술 스택 */}
+                    {arch.tech_stack && arch.tech_stack.length > 0 && (
+                      <div style={{ 
+                        padding: '10px', 
+                        background: '#e3f2fd', 
+                        borderRadius: '6px',
+                        border: '1px solid #bbdefb'
+                      }}>
+                        <div style={{ fontSize: '13px', color: '#1976d2', marginBottom: '5px', fontWeight: 'bold' }}>⚙️ 기술 스택</div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#0d47a1' }}>
+                          {arch.tech_stack.join(', ')}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* 외부 라이브러리 */}
+                    {arch.external_libs && arch.external_libs.length > 0 && (
+                      <div style={{ 
+                        padding: '10px', 
+                        background: '#fff3cd', 
+                        borderRadius: '6px',
+                        border: '1px solid #ffeaa7'
+                      }}>
+                        <div style={{ fontSize: '13px', color: '#856404', marginBottom: '5px', fontWeight: 'bold' }}>📚 외부 라이브러리</div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#856404' }}>
+                          {arch.external_libs.slice(0, 5).join(', ')}
+                          {arch.external_libs.length > 5 && ` 외 ${arch.external_libs.length - 5}개`}
+                        </div>
+                      </div>
+                    )}
+                    
+                    {/* LLM 모델 */}
+                    {arch.llm_models && arch.llm_models.length > 0 && (
+                      <div style={{ 
+                        padding: '10px', 
+                        background: '#e8f5e8', 
+                        borderRadius: '6px',
+                        border: '1px solid #c8e6c9'
+                      }}>
+                        <div style={{ fontSize: '13px', color: '#155724', marginBottom: '5px', fontWeight: 'bold' }}>🤖 LLM 모델</div>
+                        <div style={{ fontSize: '13px', fontWeight: 'bold', color: '#155724' }}>
+                          {arch.llm_models.join(', ')}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  
+                  {/* 주요 기능 (아키텍처 구조에서 추출) */}
+                  {arch.architecture && arch.architecture !== '분석 완료' && arch.architecture !== '분석 실패' && (
+                    <div style={{ 
+                      marginBottom: '15px',
+                      padding: '10px', 
+                      background: '#e8f5e8', 
+                      borderRadius: '6px',
+                      border: '1px solid #d4edda'
+                    }}>
+                      <div style={{ fontSize: '13px', color: '#155724', marginBottom: '5px', fontWeight: 'bold' }}>🚀 주요 기능</div>
+                      <div style={{ fontSize: '14px', color: '#155724', lineHeight: '1.4' }}>
+                        {arch.architecture.length > 200 ? arch.architecture.substring(0, 200) + '...' : arch.architecture}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* 아키텍처 구조 */}
+                  {arch.architecture && arch.architecture !== '분석 완료' && arch.architecture !== '분석 실패' && (
+                    <div style={{ 
+                      padding: '12px', 
+                      background: '#f8f9fa', 
+                      borderRadius: '6px',
+                      border: '1px solid #dee2e6',
+                      fontSize: '13px',
+                      lineHeight: '1.5',
+                      color: '#495057',
+                      marginBottom: '15px'
+                    }}>
+                      <div style={{ fontSize: '13px', color: '#495057', marginBottom: '5px', fontWeight: 'bold' }}>🏗️ 아키텍처 구조</div>
+                      <div style={{ fontSize: '13px', lineHeight: '1.5' }}>
+                        {arch.architecture}
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* 분석된 파일 목록 - 상세 분석 결과 다음에 표시 */}
+                  {arch.opened_files && arch.opened_files.length > 0 && (
+                    <div style={{ 
+                      padding: '10px', 
+                      background: '#f8f9fa', 
+                      borderRadius: '6px',
+                      border: '1px solid #dee2e6'
+                    }}>
+                      <div style={{ fontSize: '12px', color: '#666', marginBottom: '5px', fontWeight: 'bold' }}>📄 핵심파일 분석</div>
+                      <div style={{ fontSize: '11px', color: '#666', lineHeight: '1.3' }}>
+                        {arch.opened_files.slice(0, 8).join(', ')}
+                        {arch.opened_files.length > 8 && ` 외 ${arch.opened_files.length - 8}개`}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          ))}
+          
+          <div style={{ 
+            fontSize: '12px', 
+            color: '#666',
+            textAlign: 'center',
+            padding: '8px',
+            background: 'rgba(255,255,255,0.8)',
+            borderRadius: '4px',
+            border: '1px solid #e1e5e9'
+          }}>
+            💡 AI가 자동으로 필요한 파일들을 선택하여 깊이 있는 아키텍처 분석을 수행했습니다.
+          </div>
+        </div>
+      )}
+
+      {/* 토큰 사용량 표시 - 맨 아래에 배치 */}
+      {result && result.token_usage && (
+        <div style={{ 
+          marginTop: '20px', 
+          padding: '15px', 
+          background: 'linear-gradient(135deg, #f8f9fa 0%, #e8f4f8 100%)', 
+          borderRadius: '8px',
+          border: '2px solid #28a745'
+        }}>
+          <h5 style={{ 
+            margin: '0 0 15px 0', 
+            color: '#2c3e50', 
+            fontSize: '16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px'
+          }}>
+            📊 API 토큰 사용량
+          </h5>
+          
+          <div style={{ 
+            display: 'grid', 
+            gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+            gap: '15px'
+          }}>
+            {/* GitHub API 호출 수 */}
+            <div style={{ 
+              padding: '12px', 
+              background: 'white', 
+              borderRadius: '6px',
+              border: '1px solid #dee2e6',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>🔗 GitHub API</div>
+              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#2c3e50' }}>
+                {result.token_usage.github_api_calls || 0}회 호출
+              </div>
+            </div>
+            
+            {/* OpenAI API 호출 수 */}
+            <div style={{ 
+              padding: '12px', 
+              background: 'white', 
+              borderRadius: '6px',
+              border: '1px solid #dee2e6',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>🤖 OpenAI API</div>
+              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#2c3e50' }}>
+                {result.token_usage.openai_api_calls || 0}회 호출
+              </div>
+            </div>
+            
+            {/* OpenAI 토큰 사용량 */}
+            <div style={{ 
+              padding: '12px', 
+              background: 'white', 
+              borderRadius: '6px',
+              border: '1px solid #dee2e6',
+              textAlign: 'center'
+            }}>
+              <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>🔤 토큰 사용량</div>
+              <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#2c3e50' }}>
+                {result.token_usage.openai_tokens_used || 0} 토큰
+              </div>
+            </div>
+          </div>
+          
+          <div style={{ 
+            fontSize: '12px', 
+            color: '#666',
+            textAlign: 'center',
+            marginTop: '10px',
+            padding: '8px',
+            background: 'rgba(255,255,255,0.8)',
+            borderRadius: '4px'
+          }}>
+            💡 API 호출 횟수와 토큰 사용량은 분석 품질과 비용을 추적하는 데 도움이 됩니다.
+          </div>
+        </div>
+      )}
+
+
       </div>
     </div>
   );
