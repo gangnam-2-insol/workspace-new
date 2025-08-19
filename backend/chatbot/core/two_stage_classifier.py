@@ -7,16 +7,22 @@
 import re
 import json
 from typing import Dict, Any, Tuple, Optional
-import google.generativeai as genai
+try:
+    from openai_service import OpenAIService
+except ImportError:
+    OpenAIService = None
 import os
 from dotenv import load_dotenv
 from .suggestion_generator import suggestion_generator
 
 load_dotenv()
 
-# Gemini AI 설정
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-model = genai.GenerativeModel('gemini-1.5-pro')
+# OpenAI 설정
+try:
+    openai_service = OpenAIService(model_name="gpt-3.5-turbo") if OpenAIService else None
+except Exception as e:
+    print(f"OpenAI 서비스 초기화 실패: {e}")
+    openai_service = None
 
 class TwoStageClassifier:
     def __init__(self):
@@ -219,31 +225,49 @@ class TwoStageClassifier:
         """2차 의미 기반 재분석 + 추천문구 생성"""
         try:
             prompt = f"""
-다음 텍스트가 채용공고인지 판단하고, 채용공고라면 관련 정보를 추출해주세요.
+당신은 채용공고 분석 전문가입니다. 다음 텍스트를 분석하여 채용공고인지 판단하고 정보를 추출해주세요.
 
 텍스트: {text}
 
-다음 JSON 형식으로 응답해주세요:
+반드시 다음 JSON 형식으로만 응답하세요. 다른 설명은 포함하지 마세요:
+
 {{
-  "isRecruitment": true/false,
-  "confidence": 0.0-1.0,
+  "isRecruitment": true,
+  "confidence": 0.9,
   "fields": {{
-    "position": "직무명",
-    "tech_stack": ["기술스택 배열"],
-    "experience": "경력 요구사항",
-    "requirements": ["자격요건 배열"],
-    "preferences": ["우대조건 배열"],
-    "salary": "급여 정보",
-    "location": "근무지",
-    "company_type": "회사 유형"
+    "position": "백엔드 개발자",
+    "tech_stack": ["Python", "Django"],
+    "experience": "3년 이상",
+    "requirements": ["컴퓨터 관련 학과 졸업"],
+    "preferences": ["AWS 경험자 우대"],
+    "salary": "연봉 4000만원",
+    "location": "서울",
+    "company_type": "스타트업"
   }}
 }}
 
-채용공고가 아닌 경우 fields는 빈 객체로 설정하세요.
+중요: 
+- 채용공고가 아니면 isRecruitment: false, fields: {{}}로 설정
+- JSON만 응답하고 다른 텍스트는 포함하지 마세요
+- 정보를 찾을 수 없는 필드는 null로 설정하세요
 """
 
-            response = model.generate_content(prompt)
-            result_text = response.text.strip()
+            if openai_service:
+                try:
+                    # 새로운 이벤트 루프 생성하여 사용
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        response = loop.run_until_complete(openai_service.generate_json_response(prompt))
+                        result_text = response.strip() if response else ""
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    print(f"AI 호출 중 오류: {e}")
+                    result_text = ""
+            else:
+                result_text = ""
             
             # JSON 파싱
             try:

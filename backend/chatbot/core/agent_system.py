@@ -8,7 +8,10 @@ import json
 import math
 from typing import Dict, Any, List, Optional
 from dataclasses import dataclass
-import google.generativeai as genai
+try:
+    from openai_service import OpenAIService
+except ImportError:
+    OpenAIService = None
 import os
 from dotenv import load_dotenv
 from .context_classifier import classify_context, is_recruitment_text
@@ -18,9 +21,12 @@ from .two_stage_classifier import two_stage_classifier
 
 load_dotenv()
 
-# Gemini AI 설정
-genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-model = genai.GenerativeModel('gemini-1.5-pro')
+# OpenAI 설정
+try:
+    openai_service = OpenAIService(model_name="gpt-3.5-turbo") if OpenAIService else None
+except Exception as e:
+    print(f"OpenAI 서비스 초기화 실패: {e}")
+    openai_service = None
 
 @dataclass
 class AgentState:
@@ -379,8 +385,22 @@ class RecruitmentNode:
 답변은 한국어로 작성하고, 이모지를 적절히 사용하여 가독성을 높여주세요.
 """
             
-            response = model.generate_content(prompt)
-            return response.text
+            if openai_service:
+                try:
+                    # 새로운 이벤트 루프 생성하여 사용
+                    import asyncio
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
+                    try:
+                        response = loop.run_until_complete(openai_service.generate_response(prompt))
+                        return response
+                    finally:
+                        loop.close()
+                except Exception as e:
+                    print(f"AI 호출 중 오류: {e}")
+                    return "죄송합니다. AI 서비스 호출 중 오류가 발생했습니다."
+            else:
+                return "죄송합니다. AI 서비스를 사용할 수 없습니다."
             
         except Exception as e:
             print(f"채용공고 작성 중 오류: {str(e)}")
@@ -700,8 +720,22 @@ class FallbackNode:
                         f"사용자: {user_input}\n"
                         "어시스턴트:"
                     )
-                    response = model.generate_content(prompt)
-                    result = response.text or "네, 알겠습니다. 더 구체적으로 말씀해 주실 수 있을까요?"
+                    if openai_service:
+                        try:
+                            # 새로운 이벤트 루프 생성하여 사용
+                            import asyncio
+                            loop = asyncio.new_event_loop()
+                            asyncio.set_event_loop(loop)
+                            try:
+                                response = loop.run_until_complete(openai_service.generate_response(prompt))
+                                result = response or "네, 알겠습니다. 더 구체적으로 말씀해 주실 수 있을까요?"
+                            finally:
+                                loop.close()
+                        except Exception as e:
+                            print(f"AI 호출 중 오류: {e}")
+                            result = "네, 알겠습니다. 더 구체적으로 말씀해 주실 수 있을까요?"
+                    else:
+                        result = "네, 알겠습니다. 더 구체적으로 말씀해 주실 수 있을까요?"
                 except Exception:
                     result = "네, 알겠습니다. 더 구체적으로 말씀해 주실 수 있을까요?"
             

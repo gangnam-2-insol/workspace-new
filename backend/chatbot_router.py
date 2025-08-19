@@ -9,19 +9,18 @@ import os
 from dotenv import load_dotenv
 import traceback
 import re
-import google.generativeai as genai
+from openai_service import OpenAIService
 
 # 환경 변수 로드
 load_dotenv()
 
-# Gemini 모델 초기화
+# OpenAI 모델 초기화
 try:
-    genai.configure(api_key=os.getenv("GOOGLE_API_KEY"))
-    model = genai.GenerativeModel('gemini-pro')
-    print("Gemini 모델 초기화 성공")
+    openai_service = OpenAIService(model_name="gpt-3.5-turbo")
+    print("OpenAI 모델 초기화 성공")
 except Exception as e:
-    print(f"Gemini 모델 초기화 실패: {e}")
-    model = None
+    print(f"OpenAI 모델 초기화 실패: {e}")
+    openai_service = None
 
 # 의도 감지 유틸리티
 HARDCODED_FIELDS = {
@@ -119,22 +118,7 @@ PROMPT_TEMPLATE = """
 # .env 파일 로드
 load_dotenv()
 
-# --- Gemini API 설정 추가 시작 ---
-import google.generativeai as genai
-
-# 환경 변수에서 Gemini API 키 로드
-GEMINI_API_KEY = os.getenv('GOOGLE_API_KEY')
-
-# API 키가 없어도 기본 응답을 반환하도록 수정
-if GEMINI_API_KEY:
-    genai.configure(api_key=GEMINI_API_KEY)
-    # Gemini 모델 초기화
-    # 'gemini-1.5-pro'는 최신 텍스트 기반 모델입니다.
-    model = genai.GenerativeModel('gemini-1.5-pro')
-else:
-    print("Warning: GOOGLE_API_KEY not found. Using fallback responses.")
-    model = None
-# --- Gemini API 설정 추가 끝 ---
+# OpenAI API 설정은 상단에 이미 완료됨
 
 router = APIRouter()
 
@@ -524,7 +508,7 @@ async def handle_normal_request(request: ChatbotRequest):
             
         elif classification['type'] == 'question':
             # 3) Gemini API 호출로 답변 생성
-            ai_response = await call_gemini_api(user_input, conversation_history_from_frontend)
+            ai_response = await call_openai_api(user_input, conversation_history_from_frontend)
             response = ChatbotResponse(
                 message=ai_response,
                 field=None,
@@ -786,7 +770,7 @@ async def generate_ai_assistant_response(user_input: str, field: Dict[str, Any],
 
 이 질문에 대해 채용 공고 작성에 도움이 되는 실무적인 답변을 제공해주세요.
 """
-            ai_response = await call_gemini_api(ai_assistant_context)
+            ai_response = await call_openai_api(ai_assistant_context)
             
             # 사용자 입력에서 value 추출 시도
             extracted_value = user_input.strip()
@@ -948,7 +932,7 @@ async def simulate_llm_response(user_input: str, current_field: str, session: Di
 
 이 질문에 대해 채용 공고 작성에 도움이 되는 실무적인 답변을 제공해주세요.
 """
-            ai_response = await call_gemini_api(ai_assistant_context)
+            ai_response = await call_openai_api(ai_assistant_context)
             return {
                 "message": ai_response,
                 "is_conversation": True
@@ -998,75 +982,29 @@ async def simulate_llm_response(user_input: str, current_field: str, session: Di
         print("[DEBUG] ===== simulate_llm_response 완료 =====")
         return result
 
-async def call_gemini_api(prompt: str, conversation_history: List[Dict[str, Any]] = None) -> str:
+async def call_openai_api(prompt: str, conversation_history: List[Dict[str, Any]] = None) -> str:
     """
-    Gemini API 호출 함수
+    OpenAI API 호출 함수
     """
     try:
-        if not model:
+        if not openai_service:
             return "AI 서비스를 사용할 수 없습니다. 다시 시도해 주세요."
         
-        # 대화 히스토리 구성
-        messages = []
+        # 대화 히스토리 구성 (OpenAI 형식으로 변환)
+        history = []
         if conversation_history:
             for msg in conversation_history:
-                role = 'user' if msg.get('type') == 'user' else 'model'
-                messages.append({"role": role, "parts": [{"text": msg.get('content', '')}]})
+                role = 'user' if msg.get('type') == 'user' else 'assistant'
+                content = msg.get('content', '')
+                history.append({"role": role, "content": content})
         
-        # 컨텍스트가 포함된 프롬프트 생성
-        context_prompt = f"""
-당신은 채용 전문 어시스턴트입니다. 사용자가 채용 공고 작성이나 채용 관련 질문을 할 때 전문적이고 실용적인 답변을 제공해주세요.
-
-**주의사항:**
-- AI 모델에 대한 설명은 하지 마세요
-- 채용 관련 실무적인 조언을 제공하세요
-- 구체적이고 실용적인 답변을 해주세요
-- 한국어로 답변해주세요
-- 모든 답변은 핵심만 간단하게 요약해서 2~3줄 이내로 작성해주세요
-- 불필요한 설명은 생략하고, 요점 위주로 간결하게 답변해주세요
-- '주요 업무'를 작성할 때는 지원자 입장에서 직무 이해도가 높아지도록 구체적인 동사(예: 개발, 분석, 관리 등)를 사용하세요
-- 각 업무는 “무엇을 한다 → 왜 한다” 구조로, 기대 성과까지 간결히 포함해서 자연스럽고 명확하게 서술하세요
-- 번호가 있는 항목(1, 2, 3 등)은 각 줄마다 줄바꿈하여 출력해주세요
-
-**특별 지시:**  
-사용자가 '적용해줘', '입력해줘', '이걸로 해줘' 등의 선택적 명령어를 입력하면,  
-직전 AI가 제시한 내용을 그대로 적용하는 동작으로 이해하고,  
-사용자가 추가 설명을 요청하지 않는 이상 답변을 간단히 요약하며 다음 단계로 자연스럽게 넘어가세요.
-
-**사용자 질문:** {prompt}
-
-위 질문에 대해 채용 전문가 관점에서 답변해주세요.
-"""
-
-        messages.append({"role": "user", "parts": [{"text": context_prompt}]})
+        # OpenAI API 호출
+        response = await openai_service.generate_response(prompt, history)
         
-        # Gemini API 호출
-        response = await model.generate_content_async(
-            messages,
-            safety_settings=[
-                {
-                    "category": "HARM_CATEGORY_HARASSMENT",
-                    "threshold": "BLOCK_NONE"
-                },
-                {
-                    "category": "HARM_CATEGORY_HATE_SPEECH", 
-                    "threshold": "BLOCK_NONE"
-                },
-                {
-                    "category": "HARM_CATEGORY_SEXUALLY_EXPLICIT",
-                    "threshold": "BLOCK_NONE"
-                },
-                {
-                    "category": "HARM_CATEGORY_DANGEROUS_CONTENT",
-                    "threshold": "BLOCK_NONE"
-                }
-            ]
-        )
-        
-        return response.text
+        return response
         
     except Exception as e:
-        print(f"[ERROR] Gemini API 호출 실패: {e}")
+        print(f"[ERROR] OpenAI API 호출 실패: {e}")
         return f"AI 응답을 가져오는 데 실패했습니다. 다시 시도해 주세요. (오류: {str(e)})"
 
 @router.post("/suggestions")
@@ -1234,7 +1172,7 @@ async def chat_endpoint(request: ChatbotRequest):
             
         elif classification['type'] == 'question':
             # 3) Gemini API 호출로 답변 생성
-            ai_response = await call_gemini_api(user_input, conversation_history)
+            ai_response = await call_openai_api(user_input, conversation_history)
             response = {
                 "type": "answer",
                 "content": ai_response,
