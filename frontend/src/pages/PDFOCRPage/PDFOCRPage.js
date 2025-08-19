@@ -114,15 +114,7 @@ const PDFOCRPage = () => {
     return labels[type] || type;
   };
 
-  const getEntityTypeLabel = (type) => {
-    const labels = {
-      'organizations': '조직',
-      'locations': '위치',
-      'dates': '날짜',
-      'numbers': '숫자'
-    };
-    return labels[type] || type;
-  };
+
 
   const getInfoTypeLabel = (type) => {
     const labels = {
@@ -285,45 +277,7 @@ const PDFOCRPage = () => {
                 </TabContent>
               )}
 
-              {result.sections && Object.keys(result.sections).length > 0 && (
-                <TabContent>
-                  <TabHeader>
-                    <TabButton>📋 섹션 정보</TabButton>
-                  </TabHeader>
-                  <TabPanel>
-                    <SectionsContainer>
-                      {Object.entries(result.sections).map(([sectionName, content]) => (
-                        <SectionItem key={sectionName}>
-                          <SectionTitle>{sectionName}</SectionTitle>
-                          <SectionContent>{content}</SectionContent>
-                        </SectionItem>
-                      ))}
-                    </SectionsContainer>
-                  </TabPanel>
-                </TabContent>
-              )}
 
-              {result.entities && Object.keys(result.entities).length > 0 && (
-                <TabContent>
-                  <TabHeader>
-                    <TabButton>🏢 엔티티</TabButton>
-                  </TabHeader>
-                  <TabPanel>
-                    <EntitiesContainer>
-                      {Object.entries(result.entities).map(([entityType, entities]) => (
-                        <EntityGroup key={entityType}>
-                          <EntityTypeTitle>{getEntityTypeLabel(entityType)}</EntityTypeTitle>
-                          <EntityList>
-                            {entities.map((entity, index) => (
-                              <EntityTag key={index}>{entity}</EntityTag>
-                            ))}
-                          </EntityList>
-                        </EntityGroup>
-                      ))}
-                    </EntitiesContainer>
-                  </TabPanel>
-                </TabContent>
-              )}
 
               {result.basic_info && Object.keys(result.basic_info).length > 0 && (
                 <TabContent>
@@ -678,66 +632,7 @@ const DocumentTypeBadge = styled.div`
   text-align: center;
 `;
 
-const SectionsContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-`;
 
-const SectionItem = styled.div`
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 16px;
-  background-color: white;
-`;
-
-const SectionTitle = styled.h4`
-  margin: 0 0 8px 0;
-  color: #2d3748;
-  font-size: 1rem;
-  font-weight: 600;
-`;
-
-const SectionContent = styled.p`
-  margin: 0;
-  color: #4a5568;
-  line-height: 1.5;
-`;
-
-const EntitiesContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-`;
-
-const EntityGroup = styled.div`
-  border: 1px solid #e2e8f0;
-  border-radius: 8px;
-  padding: 16px;
-  background-color: white;
-`;
-
-const EntityTypeTitle = styled.h4`
-  margin: 0 0 12px 0;
-  color: #2d3748;
-  font-size: 1rem;
-  font-weight: 600;
-`;
-
-const EntityList = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-`;
-
-const EntityTag = styled.span`
-  background-color: #edf2f7;
-  color: #2d3748;
-  padding: 4px 12px;
-  border-radius: 16px;
-  font-size: 0.85rem;
-  font-weight: 500;
-`;
 
 const BasicInfoContainer = styled.div`
   display: flex;

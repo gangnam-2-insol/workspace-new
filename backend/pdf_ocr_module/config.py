@@ -60,8 +60,8 @@ class Settings(BaseSettings):
     min_chunk_chars: int = Field(default=20)
 
     # 인덱싱 시 요약/키워드 생성 여부(LLM/휴리스틱 모두 비활성화)
-    index_generate_summary: bool = Field(default=False)
-    index_generate_keywords: bool = Field(default=False)
+    index_generate_summary: bool = Field(default=True)
+    index_generate_keywords: bool = Field(default=True)
 
     # OpenAI (선택)
     openai_api_key: Optional[str] = Field(default=None)

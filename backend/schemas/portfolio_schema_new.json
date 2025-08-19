@@ -1,0 +1,116 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["applicant_id", "application_id", "extracted_text", "summary", "document_type", "status"],
+    "properties": {
+      "applicant_id": {
+        "bsonType": "string",
+        "description": "지원자 ID (필수)"
+      },
+      "application_id": {
+        "bsonType": "string",
+        "description": "지원서 ID (필수)"
+      },
+      "extracted_text": {
+        "bsonType": "string",
+        "description": "OCR로 추출된 텍스트 (필수)"
+      },
+      "summary": {
+        "bsonType": "string",
+        "description": "포트폴리오 요약 (필수)"
+      },
+      "keywords": {
+        "bsonType": "array",
+        "items": {
+          "bsonType": "string"
+        },
+        "description": "키워드 목록 (선택)"
+      },
+      "document_type": {
+        "bsonType": "string",
+        "enum": ["portfolio"],
+        "description": "문서 타입 (필수)"
+      },
+      "basic_info": {
+        "bsonType": "object",
+        "properties": {
+          "emails": {
+            "bsonType": "array",
+            "items": {
+              "bsonType": "string"
+            }
+          },
+          "phones": {
+            "bsonType": "array",
+            "items": {
+              "bsonType": "string"
+            }
+          },
+          "names": {
+            "bsonType": "array",
+            "items": {
+              "bsonType": "string"
+            }
+          },
+          "urls": {
+            "bsonType": "array",
+            "items": {
+              "bsonType": "string"
+            }
+          }
+        }
+      },
+      "file_metadata": {
+        "bsonType": "object",
+        "properties": {
+          "filename": {
+            "bsonType": "string"
+          },
+          "size": {
+            "bsonType": "int"
+          },
+          "mime": {
+            "bsonType": "string"
+          },
+          "hash": {
+            "bsonType": "string"
+          },
+          "created_at": {
+            "bsonType": "date"
+          },
+          "modified_at": {
+            "bsonType": "date"
+          }
+        }
+      },
+      "content": {
+        "bsonType": "string",
+        "description": "포트폴리오 내용 (선택)"
+      },
+      "analysis_score": {
+        "bsonType": "double",
+        "minimum": 0,
+        "maximum": 100,
+        "description": "분석 점수 (0-100, 선택)"
+      },
+      "status": {
+        "bsonType": "string",
+        "enum": ["active", "inactive", "archived"],
+        "description": "포트폴리오 상태 (필수)"
+      },
+      "version": {
+        "bsonType": "int",
+        "minimum": 1,
+        "description": "버전 번호 (선택)"
+      },
+      "created_at": {
+        "bsonType": "date",
+        "description": "생성일시 (선택)"
+      },
+      "updated_at": {
+        "bsonType": "date",
+        "description": "수정일시 (선택)"
+      }
+    }
+  }
+}
