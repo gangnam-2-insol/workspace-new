@@ -17,8 +17,9 @@ import csv
 from chatbot import chatbot_router, langgraph_router
 from github import router as github_router
 from routers.upload import router as upload_router
-
 from routers.pdf_ocr import router as pdf_ocr_router
+from routers.applicants import router as applicants_router
+from routers.integrated_ocr import router as integrated_ocr_router
 
 
 from similarity_service import SimilarityService
@@ -70,8 +71,11 @@ app.include_router(langgraph_router, prefix="/api/langgraph", tags=["langgraph"]
 app.include_router(langgraph_router, prefix="/api/langgraph-agent", tags=["langgraph-agent"])
 app.include_router(github_router, prefix="/api", tags=["github"])
 app.include_router(upload_router, tags=["upload"])
-
 app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
+
+# 새로운 통합 라우터들
+app.include_router(applicants_router)
+app.include_router(integrated_ocr_router)
 
 
 # MongoDB 연결
@@ -367,8 +371,39 @@ async def get_applicants(skip: int = 0, limit: int = 20):
             if "resume_id" in applicant and applicant["resume_id"]:
                 applicant["resume_id"] = str(applicant["resume_id"])
 
+        # 기존 Resume 모델과 새로운 OCR 기반 데이터를 모두 처리
+        processed_applicants = []
+        for applicant in applicants:
+            try:
+                # 기존 Resume 모델로 시도
+                processed_applicants.append(Resume(**applicant))
+            except Exception as e:
+                # 새로운 OCR 기반 데이터는 기본 구조로 변환
+                try:
+                    # OCR 기반 데이터를 기존 형식으로 변환
+                    converted_applicant = {
+                        "id": applicant.get("id") or str(applicant.get("_id", "")),
+                        "resume_id": applicant.get("resume_id") or str(applicant.get("_id", "")),
+                        "name": applicant.get("name", "이름미상"),
+                        "position": applicant.get("position", "직무미상"),
+                        "department": applicant.get("department", "부서미상"),
+                        "experience": applicant.get("experience", "경력미상"),
+                        "skills": applicant.get("skills", ""),
+                        "growthBackground": applicant.get("growthBackground", ""),
+                        "motivation": applicant.get("motivation", ""),
+                        "careerHistory": applicant.get("careerHistory", ""),
+                        "analysisScore": applicant.get("analysisScore", 0),
+                        "analysisResult": applicant.get("analysisResult", ""),
+                        "status": applicant.get("status", "pending"),
+                        "created_at": applicant.get("created_at")
+                    }
+                    processed_applicants.append(Resume(**converted_applicant))
+                except Exception as inner_e:
+                    print(f"지원자 데이터 변환 실패: {inner_e}")
+                    continue
+        
         return {
-            "applicants": [Resume(**applicant) for applicant in applicants],
+            "applicants": processed_applicants,
             "total_count": total_count,
             "skip": skip,
             "limit": limit,
@@ -397,11 +432,52 @@ async def get_applicant(applicant_id: str):
         if "resume_id" in applicant and applicant["resume_id"]:
             applicant["resume_id"] = str(applicant["resume_id"])
         
-        return Resume(**applicant)
+        try:
+            # 기존 Resume 모델로 시도
+            return Resume(**applicant)
+        except Exception as e:
+            # 새로운 OCR 기반 데이터는 기본 구조로 변환
+            converted_applicant = {
+                "id": applicant.get("id") or str(applicant.get("_id", "")),
+                "resume_id": applicant.get("resume_id") or str(applicant.get("_id", "")),
+                "name": applicant.get("name", "이름미상"),
+                "position": applicant.get("position", "직무미상"),
+                "department": applicant.get("department", "부서미상"),
+                "experience": applicant.get("experience", "경력미상"),
+                "skills": applicant.get("skills", ""),
+                "growthBackground": applicant.get("growthBackground", ""),
+                "motivation": applicant.get("motivation", ""),
+                "careerHistory": applicant.get("careerHistory", ""),
+                "analysisScore": applicant.get("analysisScore", 0),
+                "analysisResult": applicant.get("analysisResult", ""),
+                "status": applicant.get("status", "pending"),
+                "created_at": applicant.get("created_at")
+            }
+            return Resume(**converted_applicant)
     except HTTPException:
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"지원자 조회 실패: {str(e)}")
+
+# 지원자 삭제 API
+@app.delete("/api/applicants/{applicant_id}")
+async def delete_applicant(applicant_id: str):
+    try:
+        # MongoDB ObjectId로 삭제 시도
+        try:
+            result = await db.applicants.delete_one({"_id": ObjectId(applicant_id)})
+        except:
+            # ObjectId 변환 실패시 문자열로 삭제
+            result = await db.applicants.delete_one({"_id": applicant_id})
+        
+        if result.deleted_count == 0:
+            raise HTTPException(status_code=404, detail="삭제할 지원자를 찾을 수 없습니다.")
+        
+        return {"message": "지원자가 성공적으로 삭제되었습니다.", "deleted_count": result.deleted_count}
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"지원자 삭제 실패: {str(e)}")
 
 # 지원자 통계 API
 @app.get("/api/applicants/stats/overview")

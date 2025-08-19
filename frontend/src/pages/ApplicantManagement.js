@@ -1457,7 +1457,7 @@ const ApplicantActions = styled.div`
   margin-top: 16px;
   padding-top: 16px;
   border-top: 1px solid var(--border-color);
-  opacity: ${props => props.isHovered ? 1 : 0};
+  opacity: 1;
   transition: opacity 0.2s ease;
 `;
 
@@ -1466,9 +1466,9 @@ const ApplicantActionsBoard = styled.div`
   gap: 6px;
   flex-wrap: wrap;
   justify-content: center;
-  opacity: ${props => props.isHovered ? 1 : 0};
+  opacity: 1;
   transition: opacity 0.2s ease;
-  margin-top: ${props => props.isHovered ? '8px' : '0'};
+  margin-top: 8px;
 `;
 
 const StatusBadge = styled(motion.span)`
@@ -2608,6 +2608,45 @@ const ApplicantManagement = () => {
     setViewMode(mode);
   };
 
+  // 지원자 삭제 핸들러
+  const handleDeleteApplicant = async (applicantId) => {
+    if (!window.confirm('정말로 이 지원자를 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.')) {
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}`, {
+        method: 'DELETE',
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+
+      if (response.ok) {
+        console.log('✅ 지원자 삭제 성공');
+        
+        // 모달 닫기
+        handleCloseModal();
+        
+        // 지원자 목록 새로고침
+        setCurrentPage(0);
+        loadApplicants(0, false);
+        
+        // 통계 업데이트
+        loadStats();
+        
+        alert('지원자가 성공적으로 삭제되었습니다.');
+      } else {
+        const errorData = await response.json();
+        console.error('❌ 지원자 삭제 실패:', errorData);
+        alert(`지원자 삭제 실패: ${errorData.detail || '알 수 없는 오류'}`);
+      }
+    } catch (error) {
+      console.error('❌ 지원자 삭제 오류:', error);
+      alert('지원자 삭제 중 오류가 발생했습니다.');
+    }
+  };
+
   // 체크박스 관련 핸들러들
   const handleSelectAll = () => {
     if (selectAll) {
@@ -2680,6 +2719,14 @@ const ApplicantManagement = () => {
     setIsAnalyzing(false);
     setAnalysisResult(null);
     setIsDragOver(false);
+    setResumeData({
+      name: '',
+      email: '',
+      phone: '',
+      position: '',
+      experience: '',
+      skills: []
+    });
   };
 
   // 드래그 앤 드롭 이벤트 핸들러들
@@ -2749,60 +2796,81 @@ const ApplicantManagement = () => {
   const handleResumeSubmit = async () => {
     try {
       if (!resumeFile) {
-        alert('이력서 파일을 선택해주세요.');
+        alert('파일을 선택해주세요.');
         return;
       }
+
+      // 지원자 정보는 OCR에서 자동 추출됨
 
       // 분석 시작
       setIsAnalyzing(true);
       setAnalysisResult(null);
 
-      // FormData 생성 - 상세 분석 API 사용
+      // FormData 생성 - 통합 OCR API 사용
       const formData = new FormData();
       formData.append('file', resumeFile);
-      formData.append('document_type', documentType.toLowerCase()); // resume, cover_letter, portfolio
+      // 이름/이메일/전화번호는 서버에서 OCR로 추출
+      formData.append('job_posting_id', 'default_job_posting'); // 임시 job_posting_id
 
-      // 상세 분석 API 호출
-      const response = await fetch(`${API_BASE_URL}/api/upload/analyze`, {
+      // 문서 타입에 따른 API 엔드포인트 선택
+      let apiEndpoint = '';
+      switch (documentType) {
+        case '이력서':
+          apiEndpoint = '/api/integrated-ocr/upload-resume';
+          break;
+        case '자소서':
+          apiEndpoint = '/api/integrated-ocr/upload-cover-letter';
+          break;
+        case '포트폴리오':
+          apiEndpoint = '/api/integrated-ocr/upload-portfolio';
+          break;
+        default:
+          throw new Error('지원하지 않는 문서 타입입니다.');
+      }
+
+      // 통합 OCR API 호출
+      const response = await fetch(apiEndpoint, {
         method: 'POST',
         body: formData,
       });
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.detail || '파일 분석에 실패했습니다.');
+        throw new Error(errorData.detail || '파일 처리에 실패했습니다.');
       }
 
       const result = await response.json();
       
-      // 상세 분석 결과 처리
-      const analysisData = result.analysis_result;
+      // OCR 결과 처리
+      const ocrResult = result.ocr_result;
+      const dbResult = result.data;
       
-      // 이력서 분석 결과 생성
+      // 분석 결과 생성
       const analysisResult = {
         documentType: documentType,
-        fileName: result.filename,
+        fileName: resumeFile.name,
         analysisDate: new Date().toLocaleString(),
-        summary: `AI 상세 분석 완료 - 총점: ${analysisData.overall_summary.total_score}/10`,
-        skills: extractSkillsFromAnalysis(analysisData, documentType),
-        experience: extractExperienceFromAnalysis(analysisData, documentType),
-        education: extractEducationFromAnalysis(analysisData, documentType),
-        recommendations: extractRecommendationsFromAnalysis(analysisData, documentType),
-        score: analysisData.overall_summary.total_score * 10, // 0-100 점수로 변환
-        processingTime: result.processing_time || 0,
-        extractedTextLength: result.extracted_text_length,
-        detailedAnalysis: analysisData // 상세 분석 데이터 추가
+        summary: ocrResult.summary || 'OCR 처리 완료',
+        skills: ocrResult.keywords || [],
+        experience: 'OCR로 추출된 경험 정보',
+        education: 'OCR로 추출된 학력 정보',
+        recommendations: ['OCR 처리 완료'],
+        score: 85, // 기본 점수
+        processingTime: 0,
+        extractedTextLength: ocrResult.extracted_text?.length || 0,
+        detailedAnalysis: ocrResult,
+        dbResult: dbResult // DB 저장 결과
       };
 
       setAnalysisResult(analysisResult);
       setIsAnalyzing(false);
 
       // 성공 메시지
-      alert(`${documentType} 상세 분석이 완료되었습니다!`);
+      alert(`${documentType} OCR 처리 및 DB 저장이 완료되었습니다!`);
       
     } catch (error) {
-      console.error('이력서 분석 실패:', error);
-      alert(`이력서 분석에 실패했습니다: ${error.message}`);
+      console.error('파일 처리 실패:', error);
+      alert(`파일 처리에 실패했습니다: ${error.message}`);
       setIsAnalyzing(false);
     }
   };
@@ -3100,7 +3168,6 @@ const ApplicantManagement = () => {
                   onClick={() => handleCardClick(applicant)}
                   onMouseEnter={() => setHoveredApplicant(applicant.id)}
                   onMouseLeave={() => setHoveredApplicant(null)}
-                  isHovered={hoveredApplicant === applicant.id}
                 >
                   <ApplicantHeaderBoard>
                     <ApplicantCheckbox onClick={(e) => e.stopPropagation()}>
@@ -3306,6 +3373,11 @@ const ApplicantManagement = () => {
                   포트폴리오
                 </DocumentButton>
               </DocumentButtons>
+
+              <DeleteButton onClick={() => handleDeleteApplicant(selectedApplicant.id)}>
+                <FiX size={16} />
+                지원자 삭제
+              </DeleteButton>
             </ModalContent>
           </ModalOverlay>
         )}
@@ -3973,6 +4045,15 @@ const ApplicantManagement = () => {
 
               <ResumeModalBody>
                 <ResumeFormSection>
+                  <ResumeFormTitle>지원자 정보</ResumeFormTitle>
+                  <ApplicantInfoContainer>
+                    <InfoField>
+                      <InfoLabel>문서에서 자동 추출됩니다</InfoLabel>
+                    </InfoField>
+                  </ApplicantInfoContainer>
+                </ResumeFormSection>
+
+                <ResumeFormSection>
                   <ResumeFormTitle>문서 업로드</ResumeFormTitle>
                   <DocumentUploadContainer>
                     <DocumentTypeSection>
@@ -3995,7 +4076,7 @@ const ApplicantManagement = () => {
                     >
                       <FileUploadInput
                         type="file"
-                        accept=".pdf,.doc,.docx,.txt"
+                        accept=".pdf"
                         onChange={handleFileChange}
                         id="resume-file"
                       />
@@ -4015,10 +4096,10 @@ const ApplicantManagement = () => {
                             <span>
                               {isDragOver 
                                 ? '파일을 여기에 놓으세요' 
-                                : `${documentType} 파일을 선택하거나 드래그하세요`
+                                : `${documentType} PDF 파일을 선택하거나 드래그하세요`
                               }
                             </span>
-                            <small>PDF, DOC, DOCX, TXT 파일 지원</small>
+                            <small>PDF 파일만 지원</small>
                           </FileUploadPlaceholder>
                         )}
                       </FileUploadLabel>
@@ -4026,7 +4107,14 @@ const ApplicantManagement = () => {
                   </DocumentUploadContainer>
                 </ResumeFormSection>
 
-
+                <ResumeFormActions>
+                  <ResumeSubmitButton 
+                    onClick={handleResumeSubmit}
+                    disabled={!resumeFile || isAnalyzing}
+                  >
+                    {isAnalyzing ? '처리 중...' : 'OCR 처리 및 저장'}
+                  </ResumeSubmitButton>
+                </ResumeFormActions>
               </ResumeModalBody>
 
               {isAnalyzing && (
@@ -4125,5 +4213,102 @@ const ApplicantManagement = () => {
     </Container>
   );
 };
+
+// 새로운 스타일 컴포넌트들
+const ApplicantInfoContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  margin-bottom: 24px;
+`;
+
+const InfoField = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const InfoLabel = styled.label`
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: #2d3748;
+`;
+
+const InfoInput = styled.input`
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 1rem;
+  transition: border-color 0.3s ease;
+
+  &:focus {
+    outline: none;
+    border-color: #4299e1;
+    box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
+  }
+
+  &::placeholder {
+    color: #a0aec0;
+  }
+`;
+
+const ResumeFormActions = styled.div`
+  display: flex;
+  justify-content: center;
+  margin-top: 24px;
+  padding-top: 24px;
+  border-top: 1px solid #e2e8f0;
+`;
+
+const ResumeSubmitButton = styled.button`
+  background-color: #48bb78;
+  color: white;
+  border: none;
+  padding: 14px 28px;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  min-width: 160px;
+
+  &:hover:not(:disabled) {
+    background-color: #38a169;
+    transform: translateY(-1px);
+  }
+
+  &:disabled {
+    background-color: #cbd5e0;
+    cursor: not-allowed;
+    transform: none;
+  }
+`;
+
+const DeleteButton = styled.button`
+  background-color: #e53e3e;
+  color: white;
+  border: none;
+  padding: 12px 20px;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  width: 100%;
+  justify-content: center;
+
+  &:hover {
+    background-color: #c53030;
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+`;
 
 export default ApplicantManagement; 

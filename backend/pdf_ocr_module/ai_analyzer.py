@@ -1,72 +1,74 @@
 from __future__ import annotations
 
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List
 import json
+import os
 import asyncio
 
 from .config import Settings
-import sys
-import os
-sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+# OpenAIService는 선택적
 try:
-    from openai_service import OpenAIService
+    from openai_service import OpenAIService  # async: generate_response(prompt) -> str
 except ImportError:
     OpenAIService = None
 
+# 동기식 OpenAI 클라이언트 (이벤트 루프 충돌 방지용)
+try:
+    from openai import OpenAI
+    sync_client = OpenAI()
+except ImportError:
+    sync_client = None
 
-def analyze_text(text: str, settings: Settings) -> Dict[str, Any]:
-    """텍스트를 분석하여 구조화된 정보를 추출합니다."""
-    try:
-        # 기본 텍스트 정리
-        clean_text = clean_text_content(text)
-        
-        # 기본 정보 추출
-        basic_info = extract_basic_info(clean_text)
-        
-        # AI 분석 (설정에 따라)
-        if settings.index_generate_summary or settings.index_generate_keywords:
-            ai_analysis = analyze_with_ai(clean_text, settings)
-        else:
-            ai_analysis = {"summary": "", "keywords": []}
-        
-        return {
-            "clean_text": clean_text,
-            "basic_info": basic_info,
-            "summary": ai_analysis.get("summary", ""),
-            "keywords": ai_analysis.get("keywords", []),
-            "structured_data": ai_analysis.get("structured_data", {})
-        }
-    except Exception as e:
-        return {
-            "clean_text": text,
-            "basic_info": {},
-            "summary": "",
-            "keywords": [],
-            "structured_data": {},
-            "error": str(e)
-        }
 
+# ========= 공통 유틸 =========
 
 def clean_text_content(text: str) -> str:
-    """텍스트를 정리하고 정규화합니다."""
+    """텍스트를 정리하고 정규화 (OCR 품질 개선)."""
     if not text:
         return ""
     
-    # 불필요한 공백 제거
-    text = re.sub(r'\s+', ' ', text)
+    # 1. 불필요한 특수문자 제거 (한글, 영문, 숫자, 기본 문장부호만 유지)
+    text = re.sub(r'[^\w\s\.,!?;:()\-_@#$%&*+=<>\[\]{}|\\/가-힣]', '', text)
     
-    # 줄바꿈 정리
+    # 2. 다중 공백 정리
+    text = re.sub(r'[ \t]+', ' ', text)
+    
+    # 3. 과한 빈 줄 정리
     text = re.sub(r'\n\s*\n', '\n\n', text)
     
-    # 특수문자 정리
-    text = re.sub(r'[^\w\s\.,!?;:()\-_@#$%&*+=<>\[\]{}|\\/]', '', text)
+    # 4. 의미없는 반복 패턴 제거
+    text = re.sub(r'(프로젝트에서 맡은 주요업무를 적어주세요\s*)+', '프로젝트에서 맡은 주요업무를 적어주세요', text)
+    text = re.sub(r'(텍스트를 입력해주세요\s*)+', '텍스트를 입력해주세요', text)
+    
+    # 5. 불필요한 숫자 패턴 정리 (연도는 유지)
+    text = re.sub(r'\b\d{1,2}\s*[~-]\s*\d{1,2}\s*[~-]\s*\d{4}\b', '', text)  # 날짜 범위 제거
+    text = re.sub(r'\b\d{4}\s*[~-]\s*\d{4}\b', '', text)  # 연도 범위 제거
+    
+    # 6. 의미없는 단어들 제거
+    meaningless_words = [
+        '프로젝트에서 맡은 주요업무를 적어주세요',
+        '텍스트를 입력해주세요',
+        '사용한',
+        '사이즈는',
+        '행간은',
+        '자간은',
+        '입니다',
+        '입력해주세요'
+    ]
+    for word in meaningless_words:
+        text = re.sub(rf'\b{re.escape(word)}\b', '', text, flags=re.IGNORECASE)
+    
+    # 7. 연속된 공백과 줄바꿈 정리
+    text = re.sub(r'\s+', ' ', text)
+    text = re.sub(r'\n\s*\n', '\n\n', text)
     
     return text.strip()
 
 
 def extract_basic_info(text: str) -> Dict[str, Any]:
-    """기본 정보를 추출합니다 (Gemini AI 우선, 정규식 기반 폴백)."""
+    """기본 정보 추출 (AI 우선, 규칙 기반 폴백)."""
     info = {
         "emails": [],
         "phones": [],
@@ -78,59 +80,61 @@ def extract_basic_info(text: str) -> Dict[str, Any]:
         "companies": [],
         "education": [],
         "skills": [],
-        "addresses": []
+        "addresses": [],
     }
     
-    # Gemini AI를 사용한 분석 시도
-    try:
-        openai_service = OpenAIService(model_name="gpt-3.5-turbo") if OpenAIService else None
-        
-        # 비동기 함수를 동기적으로 실행
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
+    # 동기식 OpenAI 클라이언트로 AI 분석 시도
+    if sync_client:
         try:
-            ai_prompt = f"""
-다음은 이력서에서 추출한 텍스트입니다. 이 텍스트에서 다음 정보들을 정확히 추출해주세요:
+            ai_prompt = f"""다음은 OCR로 추출한 이력서 텍스트입니다. OCR 과정에서 일부 텍스트가 깨졌을 수 있으니, 가능한 정보만 추출해주세요.
 
 텍스트:
 {text}
 
 다음 정보들을 JSON 형태로 추출해주세요:
-1. 이름 (가장 가능성이 높은 하나의 이름만)
-2. 이메일 주소
-3. 전화번호
-4. 직책/포지션
-5. 회사명
-6. 학력 정보
-7. 주요 스킬/기술
-8. 주소
+1. 이름 (가장 가능성이 높은 하나의 이름만, 한글 이름 우선)
+2. 이메일 주소 (정확한 이메일 형식)
+3. 전화번호 (010-1234-5678 형식)
+4. 직책/포지션 (개발자, 디자이너, 기획자 등)
+5. 회사명 (미리캔버스, 미리물산 등)
+6. 학력 정보 (미리대학교 시각디자인학과 등)
+7. 주요 스킬/기술 (Adobe Photoshop, Illustrator 등)
+8. 주소 (서울 구로구 등)
+
+주의사항:
+- OCR 오류로 인해 일부 텍스트가 깨져있을 수 있습니다
+- 확실하지 않은 정보는 빈 문자열("")로 설정하세요
+- 한글 이름과 회사명을 우선적으로 찾아주세요
+- 기술 스킬은 Adobe 제품군, 프로그래밍 언어 등을 찾아주세요
 
 응답은 반드시 다음과 같은 JSON 형태로만 작성해주세요:
 {{
     "name": "추출된 이름",
     "email": "추출된 이메일",
-    "phone": "추출된 전화번호", 
+    "phone": "추출된 전화번호",
     "position": "추출된 직책",
     "company": "추출된 회사명",
     "education": "추출된 학력",
     "skills": "추출된 스킬",
     "address": "추출된 주소"
-}}
+}}"""
 
-만약 특정 정보를 찾을 수 없다면 해당 필드는 빈 문자열("")로 설정해주세요.
-"""
-
-            ai_response = loop.run_until_complete(
-                openai_service.generate_response(ai_prompt)
+            response = sync_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "너는 이력서 분석 AI야. 텍스트에서 정보를 정확히 추출해."},
+                    {"role": "user", "content": ai_prompt}
+                ],
+                max_tokens=1000
             )
             
             # JSON 파싱 시도
             try:
-                json_start = ai_response.find('{')
-                json_end = ai_response.rfind('}') + 1
-                if json_start != -1 and json_end != 0:
-                    json_str = ai_response[json_start:json_end]
+                content = response.choices[0].message.content.strip()
+                json_start = content.find('{')
+                json_end = content.rfind('}') + 1
+                if json_start != -1 and json_end > json_start:
+                    json_str = content[json_start:json_end]
                     ai_data = json.loads(json_str)
                     
                     # AI 결과를 info에 매핑
@@ -153,216 +157,181 @@ def extract_basic_info(text: str) -> Dict[str, Any]:
                     
                     print(f"AI 분석 결과: {ai_data}")
                     return info
-                    
             except Exception as e:
                 print(f"AI JSON 파싱 실패: {e}")
-                
-        finally:
-            loop.close()
-            
-    except Exception as e:
-        print(f"AI 분석 실패, 규칙 기반으로 폴백: {e}")
+        except Exception as e:
+            print(f"AI 분석 실패: {e}")
     
-    # AI 분석이 실패한 경우 규칙 기반 분석으로 폴백
-    
-    # 이메일 추출
-    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+    # AI 실패 시 규칙 기반 분석으로 폴백
+
+    # 이메일
+    email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}\b'
     info["emails"] = re.findall(email_pattern, text)
-    
-    # 전화번호 추출
-    phone_pattern = r'(\+?[\d\s\-\(\)]{10,})'
-    info["phones"] = re.findall(phone_pattern, text)
-    
-    # 날짜 추출
-    date_pattern = r'\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}'
+
+    # 전화번호(간단)
+    phone_pattern = r'(\+?\d[\d\s\-()]{9,})'
+    info["phones"] = [p.strip() for p in re.findall(phone_pattern, text)]
+
+    # 날짜
+    date_pattern = r'\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2}|\d{1,2}[-/\.]\d{1,2}[-/\.]\d{4}'
     info["dates"] = re.findall(date_pattern, text)
-    
-    # URL 추출
+
+    # URL
     url_pattern = r'https?://[^\s]+'
     info["urls"] = re.findall(url_pattern, text)
-    
-    # 이름 추출 (이력서에서 가장 가능성이 높은 하나의 이름만 추출)
-    name_patterns = [
-        # 1. 가장 명확한 라벨 기반 이름 추출 (우선순위 최고)
-        r'(?:이름|성명|Name|name)\s*[:\-]?\s*([가-힣]{2,4})',
-        # 2. 개인정보 섹션에서 이름
-        r'(?:개인정보|Personal Information)\s*[:\-]?\s*([가-힣]{2,4})',
-        # 3. 연락처 정보에서 이름
-        r'(?:연락처|Contact|contact)\s*[:\-]?\s*([가-힣]{2,4})',
-        # 4. 이메일에서 추출 (한글 이름이 있는 경우)
-        r'([가-힣]{2,4})@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
-        # 5. 전화번호 앞의 이름 (이름 + 전화번호 패턴)
-        r'([가-힣]{2,4})\s*[0-9]{2,3}-[0-9]{3,4}-[0-9]{4}',
-        # 6. 직책 앞의 이름 (이름 + 직책 패턴)
-        r'([가-힣]{2,4})\s*(?:팀장|과장|대리|사원|부장|이사|CEO|CTO|CFO)',
-        # 7. 호칭과 함께 있는 이름 (이름 + 호칭 패턴)
-        r'([가-힣]{2,4})\s*(?:님|씨|선생님|대표|사장)',
-        # 8. 괄호 안의 이름 (이름만 있는 경우)
-        r'\(([가-힣]{2,4})\)',
-        # 9. RESUME 앞에 있는 이름 (새로운 패턴)
-        r'([가-힣]{2,4})\s+RESUME',
-        # 10. 이메일 앞에 있는 이름
-        r'([가-힣]{2,4})\s+[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}',
-        # 11. 전화번호 앞에 있는 이름
-        r'([가-힣]{2,4})\s*\+?[\d\s\-\(\)]{10,}',
-        # 12. 직책과 함께 있는 이름 (이름 + 직책) - 수정
-        r'(?:그래픽디자이너|디자이너|개발자|프로그래머|엔지니어|기획자|마케터|영업|인사|회계)\s*,\s*([가-힣]{2,4})',
-        # 13. 문서 맨 위에 독립적으로 있는 이름 (이력서 시작 부분) - 수정
-        r'^([가-힣]{2,4})\n'
+
+    # 이름(한국어 2~4자 후보)
+    name_candidates = re.findall(r'(?<![가-힣])([가-힣]{2,4})(?![가-힣])', text)
+    # 과잉 추출 방지: 흔한 섹션/용어 제외
+    blacklist = {"주소","전화","이메일","연락처","학력","경력","스킬","프로젝트","자격증","수상"}
+    info["names"] = [n for n in set(name_candidates) if n not in blacklist]
+
+    # 직책
+    pos_pattern = r'(팀장|과장|대리|사원|부장|이사|대표|CEO|CTO|CFO|PM|PL|개발자|엔지니어|디자이너|기획자|마케터)'
+    info["positions"] = list(set(re.findall(pos_pattern, text)))
+
+    # 회사명(간단)
+    comp_pattern = r'([가-힣A-Za-z0-9&\.]+)(주식회사|㈜|Corp|Inc|Ltd|LLC|회사|그룹|스튜디오|랩|연구소)'
+    info["companies"] = [m[0] for m in re.findall(comp_pattern, text)]
+
+    # 학력(간단)
+    edu_pattern = r'([가-힣A-Za-z\s]+)(대학교|University|College|고등학교|High School)'
+    info["education"] = [''.join(m) for m in re.findall(edu_pattern, text)]
+
+    # 스킬(키워드 매칭)
+    skill_keywords = r'(Python|Java|JavaScript|TypeScript|React|Vue|Angular|Node\.js|Django|Flask|Spring|MySQL|PostgreSQL|MongoDB|AWS|Azure|Docker|Kubernetes|Git|Linux)'
+    info["skills"] = list(set(re.findall(skill_keywords, text, re.IGNORECASE)))
+
+    # 주소(간단)
+    addr_patterns = [
+        r'([가-힣]+시\s+[가-힣]+구\s+[가-힣0-9]+(동|로|길)[^\n,)]*)',
+        r'([가-힣]+도\s+[가-힣]+시\s+[가-힣]+구[^\n,)]*)',
     ]
-    
-    # 이름 추출 및 중복 제거
-    all_names = []
-    for i, pattern in enumerate(name_patterns):
-        matches = re.findall(pattern, text, re.IGNORECASE | re.MULTILINE)
-        if isinstance(matches, list):
-            all_names.extend(matches)
-        else:
-            all_names.append(matches)
-        # 디버깅 로그
-        if matches:
-            print(f"Pattern {i+1} found: {matches}")
-    
-    print(f"All names found: {all_names}")
-    
-    # 이름 후보들을 정리하고 가장 가능성이 높은 하나만 선택
-    if all_names:
-        # 빈 문자열 제거 및 정리
-        clean_names = [name.strip() for name in all_names if name.strip()]
-        print(f"Clean names: {clean_names}")
-        
-        # 중복 제거
-        unique_names = list(set(clean_names))
-        print(f"Unique names: {unique_names}")
-        
-        # 이름 유효성 검사 (한국어 이름 패턴)
-        valid_names = []
-        for name in unique_names:
-            # 2-4자 한글 이름만 허용
-            if re.match(r'^[가-힣]{2,4}$', name):
-                # 일반적인 한국어 성씨 패턴 확인 (더 관대하게)
-                common_surnames = ['김', '이', '박', '최', '정', '강', '조', '윤', '장', '임', '한', '오', '서', '신', '권', '황', '안', '송', '류', '전', '고', '문', '양', '손', '배', '조', '백', '허', '유', '남', '심', '노', '정', '하', '곽', '성', '차', '주', '우', '구', '신', '임', '나', '전', '민', '유', '진', '지', '엄', '채', '원', '천', '방', '공', '강', '현', '함', '변', '염', '양', '변', '여', '추', '노', '도', '소', '신', '석', '선', '설', '마', '길', '주', '연', '방', '위', '표', '명', '기', '동', '라', '엄', '옹', '능', '제', '모', '장', '남', '궉', '봉', '정', '홍', '가', '복', '태', '빈', '견', '화', '흥', '갈', '기', '근', '금', '기', '길', '김', '나', '단', '담', '대', '덕', '도', '동', '두', '라', '래', '로', '루', '리', '림', '마', '만', '명', '무', '문', '미', '민', '반', '방', '배', '범', '법', '벽', '별', '병', '보', '복', '본', '부', '분', '비', '빈', '사', '산', '삼', '상', '새', '생', '서', '석', '선', '설', '성', '세', '소', '손', '송', '쇠', '수', '순', '술', '승', '시', '신', '실', '심', '아', '안', '애', '야', '양', '어', '억', '언', '엄', '여', '연', '열', '염', '엽', '영', '예', '오', '옥', '완', '왕', '요', '용', '우', '원', '월', '위', '유', '육', '윤', '율', '으', '은', '을', '음', '의', '이', '익', '인', '일', '자', '작', '잔', '장', '재', '전', '정', '제', '조', '종', '좌', '주', '죽', '준', '중', '지', '진', '질', '집', '차', '찬', '창', '채', '책', '처', '천', '철', '청', '초', '총', '최', '추', '축', '춘', '출', '충', '취', '측', '치', '친', '칠', '침', '칭', '쾌', '타', '탁', '탄', '탈', '탐', '태', '택', '판', '편', '평', '폐', '포', '표', '품', '하', '학', '한', '할', '함', '합', '항', '해', '행', '향', '허', '헌', '험', '혁', '현', '혈', '협', '형', '혜', '호', '혹', '혼', '화', '확', '환', '활', '황', '회', '획', '효', '후', '훈', '훤', '훙', '휘', '휴', '휼', '흉', '흑', '흔', '흘', '흙', '흠', '흡', '흥', '희', '힐', '힘']
-                
-                # 명확히 제외할 단어들만 필터링 (최소한으로 제한)
-                exclude_words = ['주소', '전화', '이메일', '연락처', '생년월일', '학력', '경력', '스킬', '프로젝트', '자격증', '수상', '언어', '취미', '특기', '가족', '결혼', '병역', '신장', '체중', '혈액형', '종교', '정당', '국적', '본적', '현주소', '거주지', '사는곳', '근무지', '직장', '회사', '소속', '부서', '팀', '직책', '직위', '담당', '업무', '담당업무', '담당자', '관리자', '책임자', '대표', '사장', '이사', '부장', '팀장', '과장', '대리', '사원', '주임', '계장', '선임', '수석', '선배', '후배', '동료', '상사', '부하', '직원', '근로자', '노동자', '사무직', '생산직', '기술직', '관리직', '전문직', '자유직', '프리랜서', '사업자', '개인사업자', '법인사업자', '소득세', '부가가치세', '법인세', '소득공제', '세금', '세무', '회계', '재무', '경영', '마케팅', '영업', '인사', '총무', '기획', '전략', '기술', '개발', '연구', '설계', '구현', '테스트', '배포', '운영', '유지보수', '품질', '보안', '네트워크', '서버', '클라이언트', '데이터베이스', '웹', '앱', '모바일', '클라우드', 'AI', '머신러닝', '딥러닝', '데이터', '분석', '통계', '리포트', '문서', '계약서', '매뉴얼', '가이드', '튜토리얼', '교육', '훈련', '세미나', '컨퍼런스', '워크샵', '미팅', '회의', '프레젠테이션', '발표', '강의', '멘토링', '코칭', '컨설팅', '어드바이스', '조언', '제안', '제안서', '기획서', '보고서', '결과', '성과', '실적', '업적', '수치', '지표', '목표', '계획', '전략', '방향', '비전', '미션', '가치', '문화', '환경', '조건', '요구사항', '필요사항', '우대사항', '자격요건', '지원자격', '모집요강', '채용', '구인', '구직', '이직', '퇴사', '은퇴', '정년', '연봉', '급여', '월급', '연봉', '보너스', '성과급', '수당', '복리후생', '보험', '연금', '퇴직금', '퇴직연금', '국민연금', '건강보험', '고용보험', '산재보험', '의료보험', '장기요양보험', '국민건강보험', '국민연금공단', '건강보험공단', '고용보험공단', '산재보험공단', '의료보험공단', '장기요양보험공단', '제주명조', '명조', '고딕', '바탕', '돋움', '궁서', '굴림', '맑은', '새굴림', '맑은고딕', '맑은명조', '맑은바탕', '맑은돋움', '맑은궁서', '맑은굴림', '맑은새굴림', '행간은', '행간', '자간은', '자간', '사이즈는', '사이즈', '폰트는', '폰트', '사용한', '텍스트를', '입력해주세요', '사용한', '폰트', '제주명조체', '명조체', '고딕체', '바탕체', '돋움체', '궁서체', '굴림체', '맑은체', '새굴림체', '맑은고딕체', '맑은명조체', '맑은바탕체', '맑은돋움체', '맑은궁서체', '맑은굴림체', '맑은새굴림체', '디자인팀', '개발팀', '기획팀', '마케팅팀', '영업팀', '인사팀', '회계팀', '총무팀', '기술팀', '연구팀', '품질팀', '보안팀', '운영팀', '유지보수팀', '데이터팀', 'AI팀', '클라우드팀', '웹팀', '앱팀', '모바일팀', '프론트엔드팀', '백엔드팀', '풀스택팀', 'DevOps팀', '네트워크팀', '서버팀', '데이터베이스팀', 'UI팀', 'UX팀', '그래픽팀', '시각팀', '콘텐츠팀', '편집팀', '미디어팀', '커뮤니케이션팀', '홍보팀', '브랜드팀', '전략팀', '기획팀', '분석팀', '통계팀', '리서치팀', '컨설팅팀', '교육팀', '훈련팀', '멘토링팀', '코칭팀', '어드바이스팀', '조언팀', '제안팀', '프로젝트팀', '프로덕트팀', '서비스팀', '고객팀', '지원팀', '헬프팀', '문의팀', '상담팀', '커스터머팀', '사용자팀', '유저팀', '클라이언트팀', '파트너팀', '협력팀', '제휴팀', '아웃소싱팀', '외주팀', '계약팀', '법무팀', '규정팀', '정책팀', '규정팀', '감사팀', '검토팀', '평가팀', '심사팀', '선별팀', '채용팀', '구인팀', '인재팀', '인력팀', '조직팀', '구조팀', '시스템팀', '플랫폼팀', '인프라팀', '환경팀', '설정팀', '구성팀', '배치팀', '배포팀', '릴리즈팀', '버전팀', '업데이트팀', '업그레이드팀', '마이그레이션팀', '전환팀', '이관팀', '이전팀', '복사팀', '백업팀', '복구팀', '복원팀', '재구성팀', '재구축팀', '재설계팀', '재개발팀', '재구현팀', '재테스트팀', '재배포팀', '재운영팀', '재유지보수팀', '홈페이지']
-                
-                # 성씨가 맞고 제외 단어가 아니면 유효한 이름으로 간주
-                if name[0] in common_surnames and name not in exclude_words:
-                    valid_names.append(name)
-                    print(f"Valid name found: {name}")
-                # 성씨가 맞지 않아도 제외 단어가 아니면 유효한 이름으로 간주 (OCR 품질 문제 대응)
-                elif name not in exclude_words:
-                    valid_names.append(name)
-                    print(f"Valid name found (without surname check): {name}")
-        
-        print(f"Final valid names: {valid_names}")
-        
-        # 간단한 로직: 첫 번째 유효한 이름을 선택
-        if valid_names:
-            info["names"] = [valid_names[0]]
-            print(f"Selected name: {info['names']}")
-        else:
-            info["names"] = []
-            print("No valid names found")
-    else:
-        info["names"] = []
-        print("No names found at all")
-    
-    # 직책 추출
-    position_patterns = [
-        r'(?:직책|직위|Position|position)\s*[:\-]?\s*([가-힣A-Za-z\s]+)',
-        r'(?:담당|담당자|Manager|manager)\s*[:\-]?\s*([가-힣A-Za-z\s]+)',
-        r'(?:팀장|과장|대리|사원|부장|이사|CEO|CTO|CFO|PM|PL)',
-        r'(?:Senior|Junior|Lead|Principal|Staff|Associate)\s+[A-Za-z\s]+',
-        r'(?:개발자|프로그래머|엔지니어|디자이너|기획자|마케터|영업|인사|회계)'
-    ]
-    
-    for pattern in position_patterns:
-        matches = re.findall(pattern, text, re.IGNORECASE)
-        if isinstance(matches, list):
-            info["positions"].extend(matches)
-        else:
-            info["positions"].append(matches)
-    
-    # 회사명 추출
-    company_patterns = [
-        r'(?:회사|Company|company|소속|근무)\s*[:\-]?\s*([가-힣A-Za-z\s&\.]+)',
-        r'([가-힣A-Za-z\s&\.]+)(?:주식회사|㈜|㈐|Corp|Inc|Ltd|LLC)',
-        r'(?:재직|근무|소속)\s*[:\-]?\s*([가-힣A-Za-z\s&\.]+)'
-    ]
-    
-    for pattern in company_patterns:
-        matches = re.findall(pattern, text, re.IGNORECASE)
-        info["companies"].extend(matches)
-    
-    # 학력 추출
-    education_patterns = [
-        r'(?:학력|Education|education|학위|Degree|degree)\s*[:\-]?\s*([가-힣A-Za-z\s&\.]+)',
-        r'([가-힣A-Za-z\s&\.]+)(?:대학교|University|College|고등학교|High School)',
-        r'(?:학사|석사|박사|Bachelor|Master|PhD|Ph\.D)',
-        r'(?:전공|Major|major)\s*[:\-]?\s*([가-힣A-Za-z\s]+)'
-    ]
-    
-    for pattern in education_patterns:
-        matches = re.findall(pattern, text, re.IGNORECASE)
-        if isinstance(matches, list):
-            info["education"].extend(matches)
-        else:
-            info["education"].append(matches)
-    
-    # 스킬/기술 추출
-    skill_patterns = [
-        r'(?:스킬|기술|Skills|skills|기술스택|Tech Stack)\s*[:\-]?\s*([가-힣A-Za-z\s,]+)',
-        r'(?:Python|Java|JavaScript|React|Vue|Angular|Node\.js|Django|Flask|Spring|MySQL|PostgreSQL|MongoDB|AWS|Azure|Docker|Kubernetes|Git|Linux|Windows|Mac|HTML|CSS|SASS|TypeScript|PHP|C\+\+|C#|Go|Rust|Swift|Kotlin|Flutter|React Native)',
-        r'(?:프론트엔드|백엔드|풀스택|웹개발|앱개발|데이터분석|AI|머신러닝|딥러닝|클라우드|DevOps|보안|네트워크|데이터베이스|UI/UX|그래픽디자인|마케팅|영업|인사|회계|법무)'
-    ]
-    
-    for pattern in skill_patterns:
-        matches = re.findall(pattern, text, re.IGNORECASE)
-        if isinstance(matches, list):
-            info["skills"].extend(matches)
-        else:
-            info["skills"].append(matches)
-    
-    # 주소 추출
-    address_patterns = [
-        r'(?:주소|Address|address|거주지|사는곳)\s*[:\-]?\s*([가-힣A-Za-z\s\d\-]+)',
-        r'([가-힣]+시\s+[가-힣]+구\s+[가-힣]+동)',
-        r'([가-힣]+도\s+[가-힣]+시\s+[가-힣]+구)',
-        r'([가-힣]+시\s+[가-힣]+구)'
-    ]
-    
-    for pattern in address_patterns:
-        matches = re.findall(pattern, text, re.IGNORECASE)
-        info["addresses"].extend(matches)
-    
-    # 중복 제거 및 정리
-    for key in info:
-        if isinstance(info[key], list):
-            # 빈 문자열 제거
-            info[key] = [item.strip() for item in info[key] if item.strip()]
-            # 중복 제거
-            info[key] = list(set(info[key]))
-            # 길이순 정렬
-            info[key].sort(key=len, reverse=True)
-    
+    addresses = []
+    for pat in addr_patterns:
+        addresses += [m[0] if isinstance(m, tuple) else m for m in re.findall(pat, text)]
+    info["addresses"] = list({a.strip() for a in addresses if a.strip()})
+
+    # 정리
+    for k, v in info.items():
+        if isinstance(v, list):
+            info[k] = sorted(list({x.strip() for x in v if str(x).strip()}), key=len, reverse=True)
+
     return info
 
 
-def analyze_with_ai(text: str, settings: Settings) -> Dict[str, Any]:
-    """AI LLM을 사용해서 텍스트를 분석합니다."""
-    try:
-        # Gemini AI를 사용한 분석
-        openai_service = OpenAIService(model_name="gpt-3.5-turbo") if OpenAIService else None
-        
-        # 비동기 함수를 동기적으로 실행
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
+def generate_summary(text: str) -> str:
+    if not text:
+        return ""
+    sentences = [s.strip() for s in re.split(r'[.!?]+\s*', text) if len(s.strip()) > 10]
+    if not sentences:
+        return text[:200] + ("..." if len(text) > 200 else "")
+    if len(sentences) <= 3:
+        return " ".join(sentences)
+    return ". ".join([sentences[0], sentences[len(sentences)//2], sentences[-1]]) + "."
+
+
+def extract_keywords(text: str) -> List[str]:
+    """OCR로 뽑은 텍스트에서 키워드를 추출 (AI 우선, 규칙 기반 폴백)"""
+    if not text:
+        return []
+    
+    # 동기식 OpenAI 클라이언트 사용
+    if sync_client:
         try:
-            # 기본 정보 추출을 위한 프롬프트
-            basic_info_prompt = f"""
-다음은 이력서에서 추출한 텍스트입니다. 이 텍스트에서 다음 정보들을 정확히 추출해주세요:
+            response = sync_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "너는 OCR 분석 보조 AI야. OCR로 추출된 텍스트에서 의미있는 키워드만 추출해. 깨진 텍스트나 의미없는 단어는 제외하고, 기술 스킬, 직무, 회사명, 학력 등 중요한 정보만 키워드로 추출해."},
+                    {"role": "user", "content": f"다음 OCR 텍스트에서 중요한 키워드 10개를 추출해주세요:\n\n{text}\n\n추출할 키워드 유형:\n- 기술 스킬 (Adobe Photoshop, Illustrator 등)\n- 직무 (디자이너, 개발자 등)\n- 회사명 (미리캔버스 등)\n- 학력 (미리대학교 등)\n- 자격증 (TOEIC, 컬러리스트 등)\n\n응답은 반드시 JSON 형태로만 작성해주세요:\n{{\"keywords\": [\"키워드1\", \"키워드2\", ...]}}"}
+                ],
+                max_tokens=300
+            )
+            
+            # JSON 파싱 시도
+            try:
+                import json
+                content = response.choices[0].message.content.strip()
+                json_start = content.find('{')
+                json_end = content.rfind('}') + 1
+                if json_start != -1 and json_end > json_start:
+                    json_str = content[json_start:json_end]
+                    data = json.loads(json_str)
+                    keywords = data.get("keywords", [])
+                    if keywords:
+                        return keywords[:10]  # 최대 10개
+            except Exception as e:
+                print(f"AI 키워드 JSON 파싱 실패: {e}")
+        except Exception as e:
+            print(f"AI 키워드 추출 실패: {e}")
+    
+    # AI 실패 시 규칙 기반 키워드 추출
+    bag = [
+        "이력서","자기소개서","경력","학력","스킬","프로젝트","개발","데이터","AI","배포","운영",
+        "resume","cv","experience","education","skills","project","development","database","server",
+    ]
+    found = []
+    low = text.lower()
+    for kw in bag:
+        if (kw.isascii() and kw in low) or (not kw.isascii() and kw in text):
+            found.append(kw)
+    return list(dict.fromkeys(found))[:10]  # 순서 보존 중복제거
+
+
+def detect_document_type(text: str) -> str:
+    t = text.lower()
+    if any(w in t for w in ["이력서","resume","cv","경력사항"]): return "resume"
+    if any(w in t for w in ["자기소개서","cover letter","소개서"]): return "cover_letter"
+    if any(w in t for w in ["보고서","report","분석","analysis"]): return "report"
+    if any(w in t for w in ["계약서","contract","협약","agreement"]): return "contract"
+    if any(w in t for w in ["매뉴얼","manual","가이드","guide"]): return "manual"
+    return "general"
+
+
+def extract_sections(text: str) -> Dict[str, str]:
+    sections: Dict[str, str] = {}
+    pats = {
+        "개인정보": r"(개인정보|Personal Information|이름|Name)\s*[:\-]?\s*([^\n]+)",
+        "학력": r"(학력|Education|학위|Degree)\s*[:\-]?\s*([^\n]+)",
+        "경력": r"(경력|Experience|Work History|업무경험)\s*[:\-]?\s*([^\n]+)",
+        "스킬": r"(스킬|Skills|기술|Technology)\s*[:\-]?\s*([^\n]+)",
+        "프로젝트": r"(프로젝트|Project)\s*[:\-]?\s*([^\n]+)",
+    }
+    for k, pat in pats.items():
+        m = re.findall(pat, text, re.IGNORECASE)
+        if m:
+            sections[k] = m[0][1] if isinstance(m[0], tuple) else m[0]
+    return sections
+
+
+def extract_entities(text: str) -> Dict[str, List[str]]:
+    ents = {"organizations": [], "locations": [], "dates": [], "numbers": []}
+    ents["dates"] = re.findall(r'\d{4}[-/\.]\d{1,2}[-/\.]\d{1,2}', text)
+    ents["numbers"] = re.findall(r'\b\d+(?:\.\d+)?\b', text)
+    # 간단 추출 (영문 기관명)
+    ents["organizations"] = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', text)
+    return ents
+
+
+def extract_structured_data(text: str) -> Dict[str, Any]:
+    return {
+        "document_type": detect_document_type(text),
+        "sections": extract_sections(text),
+        "entities": extract_entities(text),
+    }
+
+
+# ========= AI 경로 =========
+
+async def analyze_with_ai(text: str, settings: Settings) -> Dict[str, Any]:
+    """OpenAIService를 사용(가능하면)하고, 실패 시 규칙 기반으로 폴백."""
+    try:
+        if not OpenAIService:
+            raise RuntimeError("OpenAIService 모듈을 찾을 수 없음")
+
+        service = OpenAIService(model_name="gpt-4o-mini")
+
+        basic_info_prompt = f"""다음은 이력서에서 추출한 텍스트입니다. 이 텍스트에서 다음 정보들을 정확히 추출해주세요:
 
 텍스트:
 {text}
@@ -381,20 +350,17 @@ def analyze_with_ai(text: str, settings: Settings) -> Dict[str, Any]:
 {{
     "name": "추출된 이름",
     "email": "추출된 이메일",
-    "phone": "추출된 전화번호", 
+    "phone": "추출된 전화번호",
     "position": "추출된 직책",
     "company": "추출된 회사명",
     "education": "추출된 학력",
     "skills": "추출된 스킬",
     "address": "추출된 주소"
 }}
-
 만약 특정 정보를 찾을 수 없다면 해당 필드는 빈 문자열("")로 설정해주세요.
 """
 
-            # 요약 생성을 위한 프롬프트
-            summary_prompt = f"""
-다음 이력서 텍스트를 간단하고 명확하게 요약해주세요:
+        summary_prompt = f"""다음 이력서 텍스트를 간단하고 명확하게 요약해주세요:
 
 {text}
 
@@ -406,9 +372,7 @@ def analyze_with_ai(text: str, settings: Settings) -> Dict[str, Any]:
 2-3문장으로 간결하게 작성해주세요.
 """
 
-            # 키워드 추출을 위한 프롬프트
-            keywords_prompt = f"""
-다음 이력서 텍스트에서 중요한 키워드 10개를 추출해주세요:
+        keywords_prompt = f"""다음 이력서 텍스트에서 중요한 키워드 10개를 추출해주세요:
 
 {text}
 
@@ -423,222 +387,182 @@ JSON 형태로 응답해주세요:
 }}
 """
 
-            # OpenAI 호출
-            basic_info_response = loop.run_until_complete(
-                openai_service.generate_response(basic_info_prompt)
-            )
-            summary_response = loop.run_until_complete(
-                openai_service.generate_response(summary_prompt)
-            )
-            keywords_response = loop.run_until_complete(
-                openai_service.generate_response(keywords_prompt)
-            )
-            
-            # JSON 파싱 시도
+        # 동시에 호출
+        basic_task = asyncio.create_task(service.generate_response(basic_info_prompt))
+        summary_task = asyncio.create_task(service.generate_response(summary_prompt))
+        keywords_task = asyncio.create_task(service.generate_response(keywords_prompt))
+
+        basic_resp, summary_resp, keywords_resp = await asyncio.gather(
+            basic_task, summary_task, keywords_task
+        )
+
+        # 파싱
+        basic_info = {}
+        try:
+            s, e = basic_resp.find('{'), basic_resp.rfind('}') + 1
+            if s != -1 and e > s:
+                basic_info = json.loads(basic_resp[s:e])
+        except Exception:
             basic_info = {}
-            try:
-                # JSON 부분만 추출
-                json_start = basic_info_response.find('{')
-                json_end = basic_info_response.rfind('}') + 1
-                if json_start != -1 and json_end != 0:
-                    json_str = basic_info_response[json_start:json_end]
-                    basic_info = json.loads(json_str)
-            except:
-                basic_info = {}
-            
+
+        keywords: List[str] = []
+        try:
+            s, e = keywords_resp.find('{'), keywords_resp.rfind('}') + 1
+            if s != -1 and e > s:
+                kobj = json.loads(keywords_resp[s:e])
+                keywords = kobj.get("keywords", [])
+        except Exception:
             keywords = []
-            try:
-                json_start = keywords_response.find('{')
-                json_end = keywords_response.rfind('}') + 1
-                if json_start != -1 and json_end != 0:
-                    json_str = keywords_response[json_start:json_end]
-                    keywords_data = json.loads(json_str)
-                    keywords = keywords_data.get('keywords', [])
-            except:
-                keywords = []
-            
-            analysis = {
-                "summary": summary_response,
-                "keywords": keywords,
-                "structured_data": {
-                    "document_type": detect_document_type(text),
-                    "sections": extract_sections(text),
-                    "entities": extract_entities(text),
-                    "basic_info": basic_info
-                }
-            }
-            
-        finally:
-            loop.close()
-        
-        return analysis
-        
+
+        return {
+            "summary": summary_resp,
+            "keywords": keywords,
+            "structured_data": {
+                "document_type": detect_document_type(text),
+                "sections": extract_sections(text),
+                "entities": extract_entities(text),
+                "basic_info": basic_info,
+            },
+        }
+
     except Exception as e:
-        print(f"AI 분석 중 오류 발생: {e}")
-        # 오류 발생 시 규칙 기반 분석으로 폴백
+        # 폴백
         return {
             "summary": generate_summary(text),
             "keywords": extract_keywords(text),
             "structured_data": extract_structured_data(text),
-            "error": str(e)
+            "error": str(e),
         }
 
 
-def generate_summary(text: str) -> str:
-    """텍스트 요약을 생성합니다."""
+# ========= 최상위 엔트리 =========
+
+def analyze_text(text: str, settings: Settings) -> Dict[str, Any]:
+    """텍스트를 분석하여 구조화된 정보를 추출 (완전 동기 버전)."""
+    try:
+        clean = clean_text_content(text)
+        basic = extract_basic_info(clean)
+
+        # 설정에 따라 AI 분석 실행 (동기식 함수들 사용)
+        if getattr(settings, "index_generate_summary", True) or getattr(settings, "index_generate_keywords", True):
+            # 동기식 AI 분석 함수들 사용
+            summary = summarize_text(clean) if getattr(settings, "index_generate_summary", True) else ""
+            keywords = extract_keywords(clean) if getattr(settings, "index_generate_keywords", True) else []
+            
+            # AI 분석 결과에서 더 정확한 basic_info 추출 시도
+            ai_basic_info = {}
+            try:
+                # AI를 통한 더 정확한 정보 추출
+                ai_prompt = f"""다음은 이력서에서 추출한 텍스트입니다. 이 텍스트에서 다음 정보들을 정확히 추출해주세요:
+
+텍스트:
+{clean}
+
+다음 정보들을 JSON 형태로 추출해주세요:
+1. 이름 (가장 가능성이 높은 하나의 이름만, 한글 이름 우선)
+2. 이메일 주소 (정확한 이메일 형식)
+3. 전화번호 (010-1234-5678 형식)
+4. 직책/포지션 (개발자, 디자이너, 기획자 등)
+
+응답은 반드시 다음과 같은 JSON 형태로만 작성해주세요:
+{{
+    "name": "추출된 이름",
+    "email": "추출된 이메일",
+    "phone": "추출된 전화번호",
+    "position": "추출된 직책"
+}}
+만약 특정 정보를 찾을 수 없다면 해당 필드는 빈 문자열("")로 설정해주세요."""
+
+                if sync_client:
+                    response = sync_client.chat.completions.create(
+                        model="gpt-4o-mini",
+                        messages=[
+                            {"role": "system", "content": "너는 이력서 분석 AI야. 주어진 텍스트에서 개인정보를 정확히 추출해서 JSON 형태로 응답해."},
+                            {"role": "user", "content": ai_prompt}
+                        ],
+                        max_tokens=300
+                    )
+                    
+                    ai_response = response.choices[0].message.content.strip()
+                    
+                    # JSON 파싱
+                    import json
+                    import re
+                    json_match = re.search(r'\{.*\}', ai_response, re.DOTALL)
+                    if json_match:
+                        ai_basic_info = json.loads(json_match.group())
+                        print(f"🤖 AI 분석 결과: {ai_basic_info}")
+            except Exception as e:
+                print(f"AI basic_info 추출 실패: {e}")
+                ai_basic_info = {}
+            
+            ai = {
+                "summary": summary,
+                "keywords": keywords,
+                "structured_data": {
+                    "document_type": detect_document_type(clean),
+                    "sections": extract_sections(clean),
+                    "entities": extract_entities(clean),
+                    "basic_info": {**basic, **ai_basic_info},  # 규칙 기반 + AI 결과 병합
+                }
+            }
+        else:
+            ai = {"summary": "", "keywords": [], "structured_data": {}}
+
+        # 최종 결과에서 basic_info를 최상위 레벨에도 포함
+        final_result = {
+            "clean_text": clean,
+            "basic_info": {**basic, **ai.get("structured_data", {}).get("basic_info", {})},  # 최상위 레벨
+            "summary": ai.get("summary", ""),
+            "keywords": ai.get("keywords", []),
+            "structured_data": ai.get("structured_data", {}),
+        }
+        
+        print(f"📊 최종 분석 결과 - basic_info: {final_result['basic_info']}")
+        
+        return final_result
+        
+    except Exception as e:
+        print(f"analyze_text 오류: {e}")
+        return {
+            "clean_text": text,
+            "basic_info": {},
+            "summary": "",
+            "keywords": [],
+            "structured_data": {},
+            "error": str(e),
+        }
+# --- 기존 함수 이름 호환용 래퍼들 ---
+
+def summarize_text(text: str) -> str:
+    """OCR로 뽑은 텍스트를 GPT-4o-mini로 요약 (동기식)"""
     if not text:
         return ""
     
-    # 간단한 요약 로직
-    sentences = re.split(r'[.!?]+', text)
-    sentences = [s.strip() for s in sentences if len(s.strip()) > 10]
-    
-    if len(sentences) <= 3:
-        return text[:200] + "..." if len(text) > 200 else text
-    
-    # 첫 번째, 중간, 마지막 문장 선택
-    summary_sentences = []
-    if sentences:
-        summary_sentences.append(sentences[0])
-    if len(sentences) > 2:
-        summary_sentences.append(sentences[len(sentences)//2])
-    if len(sentences) > 1:
-        summary_sentences.append(sentences[-1])
-    
-    return ". ".join(summary_sentences) + "."
-
-
-def extract_keywords(text: str) -> List[str]:
-    """키워드를 추출합니다."""
-    if not text:
-        return []
-    
-    # 한국어 키워드 패턴
-    korean_keywords = [
-        "이력서", "자기소개서", "경력", "학력", "스킬", "기술", "프로젝트", "업무", "담당",
-        "개발", "프로그래밍", "소프트웨어", "웹", "앱", "데이터베이스", "서버", "클라이언트",
-        "프론트엔드", "백엔드", "풀스택", "AI", "머신러닝", "딥러닝", "데이터", "분석",
-        "관리", "운영", "설계", "구현", "테스트", "배포", "유지보수", "최적화",
-        "성능", "보안", "품질", "문서", "리포트", "계획", "전략", "분석", "연구"
-    ]
-    
-    # 영어 키워드 패턴
-    english_keywords = [
-        "resume", "cv", "experience", "education", "skills", "project", "work", "job",
-        "development", "programming", "software", "web", "app", "database", "server",
-        "frontend", "backend", "fullstack", "ai", "machine learning", "data", "analysis",
-        "management", "operation", "design", "implementation", "test", "deploy", "maintenance",
-        "performance", "security", "quality", "document", "report", "plan", "strategy"
-    ]
-    
-    found_keywords = []
-    
-    # 한국어 키워드 검색
-    for keyword in korean_keywords:
-        if keyword in text:
-            found_keywords.append(keyword)
-    
-    # 영어 키워드 검색 (대소문자 구분 없이)
-    text_lower = text.lower()
-    for keyword in english_keywords:
-        if keyword.lower() in text_lower:
-            found_keywords.append(keyword)
-    
-    # 중복 제거하고 상위 10개만 반환
-    unique_keywords = list(set(found_keywords))
-    return unique_keywords[:10]
-
-
-def extract_structured_data(text: str) -> Dict[str, Any]:
-    """구조화된 데이터를 추출합니다."""
-    structured_data = {
-        "document_type": detect_document_type(text),
-        "sections": extract_sections(text),
-        "entities": extract_entities(text)
-    }
-    
-    return structured_data
-
-
-def detect_document_type(text: str) -> str:
-    """문서 유형을 감지합니다."""
-    text_lower = text.lower()
-    
-    if any(word in text_lower for word in ["이력서", "resume", "cv", "경력사항"]):
-        return "resume"
-    elif any(word in text_lower for word in ["자기소개서", "cover letter", "소개서"]):
-        return "cover_letter"
-    elif any(word in text_lower for word in ["보고서", "report", "분석", "analysis"]):
-        return "report"
-    elif any(word in text_lower for word in ["계약서", "contract", "협약", "agreement"]):
-        return "contract"
-    elif any(word in text_lower for word in ["매뉴얼", "manual", "가이드", "guide"]):
-        return "manual"
+    # 동기식 OpenAI 클라이언트 사용
+    if sync_client:
+        try:
+            response = sync_client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "너는 OCR 분석 보조 AI야. OCR로 추출된 텍스트에서 의미있는 정보만 추출해서 간결하게 요약해. 깨진 텍스트는 무시하고 확실한 정보만 포함해."},
+                    {"role": "user", "content": text}
+                ],
+                max_tokens=500
+            )
+            return response.choices[0].message.content.strip()
+        except Exception as e:
+            print(f"AI 요약 실패: {e}")
+            # AI 실패 시 규칙 기반 요약으로 폴백
+            return generate_summary(text)
     else:
-        return "general"
-
-
-def extract_sections(text: str) -> Dict[str, str]:
-    """문서의 섹션들을 추출합니다."""
-    sections = {}
-    
-    # 일반적인 섹션 제목들
-    section_patterns = {
-        "개인정보": r"(개인정보|Personal Information|이름|Name)[:\s]*([^\n]+)",
-        "학력": r"(학력|Education|학위|Degree)[:\s]*([^\n]+)",
-        "경력": r"(경력|Experience|Work History|업무경험)[:\s]*([^\n]+)",
-        "스킬": r"(스킬|Skills|기술|Technology)[:\s]*([^\n]+)",
-        "프로젝트": r"(프로젝트|Project|프로젝트 경험)[:\s]*([^\n]+)",
-        "자격증": r"(자격증|Certification|License)[:\s]*([^\n]+)",
-        "수상": r"(수상|Award|상|Prize)[:\s]*([^\n]+)",
-        "언어": r"(언어|Language|외국어)[:\s]*([^\n]+)"
-    }
-    
-    for section_name, pattern in section_patterns.items():
-        matches = re.findall(pattern, text, re.IGNORECASE)
-        if matches:
-            sections[section_name] = matches[0][1] if isinstance(matches[0], tuple) else matches[0]
-    
-    return sections
-
-
-def extract_entities(text: str) -> Dict[str, List[str]]:
-    """엔티티를 추출합니다."""
-    entities = {
-        "organizations": [],
-        "locations": [],
-        "dates": [],
-        "numbers": []
-    }
-    
-    # 조직명 추출 (대문자로 시작하는 연속된 단어들)
-    org_pattern = r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b'
-    entities["organizations"] = re.findall(org_pattern, text)
-    
-    # 날짜 추출
-    date_pattern = r'\d{4}[-/]\d{1,2}[-/]\d{1,2}|\d{1,2}[-/]\d{1,2}[-/]\d{4}'
-    entities["dates"] = re.findall(date_pattern, text)
-    
-    # 숫자 추출
-    number_pattern = r'\b\d+(?:\.\d+)?\b'
-    entities["numbers"] = re.findall(number_pattern, text)
-    
-    return entities
-
+        # OpenAI 클라이언트가 없으면 규칙 기반 요약
+        return generate_summary(text)
 
 def extract_fields(text: str) -> Dict[str, Any]:
-    """기존 함수와의 호환성을 위한 래퍼 함수."""
+    """기존 import 호환: extract_basic_info() 래핑"""
     return extract_basic_info(text)
 
-
-def summarize_text(text: str) -> str:
-    """기존 함수와의 호환성을 위한 래퍼 함수."""
-    return generate_summary(text)
-
-
 def clean_text(text: str) -> str:
-    """기존 함수와의 호환성을 위한 래퍼 함수."""
+    """기존 import 호환: clean_text_content() 래핑"""
     return clean_text_content(text)
-
-
-
