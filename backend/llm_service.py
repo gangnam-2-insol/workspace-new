@@ -78,10 +78,14 @@ class LLMService:
             print(f"[LLMService] 분석 결과 길이: {len(analysis_result) if analysis_result else 0}")
             print(f"[LLMService] 분석 결과 미리보기: {analysis_result[:100] if analysis_result else 'None'}...")
             
+            # 응답 파싱하여 구조화된 데이터 추출
+            parsed_analysis = self._parse_analysis_response(analysis_result)
+            
             print(f"[LLMService] === 유사성 분석 완료 ===")
             return {
                 "success": True,
                 "analysis": analysis_result,
+                "parsed_analysis": parsed_analysis,
                 "similarity_score": similarity_score,
                 "analyzed_at": datetime.now().isoformat()
             }
@@ -149,37 +153,193 @@ class LLMService:
         else:
             chunk_info = "청크 매칭 정보 없음"
         
-        prompt = f"""역할: 너는 유사성 판정 보조자다. 외부지식 절대 금지.
-입력: 이력서 A/B의 섹션 텍스트가 주어진다.
+        # 섹션별 키워드 추출을 위해 텍스트 길이 제한을 늘리고 더 명확한 지시사항 추가
+        prompt = f"""역할: 너는 자소서/이력서 유사성 분석 전문가다.
+임무: 두 문서의 각 섹션에서 핵심 키워드를 정확히 추출하고 유사성을 분석해라.
+
 엄격한 규칙:
-- 아래 텍스트에 실제로 있는 단어만 사용
-- 창작, 추측, 해석 절대 금지
-- 없으면 반드시 '없음'이라고 적어라
-- 4줄만 출력, 각 줄 40자 이내
+- 주어진 텍스트에 실제로 존재하는 단어만 사용
+- 각 섹션별로 핵심 키워드를 반드시 추출
+- 키워드는 명사, 동사, 형용사 위주로 추출
+- 섹션에 내용이 없으면 '없음'으로 표시
 
-## 이력서 A ({original_info['name']})
-성장배경: {original_info['growth_background'][:200]}
-지원동기: {original_info['motivation'][:200]}
-경력사항: {original_info['career_history'][:200]}
+## 조회이력서 ({original_info['name']})
+### 성장배경 섹션:
+{original_info['growth_background'][:400]}
 
-## 이력서 B ({similar_info['name']})
-성장배경: {similar_info['growth_background'][:200]}
-지원동기: {similar_info['motivation'][:200]}
-경력사항: {similar_info['career_history'][:200]}
+### 지원동기 섹션:
+{original_info['motivation'][:400]}
 
-출력 형식 (반드시 각 줄 사이에 공백 줄):
+### 경력사항 섹션:
+{original_info['career_history'][:400]}
 
-1) 유사부분: {{위 텍스트에서 실제 유사한 섹션만}}
+## 유사이력서 ({similar_info['name']})
+### 성장배경 섹션:
+{similar_info['growth_background'][:400]}
 
-2) 키워드: {{위 텍스트에 실제 나타난 단어만}}
+### 지원동기 섹션:
+{similar_info['motivation'][:400]}
 
-3) 요약: {{실제 텍스트 기반으로만}}
+### 경력사항 섹션:
+{similar_info['career_history'][:400]}
 
-4) 섹션키워드: 성장배경={{실제단어}}|지원동기={{실제단어}}|경력사항={{실제단어}}
+출력 형식 (각 항목을 정확히 구분):
 
-**경고: 위 텍스트에 없는 단어는 절대 사용하지 마라.**"""
+1) 전체키워드: {{두 문서에서 공통으로 나타나는 핵심 단어 최대 5개}}
+
+2) 유사섹션: {{가장 유사한 섹션 이름과 이유}}
+
+3) 섹션별키워드분석:
+- 성장배경: 조회이력서={{최대5개키워드}} | 유사이력서={{최대5개키워드}} | 공통키워드={{최대5개키워드}}
+- 지원동기: 조회이력서={{최대5개키워드}} | 유사이력서={{최대5개키워드}} | 공통키워드={{최대5개키워드}}
+- 경력사항: 조회이력서={{최대5개키워드}} | 유사이력서={{최대5개키워드}} | 공통키워드={{최대5개키워드}}
+
+4) 요약: {{유사도 {similarity_score:.1%} 기준으로 핵심 유사점}}
+
+**중요: 각 섹션에서 최대 5개의 핵심 키워드를 추출하되, 텍스트에 없는 단어는 절대 사용금지**"""
         
         return prompt
+    
+    def _parse_analysis_response(self, analysis_text: str) -> Dict[str, Any]:
+        """
+        LLM 응답을 파싱하여 구조화된 데이터로 변환합니다.
+        
+        Args:
+            analysis_text (str): LLM 응답 텍스트
+            
+        Returns:
+            Dict[str, Any]: 파싱된 구조화 데이터
+        """
+        try:
+            if not analysis_text:
+                return {}
+            
+            parsed_data = {
+                "전체키워드": [],
+                "유사섹션": "",
+                "섹션별키워드": {
+                    "성장배경": {"조회이력서": [], "유사이력서": [], "공통": []},
+                    "지원동기": {"조회이력서": [], "유사이력서": [], "공통": []},
+                    "경력사항": {"조회이력서": [], "유사이력서": [], "공통": []}
+                },
+                "요약": ""
+            }
+            
+            lines = analysis_text.split('\n')
+            current_section = None
+            
+            for line in lines:
+                line = line.strip()
+                if not line:
+                    continue
+                
+                # 1) 전체키워드 파싱
+                if line.startswith('1)') and '전체키워드' in line:
+                    keywords = line.split(':', 1)[1].strip() if ':' in line else ""
+                    all_keywords = [k.strip() for k in keywords.split(',') if k.strip()]
+                    parsed_data["전체키워드"] = all_keywords[:5]  # 최대 5개로 제한
+                
+                # 2) 유사섹션 파싱
+                elif line.startswith('2)') and '유사섹션' in line:
+                    parsed_data["유사섹션"] = line.split(':', 1)[1].strip() if ':' in line else ""
+                
+                # 3) 섹션별키워드분석 파싱
+                elif line.startswith('3)') and '섹션별키워드' in line:
+                    current_section = "섹션별키워드"
+                
+                elif current_section == "섹션별키워드" and line.startswith('-'):
+                    # 예: - 성장배경: A문서키워드={word1,word2} | B문서키워드={word3,word4} | 공통키워드={word5}
+                    self._parse_section_keywords(line, parsed_data["섹션별키워드"])
+                
+                # 4) 요약 파싱
+                elif line.startswith('4)') and '요약' in line:
+                    parsed_data["요약"] = line.split(':', 1)[1].strip() if ':' in line else ""
+            
+            print(f"[LLMService] 응답 파싱 완료: {len(parsed_data['전체키워드'])}개 전체키워드, "
+                  f"섹션별키워드 {len([k for section in parsed_data['섹션별키워드'].values() for k in section['공통']])}개")
+            
+            return parsed_data
+            
+        except Exception as e:
+            print(f"[LLMService] 응답 파싱 중 오류: {str(e)}")
+            return {}
+    
+    def _parse_section_keywords(self, line: str, section_data: Dict[str, Dict[str, List[str]]]):
+        """
+        섹션별 키워드 라인을 파싱합니다.
+        
+        Args:
+            line (str): 파싱할 라인
+            section_data (Dict): 섹션 데이터를 저장할 딕셔너리
+        """
+        try:
+            # 섹션명 추출 (성장배경, 지원동기, 경력사항)
+            section_name = None
+            for name in ["성장배경", "지원동기", "경력사항"]:
+                if name in line:
+                    section_name = name
+                    break
+            
+            if not section_name:
+                return
+            
+            # 키워드 추출
+            parts = line.split('|')
+            for part in parts:
+                part = part.strip()
+                
+                if '조회이력서' in part and '=' in part:
+                    keywords_str = part.split('=', 1)[1].strip()
+                    keywords = self._extract_keywords_from_braces(keywords_str)
+                    section_data[section_name]["조회이력서"] = keywords
+                
+                elif '유사이력서' in part and '=' in part:
+                    keywords_str = part.split('=', 1)[1].strip()
+                    keywords = self._extract_keywords_from_braces(keywords_str)
+                    section_data[section_name]["유사이력서"] = keywords
+                
+                elif '공통키워드' in part and '=' in part:
+                    keywords_str = part.split('=', 1)[1].strip()
+                    keywords = self._extract_keywords_from_braces(keywords_str)
+                    section_data[section_name]["공통"] = keywords
+            
+        except Exception as e:
+            print(f"[LLMService] 섹션 키워드 파싱 오류: {str(e)}")
+    
+    def _extract_keywords_from_braces(self, text: str) -> List[str]:
+        """
+        중괄호 안의 키워드들을 추출합니다. 중괄호가 없으면 직접 파싱합니다.
+        
+        Args:
+            text (str): 키워드가 포함된 텍스트
+            
+        Returns:
+            List[str]: 추출된 키워드 리스트
+        """
+        try:
+            import re
+            keywords = []
+            
+            # 먼저 중괄호 안의 내용 추출 시도
+            matches = re.findall(r'\{([^}]*)\}', text)
+            
+            if matches:
+                # 중괄호가 있는 경우
+                for match in matches:
+                    words = [w.strip() for w in match.split(',') if w.strip() and w.strip() != '없음']
+                    keywords.extend(words[:5])
+            else:
+                # 중괄호가 없는 경우, 콜론 뒤의 내용을 직접 파싱
+                if ':' in text:
+                    content = text.split(':', 1)[1].strip()
+                    words = [w.strip() for w in content.split(',') if w.strip() and w.strip() != '없음']
+                    keywords.extend(words[:5])
+            
+            return keywords
+            
+        except Exception as e:
+            print(f"[LLMService] 키워드 추출 오류: {str(e)}")
+            return []
     
     async def analyze_plagiarism_risk(self, 
                                     original_resume: Dict[str, Any], 

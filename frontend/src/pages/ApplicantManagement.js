@@ -1933,6 +1933,7 @@ const DocumentCard = styled.div`
   padding: 16px;
   border-radius: 8px;
   border-left: 4px solid var(--primary-color);
+  box-shadow: none;
 `;
 
 const DocumentCardTitle = styled.h4`
@@ -3914,7 +3915,83 @@ const ApplicantManagement = () => {
                                         🤖 AI 분석
                                       </div>
                                       <div style={{fontSize: '12px', color: '#333', lineHeight: '1.4', whiteSpace: 'pre-line'}}>
-                                        {similar.llm_analysis.analysis}
+                                        {similar.llm_analysis.analysis.split('\n').map((line, lineIndex) => {
+                                          // 항목별 제목에 bold 처리
+                                          if (line.match(/^\d+\)\s*(전체키워드|유사섹션|섹션별키워드분석|요약):/)) {
+                                            const [, title, content] = line.match(/^(\d+\)\s*[^:]+):\s*(.*)$/);
+                                            return (
+                                              <div key={lineIndex} style={{marginBottom: '8px'}}>
+                                                <strong style={{color: '#2c3e50'}}>{title}:</strong> {content}
+                                              </div>
+                                            );
+                                          }
+                                          // 섹션별 키워드 분석 부분 가독성 개선
+                                          else if (line.match(/^-\s*(성장배경|지원동기|경력사항):/)) {
+                                            const parts = line.split('|').map(part => part.trim());
+                                            const sectionName = line.match(/^-\s*(성장배경|지원동기|경력사항):/)[1];
+                                            // 첫 번째 part에서 섹션명 제거
+                                            if (parts[0] && parts[0].includes(sectionName + ':')) {
+                                              parts[0] = parts[0].replace(sectionName + ':', '').trim();
+                                            }
+                                            return (
+                                              <div key={lineIndex} style={{
+                                                marginBottom: '12px',
+                                                marginLeft: '16px',
+                                                padding: '12px',
+                                                backgroundColor: '#f8f9fa',
+                                                borderRadius: '4px',
+                                                border: '1px solid #e9ecef'
+                                              }}>
+                                                <div style={{
+                                                  fontWeight: 'bold',
+                                                  marginBottom: '8px',
+                                                  color: '#2c3e50',
+                                                  fontSize: '13px'
+                                                }}>
+                                                  {sectionName}
+                                                </div>
+                                                <div style={{
+                                                  display: 'flex',
+                                                  flexWrap: 'wrap',
+                                                  gap: '16px',
+                                                  alignItems: 'flex-start'
+                                                }}>
+                                                  {parts.map((part, partIndex) => {
+                                                    if (part.includes('조회이력서=')) {
+                                                      const [label, keywords] = part.split('=');
+                                                      return (
+                                                        <span key={partIndex}>
+                                                          <span style={{color: '#007bff', fontWeight: 'bold'}}>{label}:</span> {keywords}
+                                                        </span>
+                                                      );
+                                                    } else if (part.includes('유사이력서=')) {
+                                                      const [label, keywords] = part.split('=');
+                                                      return (
+                                                        <span key={partIndex}>
+                                                          <span style={{color: '#28a745', fontWeight: 'bold'}}>{label}:</span> {keywords}
+                                                        </span>
+                                                      );
+                                                    } else if (part.includes('공통키워드=')) {
+                                                      const [label, keywords] = part.split('=');
+                                                      return (
+                                                        <span key={partIndex}>
+                                                          <span style={{color: '#dc3545', fontWeight: 'bold'}}>{label}:</span> {keywords}
+                                                        </span>
+                                                      );
+                                                    } else if (!part.includes('성장배경') && !part.includes('지원동기') && !part.includes('경력사항')) {
+                                                      return <span key={partIndex}>{part}</span>;
+                                                    }
+                                                    return null;
+                                                  })}
+                                                </div>
+                                              </div>
+                                            );
+                                          }
+                                          // 일반 텍스트
+                                          else {
+                                            return <div key={lineIndex}>{line}</div>;
+                                          }
+                                        })}
                                       </div>
                                     </div>
                                   )}
