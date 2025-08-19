@@ -298,6 +298,11 @@ async def analyze_repository_architecture(owner: str, repo: str, token: Optional
             raise HTTPException(status_code=404, detail="파일 트리를 가져올 수 없습니다.")
         
         print(f"총 {len(file_tree)}개 파일 발견")
+
+        # 파일 경로 집합(존재하는 파일만) 구성
+        file_paths = {node.get('path') for node in file_tree if isinstance(node, dict) and node.get('type') == 'blob' and node.get('path')}
+        # 존재하지 않거나 실패한 파일을 기록하여 재시도 방지
+        missing_files = set()
         
         # 2. Planner-Executor 루프 시작
         opened_files = {}
@@ -348,21 +353,44 @@ async def analyze_repository_architecture(owner: str, repo: str, token: Optional
                 print(f"파일 열기 요청: {files_to_open} (이유: {reason})")
                 
                 # 요청된 파일들 열기 (최대 3개씩만 처리)
+                # 존재하지 않는 경로/이미 실패했거나 이미 열린 파일 필터링
+                candidate_files = [
+                    fp for fp in files_to_open
+                    if isinstance(fp, str)
+                    and fp in file_paths
+                    and fp not in missing_files
+                    and fp not in opened_files
+                ]
+
+                if len(candidate_files) != len(files_to_open):
+                    skipped = [fp for fp in files_to_open if fp not in candidate_files]
+                    if skipped:
+                        print(f"스킵된 요청 파일(존재하지 않음/중복/실패): {skipped}")
+
+                prev_opened_count = len(opened_files)
                 opened_count = 0
-                for file_path in files_to_open[:3]:
-                    if file_path not in opened_files and opened_count < 3:
-                        try:
-                            content = await fetch_github_file_content(owner, repo, file_path, token)
-                            if content:
-                                opened_files[file_path] = content
-                                opened_count += 1
-                                print(f"파일 열기 성공: {file_path}")
-                            else:
-                                print(f"파일 열기 실패: {file_path}")
-                        except Exception as e:
-                            print(f"파일 열기 오류 ({file_path}): {e}")
+                for file_path in candidate_files[:3]:
+                    if opened_count >= 3:
+                        break
+                    try:
+                        content = await fetch_github_file_content(owner, repo, file_path, token)
+                        if content:
+                            opened_files[file_path] = content
+                            opened_count += 1
+                            print(f"파일 열기 성공: {file_path}")
+                        else:
+                            print(f"파일 열기 실패: {file_path}")
+                            missing_files.add(file_path)
+                    except Exception as e:
+                        print(f"파일 열기 오류 ({file_path}): {e}")
+                        missing_files.add(file_path)
                 
                 print(f"현재 열린 파일 수: {len(opened_files)}")
+
+                # 무진전 감지: 이번 반복에서 새로 연 파일이 없으면 중단
+                if len(opened_files) == prev_opened_count:
+                    print("무진전 감지: 새로 열린 파일이 없어 분석을 종료합니다.")
+                    break
                 
                 # 충분한 파일이 열렸으면 분석 완료로 간주
                 if len(opened_files) >= 15:
@@ -1694,14 +1722,16 @@ async def github_summary(request: GithubSummaryRequest):
                 raise HTTPException(status_code=404, detail="공개 리포지토리를 찾을 수 없습니다.")
             
             print(f"발견된 리포지토리 수: {len(repos)}")
-            # 상위 5개 리포 분석
-            top_repos = [r for r in repos if not r.get('fork')][:5]
-            print(f"분석할 상위 리포지토리 수: {len(top_repos)}")
+            # 스마트 필터링을 통한 레포지토리 선택
+            top_repos = filter_relevant_repositories(repos, max_repos=5)
+            print(f"필터링 후 분석할 레포지토리 수: {len(top_repos)}")
             
             if not top_repos:
-                # 포크된 리포지토리만 있는 경우 포크된 리포지토리도 포함
-                top_repos = repos[:5]
-                print(f"포크된 리포지토리 포함하여 분석: {len(top_repos)}개")
+                # 필터링 결과가 없는 경우 기존 방식으로 폴백
+                top_repos = [r for r in repos if not r.get('fork')][:3]
+                if not top_repos:
+                    top_repos = repos[:3]
+                print(f"필터링 실패로 폴백하여 분석: {len(top_repos)}개")
             
             analyses = []
             architecture_results = []  # 아키텍처 분석 결과 저장
@@ -1978,4 +2008,107 @@ async def github_architecture_analysis(request: GithubArchitectureRequest):
         print(f"아키텍처 분석 오류: {error}")
         print(f"오류 상세: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"아키텍처 분석 중 오류가 발생했습니다: {str(error)}")
+
+# 레포지토리 필터링 함수 추가
+def filter_relevant_repositories(repos, max_repos=5):
+    """
+    분석할 가치가 있는 레포지토리만 필터링
+    
+    필터링 기준:
+    1. 최근 업데이트된 레포지토리 우선
+    2. 스타 수가 있는 레포지토리 우선
+    3. 설명이 있는 레포지토리 우선
+    4. 포크가 아닌 원본 레포지토리 우선
+    5. 특정 키워드가 포함된 레포지토리 제외 (개인용, 테스트용 등)
+    """
+    if not repos:
+        return []
+    
+    # 제외할 키워드 (개인용, 테스트용, 학습용 등)
+    exclude_keywords = [
+        'test', 'demo', 'example', 'sample', 'tutorial', 'learning', 'study',
+        'practice', 'temp', 'tmp', 'backup', 'old', 'archive', 'deprecated',
+        'personal', 'private', 'notes', 'docs', 'documentation', 'blog',
+        'website', 'portfolio', 'resume', 'cv', 'profile', 'homepage'
+    ]
+    
+    # 제외할 파일 확장자 (특정 파일만 있는 레포지토리)
+    exclude_extensions = ['.md', '.txt', '.pdf', '.doc', '.docx']
+    
+    filtered_repos = []
+    
+    for repo in repos:
+        repo_name = (repo.get('name') or '').lower()
+        description = (repo.get('description') or '').lower()
+        language = (repo.get('language') or '').lower()
+        
+        # 1. 제외 키워드 체크
+        should_exclude = False
+        for keyword in exclude_keywords:
+            if keyword in repo_name or keyword in description:
+                should_exclude = True
+                break
+        
+        if should_exclude:
+            continue
+        
+        # 2. 스코어 계산 (높을수록 분석 가치가 높음)
+        score = 0
+        
+        # 최근 업데이트 (최근 1년 내: +10점, 6개월 내: +20점, 3개월 내: +30점)
+        updated_at = repo.get('updated_at')
+        if updated_at:
+            try:
+                update_time = datetime.fromisoformat(updated_at.replace('Z', '+00:00'))
+                now = datetime.now(timezone.utc)
+                days_diff = (now - update_time).days
+                
+                if days_diff <= 90:  # 3개월 내
+                    score += 30
+                elif days_diff <= 180:  # 6개월 내
+                    score += 20
+                elif days_diff <= 365:  # 1년 내
+                    score += 10
+            except:
+                pass
+        
+        # 스타 수 (1개당 +1점, 최대 50점)
+        stargazers = repo.get('stargazers_count', 0)
+        score += min(stargazers, 50)
+        
+        # 포크 수 (1개당 +0.5점, 최대 25점)
+        forks = repo.get('forks_count', 0)
+        score += min(forks * 0.5, 25)
+        
+        # 설명 유무 (+5점)
+        if repo.get('description'):
+            score += 5
+        
+        # 포크가 아닌 원본 레포지토리 (+10점)
+        if not repo.get('fork', False):
+            score += 10
+        
+        # 주요 프로그래밍 언어 (+5점)
+        major_languages = ['javascript', 'python', 'java', 'c++', 'c#', 'go', 'rust', 'typescript', 'php', 'ruby', 'swift', 'kotlin']
+        if language in major_languages:
+            score += 5
+        
+        # 크기 체크 (너무 작거나 큰 레포지토리 제외)
+        size = repo.get('size', 0)  # KB 단위
+        if size < 1 or size > 100000:  # 1KB 미만 또는 100MB 초과
+            score -= 20
+        
+        # 3. 최소 스코어 이상인 레포지토리만 포함
+        if score >= 5:  # 최소 5점 이상
+            repo['_score'] = score
+            filtered_repos.append(repo)
+    
+    # 스코어 순으로 정렬하고 상위 N개 선택
+    filtered_repos.sort(key=lambda x: x.get('_score', 0), reverse=True)
+    
+    print(f"필터링 결과: {len(repos)}개 중 {len(filtered_repos)}개 선택 (스코어 기준)")
+    for repo in filtered_repos[:max_repos]:
+        print(f"  - {repo.get('name', '')}: 스코어 {repo.get('_score', 0)} (스타: {repo.get('stargazers_count', 0)}, 포크: {repo.get('forks_count', 0)})")
+    
+    return filtered_repos[:max_repos]
  

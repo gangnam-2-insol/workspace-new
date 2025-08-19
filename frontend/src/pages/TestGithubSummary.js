@@ -83,7 +83,7 @@ const TestGithubSummary = () => {
             if (data.detail.includes('사용자')) {
               errorMessage = 'GitHub 사용자를 찾을 수 없습니다. 사용자명을 확인해주세요.';
             } else if (data.detail.includes('리포지토리') || data.detail.includes('저장소')) {
-              errorMessage = '레포지토리를 찾을 수 없습니다. URL과 접근 권한을 확인해주세요.';
+            errorMessage = '레포지토리를 찾을 수 없습니다. URL과 접근 권한을 확인해주세요.';
             } else {
               errorMessage = '요청한 리소스를 찾을 수 없습니다. URL을 확인해주세요.';
             }
@@ -923,12 +923,12 @@ const TestGithubSummary = () => {
                               padding: '8px',
                               background: 'rgba(255,255,255,0.8)',
                               borderRadius: '6px',
-                              marginBottom: '15px'
-                            }}>
+                                  marginBottom: '15px'
+                                }}>
                               💡 핵심파일 선별 조회를 통해 의존성, 프레임워크, 빌드 도구를 자동으로 감지했습니다.
-                            </div>
-                          </div>
-                        )}
+                                      </div>
+                                    </div>
+                                  )}
                       </div>
                     )) : (
                       <div style={{ 
