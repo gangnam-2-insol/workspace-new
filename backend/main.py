@@ -73,7 +73,7 @@ app.include_router(langgraph_router, prefix="/api/langgraph-agent", tags=["langg
 app.include_router(github_router, prefix="/api", tags=["github"])
 app.include_router(upload_router, tags=["upload"])
 app.include_router(pick_chatbot_router, prefix="/api", tags=["pick-chatbot"])
-app.include_router(integrated_ocr_router, prefix="/api/integrated-ocr", tags=["integrated-ocr"])
+app.include_router(integrated_ocr_router, tags=["integrated-ocr"])
 
 app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
 
