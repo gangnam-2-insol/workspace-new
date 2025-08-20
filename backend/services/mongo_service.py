@@ -80,6 +80,8 @@ class MongoService:
             # 이메일로 기존 지원자 조회
             existing = self.applicants.find_one({"email": applicant_data.email})
             if existing:
+                # ObjectId를 문자열로 변환
+                existing["_id"] = str(existing["_id"])
                 return Applicant(**existing)
             
             # 새 지원자 생성
@@ -93,13 +95,42 @@ class MongoService:
         except DuplicateKeyError:
             # 동시 생성 시도 시 기존 지원자 반환
             existing = self.applicants.find_one({"email": applicant_data.email})
-            return Applicant(**existing)
+            if existing:
+                # ObjectId를 문자열로 변환
+                existing["_id"] = str(existing["_id"])
+                return Applicant(**existing)
     
     def get_applicant(self, applicant_id: str) -> Optional[Applicant]:
         """지원자를 조회합니다."""
         try:
+            if not ObjectId.is_valid(applicant_id):
+                return None
+            
             applicant = self.applicants.find_one({"_id": ObjectId(applicant_id)})
-            return Applicant(**applicant) if applicant else None
+            if applicant:
+                # ObjectId를 문자열로 변환
+                applicant["_id"] = str(applicant["_id"])
+                return Applicant(**applicant)
+            return None
+        except Exception as e:
+            print(f"지원자 조회 오류: {e}")
+            return None
+    
+    def get_applicant_by_id(self, applicant_id: str) -> Optional[Dict[str, Any]]:
+        """지원자 ID로 지원자를 조회합니다."""
+        try:
+            if not ObjectId.is_valid(applicant_id):
+                return None
+            
+            applicant = self.applicants.find_one({"_id": ObjectId(applicant_id)})
+            if applicant:
+                # ObjectId를 문자열로 변환
+                applicant["_id"] = str(applicant["_id"])
+                return applicant
+            return None
+        except Exception as e:
+            print(f"지원자 조회 오류: {e}")
+            return None
         except Exception:
             return None
     
@@ -126,10 +157,18 @@ class MongoService:
     
     def create_portfolio(self, portfolio_data: PortfolioCreate) -> PortfolioDocument:
         """포트폴리오를 생성합니다."""
+        # 기존 포트폴리오가 있는지 확인하고 버전 결정
+        latest = self.portfolios.find_one(
+            {"applicant_id": portfolio_data.applicant_id},
+            sort=[("version", DESCENDING)]
+        )
+        
+        new_version = (latest["version"] + 1) if latest else 1
+        
         portfolio_dict = portfolio_data.dict()
         portfolio_dict["created_at"] = datetime.utcnow()
         portfolio_dict["updated_at"] = datetime.utcnow()
-        portfolio_dict["version"] = 1
+        portfolio_dict["version"] = new_version
         
         result = self.portfolios.insert_one(portfolio_dict)
         portfolio_dict["_id"] = str(result.inserted_id)
@@ -155,6 +194,25 @@ class MongoService:
         portfolio_dict["_id"] = str(result.inserted_id)
         
         return PortfolioDocument(**portfolio_dict)
+    
+    def get_portfolio_by_applicant_id(self, applicant_id: str) -> Optional[Dict[str, Any]]:
+        """지원자 ID로 포트폴리오를 조회합니다 (최신 버전)."""
+        try:
+            portfolio = self.portfolios.find_one(
+                {"applicant_id": applicant_id},
+                sort=[("version", DESCENDING)]
+            )
+            
+            if portfolio:
+                # ObjectId를 문자열로 변환
+                portfolio["_id"] = str(portfolio["_id"])
+                return portfolio
+            
+            return None
+            
+        except Exception as e:
+            print(f"포트폴리오 조회 오류: {e}")
+            return None
     
     # Bundle 관련 메서드 (applicant_id 기반으로 변경)
     def get_applicant_bundle(self, applicant_id: str) -> Dict[str, Any]:

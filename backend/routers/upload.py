@@ -21,7 +21,7 @@ print(f"🔍 upload.py OPENAI_API_KEY 로드 후: {os.getenv('OPENAI_API_KEY')}"
 
 # OpenAI API 설정
 try:
-    openai_service = OpenAIService(model_name="gpt-3.5-turbo")
+    openai_service = OpenAIService(model_name="gpt-4o-mini")
     print("OpenAI 서비스 초기화 성공")
 except Exception as e:
     print(f"OpenAI 서비스 초기화 실패: {e}")
@@ -203,8 +203,8 @@ ALLOWED_EXTENSIONS = {
     '.txt': 'text/plain'
 }
 
-# 파일 크기 제한 (10MB)
-MAX_FILE_SIZE = 10 * 1024 * 1024
+# 파일 크기 제한 (50MB)
+MAX_FILE_SIZE = 50 * 1024 * 1024
 
 def validate_file(file: UploadFile) -> bool:
     """파일 유효성 검사"""
@@ -378,7 +378,7 @@ async def upload_and_summarize_file(
         if file_size > MAX_FILE_SIZE:
             raise HTTPException(
                 status_code=400,
-                detail="파일 크기가 너무 큽니다. 최대 10MB까지 업로드 가능합니다."
+                detail="파일 크기가 너무 큽니다. 최대 50MB까지 업로드 가능합니다."
             )
         
         # 임시 파일로 저장

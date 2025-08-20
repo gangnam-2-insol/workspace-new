@@ -1,0 +1,130 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["applicant_id", "items", "status", "created_at"],
+    "properties": {
+      "applicant_id": {
+        "bsonType": "string",
+        "description": "지원자 ID (필수)"
+      },
+      "application_id": {
+        "bsonType": "string",
+        "description": "지원서 ID (선택사항)"
+      },
+      "extracted_text": {
+        "bsonType": "string",
+        "description": "추출된 텍스트"
+      },
+      "summary": {
+        "bsonType": "string",
+        "description": "요약"
+      },
+      "keywords": {
+        "bsonType": "array",
+        "items": {
+          "bsonType": "string"
+        },
+        "description": "키워드 목록"
+      },
+      "document_type": {
+        "bsonType": "string",
+        "description": "문서 타입"
+      },
+      "basic_info": {
+        "bsonType": "object",
+        "description": "기본 정보"
+      },
+      "file_metadata": {
+        "bsonType": "object",
+        "description": "파일 메타데이터"
+      },
+      "items": {
+        "bsonType": "array",
+        "minItems": 1,
+        "items": {
+          "bsonType": "object",
+          "required": ["item_id", "title", "type"],
+          "properties": {
+            "item_id": {
+              "bsonType": "string",
+              "description": "아이템 ID (필수)"
+            },
+            "title": {
+              "bsonType": "string",
+              "description": "아이템 제목 (필수)"
+            },
+            "type": {
+              "enum": ["project", "doc", "slide", "code", "url", "image", "video"],
+              "description": "아이템 타입 (필수)"
+            },
+            "artifacts": {
+              "bsonType": "array",
+              "items": {
+                "bsonType": "object",
+                "required": ["kind", "filename"],
+                "properties": {
+                  "kind": {
+                    "enum": ["file", "url", "repo"],
+                    "description": "아티팩트 종류 (필수)"
+                  },
+                  "file_id": {
+                    "bsonType": "string",
+                    "description": "파일 ID (GridFS)"
+                  },
+                  "url": {
+                    "bsonType": "string",
+                    "description": "URL"
+                  },
+                  "filename": {
+                    "bsonType": "string",
+                    "description": "파일명 (필수)"
+                  },
+                  "mime": {
+                    "bsonType": "string",
+                    "description": "MIME 타입"
+                  },
+                  "size": {
+                    "bsonType": "int",
+                    "description": "파일 크기"
+                  },
+                  "hash": {
+                    "bsonType": "string",
+                    "description": "파일 해시"
+                  },
+                  "preview_image": {
+                    "bsonType": "string",
+                    "description": "미리보기 이미지 URL"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "description": "포트폴리오 아이템들 (필수, 최소 1개)"
+      },
+      "analysis_score": {
+        "bsonType": "double",
+        "minimum": 0,
+        "maximum": 100,
+        "description": "분석 점수 (0-100)"
+      },
+      "status": {
+        "bsonType": "string",
+        "description": "포트폴리오 상태 (필수)"
+      },
+      "version": {
+        "bsonType": "int",
+        "minimum": 1,
+        "description": "버전 번호"
+      },
+      "created_at": {
+        "bsonType": "date",
+        "description": "생성일시 (필수)"
+      },
+      "updated_at": {
+        "bsonType": "date",
+        "description": "수정일시"
+      }
+    }
+  }
+}
