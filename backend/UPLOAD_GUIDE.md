@@ -49,7 +49,7 @@ GET /api/upload/health
   "status": "healthy",
   "gemini_api_configured": true,
   "supported_formats": [".pdf", ".doc", ".docx", ".txt"],
-  "max_file_size_mb": 10
+  "max_file_size_mb": 50
 }
 ```
 
@@ -322,7 +322,7 @@ const handleFileUpload = async (file) => {
 - `.env` 파일에 `GOOGLE_API_KEY` 설정 필수
 
 ### 2. 파일 크기 제한
-- 최대 10MB까지 업로드 가능
+- 최대 50MB까지 업로드 가능
 - 지원 형식: PDF, DOC, DOCX, TXT
 
 ### 3. 처리 시간
@@ -353,7 +353,7 @@ Error: 지원하지 않는 파일 형식입니다.
 ```
 Error: 파일 크기가 너무 큽니다.
 ```
-**해결방법**: 10MB 이하 파일 사용
+**해결방법**: 50MB 이하 파일 사용
 
 ### 4. 텍스트 추출 실패
 ```

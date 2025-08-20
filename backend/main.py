@@ -20,6 +20,7 @@ from routers.upload import router as upload_router
 from routers.pdf_ocr import router as pdf_ocr_router
 from routers.applicants import router as applicants_router
 from routers.integrated_ocr import router as integrated_ocr_router
+from routers.portfolios import router as portfolios_router
 
 
 from similarity_service import SimilarityService
@@ -36,7 +37,12 @@ if sys.platform.startswith('win'):
     sys.stderr = codecs.getwriter('utf-8')(sys.stderr.detach())
 
 # FastAPI 앱 생성
-app = FastAPI(title="AI 채용 관리 시스템 API", version="1.0.0")
+app = FastAPI(
+    title="AI 채용 관리 시스템 API", 
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 
 # CORS 설정
 app.add_middleware(
@@ -47,10 +53,16 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# 한글 인코딩을 위한 미들웨어
+# 한글 인코딩 및 타임아웃 설정을 위한 미들웨어
 @app.middleware("http")
 async def add_charset_header(request, call_next):
-    response = await call_next(request)
+    # 타임아웃 설정 (10분)
+    import asyncio
+    try:
+        response = await asyncio.wait_for(call_next(request), timeout=600.0)
+    except asyncio.TimeoutError:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=408, detail="요청 시간이 초과되었습니다. (10분 제한)")
     
     # 모든 JSON 응답에 UTF-8 인코딩 명시
     if response.headers.get("content-type", "").startswith("application/json"):
@@ -76,6 +88,7 @@ app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
 # 새로운 통합 라우터들
 app.include_router(applicants_router)
 app.include_router(integrated_ocr_router)
+app.include_router(portfolios_router)
 
 
 # MongoDB 연결
@@ -458,6 +471,136 @@ async def get_applicant(applicant_id: str):
         raise
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"지원자 조회 실패: {str(e)}")
+
+# 지원자의 이력서 데이터 조회 API
+@app.get("/api/applicants/{applicant_id}/resume")
+async def get_applicant_resume(applicant_id: str):
+    try:
+        # 먼저 문자열로 조회 (이력서는 문자열로 저장됨)
+        resume = await db.resumes.find_one({"applicant_id": applicant_id})
+        
+        if not resume:
+            # 문자열로 찾지 못하면 ObjectId로 시도
+            try:
+                object_id = ObjectId(applicant_id)
+                resume = await db.resumes.find_one({"applicant_id": object_id})
+            except:
+                pass
+        
+        if not resume:
+            raise HTTPException(status_code=404, detail="이력서를 찾을 수 없습니다.")
+        
+        # MongoDB의 _id를 id로 변환
+        resume["id"] = str(resume["_id"])
+        del resume["_id"]
+        
+        return resume
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"이력서 조회 중 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"이력서 조회 실패: {str(e)}")
+
+# 지원자의 자소서 데이터 조회 API
+@app.get("/api/applicants/{applicant_id}/cover-letter")
+async def get_applicant_cover_letter(applicant_id: str):
+    try:
+        # 먼저 문자열로 조회 (자소서는 문자열로 저장됨)
+        cover_letter = await db.cover_letters.find_one({"applicant_id": applicant_id})
+        
+        if not cover_letter:
+            # 문자열로 찾지 못하면 ObjectId로 시도
+            try:
+                object_id = ObjectId(applicant_id)
+                cover_letter = await db.cover_letters.find_one({"applicant_id": object_id})
+            except:
+                pass
+        
+        if not cover_letter:
+            raise HTTPException(status_code=404, detail="자소서를 찾을 수 없습니다.")
+        
+        # MongoDB의 _id를 id로 변환
+        cover_letter["id"] = str(cover_letter["_id"])
+        del cover_letter["_id"]
+        
+        # basic_info가 이미 존재하는지 확인하고 analysisScore, analysisResult 추가
+        if "basic_info" not in cover_letter:
+            cover_letter["basic_info"] = {}
+        
+        cover_letter["basic_info"]["analysisScore"] = 0
+        cover_letter["basic_info"]["analysisResult"] = cover_letter.get("summary", "")
+        
+        return cover_letter
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"자소서 조회 실패: {str(e)}")
+
+# 지원자의 포트폴리오 데이터 조회 API
+@app.get("/api/applicants/{applicant_id}/portfolio")
+async def get_applicant_portfolio(applicant_id: str):
+    try:
+        # 먼저 문자열로 조회 (포트폴리오는 문자열로 저장됨)
+        portfolio = await db.portfolios.find_one({"applicant_id": applicant_id})
+        
+        if not portfolio:
+            # 문자열로 찾지 못하면 ObjectId로 시도
+            try:
+                object_id = ObjectId(applicant_id)
+                portfolio = await db.portfolios.find_one({"applicant_id": object_id})
+            except:
+                pass
+        
+        if not portfolio:
+            raise HTTPException(status_code=404, detail="포트폴리오를 찾을 수 없습니다.")
+        
+        # MongoDB의 _id를 id로 변환
+        portfolio["id"] = str(portfolio["_id"])
+        del portfolio["_id"]
+        
+        return portfolio
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"포트폴리오 조회 중 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"포트폴리오 조회 실패: {str(e)}")
+
+# 지원자의 모든 문서 데이터 조회 API (통합)
+@app.get("/api/applicants/{applicant_id}/documents")
+async def get_applicant_documents(applicant_id: str):
+    try:
+        # ObjectId로 변환 시도
+        try:
+            object_id = ObjectId(applicant_id)
+            resume = await db.resumes.find_one({"applicant_id": object_id})
+            cover_letter = await db.cover_letters.find_one({"applicant_id": object_id})
+            portfolio = await db.portfolios.find_one({"applicant_id": object_id})
+        except:
+            # ObjectId 변환 실패시 문자열로 조회
+            resume = await db.resumes.find_one({"applicant_id": applicant_id})
+            cover_letter = await db.cover_letters.find_one({"applicant_id": applicant_id})
+            portfolio = await db.portfolios.find_one({"applicant_id": applicant_id})
+        
+        # MongoDB의 _id를 id로 변환
+        if resume:
+            resume["id"] = str(resume["_id"])
+            del resume["_id"]
+        
+        if cover_letter:
+            cover_letter["id"] = str(cover_letter["_id"])
+            del cover_letter["_id"]
+            
+        if portfolio:
+            portfolio["id"] = str(portfolio["_id"])
+            del portfolio["_id"]
+        
+        return {
+            "resume": resume,
+            "cover_letter": cover_letter,
+            "portfolio": portfolio
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"문서 조회 실패: {str(e)}")
 
 # 지원자 삭제 API
 @app.delete("/api/applicants/{applicant_id}")
@@ -1200,4 +1343,4 @@ async def check_coverletter_similarity(resume_id: str):
     return await check_resume_similarity(resume_id)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000)
+    uvicorn.run(app, host="0.0.0.0", port=8000, timeout_keep_alive=600)

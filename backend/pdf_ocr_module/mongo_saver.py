@@ -14,7 +14,14 @@ class MongoSaver:
         self.mongo_service = MongoService(mongo_uri)
     
     def _serialize_datetime(self, obj):
-        """datetime 객체를 JSON 직렬화 가능한 형태로 변환합니다."""
+        """datetime 객체와 ObjectId를 JSON 직렬화 가능한 형태로 변환합니다."""
+        try:
+            from bson import ObjectId
+            if isinstance(obj, ObjectId):
+                return str(obj)
+        except ImportError:
+            pass
+        
         if isinstance(obj, datetime):
             return obj.isoformat()
         elif isinstance(obj, dict):
@@ -222,6 +229,7 @@ class MongoSaver:
                 basic_info=basic_info,
                 file_metadata=file_metadata,
                 items=[portfolio_item],
+                analysis_score=0.0,  # 기본값 설정
                 status="active"
             )
             
