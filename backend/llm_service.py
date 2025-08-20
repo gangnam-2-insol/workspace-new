@@ -16,9 +16,44 @@ class LLMService:
             print(f"[LLMService] OPENAI_API_KEY 확인됨 (길이: {len(api_key)})")
         
         self.client = OpenAI(api_key=api_key)
-        self.model_name = 'gpt-3.5-turbo'
+        self.model_name = 'gpt-4o'
         print(f"[LLMService] OpenAI 클라이언트 초기화 완료: {self.model_name}")
         print(f"[LLMService] === LLM 서비스 초기화 완료 ===")
+    
+    async def chat_completion(self, messages: List[Dict[str, str]], max_tokens: int = 1000, temperature: float = 0.7) -> str:
+        """
+        OpenAI Chat Completion API를 사용하여 대화 응답을 생성합니다.
+        
+        Args:
+            messages (List[Dict[str, str]]): 대화 메시지 리스트
+            max_tokens (int): 최대 토큰 수
+            temperature (float): 창의성 조절 (0.0 ~ 1.0)
+            
+        Returns:
+            str: AI 응답 텍스트
+        """
+        try:
+            print(f"[LLMService] === Chat Completion 시작 ===")
+            print(f"[LLMService] 메시지 수: {len(messages)}")
+            print(f"[LLMService] 모델: {self.model_name}")
+            
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=messages,
+                max_tokens=max_tokens,
+                temperature=temperature
+            )
+            
+            result = response.choices[0].message.content
+            print(f"[LLMService] 응답 생성 완료 (길이: {len(result) if result else 0})")
+            print(f"[LLMService] === Chat Completion 완료 ===")
+            
+            return result
+            
+        except Exception as e:
+            print(f"[LLMService] === Chat Completion 오류 ===")
+            print(f"[LLMService] 오류: {str(e)}")
+            return f"죄송합니다. 응답 생성 중 오류가 발생했습니다: {str(e)}"
         
     async def analyze_similarity_reasoning(self, 
                                          original_resume: Dict[str, Any], 

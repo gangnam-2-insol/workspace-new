@@ -26,7 +26,7 @@ class AIService:
         """OpenAI 서비스 초기화"""
         try:
             if OpenAIService:
-                self.openai_service = OpenAIService(model_name="gpt-3.5-turbo")
+                self.openai_service = OpenAIService(model_name="gpt-4o")
                 print("[SUCCESS] OpenAI 서비스 초기화 성공")
             else:
                 print("[ERROR] OpenAI 서비스를 사용할 수 없습니다")

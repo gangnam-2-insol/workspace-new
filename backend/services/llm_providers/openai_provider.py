@@ -320,7 +320,7 @@ else:
 OPENAI_CONFIG_EXAMPLE = {
     "provider": "openai",
     "api_key": "your-api-key-here",
-    "model_name": "gpt-4o-mini",
+                "model_name": "gpt-4o",
     "max_tokens": 4000,
     "temperature": 0.1,
     "max_retries": 3,

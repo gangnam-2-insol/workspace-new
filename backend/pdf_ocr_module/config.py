@@ -65,7 +65,7 @@ class Settings(BaseSettings):
 
     # OpenAI (선택)
     openai_api_key: Optional[str] = Field(default=None)
-    openai_model: str = Field(default="gpt-4o-mini")
+    openai_model: str = Field(default="gpt-4o")
 
     # LLM 제공자 설정
     llm_provider: str = Field(default="groq")  # "groq" | "openai"

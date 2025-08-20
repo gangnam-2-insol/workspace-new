@@ -7,12 +7,12 @@ load_dotenv()
 
 
 class OpenAIService:
-    def __init__(self, model_name: str = "gpt-4o-mini"):
+    def __init__(self, model_name: str = "gpt-4o"):
         """
         OpenAI 서비스 초기화
 
         Args:
-            model_name: 사용할 OpenAI 모델 이름 (기본값: gpt-4o-mini)
+            model_name: 사용할 OpenAI 모델 이름 (기본값: gpt-4o)
         """
         self.model_name = model_name
         self.api_key = os.getenv("OPENAI_API_KEY")

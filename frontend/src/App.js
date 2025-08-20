@@ -17,6 +17,7 @@ import PDFOCRPage from './pages/PDFOCRPage/PDFOCRPage';
 import FloatingChatbot from './chatbot/components/FloatingChatbot';
 import AITooltip from './components/AITooltip';
 import LangGraphChatbot from './components/LangGraphChatbot';
+import NewPickChatbot from './components/NewPickChatbot';
 
 
 
@@ -25,6 +26,12 @@ function App() {
   const navigate = useNavigate();
   const currentPage = location.pathname.replace('/', '') || 'dashboard';
   const [isAgentChatbotOpen, setIsAgentChatbotOpen] = React.useState(false);
+  
+  // 픽톡 챗봇 상태 관리
+  const [pickChatbotState, setPickChatbotState] = React.useState(() => {
+    const savedState = sessionStorage.getItem('pickChatbotIsOpen');
+    return savedState === 'true' ? true : (savedState === 'floating' ? 'floating' : false);
+  });
 
   // 전역 이벤트 리스너 추가 (디버깅용)
   React.useEffect(() => {
@@ -212,6 +219,15 @@ function App() {
 
       {/* 에이전트 챗봇 (LangGraph) */}
       <LangGraphChatbot isOpen={isAgentChatbotOpen} onOpenChange={setIsAgentChatbotOpen} />
+
+      {/* 픽톡 챗봇 */}
+      <NewPickChatbot 
+        isOpen={pickChatbotState} 
+        onOpenChange={(newState) => {
+          setPickChatbotState(newState);
+          sessionStorage.setItem('pickChatbotIsOpen', newState ? 'true' : (newState === 'floating' ? 'floating' : 'false'));
+        }} 
+      />
     </>
   );
 }

@@ -271,8 +271,14 @@ const Layout = ({ children }) => {
             <IconButton>
               <FiBell size={20} />
             </IconButton>
-				<IconButton title="채팅" onClick={() => window.dispatchEvent(new Event('openAgentChatbot'))}>
+				<IconButton title="에이전트 챗봇" onClick={() => window.dispatchEvent(new Event('openAgentChatbot'))}>
 					<FiMessageCircle size={20} />
+				</IconButton>
+				<IconButton title="픽톡 챗봇" onClick={() => {
+					sessionStorage.setItem('pickChatbotIsOpen', 'true');
+					window.location.reload();
+				}}>
+					💬
 				</IconButton>
             <div style={{
               width: '40px',

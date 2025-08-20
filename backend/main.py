@@ -17,6 +17,8 @@ import csv
 from chatbot import chatbot_router, langgraph_router
 from github import router as github_router
 from routers.upload import router as upload_router
+from routers.pick_chatbot import router as pick_chatbot_router
+from routers.integrated_ocr import router as integrated_ocr_router
 
 from routers.pdf_ocr import router as pdf_ocr_router
 
@@ -70,6 +72,8 @@ app.include_router(langgraph_router, prefix="/api/langgraph", tags=["langgraph"]
 app.include_router(langgraph_router, prefix="/api/langgraph-agent", tags=["langgraph-agent"])
 app.include_router(github_router, prefix="/api", tags=["github"])
 app.include_router(upload_router, tags=["upload"])
+app.include_router(pick_chatbot_router, prefix="/api", tags=["pick-chatbot"])
+app.include_router(integrated_ocr_router, prefix="/api/integrated-ocr", tags=["integrated-ocr"])
 
 app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
 

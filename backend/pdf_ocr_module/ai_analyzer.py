@@ -83,7 +83,7 @@ def extract_basic_info(text: str) -> Dict[str, Any]:
     
     # Gemini AI를 사용한 분석 시도
     try:
-        openai_service = OpenAIService(model_name="gpt-3.5-turbo") if OpenAIService else None
+        openai_service = OpenAIService(model_name="gpt-4o") if OpenAIService else None
         
         # 비동기 함수를 동기적으로 실행
         loop = asyncio.new_event_loop()
@@ -353,7 +353,7 @@ def analyze_with_ai(text: str, settings: Settings) -> Dict[str, Any]:
     """AI LLM을 사용해서 텍스트를 분석합니다."""
     try:
         # Gemini AI를 사용한 분석
-        openai_service = OpenAIService(model_name="gpt-3.5-turbo") if OpenAIService else None
+        openai_service = OpenAIService(model_name="gpt-4o") if OpenAIService else None
         
         # 비동기 함수를 동기적으로 실행
         loop = asyncio.new_event_loop()
