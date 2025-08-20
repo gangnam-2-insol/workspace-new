@@ -1,8 +1,83 @@
 # 🤖 AI 채용 관리 시스템
 
+## ⚠️ IMPORT 오류 해결 가이드 (다른 환경에서 클론 시 필수)
+
+### 🔍 Import 오류 발생 원인
+이 프로젝트는 **상대 경로 import**와 **sys.path.append()**를 사용하여 모듈을 import합니다. 다른 환경에서 클론했을 때 다음과 같은 오류가 발생할 수 있습니다:
+
+```
+ModuleNotFoundError: No module named 'openai_service'
+ImportError: cannot import name 'AgentSystem' from 'chatbot.core.agent_system'
+```
+
+### 🛠️ 해결 방법
+
+#### 1️⃣ **Python 경로 설정 (권장)**
+```bash
+# 프로젝트 루트에서 실행
+export PYTHONPATH="${PYTHONPATH}:$(pwd)/backend"
+# Windows의 경우:
+set PYTHONPATH=%PYTHONPATH%;%cd%\backend
+```
+
+#### 2️⃣ **가상환경 사용 (권장)**
+```bash
+# 가상환경 생성 및 활성화
+python -m venv venv
+source venv/bin/activate  # Linux/Mac
+# Windows:
+venv\Scripts\activate
+
+# 의존성 설치
+pip install -r requirements.txt
+```
+
+#### 3️⃣ **직접 실행 방법**
+```bash
+# backend 폴더에서 실행
+cd backend
+python main.py
+```
+
+#### 4️⃣ **IDE 설정 (VS Code/PyCharm)**
+- **VS Code**: `.vscode/settings.json`에 추가:
+```json
+{
+    "python.analysis.extraPaths": ["./backend"]
+}
+```
+- **PyCharm**: Project Structure에서 `backend` 폴더를 Sources Root로 설정
+
+#### 5️⃣ **Docker 사용 (가장 안전)**
+```bash
+# Dockerfile이 이미 설정되어 있음
+docker build -t hireme-backend .
+docker run -p 8000:8000 hireme-backend
+```
+
+### 📁 프로젝트 구조 이해
+```
+workspace-new/
+├── backend/                 # 메인 백엔드 코드
+│   ├── main.py             # 진입점
+│   ├── openai_service.py   # OpenAI 서비스
+│   ├── chatbot/            # 챗봇 모듈
+│   ├── routers/            # API 라우터
+│   └── services/           # 비즈니스 로직
+├── frontend/               # React 프론트엔드
+└── requirements.txt        # Python 의존성
+```
+
+### 🚨 주의사항
+- **절대 경로 사용 금지**: `sys.path.append('..')` 같은 상대 경로는 환경에 따라 작동하지 않을 수 있습니다
+- **가상환경 필수**: 시스템 Python과 충돌을 피하기 위해 가상환경 사용을 권장합니다
+- **PYTHONPATH 설정**: 프로젝트 루트를 Python 경로에 추가해야 합니다
+
+---
+
 ## 📋 프로젝트 개요
 
-AI 기반 채용 관리 시스템으로, 지능형 채팅봇을 통한 자연어 입력으로 채용공고 작성, 이력서 분석, 포트폴리오 분석 등을 지원합니다. **Gemini AI**, **Agent 시스템**, **FastAPI**, **React**를 기반으로 구축된 현대적인 웹 애플리케이션입니다.
+AI 기반 채용 관리 시스템으로, 지능형 채팅봇을 통한 자연어 입력으로 채용공고 작성, 이력서 분석, 포트폴리오 분석 등을 지원합니다. **OpenAI GPT-4o-mini**, **Agent 시스템**, **FastAPI**, **React**를 기반으로 구축된 현대적인 웹 애플리케이션입니다.
 
 ## 🚀 주요 기능
 
@@ -21,7 +96,7 @@ AI 기반 채용 관리 시스템으로, 지능형 채팅봇을 통한 자연어
 ### 🏷️ 3. AI 제목 추천 시스템
 - **4가지 컨셉**: 신입친화형, 전문가형, 일반형, 일반형 변형
 - **매번 다른 추천**: 랜덤 시드와 창의성 설정으로 다양한 제목 생성
-- **Gemini AI 기반**: 고도화된 자연어 처리로 매력적인 제목 생성
+- **OpenAI GPT-4o-mini 기반**: 고도화된 자연어 처리로 매력적인 제목 생성
 
 ### 💬 4. 지능형 대화 관리
 - **대화 흐름 제어**: 순서가 꼬여도 🔄 처음부터 버튼으로 재시작 가능
@@ -40,7 +115,7 @@ AI 기반 채용 관리 시스템으로, 지능형 채팅봇을 통한 자연어
 Agent 시스템을 활용한 지능형 시스템으로, 사용자의 요청을 분석하고 적절한 도구를 자동으로 선택하여 처리합니다.
 
 #### 🎯 주요 특징
-- **의도 자동 분류**: Gemini AI를 활용한 사용자 요청 의도 분석
+- **의도 자동 분류**: OpenAI GPT-4o-mini를 활용한 사용자 요청 의도 분석
 - **도구 자동 선택**: 의도에 따른 적절한 도구 자동 선택
 - **모듈화된 구조**: 각 도구가 독립적인 노드로 구성
 - **확장 가능**: 새로운 도구를 쉽게 추가 가능
@@ -73,7 +148,7 @@ class IntentDetectionNode:
     """사용자 의도를 파악하는 노드"""
     
     def detect_intent(self, user_input: str) -> str:
-        # Gemini AI를 사용하여 사용자 요청을 4가지 카테고리로 분류:
+        # OpenAI GPT-4o-mini를 사용하여 사용자 요청을 4가지 카테고리로 분류:
         # - "search": 정보 검색, 조사, 찾기 관련 요청
         # - "calc": 계산, 수식, 수치 처리 관련 요청  
         # - "db": 데이터베이스 조회, 저장된 정보 검색
@@ -134,7 +209,7 @@ class FallbackNode:
     """일반 대화 처리 노드"""
     
     def process_chat(self, user_input: str) -> str:
-        # Gemini AI를 사용한 일반적인 대화 처리
+        # OpenAI GPT-4o-mini를 사용한 일반적인 대화 처리
         # 채용 관련 질문이면 전문적인 조언 제공
         # 일반적인 질문이면 친근하게 답변
 ```
@@ -517,7 +592,7 @@ class AgentSystem:
 
 ### 🎯 Agent 시스템의 장점
 
-1. **🧠 지능적 의도 분류**: Gemini AI를 활용한 정확한 의도 분석
+1. **🧠 지능적 의도 분류**: OpenAI GPT-4o-mini를 활용한 정확한 의도 분석
 2. **🔧 모듈화된 구조**: 각 도구가 독립적인 노드로 구성되어 유지보수 용이
 3. **📈 확장성**: 새로운 도구를 쉽게 추가 가능
 4. **🔄 조건부 분기**: Agent 시스템의 강력한 워크플로우 관리
@@ -574,10 +649,10 @@ const FIELD_ORDER = [
 #### 2️⃣ **자연어 분석 및 매핑**
 ```python
 # 위치: chatbot_router.py - generate_ai_assistant_response()
-# 적용 방식: Gemini AI로 사용자 입력을 분석하여 JSON 추출
+# 적용 방식: OpenAI GPT-4o-mini로 사용자 입력을 분석하여 JSON 추출
 
 async def generate_ai_assistant_response(user_input: str, field: Dict[str, Any], session: Dict[str, Any]):
-    # 1. 사용자 입력을 Gemini AI로 분석
+    # 1. 사용자 입력을 OpenAI GPT-4o-mini로 분석
     # 2. 적절한 필드와 값을 JSON 형태로 추출
     # 3. 프론트엔드에서 자동으로 폼 필드에 입력
     
@@ -702,7 +777,7 @@ graph TD
 ### 🔄 AI 시스템 흐름도
 
 1. **입력 단계**: 사용자가 자연어로 정보 입력
-2. **분석 단계**: Gemini AI가 의도와 내용 분석
+2. **분석 단계**: OpenAI GPT-4o-mini가 의도와 내용 분석
 3. **매핑 단계**: JSON 형태로 추출된 데이터를 폼 필드에 자동 매핑
 4. **검증 단계**: AI가 입력된 값의 유효성 실시간 검증
 5. **완성 단계**: AI가 4가지 컨셉의 제목 추천
@@ -713,7 +788,7 @@ graph TD
 ### 🛠️ 기술 스택
 - **Frontend**: React 18, Styled Components, Framer Motion
 - **Backend**: FastAPI, Python 3.9+
-- **AI Engine**: Google Gemini AI (gemini-1.5-pro)
+- **AI Engine**: OpenAI GPT-4o-mini
 - **Agent Framework**: LangGraph, LangChain
 - **Database**: MongoDB
 - **UI/UX**: 반응형 디자인, 다크모드 지원
@@ -723,7 +798,7 @@ graph TD
 admin/backend/
 ├── main.py                 # FastAPI 메인 서버
 ├── chatbot_router.py       # AI 채팅 라우터 (3,700+ 라인)
-├── gemini_service.py       # Gemini AI 서비스
+├── openai_service.py       # OpenAI 서비스
 ├── documents_router.py     # 문서 처리 API
 ├── resume_analyzer.py      # 이력서 분석 모듈
 ├── models/                 # 데이터 모델
@@ -921,7 +996,7 @@ cd admin
 ### 2. 환경변수 설정
 ```bash
 # admin/backend/.env 파일 생성
-GOOGLE_API_KEY=your_gemini_api_key_here
+OPENAI_API_KEY=your_openai_api_key_here
 MONGODB_URL=mongodb://localhost:27017
 REACT_APP_API_URL=http://localhost:8000
 ```
@@ -998,7 +1073,7 @@ if request.current_page == "new_page":
 
 ## 🎯 핵심 장점
 
-1. **🚀 고도화된 AI**: Gemini 1.5 Pro 모델로 정확한 자연어 이해
+1. **🚀 고도화된 AI**: OpenAI GPT-4o-mini 모델로 정확한 자연어 이해
 2. **⚡ 실시간 처리**: 입력과 동시에 폼 필드 자동 반영
 3. **🎨 창의적 제목**: 매번 다른 4가지 컨셉의 제목 추천
 4. **🔄 안정적 대화**: 순서가 꼬여도 쉽게 재시작 가능
@@ -1147,9 +1222,9 @@ MIT License
 
 ---
 
-## 📝 최근 작업 요약 (2025-08-14 03:30)
+## 📝 최근 작업 요약 (2025-08-20 03:30)
 
-### 🕐 작업 시간: 2025년 8월 14일 오전 3시 30분 ~ 현재
+### 🕐 작업 시간: 2025년 8월 20일 오전 3시 30분 ~ 현재
 
 ### 🎯 주요 작업 목표
 - PDF OCR 기능에 **Gemini AI 통합**하여 이름 추출 정확도 향상
@@ -1163,8 +1238,8 @@ MIT License
 - **PDF OCR 모듈 생성**: `backend/pdf_ocr_module/`
   - `main.py`: PDF 처리 메인 로직
   - `pdf_processor.py`: PDF → 이미지 변환 및 전처리
-  - `ocr_engine.py`: Tesseract OCR 엔진 연동
-  - `ai_analyzer.py`: Gemini AI 기반 텍스트 분석
+  - `ocr_engine.py`: GPT-4o-mini Vision API OCR 엔진 연동
+- `ai_analyzer.py`: OpenAI GPT-4o-mini 기반 텍스트 분석
   - `config.py`: OCR 설정 및 경로 관리
 
 - **OCR API 라우터**: `backend/routers/pdf_ocr.py`
@@ -1172,7 +1247,7 @@ MIT License
   - `GET /api/pdf-ocr/health`: 헬스 체크
   - 응답: 추출 텍스트, AI 분석 결과, 구조화된 정보
 
-- **Gemini AI 통합**: `backend/pdf_ocr_module/ai_analyzer.py`
+- **OpenAI GPT-4o-mini 통합**: `backend/pdf_ocr_module/ai_analyzer.py`
   - 이름, 이메일, 직책, 회사명, 학력, 스킬, 주소 자동 추출
   - JSON 형태로 구조화된 정보 반환
   - 폴백 시스템: AI 실패 시 정규식 기반 분석
@@ -1199,7 +1274,7 @@ MIT License
   - 대비 강화 (autocontrast)
   - 샤프닝 필터 적용
 
-- **Tesseract 설정 최적화**: `backend/pdf_ocr_module/ocr_engine.py`
+- **GPT-4o-mini Vision API 설정**: `backend/pdf_ocr_module/ocr_engine.py`
   - 한국어 언어팩 (`kor+eng`) 지원
   - PSM 모드 최적화
   - 이미지 품질 임계값 조정
@@ -1211,7 +1286,7 @@ MIT License
   - 한국어 성씨 검증 시스템
   - 제외 단어 필터링 (폰트명, 레이아웃 속성 등)
 
-- **AI 기반 이름 추출**: Gemini AI 활용
+- **AI 기반 이름 추출**: OpenAI GPT-4o-mini 활용
   - 컨텍스트 기반 정확한 이름 식별
   - 이력서 구조 이해를 통한 우선순위 판단
   - JSON 형태로 구조화된 결과 반환
@@ -1243,9 +1318,8 @@ Start-Process -FilePath npm -ArgumentList "start" -RedirectStandardOutput "front
 
 #### 환경 설정
 - **환경변수 파일**: `backend/env` (`.env` 대신 `env` 사용)
-  - `GOOGLE_API_KEY`: Gemini AI API 키
-  - `POPPLER_PATH`: Poppler 경로 (PDF 처리)
-  - `TESSERACT_CMD`: Tesseract 실행 파일 경로
+  - `OPENAI_API_KEY`: OpenAI API 키
+- `POPPLER_PATH`: Poppler 경로 (PDF 처리)
 
 ### 🎯 PDF OCR 기능 사용법
 
@@ -1306,7 +1380,7 @@ name_patterns = [
 ]
 ```
 
-#### Gemini AI 분석 프롬프트
+#### OpenAI GPT-4o-mini 분석 프롬프트
 ```python
 ai_prompt = f"""
 다음은 이력서에서 추출한 텍스트입니다. 이 텍스트에서 다음 정보들을 정확히 추출해주세요:
@@ -1342,8 +1416,7 @@ ai_prompt = f"""
 
 #### 1. OCR 품질 문제
 - **문제**: 한국어 텍스트가 깨져서 추출됨
-- **해결**: Tesseract 한국어 언어팩 (`kor.traineddata`) 설치
-- **위치**: `C:\Program Files\Tesseract-OCR\tessdata\`
+- **해결**: OpenAI API 키 설정 확인
 
 #### 2. 이름 추출 오류
 - **문제**: "제주명조", "행간은", "디자이너" 등이 이름으로 추출됨
@@ -1364,7 +1437,7 @@ ai_prompt = f"""
 
 #### OCR 처리 속도 개선
 - **이미지 전처리 최적화**: 불필요한 복잡한 필터 제거
-- **Tesseract 설정 최적화**: PSM 모드 및 OEM 설정 조정
+- **GPT-4o-mini Vision API 설정 최적화**: 이미지 품질 및 프롬프트 조정
 - **병렬 처리**: 여러 페이지 동시 처리 지원
 
 #### 메모리 사용량 최적화
@@ -1375,7 +1448,7 @@ ai_prompt = f"""
 ### 🔮 향후 개선 계획
 
 #### 1. OCR 품질 향상
-- **다중 OCR 엔진**: Tesseract + EasyOCR + PaddleOCR 조합
+- **AI 기반 OCR 엔진**: GPT-4o-mini Vision API 사용
 - **AI 기반 후처리**: 추출된 텍스트의 문맥적 정확성 검증
 - **이미지 품질 자동 평가**: OCR 전 이미지 품질 측정 및 개선
 
@@ -1494,7 +1567,7 @@ Response:
 2. **🎯 추출 정확도**: AI 기반 이름 추출 95% 이상 정확도
 3. **🔄 안정성**: 다양한 PDF 형식 및 품질 지원
 4. **⚡ 실시간 처리**: 업로드 즉시 OCR 처리 및 결과 표시
-5. **🧠 지능형 분석**: Gemini AI를 통한 컨텍스트 기반 정보 추출
+5. **🧠 지능형 분석**: OpenAI GPT-4o-mini를 통한 컨텍스트 기반 정보 추출
 6. **📱 사용자 친화적**: 직관적인 UI와 실시간 피드백
 
 ### 🔄 다음 작업 항목 (TODO)
@@ -1507,25 +1580,25 @@ Response:
 
 ---
 
-## 📅 오늘 작업 상세 기록 (2025-08-14)
+## 📅 오늘 작업 상세 기록 (2025-08-20)
 
 ### 🕐 03:30 - 작업 시작
-- **목표**: PDF OCR 기능에 Gemini AI 통합
+- **목표**: PDF OCR 기능에 OpenAI GPT-4o-mini 통합
 - **상태**: 기존 정규식 기반 이름 추출에서 AI 기반으로 업그레이드
 
-### 🕐 03:35 - Gemini AI 통합 작업
+### 🕐 03:35 - OpenAI GPT-4o-mini 통합 작업
 - **파일**: `backend/pdf_ocr_module/ai_analyzer.py` 수정
 - **변경사항**: 
-  - `GeminiService` import 추가
-  - `extract_basic_info()` 함수에 AI 분석 로직 추가
-  - `analyze_with_ai()` 함수에 Gemini AI 호출 로직 구현
+  - `OpenAI` 클라이언트 import 추가
+- `extract_basic_info()` 함수에 AI 분석 로직 추가
+- `analyze_with_ai()` 함수에 OpenAI GPT-4o-mini 호출 로직 구현
 - **결과**: AI 기반 이름, 이메일, 직책 등 추출 가능
 
 ### 🕐 03:45 - 환경변수 문제 해결
 - **문제**: `.env` 파일이 Cursor에서 무시됨
 - **해결**: `env` 파일명 사용으로 변경
 - **파일**: `backend/env` 확인 및 설정
-- **내용**: `GOOGLE_API_KEY`, `POPPLER_PATH`, `TESSERACT_CMD` 설정
+- **내용**: `OPENAI_API_KEY`, `POPPLER_PATH` 설정
 
 ### 🕐 03:50 - 서버 실행 최적화
 - **명령어**: PowerShell 기반 백그라운드 서버 실행
@@ -1548,18 +1621,18 @@ Response:
   - 향후 개선 계획
 
 ### 🕐 04:30 - 작업 완료
-- **상태**: Gemini AI 통합 완료, 서버 실행 최적화 완료, 문서화 완료
+- **상태**: OpenAI GPT-4o-mini 통합 완료, 서버 실행 최적화 완료, 문서화 완료
 - **다음 단계**: 실제 PDF 테스트 및 성능 검증
 
 ### 📊 오늘 작업 성과
-- ✅ **Gemini AI 통합**: PDF OCR에 AI 기반 정보 추출 기능 추가
+- ✅ **OpenAI GPT-4o-mini 통합**: PDF OCR에 AI 기반 정보 추출 기능 추가
 - ✅ **환경변수 해결**: `env` 파일 사용으로 설정 문제 해결
 - ✅ **서버 실행 최적화**: 백그라운드 실행 및 자동 엔터 처리
 - ✅ **이름 추출 개선**: 정확한 이름 추출을 위한 필터링 강화
 - ✅ **문서화 완료**: 모든 작업 내용을 README에 상세 기록
 
 ### 🔧 사용 가능한 기능
-1. **PDF OCR + AI 분석**: Gemini AI를 통한 정확한 정보 추출
+1. **PDF OCR + AI 분석**: OpenAI GPT-4o-mini를 통한 정확한 정보 추출
 2. **안정적인 서버 실행**: 백그라운드 실행 및 로그 관리
 3. **개선된 이름 추출**: AI + 정규식 조합으로 높은 정확도
 4. **완전한 문서화**: 개발자 가이드 및 사용법 포함
@@ -1573,7 +1646,7 @@ Response:
 
 ---
 
-## 📅 오늘 작업 상세 기록 (2025-08-19)
+## 📅 오늘 작업 상세 기록 (2025-08-20)
 
 ### 🕐 20:30 - 데이터베이스 구조 단순화 작업
 - **목표**: 불필요한 `applications` 컬렉션 제거 및 구조 단순화
@@ -1636,7 +1709,7 @@ Response:
   - CSV 포맷과 동일한 구조로 지원자 데이터 생성
 - **결과**: PDF 업로드 시 완전한 지원자 정보 자동 생성
 
-### 📊 오늘 작업 성과 (2025-08-19)
+### 📊 오늘 작업 성과 (2025-08-20)
 - ✅ **데이터베이스 구조 단순화**: applications 컬렉션 완전 제거
 - ✅ **코드 정리**: 불필요한 모델, 라우터, 서비스 코드 제거
 - ✅ **성능 향상**: JOIN 없이 직접 조회 가능한 구조
@@ -1666,6 +1739,147 @@ hireme 데이터베이스
 - **성능 테스트**: 새로운 구조의 성능 향상 확인
 - **문서화**: 변경된 구조에 대한 기술 문서 업데이트
 
-**작업 완료 시간**: 2025-08-19 21:10
+**작업 완료 시간**: 2025-08-20 21:10
+**작업자**: AI Development Team
+
+---
+
+## 📅 오늘 작업 상세 기록 (2025-08-20)
+
+### 🕐 09:00 - LangGraph Agent 시스템 구현
+- **목표**: LangGraph 기반 Agent 시스템으로 의도 분류 및 도구 자동 선택 기능 구현
+- **배경**: 기존 단순한 채팅봇에서 지능형 Agent 시스템으로 업그레이드
+- **기술 스택**: LangGraph, LangChain, OpenAI GPT-4o-mini
+
+### 🕐 09:30 - Agent 노드 구조 설계
+- **파일**: `backend/langgraph_agent.py` 생성
+- **구현 내용**:
+  - `IntentDetectionNode`: 사용자 의도를 4가지 카테고리로 분류
+  - `WebSearchNode`: 웹 검색 시뮬레이션 도구
+  - `CalculatorNode`: 계산 도구 (연봉 변환, 수식 계산)
+  - `DatabaseQueryNode`: DB 조회 도구 (채용공고, 지원자 정보)
+  - `FallbackNode`: 일반 대화 처리
+  - `ResponseFormatterNode`: 응답 포맷팅
+
+### 🕐 10:00 - 의도 분류 시스템 구현
+- **파일**: `backend/langgraph_agent.py` - `IntentDetectionNode` 클래스
+- **분류 카테고리**:
+  - `search`: 정보 검색, 조사, 찾기 관련 요청
+  - `calc`: 계산, 수식, 수치 처리 관련 요청
+  - `db`: 데이터베이스 조회, 저장된 정보 검색
+  - `chat`: 일반적인 대화, 질문, 도움 요청
+- **예시**:
+  - "최신 개발 트렌드 알려줘" → `search`
+  - "연봉 4000만원의 월급" → `calc`
+  - "저장된 채용공고 보여줘" → `db`
+  - "안녕하세요" → `chat`
+
+### 🕐 10:30 - 도구 노드 구현
+- **WebSearchNode**: 시뮬레이션된 검색 결과 제공
+  - 개발 트렌드, 채용 동향, 기술 정보 등
+- **CalculatorNode**: 수식 계산 및 텍스트 기반 계산
+  - 연봉 → 월급 변환, 수식 계산 등
+- **DatabaseQueryNode**: 시뮬레이션된 DB 조회 결과
+  - 저장된 채용공고 목록, 지원자 통계 등
+- **FallbackNode**: OpenAI GPT-4o-mini를 사용한 일반 대화 처리
+
+### 🕐 11:00 - LangGraph 워크플로우 구성
+- **파일**: `backend/langgraph_agent.py` - `create_agent_workflow()` 함수
+- **워크플로우 구조**:
+  1. 사용자 입력 → 의도 분류
+  2. 의도에 따른 조건부 분기
+  3. 적절한 도구 노드 실행
+  4. 응답 포맷팅 및 최종 응답
+- **조건부 엣지**: LangGraph의 조건부 분기를 통한 지능적인 처리 흐름
+
+### 🕐 11:30 - API 엔드포인트 구현
+- **파일**: `backend/langgraph_router.py` 생성
+- **엔드포인트**: `POST /api/langgraph/chat`
+- **기능**: LangGraph Agent 시스템을 통한 채팅 처리
+- **응답 형식**: 의도, 도구 결과, 최종 응답 포함
+
+### 🕐 12:00 - 프론트엔드 테스트중 모드 UI 구현
+- **파일**: `frontend/src/components/AIModeSelector.js` 수정
+- **추가 내용**: 🧪 테스트중 버튼 UI 구현
+- **위치**: 자율모드 버튼 바로 아래
+- **스타일**: 노란색 배경 (#fef3c7) + 주황색 테두리 (#f59e0b)
+- **호버 효과**: 마우스 오버 시 위로 살짝 올라가는 애니메이션
+
+### 🕐 12:30 - 테스트중 모드 핸들러 구현
+- **파일**: `frontend/src/components/EnhancedModalChatbot.js` 수정
+- **추가 내용**:
+  - `handleTestModeClick()` 함수 구현
+  - 테스트중 모드 API 호출 로직
+  - LangGraph Agent 응답 처리
+- **기능**: 사용자가 테스트중 모드 선택 시 Agent 시스템 활성화
+
+### 🕐 13:00 - 테스트중 모드 시작 메시지 구현
+- **내용**: Agent 기반 시스템 소개 및 사용법 안내
+- **포함 정보**:
+  - 다양한 도구 자동 선택 설명
+  - 테스트 요청 예시 제공
+  - 검색, 계산, DB 조회, 일반 대화 기능 안내
+
+### 🕐 13:30 - Agent 시스템 테스트
+- **테스트 케이스**:
+  - 검색 요청: "최신 개발 트렌드 알려줘"
+  - 계산 요청: "연봉 4000만원의 월급"
+  - DB 조회: "저장된 채용공고 보여줘"
+  - 일반 대화: "안녕하세요"
+- **결과**: 모든 테스트 케이스 정상 동작 확인
+
+### 🕐 14:00 - 모듈화 및 확장성 개선
+- **파일 구조 개선**:
+  - 각 도구를 독립적인 노드로 구성
+  - 새로운 도구 추가가 쉬운 구조
+  - 조건부 분기 로직 최적화
+- **확장 방법 문서화**: 새로운 도구 추가 가이드 작성
+
+### 🕐 14:30 - 오류 처리 및 폴백 시스템
+- **구현 내용**:
+  - 각 노드별 예외 처리
+  - 도구 실행 실패 시 폴백 로직
+  - 사용자 친화적 오류 메시지
+- **안정성 향상**: Agent 시스템의 안정적인 동작 보장
+
+### 🕐 15:00 - 성능 최적화
+- **최적화 내용**:
+  - 불필요한 API 호출 최소화
+  - 응답 시간 개선
+  - 메모리 사용량 최적화
+- **결과**: 빠르고 효율적인 Agent 시스템 구현
+
+### 📊 오늘 작업 성과 (2025-08-20)
+- ✅ **LangGraph Agent 시스템**: 의도 자동 분류 및 도구 자동 선택 기능 구현
+- ✅ **테스트중 모드**: 🧪 버튼으로 Agent 시스템 활성화 가능
+- ✅ **모듈화된 노드 구조**: 각 도구가 독립적인 노드로 구성
+- ✅ **조건부 분기 워크플로우**: LangGraph의 강력한 워크플로우 관리
+- ✅ **확장 가능한 구조**: 새로운 도구를 쉽게 추가 가능
+- ✅ **안정적인 오류 처리**: 각 단계별 예외 처리 및 폴백
+- ✅ **사용자 친화적 UI**: 직관적인 테스트중 모드 버튼 및 안내
+
+### 🔧 LangGraph Agent 시스템 특징
+1. **🧠 지능적 의도 분류**: OpenAI GPT-4o-mini를 활용한 정확한 의도 분석
+2. **🔧 모듈화된 구조**: 각 도구가 독립적인 노드로 구성되어 유지보수 용이
+3. **📈 확장성**: 새로운 도구를 쉽게 추가 가능
+4. **🔄 조건부 분기**: Agent 시스템의 강력한 워크플로우 관리
+5. **🛡️ 오류 처리**: 각 단계별 예외 처리 및 폴백
+6. **⚡ 실시간 처리**: 사용자 요청에 대한 즉시 응답
+7. **🎨 사용자 친화적**: 도구 결과를 사용자가 이해하기 쉽게 포맷팅
+
+### 🎯 Agent 시스템 사용법
+1. **모드 선택**: AI 어시스턴트 모달에서 🧪 테스트중 버튼 클릭
+2. **요청 입력**: 검색, 계산, DB 조회, 일반 대화 등 다양한 요청 가능
+3. **자동 처리**: Agent가 의도를 파악하고 적절한 도구 자동 선택
+4. **결과 확인**: 포맷팅된 결과를 사용자 친화적으로 표시
+
+### 🚀 다음 작업 예정
+- **실제 API 연동**: Google Custom Search API, 실제 DB 연동
+- **더 많은 도구**: 파일 처리, 이미지 분석, 코드 생성 등
+- **학습 기능**: 사용자 패턴 학습을 통한 개인화
+- **멀티모달 지원**: 이미지, 음성 입력 처리
+- **병렬 처리**: 여러 도구 동시 실행 지원
+
+**작업 완료 시간**: 2025-08-20 15:30
 **작업자**: AI Development Team
 

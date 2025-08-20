@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from datetime import datetime
 
-# 기존 PDF OCR 모듈 import (Tesseract 대신)
+# GPT-4o-mini Vision API 기반 PDF OCR 모듈 import
 from pdf_ocr_module.main import process_pdf
 from pdf_ocr_module.config import Settings
 from pdf_ocr_module.ai_analyzer import analyze_text
@@ -69,7 +69,7 @@ def _extract_contact_from_text(text: str) -> Dict[str, Optional[str]]:
     return {"email": first_email, "phone": first_phone, "name": guessed_name}
 
 
-def _build_applicant_data(name: Optional[str], email: Optional[str], phone: Optional[str], ocr_result: Dict[str, Any]) -> ApplicantCreate:
+def _build_applicant_data(name: Optional[str], email: Optional[str], phone: Optional[str], ocr_result: Dict[str, Any], job_posting_id: Optional[str] = None) -> ApplicantCreate:
     """OCR 결과와 AI 분석 결과를 종합하여 지원자 데이터를 생성합니다."""
     
     # 1. AI 분석 결과에서 기본 정보 추출
@@ -168,7 +168,8 @@ def _build_applicant_data(name: Optional[str], email: Optional[str], phone: Opti
         careerHistory=final_career_history,
         analysisScore=final_analysis_score,
         analysisResult=final_analysis_result,
-        status="pending"
+        status="pending",
+        job_posting_id=job_posting_id if job_posting_id else None
     )
 
 def _extract_position_from_text(text: str) -> str:
@@ -269,7 +270,7 @@ async def upload_resume_with_ocr(
             temp_file_path = Path(temp_file.name)
         
         try:
-            # 기존 PDF OCR 처리 사용 (Tesseract 대신)
+            # GPT-4o-mini Vision API를 사용한 PDF OCR 처리
             ocr_result = process_pdf(str(temp_file_path))
             
             # AI 분석 결과 가져오기
@@ -287,7 +288,7 @@ async def upload_resume_with_ocr(
             }
             
             # 지원자 데이터 생성 (OCR 기반 자동 추출)
-            applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result)
+            applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
             
             # MongoDB에 저장
             result = mongo_saver.save_resume_with_ocr(
@@ -336,7 +337,7 @@ async def upload_cover_letter_with_ocr(
             temp_file_path = Path(temp_file.name)
         
         try:
-            # 기존 PDF OCR 처리 사용 (Tesseract 대신)
+            # GPT-4o-mini Vision API를 사용한 PDF OCR 처리
             ocr_result = process_pdf(str(temp_file_path))
             
             # AI 분석 결과 가져오기
@@ -354,7 +355,7 @@ async def upload_cover_letter_with_ocr(
             }
             
             # 지원자 데이터 생성 (OCR 기반 자동 추출)
-            applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result)
+            applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
             
             # MongoDB에 저장
             result = mongo_saver.save_cover_letter_with_ocr(
@@ -403,7 +404,7 @@ async def upload_portfolio_with_ocr(
             temp_file_path = Path(temp_file.name)
         
         try:
-            # 기존 PDF OCR 처리 사용 (Tesseract 대신)
+            # GPT-4o-mini Vision API를 사용한 PDF OCR 처리
             ocr_result = process_pdf(str(temp_file_path))
             
             # AI 분석 결과 가져오기
@@ -421,7 +422,7 @@ async def upload_portfolio_with_ocr(
             }
             
             # 지원자 데이터 생성 (OCR 기반 자동 추출)
-            applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result)
+            applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
             
             # MongoDB에 저장
             result = mongo_saver.save_portfolio_with_ocr(
@@ -480,7 +481,7 @@ async def upload_multiple_documents(
             
             ocr_result = process_pdf(str(temp_file_path))
             if not applicant_data:
-                applicant_data = _build_applicant_data(name, email, phone, ocr_result)
+                applicant_data = _build_applicant_data(name, email, phone, ocr_result, job_posting_id)
             result = mongo_saver.save_resume_with_ocr(
                 ocr_result=ocr_result,
                 applicant_data=applicant_data,
@@ -502,7 +503,7 @@ async def upload_multiple_documents(
             
             ocr_result = process_pdf(str(temp_file_path))
             if not applicant_data:
-                applicant_data = _build_applicant_data(name, email, phone, ocr_result)
+                applicant_data = _build_applicant_data(name, email, phone, ocr_result, job_posting_id)
             result = mongo_saver.save_cover_letter_with_ocr(
                 ocr_result=ocr_result,
                 applicant_data=applicant_data,
@@ -524,7 +525,7 @@ async def upload_multiple_documents(
             
             ocr_result = process_pdf(str(temp_file_path))
             if not applicant_data:
-                applicant_data = _build_applicant_data(name, email, phone, ocr_result)
+                applicant_data = _build_applicant_data(name, email, phone, ocr_result, job_posting_id)
             result = mongo_saver.save_portfolio_with_ocr(
                 ocr_result=ocr_result,
                 applicant_data=applicant_data,
@@ -551,5 +552,326 @@ async def upload_multiple_documents(
                 temp_file_path.unlink()
         
         raise HTTPException(status_code=500, detail=f"문서 처리 실패: {str(e)}")
+    finally:
+        mongo_saver.close()
+
+@router.post("/upload-multiple-documents")
+async def upload_multiple_documents(
+    resume_file: Optional[UploadFile] = File(None),
+    cover_letter_file: Optional[UploadFile] = File(None),
+    portfolio_file: Optional[UploadFile] = File(None),
+    name: Optional[str] = Form(None),
+    email: Optional[str] = Form(None),
+    phone: Optional[str] = Form(None),
+    job_posting_id: Optional[str] = Form("default_job_posting"),
+    mongo_saver: MongoSaver = Depends(get_mongo_saver)
+):
+    """여러 문서를 한 번에 업로드하고 OCR 처리 후 하나의 지원자 레코드로 통합 저장합니다."""
+    try:
+        # 최소 하나의 파일은 필요
+        if not resume_file and not cover_letter_file and not portfolio_file:
+            raise HTTPException(status_code=400, detail="최소 하나의 문서 파일이 필요합니다")
+        
+        # job_posting_id 기본값 설정
+        if not job_posting_id or job_posting_id == "default_job_posting":
+            job_posting_id = "default_job_posting"
+        
+        results = {}
+        temp_files = []
+        applicant_id = None
+        
+        # 1. 이력서 처리 (우선순위 1)
+        if resume_file:
+            if not resume_file.filename.lower().endswith('.pdf'):
+                raise HTTPException(status_code=400, detail="이력서는 PDF 파일만 업로드 가능합니다")
+            
+            print(f"📄 이력서 처리 시작: {resume_file.filename}")
+            print(f"📄 이력서 파일 크기: {resume_file.size} bytes")
+            print(f"📄 이력서 파일 타입: {resume_file.content_type}")
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                content = await resume_file.read()
+                temp_file.write(content)
+                temp_file_path = Path(temp_file.name)
+                temp_files.append(temp_file_path)
+            
+            try:
+                # OCR 처리
+                print(f"🔍 이력서 OCR 처리 중...")
+                ocr_result = process_pdf(str(temp_file_path))
+                
+                # AI 분석 결과 가져오기
+                print(f"🤖 이력서 AI 분석 중...")
+                settings = Settings()
+                ai_analysis = analyze_text(ocr_result.get("full_text", ""), settings)
+                
+                # OCR 결과에 AI 분석 결과 추가
+                enhanced_ocr_result = {
+                    "extracted_text": ocr_result.get("full_text", ""),
+                    "summary": ai_analysis.get("summary", ""),
+                    "keywords": ai_analysis.get("keywords", []),
+                    "basic_info": ai_analysis.get("basic_info", {}),
+                    "structured_data": ai_analysis.get("structured_data", {}),
+                    "document_type": "resume",
+                    "pages": ocr_result.get("num_pages", 0)
+                }
+                
+                # 지원자 데이터 생성
+                applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
+                
+                # MongoDB에 저장
+                result = mongo_saver.save_resume_with_ocr(
+                    ocr_result=enhanced_ocr_result,
+                    applicant_data=applicant_data,
+                    job_posting_id=job_posting_id,
+                    file_path=temp_file_path
+                )
+                
+                results["resume"] = result
+                applicant_id = result.get("applicant", {}).get("id")
+                
+                print(f"✅ 이력서 처리 완료: {applicant_id}")
+                print(f"📊 이력서 결과: {result.get('message', 'N/A')}")
+                print(f"👤 지원자 정보: {result.get('applicant', {}).get('name', 'N/A')} ({result.get('applicant', {}).get('email', 'N/A')})")
+                
+            except Exception as e:
+                import traceback
+                error_traceback = traceback.format_exc()
+                print(f"❌ 이력서 처리 실패: {e}")
+                print(f"🔍 이력서 에러 상세 정보:")
+                print(error_traceback)
+                
+                error_message = f"이력서 처리 실패: {str(e)}"
+                if hasattr(e, '__traceback__'):
+                    error_message += f"\n\n상세 정보: {error_traceback}"
+                
+                return JSONResponse(
+                    status_code=500,
+                    content={
+                        "success": False,
+                        "error": "이력서 처리 실패",
+                        "detail": error_message,
+                        "timestamp": datetime.now().isoformat()
+                    }
+                )
+        
+        # 2. 자기소개서 처리 (기존 지원자에 연결)
+        if cover_letter_file:
+            if not cover_letter_file.filename.lower().endswith('.pdf'):
+                raise HTTPException(status_code=400, detail="자기소개서는 PDF 파일만 업로드 가능합니다")
+            
+            print(f"📝 자기소개서 처리 시작: {cover_letter_file.filename}")
+            print(f"📝 자기소개서 파일 크기: {cover_letter_file.size} bytes")
+            print(f"📝 자기소개서 파일 타입: {cover_letter_file.content_type}")
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                content = await cover_letter_file.read()
+                temp_file.write(content)
+                temp_file_path = Path(temp_file.name)
+                temp_files.append(temp_file_path)
+            
+            try:
+                # OCR 처리
+                print(f"🔍 자기소개서 OCR 처리 중...")
+                ocr_result = process_pdf(str(temp_file_path))
+                
+                # AI 분석 결과 가져오기
+                print(f"🤖 자기소개서 AI 분석 중...")
+                settings = Settings()
+                ai_analysis = analyze_text(ocr_result.get("full_text", ""), settings)
+                
+                # OCR 결과에 AI 분석 결과 추가
+                enhanced_ocr_result = {
+                    "extracted_text": ocr_result.get("full_text", ""),
+                    "summary": ai_analysis.get("summary", ""),
+                    "keywords": ai_analysis.get("keywords", []),
+                    "basic_info": ai_analysis.get("basic_info", {}),
+                    "structured_data": ai_analysis.get("structured_data", {}),
+                    "document_type": "cover_letter",
+                    "pages": ocr_result.get("num_pages", 0)
+                }
+                
+                # 기존 지원자 데이터 사용 또는 새로 생성
+                if applicant_id:
+                    # 기존 지원자 정보 가져오기
+                    existing_applicant = mongo_saver.mongo_service.get_applicant_by_id(applicant_id)
+                    if existing_applicant:
+                        applicant_data = ApplicantCreate(
+                            name=existing_applicant.get("name", name),
+                            email=existing_applicant.get("email", email),
+                            phone=existing_applicant.get("phone", phone),
+                            position=existing_applicant.get("position", ""),
+                            department=existing_applicant.get("department", ""),
+                            experience=existing_applicant.get("experience", ""),
+                            skills=existing_applicant.get("skills", ""),
+                            growthBackground=existing_applicant.get("growthBackground", ""),
+                            motivation=existing_applicant.get("motivation", ""),
+                            careerHistory=existing_applicant.get("careerHistory", ""),
+                            analysisScore=existing_applicant.get("analysisScore", 0),
+                            analysisResult=existing_applicant.get("analysisResult", ""),
+                            status=existing_applicant.get("status", "pending"),
+                            job_posting_id=job_posting_id
+                        )
+                    else:
+                        applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
+                else:
+                    applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
+                
+                # MongoDB에 저장
+                result = mongo_saver.save_cover_letter_with_ocr(
+                    ocr_result=enhanced_ocr_result,
+                    applicant_data=applicant_data,
+                    job_posting_id=job_posting_id,
+                    file_path=temp_file_path
+                )
+                
+                results["cover_letter"] = result
+                if not applicant_id:
+                    applicant_id = result.get("applicant", {}).get("id")
+                
+                print(f"✅ 자기소개서 처리 완료: {applicant_id}")
+                print(f"📊 자기소개서 결과: {result.get('message', 'N/A')}")
+                print(f"👤 지원자 정보: {result.get('applicant', {}).get('name', 'N/A')} ({result.get('applicant', {}).get('email', 'N/A')})")
+                
+            except Exception as e:
+                import traceback
+                error_traceback = traceback.format_exc()
+                print(f"❌ 자기소개서 처리 실패: {e}")
+                print(f"🔍 자기소개서 에러 상세 정보:")
+                print(error_traceback)
+                raise HTTPException(status_code=500, detail=f"자기소개서 처리 실패: {str(e)}\n\n상세 정보: {error_traceback}")
+        
+        # 3. 포트폴리오 처리 (기존 지원자에 연결)
+        if portfolio_file:
+            if not portfolio_file.filename.lower().endswith('.pdf'):
+                raise HTTPException(status_code=400, detail="포트폴리오는 PDF 파일만 업로드 가능합니다")
+            
+            print(f"📁 포트폴리오 처리 시작: {portfolio_file.filename}")
+            print(f"📁 포트폴리오 파일 크기: {portfolio_file.size} bytes")
+            print(f"📁 포트폴리오 파일 타입: {portfolio_file.content_type}")
+            
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+                content = await portfolio_file.read()
+                temp_file.write(content)
+                temp_file_path = Path(temp_file.name)
+                temp_files.append(temp_file_path)
+            
+            try:
+                # OCR 처리
+                print(f"🔍 포트폴리오 OCR 처리 중...")
+                ocr_result = process_pdf(str(temp_file_path))
+                
+                # AI 분석 결과 가져오기
+                print(f"🤖 포트폴리오 AI 분석 중...")
+                settings = Settings()
+                ai_analysis = analyze_text(ocr_result.get("full_text", ""), settings)
+                
+                # OCR 결과에 AI 분석 결과 추가
+                enhanced_ocr_result = {
+                    "extracted_text": ocr_result.get("full_text", ""),
+                    "summary": ai_analysis.get("summary", ""),
+                    "keywords": ai_analysis.get("keywords", []),
+                    "basic_info": ai_analysis.get("basic_info", {}),
+                    "structured_data": ai_analysis.get("structured_data", {}),
+                    "document_type": "portfolio",
+                    "pages": ocr_result.get("num_pages", 0)
+                }
+                
+                # 기존 지원자 데이터 사용 또는 새로 생성
+                if applicant_id:
+                    # 기존 지원자 정보 가져오기
+                    existing_applicant = mongo_saver.mongo_service.get_applicant_by_id(applicant_id)
+                    if existing_applicant:
+                        applicant_data = ApplicantCreate(
+                            name=existing_applicant.get("name", name),
+                            email=existing_applicant.get("email", email),
+                            phone=existing_applicant.get("phone", phone),
+                            position=existing_applicant.get("position", ""),
+                            department=existing_applicant.get("department", ""),
+                            experience=existing_applicant.get("experience", ""),
+                            skills=existing_applicant.get("skills", ""),
+                            growthBackground=existing_applicant.get("growthBackground", ""),
+                            motivation=existing_applicant.get("motivation", ""),
+                            careerHistory=existing_applicant.get("careerHistory", ""),
+                            analysisScore=existing_applicant.get("analysisScore", 0),
+                            analysisResult=existing_applicant.get("analysisResult", ""),
+                            status=existing_applicant.get("status", "pending"),
+                            job_posting_id=job_posting_id
+                        )
+                    else:
+                        applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
+                else:
+                    applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
+                
+                # MongoDB에 저장
+                result = mongo_saver.save_portfolio_with_ocr(
+                    ocr_result=enhanced_ocr_result,
+                    applicant_data=applicant_data,
+                    job_posting_id=job_posting_id,
+                    file_path=temp_file_path
+                )
+                
+                results["portfolio"] = result
+                if not applicant_id:
+                    applicant_id = result.get("applicant", {}).get("id")
+                
+                print(f"✅ 포트폴리오 처리 완료: {applicant_id}")
+                print(f"📊 포트폴리오 결과: {result.get('message', 'N/A')}")
+                print(f"👤 지원자 정보: {result.get('applicant', {}).get('name', 'N/A')} ({result.get('applicant', {}).get('email', 'N/A')})")
+                
+            except Exception as e:
+                import traceback
+                error_traceback = traceback.format_exc()
+                print(f"❌ 포트폴리오 처리 실패: {e}")
+                print(f"🔍 포트폴리오 에러 상세 정보:")
+                print(error_traceback)
+                raise HTTPException(status_code=500, detail=f"포트폴리오 처리 실패: {str(e)}\n\n상세 정보: {error_traceback}")
+        
+        # 임시 파일들 정리
+        print(f"🧹 임시 파일 정리 중... ({len(temp_files)}개 파일)")
+        for temp_file_path in temp_files:
+            if temp_file_path.exists():
+                temp_file_path.unlink()
+        
+        print(f"✅ 모든 문서 처리 완료! 지원자 ID: {applicant_id}")
+        print(f"📊 업로드된 문서: {list(results.keys())}")
+        
+        # 최종 결과 반환
+        return JSONResponse(content={
+            "success": True,
+            "message": "모든 문서 OCR 처리 및 저장 완료",
+            "data": {
+                "applicant_id": applicant_id,
+                "results": results,
+                "uploaded_documents": list(results.keys())
+            }
+        })
+        
+    except Exception as e:
+        # 임시 파일들 정리
+        for temp_file_path in temp_files:
+            if temp_file_path.exists():
+                temp_file_path.unlink()
+        
+        import traceback
+        error_traceback = traceback.format_exc()
+        print(f"❌ 통합 문서 처리 실패: {e}")
+        print(f"🔍 에러 상세 정보:")
+        print(error_traceback)
+        
+        # 더 명확한 에러 메시지 생성
+        error_message = f"문서 처리 실패: {str(e)}"
+        if hasattr(e, '__traceback__'):
+            error_message += f"\n\n상세 정보: {error_traceback}"
+        
+        return JSONResponse(
+            status_code=500,
+            content={
+                "success": False,
+                "error": "문서 처리 실패",
+                "detail": error_message,
+                "timestamp": datetime.now().isoformat()
+            }
+        )
     finally:
         mongo_saver.close()
