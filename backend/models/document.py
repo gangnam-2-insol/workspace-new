@@ -60,7 +60,9 @@ class ResumeDocument(DocumentBase):
 
 # 자기소개서 모델 (OCR 기반)
 class CoverLetterCreate(DocumentBase):
-    pass
+    careerHistory: Optional[str] = Field(None, description="경력사항")
+    growthBackground: Optional[str] = Field(None, description="성장배경")
+    motivation: Optional[str] = Field(None, description="지원동기")
 
 class CoverLetterDocument(DocumentBase):
     id: str = Field(alias="_id", description="자기소개서 ID")

@@ -2733,7 +2733,8 @@ const ApplicantManagement = () => {
       });
 
       if (response.ok) {
-        console.log('✅ 지원자 삭제 성공');
+        const result = await response.json();
+        console.log('✅ 지원자 삭제 성공:', result);
         
         // 모달 닫기
         handleCloseModal();
@@ -2745,7 +2746,10 @@ const ApplicantManagement = () => {
         // 통계 업데이트
         loadStats();
         
-        alert('지원자가 성공적으로 삭제되었습니다.');
+        // 삭제된 문서 정보 표시
+        const deletedDocs = result.deleted_documents || {};
+        const deletedCount = Object.values(deletedDocs).filter(Boolean).length;
+        alert(`지원자와 연관된 ${deletedCount}개 문서가 성공적으로 삭제되었습니다.\n\n삭제된 문서:\n${deletedDocs.applicant ? '• 지원자 정보\n' : ''}${deletedDocs.resume ? '• 이력서\n' : ''}${deletedDocs.cover_letter ? '• 자기소개서\n' : ''}${deletedDocs.portfolio ? '• 포트폴리오\n' : ''}`);
       } else {
         const errorData = await response.json();
         console.error('❌ 지원자 삭제 실패:', errorData);
@@ -4488,9 +4492,55 @@ const ApplicantManagement = () => {
                         <ResumeAnalysisItem>
                           <ResumeAnalysisLabel>기술 스택:</ResumeAnalysisLabel>
                           <ResumeAnalysisSkills>
-                            {(analysisResult.applicant.skills || '').split(',').map((skill, index) => (
-                              <ResumeSkillTag key={index}>{skill.trim()}</ResumeSkillTag>
-                            ))}
+                            {(() => {
+                              // 기술 스택 정보를 여러 소스에서 찾기
+                              let skills = [];
+                              
+                              // 1. applicant.skills에서 찾기
+                              if (analysisResult.applicant?.skills) {
+                                if (Array.isArray(analysisResult.applicant.skills)) {
+                                  skills = analysisResult.applicant.skills;
+                                } else if (typeof analysisResult.applicant.skills === 'string') {
+                                  skills = analysisResult.applicant.skills.split(',').map(s => s.trim());
+                                }
+                              }
+                              
+                              // 2. basic_info.skills에서 찾기
+                              if (skills.length === 0 && analysisResult.applicant?.basic_info?.skills) {
+                                if (Array.isArray(analysisResult.applicant.basic_info.skills)) {
+                                  skills = analysisResult.applicant.basic_info.skills;
+                                } else if (typeof analysisResult.applicant.basic_info.skills === 'string') {
+                                  skills = analysisResult.applicant.basic_info.skills.split(',').map(s => s.trim());
+                                }
+                              }
+                              
+                              // 3. keywords에서 찾기
+                              if (skills.length === 0 && analysisResult.keywords) {
+                                if (Array.isArray(analysisResult.keywords)) {
+                                  skills = analysisResult.keywords;
+                                } else if (typeof analysisResult.keywords === 'string') {
+                                  skills = analysisResult.keywords.split(',').map(s => s.trim());
+                                }
+                              }
+                              
+                              // 4. 업로드 결과에서 찾기
+                              if (skills.length === 0 && analysisResult.uploadResults) {
+                                for (const result of analysisResult.uploadResults) {
+                                  if (result.keywords && Array.isArray(result.keywords)) {
+                                    skills = result.keywords;
+                                    break;
+                                  }
+                                }
+                              }
+                              
+                              if (skills.length > 0) {
+                                return skills.map((skill, index) => (
+                                  <ResumeSkillTag key={index}>{skill}</ResumeSkillTag>
+                                ));
+                              } else {
+                                return <span style={{ color: '#999', fontStyle: 'italic' }}>기술 스택 정보 없음</span>;
+                              }
+                            })()}
                           </ResumeAnalysisSkills>
                         </ResumeAnalysisItem>
                       </>

@@ -198,9 +198,33 @@ def extract_basic_info(text: str) -> Dict[str, Any]:
     edu_pattern = r'([가-힣A-Za-z\s]+)(대학교|University|College|고등학교|High School)'
     info["education"] = [''.join(m) for m in re.findall(edu_pattern, text)]
 
-    # 스킬(키워드 매칭)
-    skill_keywords = r'(Python|Java|JavaScript|TypeScript|React|Vue|Angular|Node\.js|Django|Flask|Spring|MySQL|PostgreSQL|MongoDB|AWS|Azure|Docker|Kubernetes|Git|Linux)'
-    info["skills"] = list(set(re.findall(skill_keywords, text, re.IGNORECASE)))
+    # 스킬(키워드 매칭) - 더 포괄적인 기술 스택 패턴
+    skill_patterns = [
+        # 프로그래밍 언어
+        r'\b(Python|Java|JavaScript|TypeScript|C\+\+|C#|Go|Rust|Kotlin|Swift|PHP|Ruby|Scala|R|MATLAB)\b',
+        # 프론트엔드 프레임워크
+        r'\b(React|Vue|Angular|Svelte|Next\.js|Nuxt\.js|Gatsby|Ember|Backbone)\b',
+        # 백엔드 프레임워크
+        r'\b(Node\.js|Express|Django|Flask|FastAPI|Spring|Spring Boot|Laravel|ASP\.NET|Ruby on Rails)\b',
+        # 데이터베이스
+        r'\b(MySQL|PostgreSQL|MongoDB|Redis|SQLite|Oracle|SQL Server|MariaDB|Cassandra|Elasticsearch)\b',
+        # 클라우드/DevOps
+        r'\b(AWS|Azure|Google Cloud|Docker|Kubernetes|Jenkins|GitLab|GitHub Actions|Terraform|Ansible)\b',
+        # 도구/라이브러리
+        r'\b(Git|SVN|Webpack|Babel|ESLint|Prettier|Jest|Mocha|Selenium|Postman)\b',
+        # 디자인 도구
+        r'\b(Adobe Photoshop|Adobe Illustrator|Adobe XD|Figma|Sketch|InVision|Zeplin|Canva)\b',
+        # 기타 기술
+        r'\b(HTML|CSS|Sass|Less|Bootstrap|Tailwind CSS|Material-UI|Ant Design|jQuery|Lodash)\b'
+    ]
+    
+    found_skills = []
+    for pattern in skill_patterns:
+        matches = re.findall(pattern, text, re.IGNORECASE)
+        found_skills.extend(matches)
+    
+    # 중복 제거 및 정렬
+    info["skills"] = sorted(list(set(found_skills)), key=str.lower)
 
     # 주소(간단)
     addr_patterns = [

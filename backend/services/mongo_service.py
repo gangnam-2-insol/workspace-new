@@ -44,6 +44,9 @@ class MongoService:
             # 포트폴리오 스키마 검증 설정
             self._setup_portfolio_schema_validation()
             
+            # 자기소개서 스키마 검증 설정
+            self._setup_cover_letter_schema_validation()
+            
             print("✅ MongoDB 인덱스 생성 완료")
         except Exception as e:
             print(f"⚠️ 인덱스 생성 중 오류: {e}")
@@ -72,6 +75,31 @@ class MongoService:
                 print("⚠️ 포트폴리오 스키마 파일을 찾을 수 없습니다")
         except Exception as e:
             print(f"⚠️ 포트폴리오 스키마 검증 설정 중 오류: {e}")
+    
+    def _setup_cover_letter_schema_validation(self):
+        """자기소개서 컬렉션에 JSON Schema 검증을 설정합니다."""
+        try:
+            import json
+            from pathlib import Path
+            
+            # 스키마 파일 로드
+            schema_path = Path(__file__).parent.parent / "schemas" / "cover_letter_schema.json"
+            if schema_path.exists():
+                with open(schema_path, 'r', encoding='utf-8') as f:
+                    schema = json.load(f)
+                
+                # 기존 검증 규칙 제거 후 새로 설정
+                self.db.command({
+                    "collMod": "cover_letters",
+                    "validator": schema,
+                    "validationLevel": "moderate",
+                    "validationAction": "error"
+                })
+                print("✅ 자기소개서 스키마 검증 설정 완료")
+            else:
+                print("⚠️ 자기소개서 스키마 파일을 찾을 수 없습니다")
+        except Exception as e:
+            print(f"⚠️ 자기소개서 스키마 검증 설정 중 오류: {e}")
     
     # Applicant 관련 메서드
     def create_or_get_applicant(self, applicant_data: ApplicantCreate) -> Applicant:

@@ -606,17 +606,73 @@ async def get_applicant_documents(applicant_id: str):
 @app.delete("/api/applicants/{applicant_id}")
 async def delete_applicant(applicant_id: str):
     try:
-        # MongoDB ObjectId로 삭제 시도
+        # 먼저 지원자 정보를 조회하여 연관된 문서 ID들을 확인
+        try:
+            applicant = await db.applicants.find_one({"_id": ObjectId(applicant_id)})
+        except:
+            applicant = await db.applicants.find_one({"_id": applicant_id})
+        
+        if not applicant:
+            raise HTTPException(status_code=404, detail="삭제할 지원자를 찾을 수 없습니다.")
+        
+        # 연관된 문서 ID들 추출
+        resume_id = applicant.get("resume_id")
+        cover_letter_id = applicant.get("cover_letter_id")
+        portfolio_id = applicant.get("portfolio_id")
+        
+        deleted_docs = {
+            "applicant": False,
+            "resume": False,
+            "cover_letter": False,
+            "portfolio": False
+        }
+        
+        # 1. 연관된 이력서 삭제
+        if resume_id:
+            try:
+                resume_result = await db.resumes.delete_one({"_id": ObjectId(resume_id)})
+                deleted_docs["resume"] = resume_result.deleted_count > 0
+                print(f"📄 이력서 삭제: {resume_id} - {'성공' if deleted_docs['resume'] else '실패'}")
+            except Exception as e:
+                print(f"⚠️ 이력서 삭제 오류: {e}")
+        
+        # 2. 연관된 자기소개서 삭제
+        if cover_letter_id:
+            try:
+                cover_letter_result = await db.cover_letters.delete_one({"_id": ObjectId(cover_letter_id)})
+                deleted_docs["cover_letter"] = cover_letter_result.deleted_count > 0
+                print(f"📝 자기소개서 삭제: {cover_letter_id} - {'성공' if deleted_docs['cover_letter'] else '실패'}")
+            except Exception as e:
+                print(f"⚠️ 자기소개서 삭제 오류: {e}")
+        
+        # 3. 연관된 포트폴리오 삭제
+        if portfolio_id:
+            try:
+                portfolio_result = await db.portfolios.delete_one({"_id": ObjectId(portfolio_id)})
+                deleted_docs["portfolio"] = portfolio_result.deleted_count > 0
+                print(f"💼 포트폴리오 삭제: {portfolio_id} - {'성공' if deleted_docs['portfolio'] else '실패'}")
+            except Exception as e:
+                print(f"⚠️ 포트폴리오 삭제 오류: {e}")
+        
+        # 4. 마지막으로 지원자 정보 삭제
         try:
             result = await db.applicants.delete_one({"_id": ObjectId(applicant_id)})
         except:
-            # ObjectId 변환 실패시 문자열로 삭제
             result = await db.applicants.delete_one({"_id": applicant_id})
         
-        if result.deleted_count == 0:
+        deleted_docs["applicant"] = result.deleted_count > 0
+        
+        if not deleted_docs["applicant"]:
             raise HTTPException(status_code=404, detail="삭제할 지원자를 찾을 수 없습니다.")
         
-        return {"message": "지원자가 성공적으로 삭제되었습니다.", "deleted_count": result.deleted_count}
+        print(f"🗑️ 지원자 삭제 완료: {applicant_id}")
+        print(f"📊 삭제된 문서들: {deleted_docs}")
+        
+        return {
+            "message": "지원자와 연관된 모든 문서가 성공적으로 삭제되었습니다.",
+            "deleted_count": result.deleted_count,
+            "deleted_documents": deleted_docs
+        }
     except HTTPException:
         raise
     except Exception as e:

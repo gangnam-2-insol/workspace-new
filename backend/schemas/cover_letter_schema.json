@@ -1,0 +1,55 @@
+{
+  "$jsonSchema": {
+    "bsonType": "object",
+    "required": ["applicant_id", "extracted_text", "created_at"],
+    "properties": {
+      "applicant_id": {
+        "bsonType": "string",
+        "description": "지원자 ID (필수)"
+      },
+      "extracted_text": {
+        "bsonType": "string",
+        "description": "추출된 텍스트 (필수)"
+      },
+      "summary": {
+        "bsonType": "string",
+        "description": "요약"
+      },
+      "keywords": {
+        "bsonType": "array",
+        "items": {
+          "bsonType": "string"
+        },
+        "description": "키워드 목록"
+      },
+      "document_type": {
+        "bsonType": "string",
+        "description": "문서 타입"
+      },
+      "basic_info": {
+        "bsonType": "object",
+        "description": "기본 정보"
+      },
+      "file_metadata": {
+        "bsonType": "object",
+        "description": "파일 메타데이터"
+      },
+      "careerHistory": {
+        "bsonType": "string",
+        "description": "경력사항"
+      },
+      "growthBackground": {
+        "bsonType": "string",
+        "description": "성장배경"
+      },
+      "motivation": {
+        "bsonType": "string",
+        "description": "지원동기"
+      },
+      "created_at": {
+        "bsonType": "date",
+        "description": "생성일시 (필수)"
+      }
+    }
+  }
+}
