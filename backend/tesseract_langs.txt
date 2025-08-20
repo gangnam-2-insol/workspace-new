@@ -1,4 +1,0 @@
-List of available languages in "C:\Program Files\Tesseract-OCR/tessdata/" (3):
-eng
-kor
-osd
