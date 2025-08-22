@@ -3,9 +3,9 @@
 API 엔드포인트 테스트 스크립트
 """
 
-import requests
+import asyncio
+import aiohttp
 import json
-import time
 import sys
 
 def test_health_endpoint():
@@ -102,7 +102,7 @@ def main():
     
     # 서버가 시작될 때까지 잠시 대기
     print("⏳ 서버 시작 대기 중...")
-    time.sleep(3)
+    await asyncio.sleep(3)
     
     # 각 엔드포인트 테스트
     tests = [

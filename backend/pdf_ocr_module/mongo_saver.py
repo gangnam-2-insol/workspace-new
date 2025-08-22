@@ -157,7 +157,7 @@ class MongoSaver:
 }}"""
 
             response = sync_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": "너는 자기소개서 분석 AI야. 텍스트에서 경력사항, 성장배경, 지원동기를 정확히 추출해."},
                     {"role": "user", "content": ai_prompt}

@@ -67,7 +67,12 @@ if sys.platform.startswith('win'):
     sys.stderr = codecs.getwriter('utf-8')(sys.stderr.detach())
 
 # FastAPI 앱 생성
-app = FastAPI(title="AI 채용 관리 시스템 API", version="1.0.0")
+app = FastAPI(
+    title="AI 채용 관리 시스템 API", 
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 
 # CORS 설정
 app.add_middleware(
@@ -134,9 +139,18 @@ else:
 print("🔧 모듈화된 라우터 등록 완료\n")
 
 
-# MongoDB 연결
+# MongoDB 연결 최적화
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/hireme")
-client = AsyncIOMotorClient(MONGODB_URI)
+client = AsyncIOMotorClient(
+    MONGODB_URI,
+    maxPoolSize=50,  # 최대 연결 풀 크기
+    minPoolSize=10,  # 최소 연결 풀 크기
+    maxIdleTimeMS=30000,  # 유휴 연결 타임아웃
+    serverSelectionTimeoutMS=5000,  # 서버 선택 타임아웃
+    socketTimeoutMS=20000,  # 소켓 타임아웃
+    connectTimeoutMS=10000,  # 연결 타임아웃
+    retryWrites=True  # 쓰기 재시도
+)
 db = client.hireme
 
 # 환경 변수에서 API 키 로드

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 
 const TestGithubSummary = () => {
@@ -8,21 +8,6 @@ const TestGithubSummary = () => {
   const [result, setResult] = useState(null);
   const [showAllFields, setShowAllFields] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 5, step: '' });
-
-  // 완전자율에이전트: URL 파라미터에서 자동 입력 데이터 확인
-  useEffect(() => {
-    const urlParams = new URLSearchParams(window.location.search);
-    const autoUsername = urlParams.get('username');
-    if (autoUsername) {
-      console.log('🤖 [완전자율에이전트] 자동 사용자명 입력:', autoUsername);
-      setUsername(autoUsername);
-      // 자동으로 분석 시작 (더 긴 지연 시간으로 페이지 로딩 완료 보장)
-      setTimeout(() => {
-        console.log('🤖 [완전자율에이전트] 자동 분석 시작:', autoUsername);
-        handleIntegratedAnalysis(autoUsername);
-      }, 1500);
-    }
-  }, []);
 
   // GitHub URL 파싱 함수 (백엔드와 동일한 로직)
   const parseGithubUrl = (url) => {
@@ -59,19 +44,15 @@ const TestGithubSummary = () => {
     await handleIntegratedAnalysis();
   };
 
-  const handleIntegratedAnalysis = async (paramUsername = null) => {
+  const handleIntegratedAnalysis = async () => {
     setProgress({ current: 1, total: 5, step: 'GitHub 프로필 정보 확인 중...' });
     
     try {
-      // 파라미터로 전달된 username이 있으면 사용, 없으면 state의 username 사용
-      const targetUsername = paramUsername || username.trim();
-      console.log('🤖 [완전자율에이전트] 분석 대상 사용자명:', targetUsername);
-      
       // URL 파싱하여 요청 데이터 구성
-      let requestData = { username: targetUsername };
+      let requestData = { username: username.trim() };
       
-      if (targetUsername.startsWith('https://github.com/')) {
-        const parsed = parseGithubUrl(targetUsername);
+      if (username.trim().startsWith('https://github.com/')) {
+        const parsed = parseGithubUrl(username.trim());
         if (parsed) {
           requestData.username = parsed.username;
           if (parsed.repo_name) {
@@ -103,43 +84,36 @@ const TestGithubSummary = () => {
               errorMessage = 'GitHub 사용자를 찾을 수 없습니다. 사용자명을 확인해주세요.';
             } else if (data.detail.includes('리포지토리') || data.detail.includes('저장소')) {
               errorMessage = '레포지토리를 찾을 수 없습니다. URL과 접근 권한을 확인해주세요.';
+            } else {
+              errorMessage = '요청한 리소스를 찾을 수 없습니다. URL을 확인해주세요.';
             }
-          } else if (data.detail.includes('API') || data.detail.includes('rate limit')) {
-            errorMessage = 'GitHub API 호출 제한에 도달했습니다. 잠시 후 다시 시도해주세요.';
+          } else if (data.detail.includes('403') || data.detail.includes('권한')) {
+            errorMessage = '비공개 레포지토리입니다. 접근 권한이 필요합니다.';
+          } else if (data.detail.includes('rate limit') || data.detail.includes('제한')) {
+            errorMessage = 'GitHub API 제한에 도달했습니다. 잠시 후 다시 시도해주세요.';
+          } else if (data.detail.includes('timeout') || data.detail.includes('시간 초과')) {
+            errorMessage = '요청이 시간 초과되었습니다. 네트워크 상태를 확인해주세요.';
           } else {
             errorMessage = data.detail;
           }
+        } else if (data?.message) {
+          errorMessage = data.message;
         }
         
-        setError(errorMessage);
-        setLoading(false);
-        setProgress({ current: 0, total: 5, step: '' });
-        return;
+        throw new Error(errorMessage);
       }
       
-      // 4단계: 결과 처리
-      setProgress({ current: 4, total: 5, step: '분석 결과 정리 중...' });
+      // 4단계: 아키텍처 분석 (특정 레포지토리가 있는 경우)
+      if (requestData.repo_name) {
+        setProgress({ current: 4, total: 5, step: 'AI 기반 아키텍처 분석 중...' });
+      }
       
-      // 결과 데이터 구조화
-      const processedResult = {
-        ...data,
-        summary: data.summary || '분석 결과가 없습니다.',
-        languages: data.languages || [],
-        repositories: data.repositories || [],
-        profile: data.profile || {},
-        activity: data.activity || {}
-      };
+      // 5단계: 결과 생성
+      setProgress({ current: 5, total: 5, step: '분석 결과 생성 중...' });
       
-      setResult(processedResult);
-      
-      // 5단계: 완료
-      setProgress({ current: 5, total: 5, step: '분석 완료!' });
-      
-      console.log('🤖 [완전자율에이전트] GitHub 분석 완료:', processedResult);
-      
-    } catch (error) {
-      console.error('GitHub 분석 오류:', error);
-      setError('분석 중 오류가 발생했습니다. 네트워크 연결을 확인해주세요.');
+      setResult(data);
+    } catch (err) {
+      setError(err.message);
     } finally {
       setLoading(false);
       setProgress({ current: 0, total: 5, step: '' });
@@ -149,57 +123,117 @@ const TestGithubSummary = () => {
 
 
   return (
-    <div style={{ padding: '20px', maxWidth: '1200px', margin: '0 auto' }}>
-      <h1 style={{ color: '#333', marginBottom: '20px' }}>GitHub 포트폴리오 분석</h1>
-      
-      {/* 완전자율에이전트 테스트 안내 */}
-      {window.location.search.includes('username=') && (
         <div style={{ 
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', 
+      minHeight: '100vh',
+      background: '#f8f9fa',
+      // padding: '20px'
+    }}>
+      <style>
+        {`
+          @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+          }
+        `}
+      </style>
+      <div style={{ 
+        maxWidth: 900, 
+        margin: '0 auto', 
+        fontFamily: 'Arial, sans-serif' 
+      }}>
+        <div style={{ 
+          background: '#2c3e50', 
           color: 'white', 
-          padding: '15px', 
-          borderRadius: '10px', 
-          marginBottom: '20px',
+          padding: '30px', 
+          borderRadius: '12px', 
+          marginBottom: '30px',
           textAlign: 'center'
         }}>
-          <h3>🤖 완전자율에이전트 테스트 중</h3>
-          <p>자동으로 GitHub 분석이 시작됩니다. 잠시만 기다려주세요...</p>
+          <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 'bold' }}>🔍 GitHub 프로젝트 상세 분석</h1>
+          <p style={{ margin: '10px 0 0 0', opacity: 0.9 }}>AI 기반 프로젝트 아키텍처 및 기술 스택 분석</p>
+          
+          <div style={{ 
+            marginTop: '15px',
+            padding: '10px',
+            background: 'rgba(52, 152, 219, 0.2)',
+            borderRadius: '6px',
+            fontSize: '13px',
+            opacity: 0.9
+          }}>
+            💡 통합 분석: 요약 분석과 아키텍처 분석이 자동으로 함께 수행됩니다.
+            <br />
+            특정 레포지토리 URL을 입력하면 더 상세한 아키텍처 분석이 포함됩니다.
+          </div>
         </div>
-      )}
-      
-      <form onSubmit={handleSubmit} style={{ marginBottom: '30px' }}>
-        <div style={{ display: 'flex', gap: '10px', marginBottom: '10px' }}>
-          <input
-            type="text"
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            placeholder="GitHub 사용자명 또는 GitHub URL을 입력하세요"
-            style={{
-              flex: 1,
-              padding: '12px',
-              border: '2px solid #ddd',
+
+      <div style={{ 
+        background: 'white', 
+        borderRadius: '12px', 
+        padding: '25px', 
+        boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+        marginBottom: '25px'
+      }}>
+        <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+          <div style={{ flex: 1, position: 'relative' }}>
+            <input
+              placeholder="GitHub 아이디 또는 GitHub URL을 입력하세요 (예: https://github.com/test/test_project)"
+              value={username}
+              onChange={(e) => setUsername(e.target.value)}
+              style={{ 
+                width: '100%', 
+                padding: '15px 20px', 
+                borderRadius: '8px', 
+                border: '2px solid #e1e5e9',
+                fontSize: '16px',
+                outline: 'none',
+                transition: 'border-color 0.3s ease'
+              }}
+              onFocus={(e) => e.target.style.borderColor = '#2c3e50'}
+              onBlur={(e) => e.target.style.borderColor = '#e1e5e9'}
+            />
+          </div>
+          <button 
+            type="submit" 
+            disabled={loading} 
+            style={{ 
+              padding: '15px 25px',
               borderRadius: '8px',
-              fontSize: '16px'
-            }}
-          />
-          <button
-            type="submit"
-            disabled={loading}
-            style={{
-              padding: '12px 24px',
-              backgroundColor: '#667eea',
-              color: 'white',
               border: 'none',
-              borderRadius: '8px',
+              background: loading ? '#ccc' : '#2c3e50',
+              color: 'white',
               fontSize: '16px',
+              fontWeight: 'bold',
               cursor: loading ? 'not-allowed' : 'pointer',
-              opacity: loading ? 0.6 : 1
+              transition: 'transform 0.2s ease',
+              minWidth: '120px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px'
             }}
+            onMouseOver={(e) => !loading && (e.target.style.transform = 'translateY(-2px)')}
+            onMouseOut={(e) => !loading && (e.target.style.transform = 'translateY(0)')}
           >
-            {loading ? '분석 중...' : '분석하기'}
+            {loading ? (
+              <>
+                <div style={{ 
+                  width: '16px', 
+                  height: '16px', 
+                  borderRadius: '50%', 
+                  border: '2px solid white',
+                  borderTop: '2px solid transparent',
+                  animation: 'spin 1s linear infinite'
+                }} />
+                분석 중...
+              </>
+            ) : (
+              <>
+                <span>🚀</span>
+                분석하기
+              </>
+            )}
           </button>
-        </div>
-      </form>
+        </form>
+      </div>
 
       {/* 진행 상황 표시 */}
       {loading && progress.current > 0 && (
@@ -1421,6 +1455,9 @@ const TestGithubSummary = () => {
           </div>
         </div>
       )}
+
+
+      </div>
     </div>
   );
 };

@@ -1,22 +1,23 @@
-import React from 'react';
+import React, { Suspense } from 'react';
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Layout from './components/Layout/Layout';
-import Dashboard from './pages/Dashboard/Dashboard';
-import JobPostingRegistration from './pages/JobPostingRegistration/JobPostingRegistration';
-import AIJobRegistrationPage from './pages/JobPostingRegistration/AIJobRegistrationPage';
-import ResumeManagement from './pages/ResumeManagement/ResumeManagement';
-import ApplicantManagement from './pages/ApplicantManagement';
-import InterviewManagement from './pages/InterviewManagement/InterviewManagement';
-import InterviewCalendar from './pages/InterviewManagement/InterviewCalendar';
-
-import CoverLetterValidation from './pages/CoverLetterValidation/CoverLetterValidation';
-import TalentRecommendation from './pages/TalentRecommendation/TalentRecommendation';
-import UserManagement from './pages/UserManagement/UserManagement';
-import Settings from './pages/Settings/Settings';
-import TestGithubSummary from './pages/TestGithubSummary';
-import PDFOCRPage from './pages/PDFOCRPage/PDFOCRPage';
 import AITooltip from './components/AITooltip';
 import NewPickChatbot from './components/NewPickChatbot';
+
+// 코드 스플리팅으로 지연 로딩
+const Dashboard = React.lazy(() => import('./pages/Dashboard/Dashboard'));
+const JobPostingRegistration = React.lazy(() => import('./pages/JobPostingRegistration/JobPostingRegistration'));
+const AIJobRegistrationPage = React.lazy(() => import('./pages/JobPostingRegistration/AIJobRegistrationPage'));
+const ResumeManagement = React.lazy(() => import('./pages/ResumeManagement/ResumeManagement'));
+const ApplicantManagement = React.lazy(() => import('./pages/ApplicantManagement'));
+const InterviewManagement = React.lazy(() => import('./pages/InterviewManagement/InterviewManagement'));
+const InterviewCalendar = React.lazy(() => import('./pages/InterviewManagement/InterviewCalendar'));
+const CoverLetterValidation = React.lazy(() => import('./pages/CoverLetterValidation/CoverLetterValidation'));
+const TalentRecommendation = React.lazy(() => import('./pages/TalentRecommendation/TalentRecommendation'));
+const UserManagement = React.lazy(() => import('./pages/UserManagement/UserManagement'));
+const Settings = React.lazy(() => import('./pages/Settings/Settings'));
+const TestGithubSummary = React.lazy(() => import('./pages/TestGithubSummary'));
+const PDFOCRPage = React.lazy(() => import('./pages/PDFOCRPage/PDFOCRPage'));
 
 
 
@@ -158,23 +159,25 @@ function App() {
   return (
     <>
       <Layout>
-        <Routes>
-          <Route path="/" element={<Dashboard />} />
-          <Route path="/job-posting" element={<JobPostingRegistration />} />
-          <Route path="/ai-job-registration" element={<AIJobRegistrationPage />} />
-          <Route path="/resume" element={<ResumeManagement />} />
-          <Route path="/applicants" element={<ApplicantManagement />} />
-          <Route path="/interview" element={<InterviewManagement />} />
-          <Route path="/interview-calendar" element={<InterviewCalendar />} />
-          <Route path="/portfolio" element={<Navigate to="/github-test" replace />} />
-          <Route path="/cover-letter" element={<CoverLetterValidation />} />
-          <Route path="/talent" element={<TalentRecommendation />} />
-          <Route path="/users" element={<UserManagement />} />
-          <Route path="/settings" element={<Settings />} />
-          <Route path="/github-test" element={<TestGithubSummary />} />
-          <Route path="/pdf-ocr" element={<PDFOCRPage />} />
-          <Route path="*" element={<div style={{ padding: '20px', textAlign: 'center' }}>페이지를 찾을 수 없습니다.</div>} />
-        </Routes>
+        <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center' }}>로딩 중...</div>}>
+          <Routes>
+            <Route path="/" element={<Dashboard />} />
+            <Route path="/job-posting" element={<JobPostingRegistration />} />
+            <Route path="/ai-job-registration" element={<AIJobRegistrationPage />} />
+            <Route path="/resume" element={<ResumeManagement />} />
+            <Route path="/applicants" element={<ApplicantManagement />} />
+            <Route path="/interview" element={<InterviewManagement />} />
+            <Route path="/interview-calendar" element={<InterviewCalendar />} />
+            <Route path="/portfolio" element={<Navigate to="/github-test" replace />} />
+            <Route path="/cover-letter" element={<CoverLetterValidation />} />
+            <Route path="/talent" element={<TalentRecommendation />} />
+            <Route path="/users" element={<UserManagement />} />
+            <Route path="/settings" element={<Settings />} />
+            <Route path="/github-test" element={<TestGithubSummary />} />
+            <Route path="/pdf-ocr" element={<PDFOCRPage />} />
+            <Route path="*" element={<div style={{ padding: '20px', textAlign: 'center' }}>페이지를 찾을 수 없습니다.</div>} />
+          </Routes>
+        </Suspense>
       </Layout>
 
       {/* AI 말풍선 컴포넌트 */}

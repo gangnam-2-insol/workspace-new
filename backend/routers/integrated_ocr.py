@@ -6,7 +6,7 @@ import tempfile
 from pathlib import Path
 from datetime import datetime
 
-# GPT-4o-mini Vision API 기반 PDF OCR 모듈 import
+# GPT-4o Vision API 기반 PDF OCR 모듈 import
 from pdf_ocr_module.main import process_pdf
 from pdf_ocr_module.config import Settings
 from pdf_ocr_module.ai_analyzer import analyze_text
@@ -270,7 +270,7 @@ async def upload_resume_with_ocr(
             temp_file_path = Path(temp_file.name)
         
         try:
-            # GPT-4o-mini Vision API를 사용한 PDF OCR 처리
+            # GPT-4o Vision API를 사용한 PDF OCR 처리
             ocr_result = process_pdf(str(temp_file_path))
             
             # AI 분석 결과 가져오기
@@ -337,7 +337,7 @@ async def upload_cover_letter_with_ocr(
             temp_file_path = Path(temp_file.name)
         
         try:
-            # GPT-4o-mini Vision API를 사용한 PDF OCR 처리
+            # GPT-4o Vision API를 사용한 PDF OCR 처리
             ocr_result = process_pdf(str(temp_file_path))
             
             # AI 분석 결과 가져오기
@@ -404,7 +404,7 @@ async def upload_portfolio_with_ocr(
             temp_file_path = Path(temp_file.name)
         
         try:
-            # GPT-4o-mini Vision API를 사용한 PDF OCR 처리
+            # GPT-4o Vision API를 사용한 PDF OCR 처리
             ocr_result = process_pdf(str(temp_file_path))
             
             # AI 분석 결과 가져오기

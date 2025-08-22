@@ -19,6 +19,7 @@ import pickChatbotApi from '../services/pickChatbotApi';
 const ChatbotContainer = styled(motion.div)`
   position: fixed;
   bottom: 80px;
+  height: 85%;
   right: 25px;
   z-index: 1000;
   display: flex;
@@ -28,7 +29,7 @@ const ChatbotContainer = styled(motion.div)`
 
 const ChatWindow = styled(motion.div)`
   width: 400px;
-  height: 800px;
+  height: 100%;
   background: white;
   border-radius: 20px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);

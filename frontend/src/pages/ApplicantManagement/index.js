@@ -123,7 +123,7 @@ const ApplicantManagement = () => {
   const [statusFilter, setStatusFilter] = useState('all');
   const [positionFilter, setPositionFilter] = useState('all');
 
-  // 데이터 로딩
+  // 데이터 로딩 (메모리 최적화)
   const loadApplicants = useCallback(async () => {
     try {
       console.log('지원자 데이터를 불러오는 중...');
@@ -132,7 +132,11 @@ const ApplicantManagement = () => {
       if (page === 0) {
         setApplicants(data);
       } else {
-        setApplicants(prev => [...prev, ...data]);
+        setApplicants(prev => {
+          // 중복 제거 및 메모리 최적화
+          const newData = data.filter(item => !prev.some(existingItem => existingItem._id === item._id));
+          return [...prev, ...newData];
+        });
       }
       
       setHasMore(data.length === 20);
@@ -376,4 +380,4 @@ const ApplicantManagement = () => {
   );
 };
 
-export default ApplicantManagement;
+export default React.memo(ApplicantManagement);
