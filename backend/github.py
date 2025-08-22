@@ -4,31 +4,1675 @@ import httpx
 import os
 import base64
 import json
-from typing import Optional, Dict, List
+import re
+from typing import Optional, Dict, List, Any, Tuple
 import asyncio
 from datetime import datetime, timedelta, timezone
+import hashlib
+import pickle
+from collections import Counter
+import math
+
+# MongoDB 저장소 서비스와 해시 유틸리티 import
+from services.github_storage_service import github_storage_service
+from utils.github_hash_utils import (
+    generate_file_hashes_from_github,
+    compare_file_hashes,
+    calculate_change_impact,
+    should_trigger_full_reanalysis
+)
 
 router = APIRouter()
+
+# 캐싱 시스템 추가
+class AnalysisCache:
+    """분석 결과 캐싱 시스템"""
+    
+    def __init__(self, cache_dir: str = "cache", ttl_hours: int = 24):
+        self.cache_dir = cache_dir
+        self.ttl_hours = ttl_hours
+        os.makedirs(cache_dir, exist_ok=True)
+    
+    def _get_cache_key(self, username: str, repo_name: Optional[str] = None) -> str:
+        """캐시 키 생성"""
+        key_data = f"{username}:{repo_name or 'profile'}"
+        return hashlib.md5(key_data.encode()).hexdigest()
+    
+    def _get_cache_path(self, cache_key: str) -> str:
+        """캐시 파일 경로 반환"""
+        return os.path.join(self.cache_dir, f"{cache_key}.pkl")
+    
+    async def get_cached_analysis(self, username: str, repo_name: Optional[str] = None) -> Optional[Dict]:
+        """캐시된 분석 결과 반환"""
+        try:
+            cache_key = self._get_cache_key(username, repo_name)
+            cache_path = self._get_cache_path(cache_key)
+            
+            if not os.path.exists(cache_path):
+                return None
+            
+            # 파일 수정 시간 확인 (TTL 체크)
+            file_mtime = datetime.fromtimestamp(os.path.getmtime(cache_path))
+            if datetime.now() - file_mtime > timedelta(hours=self.ttl_hours):
+                os.remove(cache_path)  # 만료된 캐시 삭제
+                return None
+            
+            # 캐시 파일 읽기
+            with open(cache_path, 'rb') as f:
+                cached_data = pickle.load(f)
+                print(f"캐시된 분석 결과 사용: {username}/{repo_name or 'profile'}")
+                return cached_data
+                
+        except Exception as e:
+            print(f"캐시 읽기 오류: {e}")
+            return None
+    
+    async def cache_analysis(self, username: str, repo_name: Optional[str] = None, analysis: Dict = None):
+        """분석 결과 캐싱"""
+        try:
+            if not analysis:
+                return
+                
+            cache_key = self._get_cache_key(username, repo_name)
+            cache_path = self._get_cache_path(cache_key)
+            
+            # 캐시 데이터에 타임스탬프 추가
+            cache_data = {
+                'analysis': analysis,
+                'cached_at': datetime.now(),
+                'username': username,
+                'repo_name': repo_name
+            }
+            
+            # 캐시 파일 저장
+            with open(cache_path, 'wb') as f:
+                pickle.dump(cache_data, f)
+                
+            print(f"분석 결과 캐싱 완료: {username}/{repo_name or 'profile'}")
+            
+        except Exception as e:
+            print(f"캐시 저장 오류: {e}")
+
+# 전역 캐시 인스턴스
+analysis_cache = AnalysisCache()
+
+# 로컬 AI 관련 함수들 제거 - GPT-4o 전용으로 변경
+
+# 정적 코드 분석 시스템
+class StaticCodeAnalyzer:
+    """정적 코드 분석을 통한 품질 평가"""
+    
+    def __init__(self):
+        self.quality_metrics = {}
+    
+    async def analyze_code_quality(self, owner: str, repo: str, token: str) -> Dict:
+        """정적 코드 분석을 통한 품질 평가"""
+        try:
+            # 파일 구조 분석
+            file_structure = await self._analyze_file_structure(owner, repo, token)
+            
+            # 코드 복잡도 분석
+            complexity_metrics = await self._analyze_complexity(owner, repo, token)
+            
+            # 테스트 커버리지 추정
+            test_coverage = await self._estimate_test_coverage(owner, repo, token)
+            
+            # 보안 취약점 스캔
+            security_issues = await self._scan_security_vulnerabilities(owner, repo, token)
+            
+            return {
+                'code_quality': {
+                    'complexity': complexity_metrics.get('overall_complexity', 'medium'),
+                    'maintainability': self._calculate_maintainability_score(file_structure, complexity_metrics),
+                    'test_coverage': test_coverage,
+                    'code_smells': complexity_metrics.get('code_smells', 0),
+                    'security_issues': len(security_issues),
+                    'file_structure_score': self._calculate_structure_score(file_structure)
+                },
+                'file_structure': file_structure,
+                'complexity_metrics': complexity_metrics,
+                'security_issues': security_issues
+            }
+        except Exception as e:
+            print(f"정적 코드 분석 오류: {e}")
+            return {'code_quality': {'error': str(e)}}
+    
+    async def _analyze_file_structure(self, owner: str, repo: str, token: str) -> Dict:
+        """파일 구조 분석"""
+        try:
+            tree = await fetch_github_tree(owner, repo, token)
+            
+            structure = {
+                'total_files': len(tree),
+                'directories': {},
+                'file_types': {},
+                'config_files': [],
+                'test_files': [],
+                'documentation_files': []
+            }
+            
+            for item in tree:
+                path = item.get('path', '')
+                name = item.get('name', '')
+                
+                # 파일 타입 분류
+                if '.' in name:
+                    ext = name.split('.')[-1].lower()
+                    structure['file_types'][ext] = structure['file_types'].get(ext, 0) + 1
+                
+                # 디렉토리 분석
+                if item.get('type') == 'tree':
+                    dir_name = path.split('/')[-1]
+                    structure['directories'][dir_name] = structure['directories'].get(dir_name, 0) + 1
+                
+                # 특수 파일 분류
+                if any(keyword in name.lower() for keyword in ['test', 'spec', 'specs']):
+                    structure['test_files'].append(path)
+                elif any(keyword in name.lower() for keyword in ['readme', 'docs', 'documentation']):
+                    structure['documentation_files'].append(path)
+                elif any(keyword in name.lower() for keyword in ['config', 'settings', '.env']):
+                    structure['config_files'].append(path)
+            
+            return structure
+        except Exception as e:
+            print(f"파일 구조 분석 오류: {e}")
+            return {}
+    
+    async def _analyze_complexity(self, owner: str, repo: str, token: str) -> Dict:
+        """코드 복잡도 분석"""
+        try:
+            # 주요 소스 파일들 분석
+            source_files = await self._get_source_files(owner, repo, token)
+            
+            complexity_metrics = {
+                'overall_complexity': 'low',
+                'code_smells': 0,
+                'long_functions': 0,
+                'deep_nesting': 0,
+                'duplicate_code': 0
+            }
+            
+            total_lines = 0
+            total_functions = 0
+            
+            for file_path in source_files[:10]:  # 상위 10개 파일만 분석
+                try:
+                    content = await fetch_github_file_content(owner, repo, file_path, token)
+                    if content:
+                        file_metrics = self._analyze_file_complexity(content, file_path)
+                        total_lines += file_metrics.get('lines', 0)
+                        total_functions += file_metrics.get('functions', 0)
+                        complexity_metrics['code_smells'] += file_metrics.get('smells', 0)
+                        complexity_metrics['long_functions'] += file_metrics.get('long_functions', 0)
+                        complexity_metrics['deep_nesting'] += file_metrics.get('deep_nesting', 0)
+                except Exception as e:
+                    # 파일 처리 중 오류 발생 시 무시하고 계속 진행
+                    continue
+            
+            # 전체 복잡도 계산
+            if total_lines > 0:
+                avg_complexity = complexity_metrics['code_smells'] / total_lines
+                if avg_complexity > 0.1:
+                    complexity_metrics['overall_complexity'] = 'high'
+                elif avg_complexity > 0.05:
+                    complexity_metrics['overall_complexity'] = 'medium'
+                else:
+                    complexity_metrics['overall_complexity'] = 'low'
+            
+            return complexity_metrics
+        except Exception as e:
+            print(f"복잡도 분석 오류: {e}")
+            return {'overall_complexity': 'unknown'}
+    
+    async def _get_source_files(self, owner: str, repo: str, token: str) -> List[str]:
+        """소스 파일 목록 가져오기"""
+        try:
+            tree = await fetch_github_tree(owner, repo, token)
+            source_extensions = ['.js', '.ts', '.py', '.java', '.cpp', '.c', '.go', '.rs', '.php', '.rb']
+            
+            source_files = []
+            for item in tree:
+                if item.get('type') == 'blob':
+                    path = item.get('path', '')
+                    if any(path.endswith(ext) for ext in source_extensions):
+                        source_files.append(path)
+            
+            return source_files
+        except Exception as e:
+            print(f"소스 파일 목록 가져오기 오류: {e}")
+            return []
+    
+    def _analyze_file_complexity(self, content: str, file_path: str) -> Dict:
+        """개별 파일 복잡도 분석"""
+        lines = content.split('\n')
+        
+        metrics = {
+            'lines': len(lines),
+            'functions': 0,
+            'smells': 0,
+            'long_functions': 0,
+            'deep_nesting': 0
+        }
+        
+        # 간단한 복잡도 분석
+        for line in lines:
+            line = line.strip()
+            
+            # 함수 정의 감지
+            if any(keyword in line for keyword in ['function ', 'def ', 'class ', 'async def ']):
+                metrics['functions'] += 1
+            
+            # 긴 함수 감지 (20줄 이상)
+            if len(line) > 100:
+                metrics['smells'] += 1
+            
+            # 깊은 중첩 감지
+            indent_level = len(line) - len(line.lstrip())
+            if indent_level > 8:
+                metrics['deep_nesting'] += 1
+        
+        return metrics
+    
+    async def _estimate_test_coverage(self, owner: str, repo: str, token: str) -> int:
+        """테스트 커버리지 추정"""
+        try:
+            tree = await fetch_github_tree(owner, repo, token)
+            
+            test_files = 0
+            source_files = 0
+            
+            for item in tree:
+                if item.get('type') == 'blob':
+                    path = item.get('path', '')
+                    if any(keyword in path.lower() for keyword in ['test', 'spec', 'specs']):
+                        test_files += 1
+                    elif any(path.endswith(ext) for ext in ['.js', '.ts', '.py', '.java']):
+                        source_files += 1
+            
+            if source_files > 0:
+                return min(100, int((test_files / source_files) * 100))
+            return 0
+        except Exception as e:
+            print(f"테스트 커버리지 추정 오류: {e}")
+            return 0
+    
+    async def _scan_security_vulnerabilities(self, owner: str, repo: str, token: str) -> List[Dict]:
+        """보안 취약점 스캔"""
+        try:
+            # 주요 설정 파일들 확인
+            config_files = ['package.json', 'requirements.txt', 'pom.xml', 'build.gradle', 'Dockerfile']
+            vulnerabilities = []
+            
+            for config_file in config_files:
+                try:
+                    content = await fetch_github_file_content(owner, repo, config_file, token)
+                    if content:
+                        file_vulns = self._scan_file_vulnerabilities(content, config_file)
+                        vulnerabilities.extend(file_vulns)
+                except Exception as file_error:
+                    # 파일이 존재하지 않거나 접근할 수 없는 경우 무시
+                    continue
+            
+            return vulnerabilities
+        except Exception as e:
+            print(f"보안 취약점 스캔 오류: {e}")
+            return []
+    
+    def _scan_file_vulnerabilities(self, content: str, filename: str) -> List[Dict]:
+        """파일별 보안 취약점 스캔"""
+        vulnerabilities = []
+        
+        # 하드코딩된 비밀번호/키 감지
+        sensitive_patterns = [
+            r'password\s*=\s*["\'][^"\']+["\']',
+            r'api_key\s*=\s*["\'][^"\']+["\']',
+            r'secret\s*=\s*["\'][^"\']+["\']',
+            r'token\s*=\s*["\'][^"\']+["\']'
+        ]
+        
+        for pattern in sensitive_patterns:
+            if re.search(pattern, content, re.IGNORECASE):
+                vulnerabilities.append({
+                    'type': 'hardcoded_credentials',
+                    'severity': 'high',
+                    'file': filename,
+                    'description': '하드코딩된 비밀번호 또는 API 키 발견'
+                })
+        
+        return vulnerabilities
+    
+    def _calculate_maintainability_score(self, file_structure: Dict, complexity_metrics: Dict) -> str:
+        """유지보수성 점수 계산"""
+        score = 100
+        
+        # 파일 구조 점수
+        if file_structure.get('total_files', 0) > 1000:
+            score -= 20
+        elif file_structure.get('total_files', 0) > 500:
+            score -= 10
+        
+        # 복잡도 점수
+        if complexity_metrics.get('overall_complexity') == 'high':
+            score -= 30
+        elif complexity_metrics.get('overall_complexity') == 'medium':
+            score -= 15
+        
+        # 테스트 파일 점수
+        test_ratio = len(file_structure.get('test_files', [])) / max(1, file_structure.get('total_files', 1))
+        if test_ratio < 0.1:
+            score -= 20
+        elif test_ratio < 0.2:
+            score -= 10
+        
+        if score >= 80:
+            return 'high'
+        elif score >= 60:
+            return 'medium'
+        else:
+            return 'low'
+    
+    def _calculate_structure_score(self, file_structure: Dict) -> int:
+        """파일 구조 점수 계산"""
+        score = 100
+        
+        # 문서화 점수
+        doc_files = len(file_structure.get('documentation_files', []))
+        if doc_files == 0:
+            score -= 20
+        elif doc_files < 3:
+            score -= 10
+        
+        # 설정 파일 점수
+        config_files = len(file_structure.get('config_files', []))
+        if config_files == 0:
+            score -= 10
+        
+        return max(0, score)
+
+# 실제 사용 패턴 분석 시스템 (현재 사용되지 않음)
+class UsagePatternAnalyzer:
+    """실제 코드에서 라이브러리 사용 패턴 분석"""
+    
+    def __init__(self):
+        self.import_patterns = {
+            'javascript': [
+                r'import\s+.*?from\s+["\']([^"\']+)["\']',
+                r'require\s*\(\s*["\']([^"\']+)["\']\s*\)',
+                r'import\s+["\']([^"\']+)["\']'
+            ],
+            'python': [
+                r'import\s+([a-zA-Z_][a-zA-Z0-9_]*)',
+                r'from\s+([a-zA-Z_][a-zA-Z0-9_.]*)\s+import',
+                r'import\s+([a-zA-Z_][a-zA-Z0-9_.]*)'
+            ],
+            'java': [
+                r'import\s+([a-zA-Z_][a-zA-Z0-9_.]*);',
+                r'import\s+static\s+([a-zA-Z_][a-zA-Z0-9_.]*);'
+            ]
+        }
+    
+    async def analyze_actual_usage(self, owner: str, repo: str, token: str) -> Dict:
+        """실제 코드에서 라이브러리 사용 패턴 분석"""
+        try:
+            # 소스 파일들 가져오기
+            source_files = await self._get_source_files(owner, repo, token)
+            
+            usage_analysis = {
+                'actual_imports': {},
+                'unused_dependencies': [],
+                'import_frequency': {},
+                'framework_usage': {},
+                'api_usage': {}
+            }
+            
+            # 각 파일별 import 분석
+            for file_path in source_files[:20]:  # 상위 20개 파일만 분석
+                try:
+                    content = await fetch_github_file_content(owner, repo, file_path, token)
+                    if content:
+                        file_usage = self._analyze_file_imports(content, file_path)
+                        
+                        # 실제 import 수집
+                        for lang, imports in file_usage.items():
+                            if lang not in usage_analysis['actual_imports']:
+                                usage_analysis['actual_imports'][lang] = []
+                            usage_analysis['actual_imports'][lang].extend(imports)
+                            
+                            # 사용 빈도 계산
+                            for imp in imports:
+                                usage_analysis['import_frequency'][imp] = usage_analysis['import_frequency'].get(imp, 0) + 1
+                except Exception as e:
+                    # 파일 처리 중 오류 발생 시 무시하고 계속 진행
+                    continue
+            
+            # 중복 제거
+            for lang in usage_analysis['actual_imports']:
+                usage_analysis['actual_imports'][lang] = list(set(usage_analysis['actual_imports'][lang]))
+            
+            # 프레임워크 사용 패턴 분석
+            usage_analysis['framework_usage'] = self._analyze_framework_usage(usage_analysis['actual_imports'])
+            
+            # API 사용 패턴 분석
+            usage_analysis['api_usage'] = self._analyze_api_usage(usage_analysis['actual_imports'])
+            
+            return usage_analysis
+            
+        except Exception as e:
+            print(f"실제 사용 패턴 분석 오류: {e}")
+            return {}
+    
+    async def _get_source_files(self, owner: str, repo: str, token: str) -> List[str]:
+        """소스 파일 목록 가져오기"""
+        try:
+            tree = await fetch_github_tree(owner, repo, token)
+            
+            source_files = []
+            for item in tree:
+                if item.get('type') == 'blob':
+                    path = item.get('path', '')
+                    if any(path.endswith(ext) for ext in ['.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.cpp', '.c']):
+                        source_files.append(path)
+            
+            return source_files
+        except Exception as e:
+            print(f"소스 파일 목록 가져오기 오류: {e}")
+            return []
+    
+    def _analyze_file_imports(self, content: str, file_path: str) -> Dict:
+        """파일별 import 분석"""
+        imports = {
+            'javascript': [],
+            'python': [],
+            'java': []
+        }
+        
+        # 파일 확장자로 언어 판단
+        if file_path.endswith(('.js', '.ts', '.jsx', '.tsx')):
+            lang = 'javascript'
+        elif file_path.endswith('.py'):
+            lang = 'python'
+        elif file_path.endswith('.java'):
+            lang = 'java'
+        else:
+            return imports
+        
+        # 언어별 import 패턴 매칭
+        patterns = self.import_patterns.get(lang, [])
+        for pattern in patterns:
+            matches = re.findall(pattern, content, re.MULTILINE)
+            for match in matches:
+                if isinstance(match, tuple):
+                    imports[lang].extend(match)
+                else:
+                    imports[lang].append(match)
+        
+        return imports
+    
+    def _analyze_framework_usage(self, actual_imports: Dict) -> Dict:
+        """프레임워크 사용 패턴 분석"""
+        framework_usage = {}
+        
+        # JavaScript/TypeScript 프레임워크
+        js_imports = actual_imports.get('javascript', [])
+        if any('react' in imp.lower() for imp in js_imports):
+            framework_usage['react'] = True
+        if any('vue' in imp.lower() for imp in js_imports):
+            framework_usage['vue'] = True
+        if any('angular' in imp.lower() for imp in js_imports):
+            framework_usage['angular'] = True
+        if any('express' in imp.lower() for imp in js_imports):
+            framework_usage['express'] = True
+        
+        # Python 프레임워크
+        py_imports = actual_imports.get('python', [])
+        if any('django' in imp.lower() for imp in py_imports):
+            framework_usage['django'] = True
+        if any('flask' in imp.lower() for imp in py_imports):
+            framework_usage['flask'] = True
+        if any('fastapi' in imp.lower() for imp in py_imports):
+            framework_usage['fastapi'] = True
+        
+        return framework_usage
+    
+    def _analyze_api_usage(self, actual_imports: Dict) -> Dict:
+        """API 사용 패턴 분석"""
+        api_usage = {}
+        
+        all_imports = []
+        for imports in actual_imports.values():
+            all_imports.extend(imports)
+        
+        # API 관련 라이브러리 감지
+        api_keywords = {
+            'http': 'HTTP 클라이언트',
+            'axios': 'Axios HTTP 클라이언트',
+            'fetch': 'Fetch API',
+            'requests': 'Python Requests',
+            'urllib': 'Python urllib',
+            'socket': '소켓 통신',
+            'websocket': 'WebSocket',
+            'grpc': 'gRPC',
+            'graphql': 'GraphQL'
+        }
+        
+        for keyword, description in api_keywords.items():
+            if any(keyword in imp.lower() for imp in all_imports):
+                api_usage[keyword] = description
+        
+        return api_usage
+
+# 플러그인 시스템 (현재 사용되지 않음)
+class AnalysisPlugin:
+    """분석 플러그인 기본 클래스"""
+    
+    def __init__(self, name: str, priority: int = 0):
+        self.name = name
+        self.priority = priority
+    
+    async def analyze(self, owner: str, repo: str, token: str, repo_data: Dict) -> Dict:
+        """플러그인별 분석 로직"""
+        raise NotImplementedError
+    
+    def can_handle(self, repo_data: Dict) -> bool:
+        """이 플러그인이 해당 레포지토리를 처리할 수 있는지 확인"""
+        raise NotImplementedError
+
+class ReactPlugin(AnalysisPlugin):
+    """React 프로젝트 특화 분석"""
+    
+    def __init__(self):
+        super().__init__("React", priority=10)
+    
+    def can_handle(self, repo_data: Dict) -> bool:
+        frameworks = repo_data.get('frameworks', [])
+        return 'React' in frameworks or any('react' in f.lower() for f in frameworks)
+    
+    async def analyze(self, owner: str, repo: str, token: str, repo_data: Dict) -> Dict:
+        try:
+            # React 특화 분석
+            hooks_usage = await self._analyze_hooks_usage(owner, repo, token)
+            component_structure = await self._analyze_component_structure(owner, repo, token)
+            
+            return {
+                'react_analysis': {
+                    'hooks_usage': hooks_usage,
+                    'component_structure': component_structure,
+                    'state_management': self._detect_state_management(repo_data),
+                    'routing': self._detect_routing(repo_data)
+                }
+            }
+        except Exception as e:
+            print(f"React 플러그인 분석 오류: {e}")
+            return {}
+    
+    async def _analyze_hooks_usage(self, owner: str, repo: str, token: str) -> Dict:
+        """React Hooks 사용 패턴 분석"""
+        hooks = ['useState', 'useEffect', 'useContext', 'useReducer', 'useCallback', 'useMemo']
+        usage = {}
+        
+        try:
+            source_files = await self._get_react_files(owner, repo, token)
+            for file_path in source_files[:10]:
+                try:
+                    content = await fetch_github_file_content(owner, repo, file_path, token)
+                    if content:
+                        for hook in hooks:
+                            if hook in content:
+                                usage[hook] = usage.get(hook, 0) + 1
+                except Exception as e:
+                    # 파일 처리 중 오류 발생 시 무시하고 계속 진행
+                    continue
+        except Exception as e:
+            print(f"Hooks 분석 오류: {e}")
+        
+        return usage
+    
+    async def _analyze_component_structure(self, owner: str, repo: str, token: str) -> Dict:
+        """컴포넌트 구조 분석"""
+        try:
+            source_files = await self._get_react_files(owner, repo, token)
+            
+            structure = {
+                'functional_components': 0,
+                'class_components': 0,
+                'custom_hooks': 0
+            }
+            
+            for file_path in source_files[:10]:
+                try:
+                    content = await fetch_github_file_content(owner, repo, file_path, token)
+                    if content:
+                        if 'function ' in content or 'const ' in content:
+                            structure['functional_components'] += 1
+                        if 'class ' in content and 'extends' in content:
+                            structure['class_components'] += 1
+                        if 'use' in content and 'function' in content:
+                            structure['custom_hooks'] += 1
+                except Exception as e:
+                    # 파일 처리 중 오류 발생 시 무시하고 계속 진행
+                    continue
+            
+            return structure
+        except Exception as e:
+            print(f"컴포넌트 구조 분석 오류: {e}")
+            return {}
+    
+    async def _get_react_files(self, owner: str, repo: str, token: str) -> List[str]:
+        """React 관련 파일 목록 가져오기"""
+        try:
+            tree = await fetch_github_tree(owner, repo, token)
+            react_files = []
+            
+            for item in tree:
+                if item.get('type') == 'blob':
+                    path = item.get('path', '')
+                    if path.endswith(('.jsx', '.tsx', '.js', '.ts')):
+                        react_files.append(path)
+            
+            return react_files
+        except Exception as e:
+            print(f"React 파일 목록 가져오기 오류: {e}")
+            return []
+    
+    def _detect_state_management(self, repo_data: Dict) -> str:
+        """상태 관리 라이브러리 감지"""
+        external_libs = repo_data.get('external_libraries_hint', [])
+        
+        if any('redux' in lib.lower() for lib in external_libs):
+            return 'Redux'
+        elif any('zustand' in lib.lower() for lib in external_libs):
+            return 'Zustand'
+        elif any('recoil' in lib.lower() for lib in external_libs):
+            return 'Recoil'
+        elif any('jotai' in lib.lower() for lib in external_libs):
+            return 'Jotai'
+        else:
+            return 'useState/useContext'
+    
+    def _detect_routing(self, repo_data: Dict) -> str:
+        """라우팅 라이브러리 감지"""
+        external_libs = repo_data.get('external_libraries_hint', [])
+        
+        if any('react-router' in lib.lower() for lib in external_libs):
+            return 'React Router'
+        elif any('next' in lib.lower() for lib in external_libs):
+            return 'Next.js Router'
+        else:
+            return '기본 라우팅'
+
+class PythonPlugin(AnalysisPlugin):
+    """Python 프로젝트 특화 분석"""
+    
+    def __init__(self):
+        super().__init__("Python", priority=10)
+    
+    def can_handle(self, repo_data: Dict) -> bool:
+        language = repo_data.get('language', '')
+        return language.lower() == 'python'
+    
+    async def analyze(self, owner: str, repo: str, token: str, repo_data: Dict) -> Dict:
+        try:
+            # Python 특화 분석
+            async_usage = await self._analyze_async_usage(owner, repo, token)
+            framework_analysis = self._analyze_framework(repo_data)
+            
+            return {
+                'python_analysis': {
+                    'async_usage': async_usage,
+                    'framework_analysis': framework_analysis,
+                    'package_management': self._detect_package_manager(repo_data)
+                }
+            }
+        except Exception as e:
+            print(f"Python 플러그인 분석 오류: {e}")
+            return {}
+    
+    async def _analyze_async_usage(self, owner: str, repo: str, token: str) -> Dict:
+        """비동기 사용 패턴 분석"""
+        try:
+            source_files = await self._get_python_files(owner, repo, token)
+            
+            async_metrics = {
+                'async_functions': 0,
+                'await_usage': 0,
+                'asyncio_imports': 0
+            }
+            
+            for file_path in source_files[:10]:
+                try:
+                    content = await fetch_github_file_content(owner, repo, file_path, token)
+                    if content:
+                        if 'async def' in content:
+                            async_metrics['async_functions'] += 1
+                        if 'await ' in content:
+                            async_metrics['await_usage'] += 1
+                        if 'import asyncio' in content:
+                            async_metrics['asyncio_imports'] += 1
+                except Exception as e:
+                    # 파일 처리 중 오류 발생 시 무시하고 계속 진행
+                    continue
+            
+            return async_metrics
+        except Exception as e:
+            print(f"비동기 사용 분석 오류: {e}")
+            return {}
+    
+    async def _get_python_files(self, owner: str, repo: str, token: str) -> List[str]:
+        """Python 파일 목록 가져오기"""
+        try:
+            tree = await fetch_github_tree(owner, repo, token)
+            python_files = []
+            
+            for item in tree:
+                if item.get('type') == 'blob':
+                    path = item.get('path', '')
+                    if path.endswith('.py'):
+                        python_files.append(path)
+            
+            return python_files
+        except Exception as e:
+            print(f"Python 파일 목록 가져오기 오류: {e}")
+            return []
+    
+    def _analyze_framework(self, repo_data: Dict) -> Dict:
+        """프레임워크 분석"""
+        frameworks = repo_data.get('frameworks', [])
+        
+        analysis = {
+            'web_framework': None,
+            'has_orm': False,
+            'has_api': False
+        }
+        
+        if 'Django' in frameworks:
+            analysis['web_framework'] = 'Django'
+            analysis['has_orm'] = True
+        elif 'Flask' in frameworks:
+            analysis['web_framework'] = 'Flask'
+        elif 'FastAPI' in frameworks:
+            analysis['web_framework'] = 'FastAPI'
+            analysis['has_api'] = True
+        
+        return analysis
+    
+    def _detect_package_manager(self, repo_data: Dict) -> str:
+        """패키지 관리자 감지"""
+        toplevel_files = repo_data.get('toplevel_files', [])
+        
+        if 'requirements.txt' in toplevel_files:
+            return 'pip'
+        elif 'pyproject.toml' in toplevel_files:
+            return 'poetry'
+        elif 'Pipfile' in toplevel_files:
+            return 'pipenv'
+        else:
+            return 'unknown'
+
+# 플러그인 매니저
+class PluginManager:
+    """분석 플러그인 관리자"""
+    
+    def __init__(self):
+        self.plugins = []
+        self._register_default_plugins()
+    
+    def _register_default_plugins(self):
+        """기본 플러그인 등록"""
+        self.register_plugin(ReactPlugin())
+        self.register_plugin(PythonPlugin())
+    
+    def register_plugin(self, plugin: AnalysisPlugin):
+        """플러그인 등록"""
+        self.plugins.append(plugin)
+        # 우선순위별 정렬
+        self.plugins.sort(key=lambda x: x.priority, reverse=True)
+    
+    async def analyze_with_plugins(self, owner: str, repo: str, token: str, repo_data: Dict) -> Dict:
+        """플러그인을 사용한 분석"""
+        plugin_results = {}
+        
+        for plugin in self.plugins:
+            try:
+                if plugin.can_handle(repo_data):
+                    result = await plugin.analyze(owner, repo, token, repo_data)
+                    if result:
+                        plugin_results[plugin.name] = result
+            except Exception as e:
+                print(f"플러그인 {plugin.name} 분석 오류: {e}")
+        
+        return plugin_results
+
+# 의존성 그래프 분석 시스템 (현재 사용되지 않음)
+class DependencyGraphAnalyzer:
+    """의존성 그래프 분석을 통한 복잡한 관계 파악"""
+    
+    def __init__(self):
+        self.dependency_patterns = {
+            'javascript': {
+                'import': r'import\s+.*?from\s+["\']([^"\']+)["\']',
+                'require': r'require\s*\(\s*["\']([^"\']+)["\']\s*\)',
+                'export': r'export\s+.*?from\s+["\']([^"\']+)["\']'
+            },
+            'python': {
+                'import': r'import\s+([a-zA-Z_][a-zA-Z0-9_.]*)',
+                'from_import': r'from\s+([a-zA-Z_][a-zA-Z0-9_.]*)\s+import',
+                'relative_import': r'from\s+\.([a-zA-Z_][a-zA-Z0-9_.]*)\s+import'
+            },
+            'java': {
+                'import': r'import\s+([a-zA-Z_][a-zA-Z0-9_.]*);',
+                'package': r'package\s+([a-zA-Z_][a-zA-Z0-9_.]*);'
+            }
+        }
+    
+    async def analyze_dependency_graph(self, owner: str, repo: str, token: str) -> Dict:
+        """의존성 그래프 분석"""
+        try:
+            # 파일 구조 분석
+            file_structure = await self._analyze_file_structure(owner, repo, token)
+            
+            # 의존성 관계 분석
+            dependencies = await self._analyze_dependencies(owner, repo, token)
+            
+            # 순환 의존성 검사
+            circular_deps = self._detect_circular_dependencies(dependencies)
+            
+            # 의존성 복잡도 계산
+            complexity_metrics = self._calculate_dependency_complexity(dependencies)
+            
+            # 모듈 간 결합도 분석
+            coupling_analysis = self._analyze_module_coupling(dependencies)
+            
+            return {
+                'dependency_graph': {
+                    'nodes': list(dependencies.keys()),
+                    'edges': self._extract_edges(dependencies),
+                    'circular_dependencies': circular_deps,
+                    'complexity_metrics': complexity_metrics,
+                    'coupling_analysis': coupling_analysis
+                },
+                'file_structure': file_structure,
+                'dependencies': dependencies
+            }
+        except Exception as e:
+            print(f"의존성 그래프 분석 오류: {e}")
+            return {}
+    
+    async def _analyze_file_structure(self, owner: str, repo: str, token: str) -> Dict:
+        """파일 구조 분석"""
+        try:
+            tree = await fetch_github_tree(owner, repo, token)
+            
+            structure = {
+                'files': [],
+                'directories': [],
+                'modules': {},
+                'entry_points': []
+            }
+            
+            for item in tree:
+                path = item.get('path', '')
+                name = item.get('name', '')
+                
+                if item.get('type') == 'blob':
+                    structure['files'].append(path)
+                    
+                    # 모듈 식별
+                    module_name = self._extract_module_name(path)
+                    if module_name:
+                        structure['modules'][module_name] = path
+                    
+                    # 진입점 식별
+                    if self._is_entry_point(name):
+                        structure['entry_points'].append(path)
+                
+                elif item.get('type') == 'tree':
+                    structure['directories'].append(path)
+            
+            return structure
+        except Exception as e:
+            print(f"파일 구조 분석 오류: {e}")
+            return {}
+    
+    async def _analyze_dependencies(self, owner: str, repo: str, token: str) -> Dict:
+        """의존성 관계 분석"""
+        try:
+            source_files = await self._get_source_files(owner, repo, token)
+            dependencies = {}
+            
+            for file_path in source_files[:30]:  # 상위 30개 파일만 분석
+                try:
+                    content = await fetch_github_file_content(owner, repo, file_path, token)
+                    if content:
+                        file_deps = self._extract_file_dependencies(content, file_path)
+                        if file_deps:
+                            dependencies[file_path] = file_deps
+                except Exception as e:
+                    # 파일 처리 중 오류 발생 시 무시하고 계속 진행
+                    continue
+            
+            return dependencies
+        except Exception as e:
+            print(f"의존성 분석 오류: {e}")
+            return {}
+    
+    async def _get_source_files(self, owner: str, repo: str, token: str) -> List[str]:
+        """소스 파일 목록 가져오기"""
+        try:
+            tree = await fetch_github_tree(owner, repo, token)
+            source_files = []
+            
+            for item in tree:
+                if item.get('type') == 'blob':
+                    path = item.get('path', '')
+                    if any(path.endswith(ext) for ext in ['.js', '.ts', '.jsx', '.tsx', '.py', '.java']):
+                        source_files.append(path)
+            
+            return source_files
+        except Exception as e:
+            print(f"소스 파일 목록 가져오기 오류: {e}")
+            return []
+    
+    def _extract_file_dependencies(self, content: str, file_path: str) -> List[str]:
+        """파일별 의존성 추출"""
+        dependencies = []
+        
+        # 파일 확장자로 언어 판단
+        if file_path.endswith(('.js', '.ts', '.jsx', '.tsx')):
+            lang = 'javascript'
+        elif file_path.endswith('.py'):
+            lang = 'python'
+        elif file_path.endswith('.java'):
+            lang = 'java'
+        else:
+            return dependencies
+        
+        patterns = self.dependency_patterns.get(lang, {})
+        
+        for pattern_name, pattern in patterns.items():
+            matches = re.findall(pattern, content, re.MULTILINE)
+            for match in matches:
+                if isinstance(match, tuple):
+                    dependencies.extend(match)
+                else:
+                    dependencies.append(match)
+        
+        return list(set(dependencies))  # 중복 제거
+    
+    def _extract_module_name(self, file_path: str) -> Optional[str]:
+        """파일 경로에서 모듈명 추출"""
+        if not file_path:
+            return None
+        
+        # 파일명에서 확장자 제거
+        name = os.path.basename(file_path)
+        if '.' in name:
+            name = name.rsplit('.', 1)[0]
+        
+        # 특수 파일 제외
+        if name in ['index', 'main', '__init__']:
+            return None
+        
+        return name
+    
+    def _is_entry_point(self, filename: str) -> bool:
+        """진입점 파일인지 확인"""
+        entry_points = ['index.js', 'main.js', 'app.js', 'main.py', 'app.py', 'Main.java']
+        return filename in entry_points
+    
+    def _detect_circular_dependencies(self, dependencies: Dict) -> List[List[str]]:
+        """순환 의존성 검사"""
+        try:
+            # 그래프 생성
+            graph = {}
+            for file_path, deps in dependencies.items():
+                graph[file_path] = []
+                for dep in deps:
+                    # 의존성을 파일 경로로 변환 시도
+                    dep_file = self._resolve_dependency_to_file(dep, dependencies.keys())
+                    if dep_file:
+                        graph[file_path].append(dep_file)
+            
+            # DFS로 순환 의존성 검사
+            visited = set()
+            rec_stack = set()
+            circular_deps = []
+            
+            def dfs(node, path):
+                if node in rec_stack:
+                    # 순환 발견
+                    cycle_start = path.index(node)
+                    cycle = path[cycle_start:] + [node]
+                    circular_deps.append(cycle)
+                    return
+                
+                if node in visited:
+                    return
+                
+                visited.add(node)
+                rec_stack.add(node)
+                
+                for neighbor in graph.get(node, []):
+                    dfs(neighbor, path + [node])
+                
+                rec_stack.remove(node)
+            
+            for node in graph:
+                if node not in visited:
+                    dfs(node, [])
+            
+            return circular_deps
+        except Exception as e:
+            print(f"순환 의존성 검사 오류: {e}")
+            return []
+    
+    def _resolve_dependency_to_file(self, dep: str, files: List[str]) -> Optional[str]:
+        """의존성을 파일 경로로 해석"""
+        # 간단한 매칭 로직
+        for file_path in files:
+            if dep in file_path or dep in os.path.basename(file_path):
+                return file_path
+        return None
+    
+    def _calculate_dependency_complexity(self, dependencies: Dict) -> Dict:
+        """의존성 복잡도 계산"""
+        if not dependencies:
+            return {}
+        
+        total_files = len(dependencies)
+        total_deps = sum(len(deps) for deps in dependencies.values())
+        
+        # 평균 의존성 수
+        avg_deps = total_deps / total_files if total_files > 0 else 0
+        
+        # 최대 의존성 수
+        max_deps = max(len(deps) for deps in dependencies.values()) if dependencies else 0
+        
+        # 복잡도 등급
+        if avg_deps > 10:
+            complexity_level = 'high'
+        elif avg_deps > 5:
+            complexity_level = 'medium'
+        else:
+            complexity_level = 'low'
+        
+        return {
+            'total_files': total_files,
+            'total_dependencies': total_deps,
+            'average_dependencies': round(avg_deps, 2),
+            'max_dependencies': max_deps,
+            'complexity_level': complexity_level
+        }
+    
+    def _analyze_module_coupling(self, dependencies: Dict) -> Dict:
+        """모듈 간 결합도 분석"""
+        coupling_metrics = {
+            'high_coupling_modules': [],
+            'low_coupling_modules': [],
+            'coupling_scores': {}
+        }
+        
+        for file_path, deps in dependencies.items():
+            coupling_score = len(deps)
+            coupling_metrics['coupling_scores'][file_path] = coupling_score
+            
+            if coupling_score > 5:
+                coupling_metrics['high_coupling_modules'].append(file_path)
+            elif coupling_score <= 2:
+                coupling_metrics['low_coupling_modules'].append(file_path)
+        
+        return coupling_metrics
+    
+    def _extract_edges(self, dependencies: Dict) -> List[Dict]:
+        """의존성 그래프의 엣지 추출"""
+        edges = []
+        for source, deps in dependencies.items():
+            for dep in deps:
+                edges.append({
+                    'source': source,
+                    'target': dep,
+                    'type': 'dependency'
+                })
+        return edges
+
+# 성능 메트릭 분석 시스템 (현재 사용되지 않음)
+class PerformanceMetricsAnalyzer:
+    """성능 메트릭 분석을 통한 실제 성능 평가"""
+    
+    def __init__(self):
+        self.performance_patterns = {
+            'javascript': {
+                'async_operations': [
+                    r'async\s+function',
+                    r'await\s+',
+                    r'Promise\.',
+                    r'setTimeout\(',
+                    r'setInterval\('
+                ],
+                'memory_usage': [
+                    r'new\s+Array\(',
+                    r'new\s+Object\(',
+                    r'JSON\.parse\(',
+                    r'JSON\.stringify\('
+                ],
+                'dom_operations': [
+                    r'document\.',
+                    r'getElementById\(',
+                    r'querySelector\(',
+                    r'addEventListener\('
+                ]
+            },
+            'python': {
+                'async_operations': [
+                    r'async\s+def',
+                    r'await\s+',
+                    r'asyncio\.',
+                    r'threading\.',
+                    r'multiprocessing\.'
+                ],
+                'memory_usage': [
+                    r'list\(\)',
+                    r'dict\(\)',
+                    r'open\(',
+                    r'with\s+open\('
+                ],
+                'io_operations': [
+                    r'requests\.',
+                    r'urllib\.',
+                    r'socket\.',
+                    r'subprocess\.'
+                ]
+            }
+        }
+    
+    async def analyze_performance_metrics(self, owner: str, repo: str, token: str) -> Dict:
+        """성능 메트릭 분석"""
+        try:
+            # 코드 성능 패턴 분석
+            performance_patterns = await self._analyze_performance_patterns(owner, repo, token)
+            
+            # 파일 크기 및 복잡도 분석
+            file_metrics = await self._analyze_file_metrics(owner, repo, token)
+            
+            # 알고리즘 복잡도 추정
+            algorithm_complexity = await self._analyze_algorithm_complexity(owner, repo, token)
+            
+            # 메모리 사용 패턴 분석
+            memory_patterns = await self._analyze_memory_patterns(owner, repo, token)
+            
+            # 네트워크/IO 패턴 분석
+            io_patterns = await self._analyze_io_patterns(owner, repo, token)
+            
+            return {
+                'performance_metrics': {
+                    'overall_score': self._calculate_performance_score(performance_patterns, file_metrics),
+                    'performance_patterns': performance_patterns,
+                    'file_metrics': file_metrics,
+                    'algorithm_complexity': algorithm_complexity,
+                    'memory_patterns': memory_patterns,
+                    'io_patterns': io_patterns
+                }
+            }
+        except Exception as e:
+            print(f"성능 메트릭 분석 오류: {e}")
+            return {}
+    
+    async def _analyze_performance_patterns(self, owner: str, repo: str, token: str) -> Dict:
+        """성능 패턴 분석"""
+        try:
+            source_files = await self._get_source_files(owner, repo, token)
+            patterns = {
+                'async_operations': 0,
+                'memory_operations': 0,
+                'dom_operations': 0,
+                'io_operations': 0,
+                'performance_issues': []
+            }
+            
+            for file_path in source_files[:20]:
+                try:
+                    content = await fetch_github_file_content(owner, repo, file_path, token)
+                    if content:
+                        file_patterns = self._analyze_file_performance_patterns(content, file_path)
+                        
+                        patterns['async_operations'] += file_patterns.get('async_operations', 0)
+                        patterns['memory_operations'] += file_patterns.get('memory_operations', 0)
+                        patterns['dom_operations'] += file_patterns.get('dom_operations', 0)
+                        patterns['io_operations'] += file_patterns.get('io_operations', 0)
+                        patterns['performance_issues'].extend(file_patterns.get('performance_issues', []))
+                except Exception as e:
+                    # 파일 처리 중 오류 발생 시 무시하고 계속 진행
+                    continue
+            
+            return patterns
+        except Exception as e:
+            print(f"성능 패턴 분석 오류: {e}")
+            return {}
+    
+    async def _get_source_files(self, owner: str, repo: str, token: str) -> List[str]:
+        """소스 파일 목록 가져오기"""
+        try:
+            tree = await fetch_github_tree(owner, repo, token)
+            source_files = []
+            
+            for item in tree:
+                if item.get('type') == 'blob':
+                    path = item.get('path', '')
+                    if any(path.endswith(ext) for ext in ['.js', '.ts', '.jsx', '.tsx', '.py', '.java']):
+                        source_files.append(path)
+            
+            return source_files
+        except Exception as e:
+            print(f"소스 파일 목록 가져오기 오류: {e}")
+            return []
+    
+    def _analyze_file_performance_patterns(self, content: str, file_path: str) -> Dict:
+        """파일별 성능 패턴 분석"""
+        patterns = {
+            'async_operations': 0,
+            'memory_operations': 0,
+            'dom_operations': 0,
+            'io_operations': 0,
+            'performance_issues': []
+        }
+        
+        # 파일 확장자로 언어 판단
+        if file_path.endswith(('.js', '.ts', '.jsx', '.tsx')):
+            lang = 'javascript'
+        elif file_path.endswith('.py'):
+            lang = 'python'
+        else:
+            return patterns
+        
+        lang_patterns = self.performance_patterns.get(lang, {})
+        
+        for pattern_type, pattern_list in lang_patterns.items():
+            for pattern in pattern_list:
+                matches = re.findall(pattern, content, re.MULTILINE)
+                if pattern_type == 'async_operations':
+                    patterns['async_operations'] += len(matches)
+                elif pattern_type == 'memory_usage':
+                    patterns['memory_operations'] += len(matches)
+                elif pattern_type == 'dom_operations':
+                    patterns['dom_operations'] += len(matches)
+                elif pattern_type == 'io_operations':
+                    patterns['io_operations'] += len(matches)
+        
+        # 성능 이슈 감지
+        performance_issues = self._detect_performance_issues(content, file_path)
+        patterns['performance_issues'] = performance_issues
+        
+        return patterns
+    
+    def _detect_performance_issues(self, content: str, file_path: str) -> List[Dict]:
+        """성능 이슈 감지"""
+        issues = []
+        
+        # N+1 쿼리 패턴
+        if re.search(r'for.*in.*\n.*query|select', content, re.IGNORECASE):
+            issues.append({
+                'type': 'n_plus_one_query',
+                'severity': 'high',
+                'description': 'N+1 쿼리 패턴 감지'
+            })
+        
+        # 무한 루프 가능성
+        if re.search(r'while\s*\(\s*true\s*\)|for\s*\(\s*;\s*;\s*\)', content):
+            issues.append({
+                'type': 'infinite_loop_risk',
+                'severity': 'medium',
+                'description': '무한 루프 위험 감지'
+            })
+        
+        # 메모리 누수 패턴
+        if re.search(r'setInterval|setTimeout.*function', content):
+            issues.append({
+                'type': 'memory_leak_risk',
+                'severity': 'medium',
+                'description': '메모리 누수 위험 감지'
+            })
+        
+        return issues
+    
+    async def _analyze_file_metrics(self, owner: str, repo: str, token: str) -> Dict:
+        """파일 크기 및 복잡도 분석"""
+        try:
+            source_files = await self._get_source_files(owner, repo, token)
+            
+            metrics = {
+                'total_files': len(source_files),
+                'total_lines': 0,
+                'average_file_size': 0,
+                'large_files': [],
+                'complex_files': []
+            }
+            
+            file_sizes = []
+            
+            for file_path in source_files:
+                try:
+                    content = await fetch_github_file_content(owner, repo, file_path, token)
+                    if content:
+                        lines = len(content.split('\n'))
+                        file_sizes.append(lines)
+                        metrics['total_lines'] += lines
+                        
+                        # 큰 파일 감지 (1000줄 이상)
+                        if lines > 1000:
+                            metrics['large_files'].append({
+                                'file': file_path,
+                                'lines': lines
+                            })
+                        
+                        # 복잡한 파일 감지 (함수 수가 많은 파일)
+                        complexity = self._calculate_file_complexity(content)
+                        if complexity > 20:
+                            metrics['complex_files'].append({
+                                'file': file_path,
+                                'complexity': complexity
+                            })
+                except Exception as e:
+                    # 파일 처리 중 오류 발생 시 무시하고 계속 진행
+                    continue
+            
+            if file_sizes:
+                metrics['average_file_size'] = sum(file_sizes) / len(file_sizes)
+            
+            return metrics
+        except Exception as e:
+            print(f"파일 메트릭 분석 오류: {e}")
+            return {}
+    
+    def _calculate_file_complexity(self, content: str) -> int:
+        """파일 복잡도 계산"""
+        complexity = 0
+        
+        # 함수 수 계산
+        function_patterns = [
+            r'function\s+\w+\s*\(',
+            r'def\s+\w+\s*\(',
+            r'async\s+function\s+\w+\s*\(',
+            r'async\s+def\s+\w+\s*\(',
+            r'const\s+\w+\s*=\s*\([^)]*\)\s*=>',
+            r'let\s+\w+\s*=\s*\([^)]*\)\s*=>'
+        ]
+        
+        for pattern in function_patterns:
+            matches = re.findall(pattern, content, re.MULTILINE)
+            complexity += len(matches)
+        
+        return complexity
+    
+    async def _analyze_algorithm_complexity(self, owner: str, repo: str, token: str) -> Dict:
+        """알고리즘 복잡도 추정"""
+        try:
+            source_files = await self._get_source_files(owner, repo, token)
+            
+            complexity_analysis = {
+                'nested_loops': 0,
+                'recursive_functions': 0,
+                'sorting_operations': 0,
+                'search_operations': 0,
+                'complexity_estimates': []
+            }
+            
+            for file_path in source_files[:10]:  # 상위 10개 파일만 분석
+                try:
+                    content = await fetch_github_file_content(owner, repo, file_path, token)
+                    if content:
+                        file_complexity = self._analyze_file_algorithm_complexity(content, file_path)
+                        
+                        complexity_analysis['nested_loops'] += file_complexity.get('nested_loops', 0)
+                        complexity_analysis['recursive_functions'] += file_complexity.get('recursive_functions', 0)
+                        complexity_analysis['sorting_operations'] += file_complexity.get('sorting_operations', 0)
+                        complexity_analysis['search_operations'] += file_complexity.get('search_operations', 0)
+                        complexity_analysis['complexity_estimates'].extend(file_complexity.get('estimates', []))
+                except Exception as e:
+                    # 파일 처리 중 오류 발생 시 무시하고 계속 진행
+                    continue
+            
+            return complexity_analysis
+        except Exception as e:
+            print(f"알고리즘 복잡도 분석 오류: {e}")
+            return {}
+    
+    def _analyze_file_algorithm_complexity(self, content: str, file_path: str) -> Dict:
+        """파일별 알고리즘 복잡도 분석"""
+        analysis = {
+            'nested_loops': 0,
+            'recursive_functions': 0,
+            'sorting_operations': 0,
+            'search_operations': 0,
+            'estimates': []
+        }
+        
+        lines = content.split('\n')
+        
+        # 중첩 루프 감지
+        loop_depth = 0
+        for line in lines:
+            if re.search(r'\bfor\b|\bwhile\b', line):
+                loop_depth += 1
+            elif re.search(r'^\s*}', line):  # 루프 종료
+                if loop_depth > 1:
+                    analysis['nested_loops'] += 1
+                loop_depth = max(0, loop_depth - 1)
+        
+        # 재귀 함수 감지
+        recursive_patterns = [
+            r'function\s+(\w+).*\1',  # 함수가 자신을 호출
+            r'def\s+(\w+).*\1'
+        ]
+        
+        for pattern in recursive_patterns:
+            if re.search(pattern, content, re.MULTILINE):
+                analysis['recursive_functions'] += 1
+        
+        # 정렬 및 검색 작업 감지
+        sorting_keywords = ['sort', 'sorted', 'orderBy', 'sortBy']
+        search_keywords = ['find', 'search', 'indexOf', 'includes', 'filter']
+        
+        for keyword in sorting_keywords:
+            if keyword in content:
+                analysis['sorting_operations'] += 1
+        
+        for keyword in search_keywords:
+            if keyword in content:
+                analysis['search_operations'] += 1
+        
+        # 복잡도 추정
+        if analysis['nested_loops'] > 5:
+            analysis['estimates'].append('O(n²) 이상의 복잡도 가능성')
+        if analysis['recursive_functions'] > 2:
+            analysis['estimates'].append('재귀 함수로 인한 스택 오버플로우 위험')
+        
+        return analysis
+    
+    async def _analyze_memory_patterns(self, owner: str, repo: str, token: str) -> Dict:
+        """메모리 사용 패턴 분석"""
+        try:
+            source_files = await self._get_source_files(owner, repo, token)
+            
+            memory_patterns = {
+                'memory_allocation': 0,
+                'memory_deallocation': 0,
+                'large_data_structures': 0,
+                'memory_issues': []
+            }
+            
+            for file_path in source_files[:15]:
+                try:
+                    content = await fetch_github_file_content(owner, repo, file_path, token)
+                    if content:
+                        file_memory = self._analyze_file_memory_patterns(content, file_path)
+                        
+                        memory_patterns['memory_allocation'] += file_memory.get('allocation', 0)
+                        memory_patterns['memory_deallocation'] += file_memory.get('deallocation', 0)
+                        memory_patterns['large_data_structures'] += file_memory.get('large_structures', 0)
+                        memory_patterns['memory_issues'].extend(file_memory.get('issues', []))
+                except Exception as e:
+                    # 파일 처리 중 오류 발생 시 무시하고 계속 진행
+                    continue
+            
+            return memory_patterns
+        except Exception as e:
+            print(f"메모리 패턴 분석 오류: {e}")
+            return {}
+    
+    def _analyze_file_memory_patterns(self, content: str, file_path: str) -> Dict:
+        """파일별 메모리 패턴 분석"""
+        patterns = {
+            'allocation': 0,
+            'deallocation': 0,
+            'large_structures': 0,
+            'issues': []
+        }
+        
+        # 메모리 할당 패턴
+        allocation_patterns = [
+            r'new\s+\w+\(',
+            r'Array\(',
+            r'Object\(',
+            r'\[\]',
+            r'\{\}'
+        ]
+        
+        for pattern in allocation_patterns:
+            matches = re.findall(pattern, content)
+            patterns['allocation'] += len(matches)
+        
+        # 큰 데이터 구조 감지
+        if re.search(r'Array\(\d{3,}\)|\[\s*\d{3,}\s*\]', content):
+            patterns['large_structures'] += 1
+            patterns['issues'].append('큰 배열 할당 감지')
+        
+        # 메모리 누수 패턴
+        if re.search(r'setInterval|setTimeout.*function', content):
+            patterns['issues'].append('타이머 기반 메모리 누수 위험')
+        
+        return patterns
+    
+    async def _analyze_io_patterns(self, owner: str, repo: str, token: str) -> Dict:
+        """네트워크/IO 패턴 분석"""
+        try:
+            source_files = await self._get_source_files(owner, repo, token)
+            
+            io_patterns = {
+                'network_requests': 0,
+                'file_operations': 0,
+                'database_queries': 0,
+                'io_issues': []
+            }
+            
+            for file_path in source_files[:15]:
+                try:
+                    content = await fetch_github_file_content(owner, repo, file_path, token)
+                    if content:
+                        file_io = self._analyze_file_io_patterns(content, file_path)
+                        
+                        io_patterns['network_requests'] += file_io.get('network', 0)
+                        io_patterns['file_operations'] += file_io.get('file', 0)
+                        io_patterns['database_queries'] += file_io.get('database', 0)
+                        io_patterns['io_issues'].extend(file_io.get('issues', []))
+                except Exception as e:
+                    # 파일 처리 중 오류 발생 시 무시하고 계속 진행
+                    continue
+            
+            return io_patterns
+        except Exception as e:
+            print(f"IO 패턴 분석 오류: {e}")
+            return {}
+    
+    def _analyze_file_io_patterns(self, content: str, file_path: str) -> Dict:
+        """파일별 IO 패턴 분석"""
+        patterns = {
+            'network': 0,
+            'file': 0,
+            'database': 0,
+            'issues': []
+        }
+        
+        # 네트워크 요청 패턴
+        network_patterns = [
+            r'fetch\(',
+            r'axios\.',
+            r'XMLHttpRequest',
+            r'requests\.',
+            r'urllib\.'
+        ]
+        
+        for pattern in network_patterns:
+            matches = re.findall(pattern, content)
+            patterns['network'] += len(matches)
+        
+        # 파일 작업 패턴
+        file_patterns = [
+            r'open\(',
+            r'readFile',
+            r'writeFile',
+            r'fs\.'
+        ]
+        
+        for pattern in file_patterns:
+            matches = re.findall(pattern, content)
+            patterns['file'] += len(matches)
+        
+        # 데이터베이스 쿼리 패턴
+        db_patterns = [
+            r'SELECT|INSERT|UPDATE|DELETE',
+            r'query\(',
+            r'execute\(',
+            r'find\(',
+            r'save\('
+        ]
+        
+        for pattern in db_patterns:
+            matches = re.findall(pattern, content, re.IGNORECASE)
+            patterns['database'] += len(matches)
+        
+        # IO 이슈 감지
+        if patterns['network'] > 10:
+            patterns['issues'].append('과도한 네트워크 요청')
+        if patterns['database'] > 20:
+            patterns['issues'].append('과도한 데이터베이스 쿼리')
+        
+        return patterns
+    
+    def _calculate_performance_score(self, performance_patterns: Dict, file_metrics: Dict) -> int:
+        """전체 성능 점수 계산"""
+        score = 100
+        
+        # 성능 이슈에 따른 점수 감점
+        performance_issues = performance_patterns.get('performance_issues', [])
+        for issue in performance_issues:
+            if issue.get('severity') == 'high':
+                score -= 10
+            elif issue.get('severity') == 'medium':
+                score -= 5
+        
+        # 파일 크기에 따른 점수 감점
+        avg_file_size = file_metrics.get('average_file_size', 0)
+        if avg_file_size > 500:
+            score -= 10
+        elif avg_file_size > 300:
+            score -= 5
+        
+        # 복잡한 파일에 따른 점수 감점
+        complex_files = file_metrics.get('complex_files', [])
+        if len(complex_files) > 5:
+            score -= 10
+        elif len(complex_files) > 2:
+            score -= 5
+        
+        return max(0, score)
+
+# 전역 인스턴스들 (필요한 것만 유지)
+analysis_cache = AnalysisCache()
 
 class GithubSummaryRequest(BaseModel):
     username: str
     repo_name: Optional[str] = None  # 특정 저장소 분석 시 사용
 
-class GithubArchitectureRequest(BaseModel):
-    owner: str
-    repo: str
 
-class GithubArchitectureResponse(BaseModel):
-    owner: str
-    repo: str
-    topic: str
-    tech_stack: List[str]
-    external_libs: List[str]
-    llm_models: List[str]
-    architecture: str
-    opened_files: List[str]
-    analysis_time: float
-    token_usage: Optional[Dict[str, int]] = None  # 토큰 사용량 추가
 
 class GithubSummaryResponse(BaseModel):
     profileUrl: str
@@ -48,26 +1692,32 @@ class LanguageChartResponse(BaseModel):
     original_stats: Optional[Dict[str, int]] = None  # 원본 통계 (기타 분류 전)
 
 def process_language_stats(language_stats: Dict[str, int], total_bytes: int) -> Dict[str, int]:
-    """언어 통계를 처리하여 8개 이상이거나 3% 이하인 언어들을 '기타'로 분류"""
+    """언어 통계를 처리하여 정확한 비율로 분류 (정확도 개선)"""
     if not language_stats:
         return language_stats
     
     entries = sorted(language_stats.items(), key=lambda x: x[1], reverse=True)
     
-    # 3% 이하인 언어들을 찾기
-    small_languages = [(name, value) for name, value in entries if (value / total_bytes) * 100 <= 3]
+    # 정확한 비율 계산
+    language_percentages = {}
+    for name, value in entries:
+        percentage = (value / total_bytes) * 100
+        language_percentages[name] = percentage
     
-    # 8개 이상이거나 3% 이하인 언어가 여러 개인 경우 처리
-    if len(entries) > 8 or len(small_languages) > 1:
-        # 3% 이하인 언어들을 제외하고 상위 언어들 선택
-        significant_languages = [(name, value) for name, value in entries if (value / total_bytes) * 100 > 3]
-        top_languages = significant_languages[:7]
+    # 2% 이하인 언어들을 찾기 (더 엄격한 기준)
+    small_languages = [(name, value) for name, value in entries if language_percentages[name] <= 2]
+    
+    # 7개 이상이거나 2% 이하인 언어가 여러 개인 경우 처리 (더 엄격한 기준)
+    if len(entries) > 7 or len(small_languages) > 1:
+        # 2% 이상인 언어들을 선택
+        significant_languages = [(name, value) for name, value in entries if language_percentages[name] > 2]
+        top_languages = significant_languages[:6]  # 상위 6개로 제한
         
         # 나머지 언어들을 '기타'로 분류
         others = []
         for name, value in entries:
-            percentage = (value / total_bytes) * 100
-            if percentage <= 3 or not any(top_name == name for top_name, _ in top_languages):
+            percentage = language_percentages[name]
+            if percentage <= 2 or not any(top_name == name for top_name, _ in top_languages):
                 others.append((name, value))
         
         # 결과 구성 - 기타를 맨 마지막에 배치
@@ -80,8 +1730,8 @@ def process_language_stats(language_stats: Dict[str, int], total_bytes: int) -> 
         
         return result
     else:
-        # 기존 로직: 상위 7개만 표시
-        return dict(entries[:7])
+        # 기존 로직: 상위 6개만 표시
+        return dict(entries[:6])
 
 class RepositoryAnalysis(BaseModel):
     project_overview: Dict
@@ -93,6 +1743,8 @@ class RepositoryAnalysis(BaseModel):
     deployment_info: Optional[Dict]
 
 GITHUB_API_BASE = 'https://api.github.com'
+
+
 
 async def fetch_github_tree(owner: str, repo: str, token: Optional[str] = None) -> List[Dict]:
     """GitHub 레포지토리의 전체 파일 트리를 가져오기"""
@@ -136,7 +1788,7 @@ async def fetch_github_file_content(owner: str, repo: str, file_path: str, token
             
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
-            print(f"파일을 찾을 수 없음: {file_path}")
+            # 404 오류는 정상적인 상황이므로 로그 출력하지 않음
             return None
         elif e.response.status_code == 403:
             print(f"파일 접근 권한 없음: {file_path}")
@@ -145,293 +1797,22 @@ async def fetch_github_file_content(owner: str, repo: str, file_path: str, token
             print(f"파일 조회 오류 ({file_path}): {e.response.status_code}")
             return None
     except Exception as e:
-        print(f"파일 처리 오류 ({file_path}): {e}")
+        # 모든 파일 처리 오류를 조용히 무시
         return None
 
-async def call_openai_for_planning(file_tree: List[Dict], opened_files: Dict[str, str], token: Optional[str] = None) -> Dict:
-    """OpenAI API를 사용하여 다음 액션 계획"""
-    global openai_api_calls, openai_tokens_used
-    
-    api_key = os.getenv('OPENAI_API_KEY')
-    if not api_key:
-        raise HTTPException(status_code=500, detail="OpenAI API 키가 설정되지 않았습니다.")
-    
-    endpoint = "https://api.openai.com/v1/chat/completions"
-    
-    # 파일 트리 정보 요약
-    file_summary = []
-    for file_info in file_tree[:50]:  # 최대 50개 파일만 전송
-        file_summary.append({
-            'name': file_info.get('path', ''),
-            'type': file_info.get('type', ''),
-            'size': file_info.get('size', 0)
-        })
-    
-    # 열린 파일 정보 요약
-    opened_summary = []
-    for file_path, content in list(opened_files.items())[:5]:  # 최대 5개 파일만 전송
-        opened_summary.append({
-            'path': file_path,
-            'content_preview': content[:500] + '...' if len(content) > 500 else content
-        })
-    
-    prompt = f"""GitHub 레포지토리 분석을 위한 Planner-Executor 루프입니다.
 
-현재 상황:
-- 파일 트리: {len(file_tree)}개 파일
-- 열린 파일: {len(opened_files)}개
-- 열린 파일 목록: {list(opened_files.keys())}
 
-파일 트리 (상위 50개):
-{json.dumps(file_summary, ensure_ascii=False, indent=2)}
 
-열린 파일 내용 (상위 5개):
-{json.dumps(opened_summary, ensure_ascii=False, indent=2)}
 
-다음 중 하나의 액션을 선택하세요:
 
-1. 더 많은 파일을 열어야 하는 경우:
-{{
-  "action": "open",
-  "files": ["파일명1", "파일명2", "파일명3"],
-  "reason": "이 파일들을 열어야 하는 이유"
-}}
 
-2. 충분한 정보가 모여서 최종 분석 결과를 제공하는 경우:
-{{
-  "action": "answer",
-  "result": {{
-    "topic": "프로젝트의 핵심 주제와 목적",
-    "tech_stack": ["주요 기술 스택 목록"],
-    "external_libs": ["외부 라이브러리 목록"],
-    "llm_models": ["LLM 관련 라이브러리 목록"],
-    "architecture": "전체 아키텍처 구조 설명"
-  }}
-}}
 
-중요한 지침:
-- 항상 JSON 형식으로만 응답하세요
-- 파일을 열 때는 가장 중요한 파일부터 선택하세요 (README, package.json, requirements.txt, 주요 설정 파일 등)
-- 한 번에 최대 3개 파일까지만 요청하세요
-- 충분한 정보가 모이면 "answer" 액션으로 최종 결과를 제공하세요
-- LLM 관련 라이브러리는 openai, anthropic, langchain, transformers 등 AI/ML 관련 라이브러리를 포함하세요"""
 
-    payload = {
-        "model": "gpt-4o-mini",
-        "messages": [
-            {
-                "role": "user",
-                "content": prompt
-            }
-        ],
-        "temperature": 0.1,
-        "max_tokens": 2000
-    }
-    
-    # 타임아웃을 90초로 증가
-    async with httpx.AsyncClient(timeout=httpx.Timeout(90.0)) as client:
-        try:
-            openai_api_calls += 1
-            response = await client.post(endpoint, json=payload, headers={
-                'Content-Type': 'application/json',
-                'Authorization': f'Bearer {api_key}'
-            })
-            response.raise_for_status()
-            data = response.json()
-            
-            # 토큰 사용량 기록
-            if 'usage' in data:
-                openai_tokens_used += data['usage'].get('total_tokens', 0)
-            
-            response_text = data.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
-            
-            try:
-                # JSON 응답 파싱
-                result = json.loads(response_text)
-                return result
-            except json.JSONDecodeError as e:
-                print(f"OpenAI 응답 JSON 파싱 실패: {e}")
-                print(f"응답 텍스트: {response_text}")
-                # 기본 응답 반환
-                return {
-                    "action": "open",
-                    "files": ["README.md"],
-                    "reason": "JSON 파싱 실패로 기본 파일 요청"
-                }
-        except httpx.TimeoutException:
-            print("OpenAI API 타임아웃 발생")
-            return {
-                "action": "answer",
-                "result": {
-                    "topic": "분석 시간 초과",
-                    "tech_stack": [],
-                    "external_libs": [],
-                    "llm_models": [],
-                    "architecture": "분석 시간 초과로 인해 완전한 분석을 제공할 수 없습니다."
-                }
-            }
-        except Exception as e:
-            print(f"OpenAI API 호출 오류: {e}")
-            return {
-                "action": "answer",
-                "result": {
-                    "topic": "분석 오류",
-                    "tech_stack": [],
-                    "external_libs": [],
-                    "llm_models": [],
-                    "architecture": f"분석 중 오류가 발생했습니다: {str(e)}"
-                }
-            }
 
-async def analyze_repository_architecture(owner: str, repo: str, token: Optional[str] = None) -> GithubArchitectureResponse:
-    """Planner-Executor 루프를 사용하여 레포지토리 아키텍처 분석"""
-    start_time = datetime.now()
-    
-    # 아키텍처 분석 전에 토큰 사용량 초기화
-    reset_token_usage()
-    
-    try:
-        # 1. 파일 트리 가져오기
-        print(f"1단계: 파일 트리 수집 중... ({owner}/{repo})")
-        file_tree = await fetch_github_tree(owner, repo, token)
-        if not file_tree:
-            raise HTTPException(status_code=404, detail="파일 트리를 가져올 수 없습니다.")
-        
-        print(f"총 {len(file_tree)}개 파일 발견")
 
-        # 파일 경로 집합(존재하는 파일만) 구성
-        file_paths = {node.get('path') for node in file_tree if isinstance(node, dict) and node.get('type') == 'blob' and node.get('path')}
-        # 존재하지 않거나 실패한 파일을 기록하여 재시도 방지
-        missing_files = set()
-        
-        # 2. Planner-Executor 루프 시작
-        opened_files = {}
-        max_iterations = 6  # 최대 반복 횟수를 6번으로 줄임
-        max_analysis_time = 300  # 최대 분석 시간을 5분으로 제한
-        iteration = 0
-        
-        while iteration < max_iterations:
-            iteration += 1
-            current_time = (datetime.now() - start_time).total_seconds()
-            
-            # 분석 시간 제한 확인
-            if current_time > max_analysis_time:
-                print(f"분석 시간 제한 도달: {current_time:.2f}초")
-                break
-                
-            print(f"반복 {iteration}: AI 분석 중... (경과 시간: {current_time:.2f}초)")
-            
-            # OpenAI에 현재 상황 전달하고 다음 액션 요청
-            try:
-                ai_response = await call_openai_for_planning(file_tree, opened_files, token)
-            except Exception as e:
-                print(f"AI 분석 중 오류: {e}")
-                break
-            
-            if ai_response.get('action') == 'answer':
-                # 최종 답변 생성
-                result = ai_response.get('result', {})
-                analysis_time = (datetime.now() - start_time).total_seconds()
-                
-                return GithubArchitectureResponse(
-                    owner=owner,
-                    repo=repo,
-                    topic=result.get('topic', '분석 완료'),
-                    tech_stack=result.get('tech_stack', []),
-                    external_libs=result.get('external_libs', []),
-                    llm_models=result.get('llm_models', []),
-                    architecture=result.get('architecture', '분석 완료'),
-                    opened_files=list(opened_files.keys()),
-                    analysis_time=analysis_time,
-                    token_usage=get_token_usage()
-                )
-            
-            elif ai_response.get('action') == 'open':
-                # 파일 열기 요청
-                files_to_open = ai_response.get('files', [])
-                reason = ai_response.get('reason', '')
-                print(f"파일 열기 요청: {files_to_open} (이유: {reason})")
-                
-                # 요청된 파일들 열기 (최대 3개씩만 처리)
-                # 존재하지 않는 경로/이미 실패했거나 이미 열린 파일 필터링
-                candidate_files = [
-                    fp for fp in files_to_open
-                    if isinstance(fp, str)
-                    and fp in file_paths
-                    and fp not in missing_files
-                    and fp not in opened_files
-                ]
 
-                if len(candidate_files) != len(files_to_open):
-                    skipped = [fp for fp in files_to_open if fp not in candidate_files]
-                    if skipped:
-                        print(f"스킵된 요청 파일(존재하지 않음/중복/실패): {skipped}")
 
-                prev_opened_count = len(opened_files)
-                opened_count = 0
-                for file_path in candidate_files[:3]:
-                    if opened_count >= 3:
-                        break
-                    try:
-                        content = await fetch_github_file_content(owner, repo, file_path, token)
-                        if content:
-                            opened_files[file_path] = content
-                            opened_count += 1
-                            print(f"파일 열기 성공: {file_path}")
-                        else:
-                            print(f"파일 열기 실패: {file_path}")
-                            missing_files.add(file_path)
-                    except Exception as e:
-                        print(f"파일 열기 오류 ({file_path}): {e}")
-                        missing_files.add(file_path)
-                
-                print(f"현재 열린 파일 수: {len(opened_files)}")
 
-                # 무진전 감지: 이번 반복에서 새로 연 파일이 없으면 중단
-                if len(opened_files) == prev_opened_count:
-                    print("무진전 감지: 새로 열린 파일이 없어 분석을 종료합니다.")
-                    break
-                
-                # 충분한 파일이 열렸으면 분석 완료로 간주
-                if len(opened_files) >= 15:
-                    print("충분한 파일이 열려서 분석을 완료합니다.")
-                    break
-            else:
-                print(f"알 수 없는 AI 응답: {ai_response}")
-                break
-        
-        # 최대 반복 횟수 도달 또는 시간 초과 시 기본 결과 반환
-        analysis_time = (datetime.now() - start_time).total_seconds()
-        print(f"분석 완료 (반복 {iteration}회, 시간 {analysis_time:.2f}초)")
-        
-        return GithubArchitectureResponse(
-            owner=owner,
-            repo=repo,
-            topic="분석 완료 (제한 시간 내)",
-            tech_stack=[],
-            external_libs=[],
-            llm_models=[],
-            architecture="분석 완료",
-            opened_files=list(opened_files.keys()),
-            analysis_time=analysis_time,
-            token_usage=get_token_usage()
-        )
-        
-    except Exception as e:
-        analysis_time = (datetime.now() - start_time).total_seconds()
-        print(f"아키텍처 분석 중 오류: {e}")
-        return GithubArchitectureResponse(
-            owner=owner,
-            repo=repo,
-            topic=f"분석 오류: {str(e)}",
-            tech_stack=[],
-            external_libs=[],
-            llm_models=[],
-            architecture="분석 실패",
-            opened_files=[],
-            analysis_time=analysis_time,
-            token_usage=get_token_usage()
-        )
 
 # 토큰 사용량 추적을 위한 전역 변수
 github_api_calls = 0
@@ -674,6 +2055,8 @@ async def fetch_repo_core_files(owner: str, repo: str, token: Optional[str] = No
         
     except Exception as e:
         print(f"핵심파일 조회 중 오류: {e}")
+        import traceback
+        traceback.print_exc()
         return {'high': [], 'medium': [], 'normal': [], 'other': []}
 
 async def fetch_repo_top_level_files(owner: str, repo: str, token: Optional[str] = None) -> List[Dict]:
@@ -719,7 +2102,7 @@ async def analyze_core_files_content(owner: str, repo: str, core_files: Dict[str
             
         filename = file_info['name'].lower()
         
-        # package.json 분석
+        # package.json 분석 (정확도 개선)
         if filename == 'package.json':
             try:
                 import json
@@ -731,27 +2114,57 @@ async def analyze_core_files_content(owner: str, repo: str, core_files: Dict[str
                     'engines': pkg_data.get('engines', {})
                 }
                 
-                # 프레임워크 감지
+                # 정확한 프레임워크 감지 (오탐 방지)
                 deps = {**pkg_data.get('dependencies', {}), **pkg_data.get('devDependencies', {})}
-                if 'react' in deps:
+                
+                # React 생태계 (정확한 매칭)
+                if 'react' in deps and 'react-dom' in deps:
                     analysis_result['frameworks'].append('React')
-                if 'vue' in deps:
-                    analysis_result['frameworks'].append('Vue.js')
-                if 'angular' in deps:
-                    analysis_result['frameworks'].append('Angular')
                 if 'next' in deps:
                     analysis_result['frameworks'].append('Next.js')
+                if 'gatsby' in deps:
+                    analysis_result['frameworks'].append('Gatsby')
+                
+                # Vue 생태계 (정확한 매칭)
+                if 'vue' in deps:
+                    analysis_result['frameworks'].append('Vue.js')
                 if 'nuxt' in deps:
                     analysis_result['frameworks'].append('Nuxt.js')
+                
+                # Angular (정확한 매칭)
+                if 'angular' in deps or '@angular/core' in deps:
+                    analysis_result['frameworks'].append('Angular')
+                
+                # Node.js 백엔드 (정확한 매칭)
                 if 'express' in deps:
                     analysis_result['frameworks'].append('Express.js')
                 if 'fastify' in deps:
                     analysis_result['frameworks'].append('Fastify')
+                if 'koa' in deps:
+                    analysis_result['frameworks'].append('Koa.js')
+                if 'nest' in deps or '@nestjs/core' in deps:
+                    analysis_result['frameworks'].append('NestJS')
+                
+                # 빌드 도구 (정확한 매칭)
+                if 'webpack' in deps:
+                    analysis_result['build_tools'].append('Webpack')
+                if 'vite' in deps:
+                    analysis_result['build_tools'].append('Vite')
+                if 'rollup' in deps:
+                    analysis_result['build_tools'].append('Rollup')
+                if 'parcel' in deps:
+                    analysis_result['build_tools'].append('Parcel')
+                
+                # 의존성 관리자 추가
+                if deps:  # dependencies나 devDependencies가 있으면
+                    if 'dependency_managers' not in analysis_result:
+                        analysis_result['dependency_managers'] = []
+                    analysis_result['dependency_managers'].append('npm')
                     
             except json.JSONDecodeError:
                 pass
                 
-        # requirements.txt 분석
+        # requirements.txt 분석 (정확도 개선)
         elif filename == 'requirements.txt':
             dependencies = []
             for line in file_content.split('\n'):
@@ -763,7 +2176,7 @@ async def analyze_core_files_content(owner: str, repo: str, core_files: Dict[str
             
             analysis_result['dependencies']['pip'] = dependencies
             
-            # Python 프레임워크 감지
+            # 정확한 Python 프레임워크 감지 (오탐 방지)
             if 'django' in dependencies:
                 analysis_result['frameworks'].append('Django')
             if 'flask' in dependencies:
@@ -772,6 +2185,40 @@ async def analyze_core_files_content(owner: str, repo: str, core_files: Dict[str
                 analysis_result['frameworks'].append('FastAPI')
             if 'streamlit' in dependencies:
                 analysis_result['frameworks'].append('Streamlit')
+            if 'tornado' in dependencies:
+                analysis_result['frameworks'].append('Tornado')
+            if 'aiohttp' in dependencies:
+                analysis_result['frameworks'].append('aiohttp')
+            
+            # Python 빌드 도구 감지
+            if 'uvicorn' in dependencies:
+                analysis_result['build_tools'].append('Uvicorn')
+            if 'gunicorn' in dependencies:
+                analysis_result['build_tools'].append('Gunicorn')
+            
+            # 데이터베이스 감지
+            if 'motor' in dependencies or 'pymongo' in dependencies:
+                if 'databases' not in analysis_result:
+                    analysis_result['databases'] = []
+                analysis_result['databases'].append('MongoDB')
+            if 'psycopg2' in dependencies or 'asyncpg' in dependencies:
+                if 'databases' not in analysis_result:
+                    analysis_result['databases'] = []
+                analysis_result['databases'].append('PostgreSQL')
+            if 'mysql-connector-python' in dependencies or 'pymysql' in dependencies:
+                if 'databases' not in analysis_result:
+                    analysis_result['databases'] = []
+                analysis_result['databases'].append('MySQL')
+            if 'redis' in dependencies:
+                if 'databases' not in analysis_result:
+                    analysis_result['databases'] = []
+                analysis_result['databases'].append('Redis')
+            
+            # Python 의존성 관리자 추가
+            if dependencies:  # requirements.txt가 있으면
+                if 'dependency_managers' not in analysis_result:
+                    analysis_result['dependency_managers'] = []
+                analysis_result['dependency_managers'].append('pip')
                 
         # Docker 파일 분석
         elif filename in ['dockerfile', 'docker-compose.yml', 'docker-compose.yaml']:
@@ -831,9 +2278,20 @@ async def analyze_core_files_content(owner: str, repo: str, core_files: Dict[str
         elif 'tsconfig' in filename:
             analysis_result['build_tools'].append('TypeScript')
     
-    # 중복 제거
+    # 중복 제거 및 정확도 검증
     analysis_result['frameworks'] = list(set(analysis_result['frameworks']))
     analysis_result['build_tools'] = list(set(analysis_result['build_tools']))
+    
+    # 프레임워크 정확도 검증 (상호 배타적 프레임워크 처리)
+    frameworks = analysis_result['frameworks']
+    if 'Next.js' in frameworks and 'React' not in frameworks:
+        frameworks.append('React')  # Next.js는 React 기반
+    if 'Nuxt.js' in frameworks and 'Vue.js' not in frameworks:
+        frameworks.append('Vue.js')  # Nuxt.js는 Vue 기반
+    if 'Gatsby' in frameworks and 'React' not in frameworks:
+        frameworks.append('React')  # Gatsby는 React 기반
+    
+    analysis_result['frameworks'] = list(set(frameworks))
     
     return analysis_result
 
@@ -862,7 +2320,7 @@ def _parse_dependencies_from_requirements(content: str) -> List[str]:
     return list(sorted(set(deps)))
 
 async def collect_dependency_hints(owner: str, repo: str, token: Optional[str]) -> Dict[str, List[str]]:
-    """핵심파일 선별 조회를 통해 외부 라이브러리 및 LLM 관련 힌트를 수집한다."""
+    """향상된 의존성 분석을 통해 외부 라이브러리 및 LLM 관련 힌트를 수집한다."""
     hints: Dict[str, List[str]] = {
         'external_libraries': [],
         'llm_hints': [],
@@ -872,77 +2330,630 @@ async def collect_dependency_hints(owner: str, repo: str, token: Optional[str]) 
     }
 
     try:
-        # 핵심파일 선별 조회
+        # 1단계: 핵심파일 선별 조회 및 분석
         core_files = await fetch_repo_core_files(owner, repo, token)
-        
-        # 핵심파일 내용 분석
         analysis_result = await analyze_core_files_content(owner, repo, core_files, token)
         
-        # 의존성 정보 수집
-        if 'npm' in analysis_result['dependencies']:
-            npm_deps = analysis_result['dependencies']['npm']
-            deps = {**npm_deps.get('dependencies', {}), **npm_deps.get('devDependencies', {})}
-            hints['external_libraries'].extend(list(deps.keys()))
-            
-        if 'pip' in analysis_result['dependencies']:
-            hints['external_libraries'].extend(analysis_result['dependencies']['pip'])
+        # 2단계: 향상된 의존성 정보 수집
+        await _collect_enhanced_dependencies(owner, repo, analysis_result, hints, token)
         
-        # 프레임워크 및 빌드 도구 정보
-        hints['frameworks'] = analysis_result['frameworks']
-        hints['build_tools'] = analysis_result['build_tools']
-        hints['deployment_configs'] = [config['type'] for config in analysis_result['deployment_configs']]
+        # 3단계: 향상된 LLM 라이브러리 감지
+        await _detect_enhanced_llm_libraries(hints)
         
-        # LLM 라이브러리 키워드 매핑
-        llm_keywords = [
-            'openai', 'google-generativeai', 'google.generativeai', 'vertexai', 
-            'anthropic', 'langchain', 'llama-index', 'transformers', 'cohere', 
-            'groq', 'mcp', 'claude', 'gpt', 'llama', 'gemini', 'palm'
-        ]
+        # 4단계: 추가 파일 스캔 (fallback)
+        await _scan_additional_files(owner, repo, hints, token)
         
-        for lib in list(hints['external_libraries']):
-            lower = lib.lower()
-            if any(k in lower for k in llm_keywords):
-                hints['llm_hints'].append(lib)
-
-        # 중복 제거
-        hints['external_libraries'] = list(sorted(set(hints['external_libraries'])))
-        hints['llm_hints'] = list(sorted(set(hints['llm_hints'])))
-        hints['frameworks'] = list(sorted(set(hints['frameworks'])))
-        hints['build_tools'] = list(sorted(set(hints['build_tools'])))
-        hints['deployment_configs'] = list(sorted(set(hints['deployment_configs'])))
+        # 5단계: 중복 제거 및 정렬
+        _cleanup_and_sort_hints(hints)
 
     except Exception as e:
-        print(f"핵심파일 분석 중 오류: {e}")
-        # 기존 방식으로 fallback
-        top_level_files = await fetch_repo_top_level_files(owner, repo, token)
-        file_names = [f.get('name', '').lower() for f in (top_level_files or [])]
-        
-        # package.json
-        if 'package.json' in file_names:
-            content = await fetch_repo_file(owner, repo, 'package.json', token)
-            pkgs = _parse_dependencies_from_package_json(content or '') if content else []
-            if pkgs:
-                hints['external_libraries'].extend(pkgs)
-
-        # requirements.txt
-        if 'requirements.txt' in file_names:
-            content = await fetch_repo_file(owner, repo, 'requirements.txt', token)
-            reqs = _parse_dependencies_from_requirements(content or '') if content else []
-            if reqs:
-                hints['external_libraries'].extend(reqs)
-
-        # LLM 라이브러리 키워드 매핑
-        llm_keywords = ['openai', 'google-generativeai', 'google.generativeai', 'vertexai', 'anthropic', 'langchain', 'llama-index', 'transformers', 'cohere', 'groq', 'mcp']
-        for lib in list(hints['external_libraries']):
-            lower = lib.lower()
-            if any(k in lower for k in llm_keywords):
-                hints['llm_hints'].append(lib)
-
-        # 중복 제거
-        hints['external_libraries'] = list(sorted(set(hints['external_libraries'])))
-        hints['llm_hints'] = list(sorted(set(hints['llm_hints'])))
+        print(f"향상된 의존성 분석 중 오류: {e}")
+        # 강화된 fallback 로직
+        await _enhanced_fallback_analysis(owner, repo, hints, token)
 
     return hints
+
+async def _collect_enhanced_dependencies(owner: str, repo: str, analysis_result: Dict, hints: Dict[str, List[str]], token: Optional[str]):
+    """향상된 의존성 정보 수집"""
+    
+    # 분석 결과에서 직접 추출된 정보를 hints에 복사
+    if 'frameworks' in analysis_result:
+        hints['frameworks'].extend(analysis_result['frameworks'])
+    
+    if 'build_tools' in analysis_result:
+        hints['build_tools'].extend(analysis_result['build_tools'])
+    
+    if 'dependency_managers' in analysis_result:
+        if 'dependency_managers' not in hints:
+            hints['dependency_managers'] = []
+        hints['dependency_managers'].extend(analysis_result['dependency_managers'])
+    
+    if 'databases' in analysis_result:
+        if 'databases' not in hints:
+            hints['databases'] = []
+        hints['databases'].extend(analysis_result['databases'])
+    
+    if 'deployment_configs' in analysis_result:
+        hints['deployment_configs'].extend(analysis_result['deployment_configs'])
+    
+    # NPM 의존성 수집
+    if 'dependencies' in analysis_result and 'npm' in analysis_result['dependencies']:
+            npm_deps = analysis_result['dependencies']['npm']
+            deps = {**npm_deps.get('dependencies', {}), **npm_deps.get('devDependencies', {}), 
+                **npm_deps.get('peerDependencies', {}), **npm_deps.get('optionalDependencies', {})}
+            hints['external_libraries'].extend(list(deps.keys()))
+            
+    # Python 의존성 수집
+    if 'dependencies' in analysis_result and 'pip' in analysis_result['dependencies']:
+            hints['external_libraries'].extend(analysis_result['dependencies']['pip'])
+        
+    # Go 의존성 수집
+    go_mod_content = await fetch_repo_file(owner, repo, 'go.mod', token)
+    if go_mod_content:
+        go_deps = _parse_go_dependencies(go_mod_content)
+        hints['external_libraries'].extend(go_deps)
+    
+    # Rust 의존성 수집
+    cargo_content = await fetch_repo_file(owner, repo, 'Cargo.toml', token)
+    if cargo_content:
+        rust_deps = _parse_cargo_dependencies(cargo_content)
+        hints['external_libraries'].extend(rust_deps)
+    
+    # Java 의존성 수집
+    pom_content = await fetch_repo_file(owner, repo, 'pom.xml', token)
+    if pom_content:
+        maven_deps = _parse_maven_dependencies(pom_content)
+        hints['external_libraries'].extend(maven_deps)
+        
+async def _detect_enhanced_llm_libraries(hints: Dict[str, List[str]]):
+    """향상된 LLM 라이브러리 감지 (정확도 개선)"""
+    
+    # 정확한 LLM 라이브러리 매핑 (오탐 방지)
+    llm_library_patterns = {
+        # OpenAI 생태계 (정확한 매칭)
+        'openai': ['openai', 'gpt-4', 'gpt-3.5', 'gpt-3', 'dall-e', 'whisper', 'tiktoken', 'openai-python'],
+        # Google AI 생태계 (정확한 매칭)
+        'google_ai': ['google-generativeai', 'google.generativeai', 'vertexai', 'gemini', 'palm', 'tensorflow', 'tensorflow-hub'],
+        # Anthropic 생태계 (정확한 매칭)
+        'anthropic': ['anthropic', 'claude', 'claude-3', 'claude-2', 'claude-instant'],
+        # LangChain 생태계 (정확한 매칭)
+        'langchain': ['langchain', 'langchain-js', 'langchain-python', 'langchain-community', 'langchain-core'],
+        # LlamaIndex 생태계 (정확한 매칭)
+        'llamaindex': ['llama-index', 'llamaindex', 'llama-index-core', 'llama-index-llms'],
+        # Hugging Face (정확한 매칭)
+        'huggingface': ['transformers', 'huggingface-hub', 'datasets', 'tokenizers', 'accelerate', 'diffusers'],
+        # 기타 LLM 라이브러리 (정확한 매칭)
+        'others': ['cohere', 'groq', 'mcp', 'llama', 'mistral', 'falcon', 't5', 'bert', 'roberta', 'gpt2', 'gpt-j'],
+        # 벡터 데이터베이스 (정확한 매칭)
+        'vector_db': ['pinecone', 'weaviate', 'qdrant', 'chromadb', 'faiss', 'milvus', 'elasticsearch'],
+        # 프롬프트 엔지니어링 (정확한 매칭)
+        'prompting': ['promptify', 'promptlayer', 'promptfoo', 'langfuse', 'promptflow'],
+        # RAG 관련 (정확한 매칭)
+        'rag': ['haystack', 'sentence-transformers', 'all-minilm-l6-v2', 'all-mpnet-base-v2'],
+        # 멀티모달 (정확한 매칭)
+        'multimodal': ['clip', 'blip', 'llava', 'instructblip', 'cogvlm', 'qwen-vl']
+    }
+    
+    # 제외할 키워드 (오탐 방지)
+    exclude_keywords = ['ai', 'ml', 'nlp', 'llm', 'gpt', 'claude', 'gemini', 'openai', 'anthropic', 'google']
+    
+    detected_llm_libs = []
+    
+    for lib in hints['external_libraries']:
+        lib_lower = lib.lower()
+        
+        # 정확한 매칭만 허용 (오탐 방지)
+        is_llm_lib = False
+        for category, patterns in llm_library_patterns.items():
+            for pattern in patterns:
+                if pattern == lib_lower or lib_lower.startswith(pattern + '-') or lib_lower.endswith('-' + pattern):
+                    detected_llm_libs.append(lib)
+                    is_llm_lib = True
+                    break
+            if is_llm_lib:
+                break
+        
+        # 추가 검증: 일반적인 키워드만으로는 포함하지 않음
+        if not is_llm_lib:
+            # 매우 구체적인 패턴만 허용
+            specific_patterns = [
+                'openai-', 'anthropic-', 'google-ai', 'langchain-', 'llamaindex-',
+                'transformers', 'huggingface', 'cohere-', 'groq-', 'mistral-',
+                'google-generativeai', 'google.generativeai'  # Gemini 특화
+            ]
+            for pattern in specific_patterns:
+                if pattern in lib_lower:
+                    detected_llm_libs.append(lib)
+                    break
+    
+    # Gemini 관련 라이브러리 특별 처리 (강화)
+    for lib in hints['external_libraries']:
+        if 'google-generativeai' in lib.lower() or 'google.generativeai' in lib.lower():
+            detected_llm_libs.append('google-generativeai')
+            detected_llm_libs.append('gemini')
+            break
+    
+    # LLM 라이브러리에서도 Gemini 확인
+    if 'llm_libraries' in hints:
+        for lib in hints['llm_libraries']:
+            if 'gemini' in lib.lower() or 'google-generativeai' in lib.lower():
+                detected_llm_libs.append('gemini')
+                break
+    
+    hints['llm_hints'] = list(set(detected_llm_libs))
+
+async def _scan_additional_files(owner: str, repo: str, hints: Dict[str, List[str]], token: Optional[str]):
+    """추가 파일 스캔으로 의존성 정보 보완 (강화)"""
+    
+    # 1. 의존성 파일 스캔
+    additional_files = [
+        'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml',
+        'poetry.lock', 'Pipfile', 'Pipfile.lock', 'pyproject.toml',
+        'go.sum', 'Cargo.lock', 'composer.json', 'composer.lock',
+        'Gemfile', 'Gemfile.lock', 'Podfile', 'Podfile.lock'
+    ]
+    
+    for filename in additional_files:
+        content = await fetch_repo_file(owner, repo, filename, token)
+        if content:
+            if filename in ['package-lock.json', 'yarn.lock']:
+                npm_deps = _parse_lockfile_dependencies(content)
+                hints['external_libraries'].extend(npm_deps)
+            elif filename in ['poetry.lock', 'Pipfile', 'pyproject.toml']:
+                python_deps = _parse_python_dependencies(content, filename)
+                hints['external_libraries'].extend(python_deps)
+    
+    # 2. README에서 라이브러리 정보 추출
+    readme_content = await fetch_repo_file(owner, repo, 'README.md', token)
+    if readme_content:
+        await _extract_libraries_from_readme(readme_content, hints)
+    
+    # 3. 실제 코드 파일에서 import/require 문 분석
+    await _analyze_code_imports(owner, repo, hints, token)
+    
+    # 4. LLM 관련 키워드 검색 강화
+    await _search_llm_patterns(owner, repo, hints, token)
+
+async def _enhanced_fallback_analysis(owner: str, repo: str, hints: Dict[str, List[str]], token: Optional[str]):
+    """강화된 fallback 분석"""
+    
+    # 1. 최상위 파일 스캔
+    top_level_files = await fetch_repo_top_level_files(owner, repo, token)
+    file_names = [f.get('name', '').lower() for f in (top_level_files or [])]
+        
+    # 2. 주요 의존성 파일 분석
+    dependency_files = {
+        'package.json': _parse_dependencies_from_package_json,
+        'requirements.txt': _parse_dependencies_from_requirements,
+        'go.mod': _parse_go_dependencies,
+        'Cargo.toml': _parse_cargo_dependencies,
+        'pom.xml': _parse_maven_dependencies
+    }
+    
+    for filename, parser_func in dependency_files.items():
+        if filename in file_names:
+            content = await fetch_repo_file(owner, repo, filename, token)
+            if content:
+                deps = parser_func(content)
+                hints['external_libraries'].extend(deps)
+    
+    # 3. LLM 라이브러리 재감지
+    await _detect_enhanced_llm_libraries(hints)
+    
+    # 4. 정리
+    _cleanup_and_sort_hints(hints)
+
+async def _extract_libraries_from_readme(content: str, hints: Dict[str, List[str]]):
+    """README에서 라이브러리 정보 추출"""
+    lines = content.split('\n')
+    
+    for line in lines:
+        line_lower = line.lower()
+        
+        # 설치 명령어에서 패키지명 추출
+        if 'npm install' in line_lower or 'yarn add' in line_lower:
+            # 패키지명 추출 로직
+            packages = re.findall(r'(?:npm install|yarn add)\s+([^\s]+)', line)
+            hints['external_libraries'].extend(packages)
+        
+        # pip install 명령어에서 패키지명 추출
+        elif 'pip install' in line_lower:
+            packages = re.findall(r'pip install\s+([^\s]+)', line)
+            hints['external_libraries'].extend(packages)
+
+async def _analyze_code_imports(owner: str, repo: str, hints: Dict[str, List[str]], token: Optional[str]):
+    """실제 코드 파일에서 import/require 문 분석"""
+    try:
+        # 파일 트리 가져오기
+        tree = await fetch_github_tree(owner, repo, token)
+        
+        # 주요 코드 파일들 분석
+        code_files = []
+        for item in tree:
+            if item.get('type') == 'blob':
+                path = item.get('path', '')
+                if any(path.endswith(ext) for ext in ['.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.cpp', '.c']):
+                    code_files.append(path)
+        
+        # 상위 20개 파일만 분석 (성능 고려)
+        for file_path in code_files[:20]:
+            try:
+                content = await fetch_github_file_content(owner, repo, file_path, token)
+                if content:
+                    # JavaScript/TypeScript import 분석
+                    if file_path.endswith(('.js', '.ts', '.jsx', '.tsx')):
+                        js_imports = _extract_js_imports(content)
+                        hints['external_libraries'].extend(js_imports)
+                    
+                    # Python import 분석
+                    elif file_path.endswith('.py'):
+                        py_imports = _extract_py_imports(content)
+                        hints['external_libraries'].extend(py_imports)
+                    
+                    # Java import 분석
+                    elif file_path.endswith('.java'):
+                        java_imports = _extract_java_imports(content)
+                        hints['external_libraries'].extend(java_imports)
+                        
+            except Exception as e:
+                continue
+                
+    except Exception as e:
+        print(f"코드 import 분석 오류: {e}")
+
+async def _search_llm_patterns(owner: str, repo: str, hints: Dict[str, List[str]], token: Optional[str]):
+    """LLM 관련 패턴 검색 강화"""
+    try:
+        # 파일 트리 가져오기
+        tree = await fetch_github_tree(owner, repo, token)
+        
+        # 모든 텍스트 파일에서 LLM 관련 키워드 검색
+        for item in tree:
+            if item.get('type') == 'blob':
+                path = item.get('path', '')
+                if any(path.endswith(ext) for ext in ['.md', '.txt', '.js', '.ts', '.jsx', '.tsx', '.py', '.json', '.env', '.env.example']):
+                    try:
+                        content = await fetch_github_file_content(owner, repo, path, token)
+                        if content:
+                            # 일반 LLM 패턴 검색
+                            llm_patterns = _find_llm_patterns(content)
+                            if llm_patterns:
+                                hints['llm_hints'].extend(llm_patterns)
+                            
+                            # Gemini 특화 패턴 검색
+                            gemini_patterns = _find_gemini_specific_patterns(content)
+                            if gemini_patterns:
+                                hints['llm_hints'].extend(gemini_patterns)
+                                
+                    except Exception as e:
+                        continue
+                        
+    except Exception as e:
+        print(f"LLM 패턴 검색 오류: {e}")
+
+def _extract_js_imports(content: str) -> List[str]:
+    """JavaScript/TypeScript import 문에서 라이브러리 추출"""
+    imports = []
+    
+    # ES6 import 문
+    import_patterns = [
+        r'import\s+.*?from\s+["\']([^"\']+)["\']',
+        r'import\s+["\']([^"\']+)["\']',
+        r'require\s*\(\s*["\']([^"\']+)["\']\s*\)'
+    ]
+    
+    for pattern in import_patterns:
+        matches = re.findall(pattern, content)
+        imports.extend(matches)
+    
+    return list(set(imports))
+
+def _extract_py_imports(content: str) -> List[str]:
+    """Python import 문에서 라이브러리 추출"""
+    imports = []
+    
+    # Python import 문
+    import_patterns = [
+        r'import\s+([a-zA-Z_][a-zA-Z0-9_]*)',
+        r'from\s+([a-zA-Z_][a-zA-Z0-9_.]*)\s+import'
+    ]
+    
+    for pattern in import_patterns:
+        matches = re.findall(pattern, content)
+        imports.extend(matches)
+    
+    return list(set(imports))
+
+def _extract_java_imports(content: str) -> List[str]:
+    """Java import 문에서 라이브러리 추출"""
+    imports = []
+    
+    # Java import 문
+    import_patterns = [
+        r'import\s+([a-zA-Z_][a-zA-Z0-9_.]*);'
+    ]
+    
+    for pattern in import_patterns:
+        matches = re.findall(pattern, content)
+        imports.extend(matches)
+    
+    return list(set(imports))
+
+def _find_llm_patterns(content: str) -> List[str]:
+    """LLM 관련 패턴 검색 (강화)"""
+    llm_patterns = []
+    
+    # LLM 관련 키워드 패턴 (확장)
+    llm_keywords = [
+        # OpenAI 생태계
+        'openai', 'gpt', 'gpt-4', 'gpt-3.5', 'dall-e', 'whisper', 'tiktoken',
+        # Anthropic 생태계
+        'claude', 'claude-3', 'claude-2', 'anthropic',
+        # Google AI 생태계 (강화)
+        'gemini', 'palm', 'vertexai', 'google-generativeai', 'google.generativeai', 'generativeai',
+        'google-ai', 'googleai', 'genai', 'google_genai',
+        # LangChain 생태계
+        'langchain', 'langchain-js', 'langchain-python', 'langchain-community',
+        # LlamaIndex 생태계
+        'llamaindex', 'llama-index',
+        # Hugging Face
+        'transformers', 'huggingface', 'huggingface-hub', 'datasets', 'tokenizers',
+        # 기타 LLM 라이브러리
+        'cohere', 'groq', 'mistral', 'falcon', 't5', 'bert', 'roberta', 'gpt2',
+        # 벡터 데이터베이스
+        'pinecone', 'weaviate', 'qdrant', 'chromadb', 'faiss', 'milvus',
+        # 프롬프트 엔지니어링
+        'prompt', 'completion', 'chat', 'llm', 'ai', 'ml', 'nlp',
+        # API 관련
+        'api_key', 'api_key', 'endpoint', 'client', 'model', 'response'
+    ]
+    
+    content_lower = content.lower()
+    for keyword in llm_keywords:
+        if keyword in content_lower:
+            # 키워드 주변 컨텍스트 분석
+            context = _extract_context(content, keyword)
+            if _is_llm_related_context(context):
+                llm_patterns.append(keyword)
+    
+    # 추가: 코드 패턴 검색 (강화)
+    code_patterns = [
+        r'openai\s*\.\s*',  # openai.
+        r'claude\s*\.\s*',  # claude.
+        r'gemini\s*\.\s*',  # gemini.
+        r'langchain\s*\.\s*',  # langchain.
+        r'from\s+openai\s+import',  # from openai import
+        r'from\s+anthropic\s+import',  # from anthropic import
+        r'from\s+google\s+import\s+generativeai',  # from google import generativeai
+        r'import\s+google\.generativeai',  # import google.generativeai
+        r'import\s+generativeai',  # import generativeai
+        r'import\s+openai',  # import openai
+        r'import\s+anthropic',  # import anthropic
+        r'new\s+OpenAI',  # new OpenAI
+        r'new\s+Anthropic',  # new Anthropic
+        r'genai\s*\.\s*',  # genai.
+        r'google\.generativeai\s*\.\s*',  # google.generativeai.
+    ]
+    
+    for pattern in code_patterns:
+        if re.search(pattern, content, re.IGNORECASE):
+            # 패턴에서 라이브러리명 추출
+            match = re.search(pattern, content, re.IGNORECASE)
+            if match:
+                lib_name = pattern.split(r'\s*\.\s*')[0] if r'\s*\.\s*' in pattern else pattern.split(r'\s+import')[0].split(r'from\s+')[-1]
+                if lib_name not in llm_patterns:
+                    llm_patterns.append(lib_name)
+    
+    return list(set(llm_patterns))
+
+def _find_gemini_specific_patterns(content: str) -> List[str]:
+    """Gemini 특화 패턴 검색 (강화)"""
+    gemini_patterns = []
+    content_lower = content.lower()
+    
+    # Gemini 관련 특화 패턴들 (확장)
+    gemini_specific_patterns = [
+        r'google\.generativeai\.GenerativeModel',
+        r'genai\.GenerativeModel',
+        r'generativeai\.GenerativeModel',
+        r'gemini-pro',
+        r'gemini-pro-vision',
+        r'gemini-1\.5',
+        r'gemini-2\.0',
+        r'gemini-flash',
+        r'GOOGLE_API_KEY',
+        r'GEMINI_API_KEY',
+        r'GOOGLE_GENERATIVE_AI_API_KEY',
+        r'genai\.configure',
+        r'generativeai\.configure',
+        r'google\.generativeai\.configure',
+        r'genai\.generate_content',
+        r'generativeai\.generate_content',
+        r'google\.generativeai\.generate_content',
+        r'google-generativeai',
+        r'import\s+google\.generativeai',
+        r'from\s+google\.generativeai'
+    ]
+    
+    # 패턴 매칭
+    for pattern in gemini_specific_patterns:
+        if re.search(pattern, content, re.IGNORECASE):
+            gemini_patterns.append('gemini')
+            break
+    
+    # 직접적인 키워드 검색 추가
+    if 'gemini' in content_lower:
+        gemini_patterns.append('gemini')
+    
+    if 'google.generativeai' in content_lower or 'google-generativeai' in content_lower:
+        gemini_patterns.append('gemini')
+    
+    if 'genai' in content_lower and ('import' in content_lower or 'configure' in content_lower):
+        gemini_patterns.append('gemini')
+    
+    return list(set(gemini_patterns))
+
+def _extract_context(content: str, keyword: str, context_size: int = 50) -> str:
+    """키워드 주변 컨텍스트 추출"""
+    try:
+        index = content.lower().find(keyword.lower())
+        if index != -1:
+            start = max(0, index - context_size)
+            end = min(len(content), index + len(keyword) + context_size)
+            return content[start:end]
+    except:
+        pass
+    return ""
+
+def _is_llm_related_context(context: str) -> bool:
+    """컨텍스트가 LLM 관련인지 판단 (강화)"""
+    llm_indicators = [
+        'api', 'model', 'token', 'response', 'request', 'client', 'config',
+        'key', 'secret', 'endpoint', 'url', 'service', 'library', 'package',
+        'generate', 'completion', 'chat', 'prompt', 'text', 'content',
+        'gemini', 'openai', 'anthropic', 'claude', 'gpt', 'llm', 'ai'
+    ]
+    
+    context_lower = context.lower()
+    return any(indicator in context_lower for indicator in llm_indicators)
+
+def _cleanup_and_sort_hints(hints: Dict[str, List[str]]):
+    """힌트 정리 및 정렬 (정확도 개선)"""
+    for key in hints:
+        if isinstance(hints[key], list):
+            # 중복 제거 및 정렬 (정확도 개선)
+            cleaned_list = []
+            seen = set()
+            
+            for item in hints[key]:
+                # 딕셔너리인 경우 문자열로 변환
+                if isinstance(item, dict):
+                    if 'name' in item:
+                        item_str = str(item['name'])
+                    elif 'type' in item:
+                        item_str = str(item['type'])
+                    else:
+                        item_str = str(item)
+                else:
+                    item_str = str(item)
+                
+                # 정규화된 이름으로 중복 체크
+                normalized = item_str.lower().replace('-', '').replace('_', '')
+                if normalized not in seen:
+                    seen.add(normalized)
+                    cleaned_list.append(item_str)
+            
+            # 알파벳 순으로 정렬
+            hints[key] = sorted(cleaned_list)
+
+def _parse_go_dependencies(content: str) -> List[str]:
+    """Go 모듈 의존성 파싱 (정확도 개선)"""
+    deps = []
+    for line in content.split('\n'):
+        line = line.strip()
+        if line.startswith('require ') and '(' in line and ')' in line:
+            # require (github.com/example/package v1.2.3)
+            parts = line.split('(')[1].split(')')[0].strip()
+            for part in parts.split('\n'):
+                part = part.strip()
+                if part and not part.startswith('//'):
+                    module = part.split()[0]
+                    # 정확한 모듈명만 추출 (버전 정보 제거)
+                    if '/' in module:
+                        deps.append(module)
+    return deps
+
+def _parse_cargo_dependencies(content: str) -> List[str]:
+    """Rust Cargo 의존성 파싱 (정확도 개선)"""
+    deps = []
+    lines = content.split('\n')
+    in_dependencies = False
+    
+    for line in lines:
+        line = line.strip()
+        if line == '[dependencies]':
+            in_dependencies = True
+            continue
+        elif line.startswith('[') and line.endswith(']'):
+            in_dependencies = False
+            continue
+        
+        if in_dependencies and line and not line.startswith('#'):
+            if '=' in line:
+                package = line.split('=')[0].strip()
+                # 정확한 패키지명만 추출 (버전 정보 제거)
+                if package and not package.startswith('{'):
+                    deps.append(package)
+    
+    return deps
+
+def _parse_maven_dependencies(content: str) -> List[str]:
+    """Maven 의존성 파싱"""
+    deps = []
+    import re
+    
+    # groupId:artifactId 패턴 찾기
+    pattern = r'<groupId>([^<]+)</groupId>\s*<artifactId>([^<]+)</artifactId>'
+    matches = re.findall(pattern, content)
+    
+    for group_id, artifact_id in matches:
+        deps.append(f"{group_id}:{artifact_id}")
+    
+    return deps
+
+def _parse_lockfile_dependencies(content: str) -> List[str]:
+    """NPM lockfile 의존성 파싱"""
+    deps = []
+    try:
+        import json
+        data = json.loads(content)
+        if 'dependencies' in data:
+            deps.extend(list(data['dependencies'].keys()))
+    except:
+        pass
+    return deps
+
+def _parse_python_dependencies(content: str, filename: str) -> List[str]:
+    """Python 의존성 파일 파싱"""
+    deps = []
+    
+    if filename == 'pyproject.toml':
+        # TOML 파싱 (간단한 버전)
+        lines = content.split('\n')
+        in_dependencies = False
+        for line in lines:
+            line = line.strip()
+            if line == '[tool.poetry.dependencies]' or line == '[project.dependencies]':
+                in_dependencies = True
+                continue
+            elif line.startswith('[') and line.endswith(']'):
+                in_dependencies = False
+                continue
+            
+            if in_dependencies and line and not line.startswith('#'):
+                if '=' in line:
+                    package = line.split('=')[0].strip()
+                    deps.append(package)
+    
+    elif filename == 'Pipfile':
+        # Pipfile 파싱
+        lines = content.split('\n')
+        in_packages = False
+        for line in lines:
+            line = line.strip()
+            if line == '[packages]':
+                in_packages = True
+                continue
+            elif line.startswith('[') and line.endswith(']'):
+                in_packages = False
+                continue
+            
+            if in_packages and line and not line.startswith('#'):
+                if '=' in line:
+                    package = line.split('=')[0].strip().strip('"').strip("'")
+                    deps.append(package)
+    
+    return deps
 
 async def fetch_repo_commits(owner: str, repo: str, token: Optional[str] = None) -> List[Dict]:
     """리포지토리 커밋 기록 가져오기"""
@@ -1175,12 +3186,14 @@ async def generate_detailed_analysis(repo_data: Dict, languages: Dict, files: Li
     }
 
 async def generate_unified_summary(username: str, repo_name: Optional[str] = None, profile_readme: Optional[Dict] = None, repos_data: Optional[List[Dict]] = None) -> List[Dict]:
-    """통합된 요약 생성 함수 - README와 레포 데이터를 모두 처리"""
+    """통합된 요약 생성 함수 - GPT-4o 최적화"""
+    
+    # OpenAI API 키 확인
     api_key = os.getenv('OPENAI_API_KEY')
     if not api_key:
-        raise HTTPException(status_code=500, detail="OPENAI_API_KEY 환경변수가 설정되어 있지 않습니다.")
+        raise HTTPException(status_code=500, detail="OpenAI API 키가 설정되지 않았습니다.")
     
-    model = 'gpt-4o-mini'
+    model = 'gpt-4o'  # GPT-4o로 업그레이드
     endpoint = 'https://api.openai.com/v1/chat/completions'
     
     # 입력 데이터 구성
@@ -1205,10 +3218,12 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
     else:
         raise HTTPException(status_code=404, detail="분석할 데이터가 없습니다.")
     
-    # 통합 프롬프트 구성
+    # GPT-4o 최적화 프롬프트 구성 - 정확도 향상
     if input_data["analysis_type"] == "single_repo":
         repo_data = input_data["repo_data"]
-        prompt = f"""당신은 GitHub 레포지토리를 분석하여 채용 담당자가 이해하기 쉬운 형태로 요약하는 전문가입니다.
+        prompt = f"""당신은 GitHub 레포지토리를 분석하여 채용 담당자가 이해하기 쉬운 형태로 요약하는 전문가입니다. GPT-4o의 강력한 분석 능력을 활용하여 실제 레포지토리 내용과 정확히 일치하는 분석을 제공해주세요.
+
+**중요**: 제공된 데이터만을 기반으로 분석하고, 추측이나 일반적인 내용을 포함하지 마세요. 실제 파일 구조, 언어 사용량, 기술 스택을 정확히 반영해주세요.
 
 다음 레포지토리 데이터를 분석하여 '주제', '기술 스택', '주요 기능', '레포 주소', '아키텍처 구조', '외부 라이브러리', 'LLM 모델 정보'를 추출해주세요:
 
@@ -1223,24 +3238,41 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
         - 사용 언어: {repo_data.get('languages', {})}
         - 프레임워크: {repo_data.get('frameworks', [])}
         - 상단 파일 목록: {repo_data.get('toplevel_files', [])}
+- 외부 라이브러리 힌트: {repo_data.get('external_libraries_hint', [])}
+- LLM 관련 힌트: {repo_data.get('llm_hints', [])}
 
-**주요 기능**
-{repo_data.get('main_features', '기능 정보 없음')}
+**파일 구조 및 메타데이터**
+- 파일 구조: {repo_data.get('file_structure', '파일 구조 정보 없음')}
+- 개발자 활동: {repo_data.get('developer_activity', '활동 정보 없음')}
+- 빌드 도구: {repo_data.get('build_tools', [])}
+- 배포 설정: {repo_data.get('deployment_configs', [])}
 
-**파일 구조**
-{repo_data.get('file_structure', '파일 구조 정보 없음')}
-
-**개발자 활동**
-{repo_data.get('developer_activity', '활동 정보 없음')}
-
-        **중요한 지침:**
-        - 기술 스택은 카테고리로 요약하되, 외부 라이브러리/LLM 항목은 구체 명칭으로 작성하세요.
-        - README 정보가 부실하거나 모호하면 다음 힌트를 참고하여 보완하세요:
-          - toplevel_files: 프레임워크/배포 방식 추정
-          - external_libraries_hint: 의존성 파일에서 수집된 라이브러리 후보
-          - llm_hints: LLM 관련 라이브러리 후보
-        - 외부 라이브러리는 위 힌트를 활용해 구체적인 라이브러리명/서비스명을 기입하세요.
-        - LLM 모델 정보는 라이브러리/플랫폼과 호출 방식을 근거와 함께 요약하세요.
+**GPT-4o 정확도 향상 분석 지침 (강화):**
+1. **주제 분석**: 
+   - 실제 파일명, 폴더명, README 내용을 기반으로 정확한 프로젝트 목적 파악
+   - 추측하지 말고 제공된 데이터만으로 분석
+   - 일반적인 설명이 아닌 구체적인 프로젝트 특징만 언급
+2. **기술 스택 분석**: 
+   - 실제 언어 사용량 비율을 정확히 반영 (백분율 기반)
+   - 프레임워크는 실제 발견된 것만 포함 (오탐 방지)
+   - 라이브러리는 실제 의존성 파일에서 확인된 것만 포함
+   - 버전 정보가 있다면 정확히 표시
+3. **주요 기능 추출**: 
+   - 실제 파일 구조와 코드 패턴을 기반으로 구현된 기능만 식별
+   - README나 코드에서 명시적으로 확인된 기능만 포함
+   - 추측이 아닌 실제 구현된 기능만 분석
+4. **아키텍처 구조 분석**:
+   - 실제 폴더 구조와 파일 배치를 기반으로 아키텍처 패턴 분석
+   - 추측이 아닌 실제 구조를 반영
+   - 구체적인 아키텍처 패턴명 사용 (MVC, MVVM, Microservices 등)
+5. **외부 라이브러리 분석**:
+   - 실제 package.json, requirements.txt 등에서 확인된 라이브러리만 포함
+   - 버전 정보가 있다면 정확히 표시
+   - 오탐 방지를 위해 정확한 라이브러리명만 사용
+6. **LLM 모델 정보**:
+   - 실제 코드에서 LLM 관련 라이브러리나 API 호출이 확인된 경우만 포함
+   - 추측하지 말고 실제 사용된 것만 분석
+   - 구체적인 모델명이나 API 종류 명시
 
 다음 JSON 형식으로 응답해주세요:
 {{
@@ -1255,23 +3287,44 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
     
     elif input_data["analysis_type"] == "profile_readme":
         readme_text = input_data["readme_text"]
-        prompt = f"""당신은 GitHub 사용자 프로필 README를 분석하여 채용 담당자가 이해하기 쉬운 형태로 요약하는 전문가입니다.
+        prompt = f"""당신은 GitHub 사용자 프로필 README를 분석하여 채용 담당자가 이해하기 쉬운 형태로 요약하는 전문가입니다. GPT-4o의 강력한 분석 능력을 활용하여 실제 프로필 내용과 정확히 일치하는 분석을 제공해주세요.
+
+**중요**: 제공된 README 내용만을 기반으로 분석하고, 추측이나 일반적인 내용을 포함하지 마세요. 실제 언급된 기술, 프로젝트, 경험만을 정확히 반영해주세요.
 
 다음 프로필 README 내용을 분석하여 '주제', '기술 스택', '주요 기능', '레포 주소', '아키텍처 구조', '외부 라이브러리', 'LLM 모델 정보'를 추출해주세요:
 
 **프로필 README 내용:**
 {readme_text}
 
-**중요한 지침:**
-- 기술 스택은 구체적인 라이브러리나 도구명 대신 카테고리별로 간단하게 표시하세요
-- 예: "Naver Search MCP", "Exa Search MCP" → "MCP"
-- 예: "React", "Vue.js", "Angular" → "Frontend Framework"
-- 예: "MongoDB", "PostgreSQL", "MySQL" → "Database"
-- 예: "Docker", "Kubernetes" → "Containerization"
+**GPT-4o 정확도 향상 분석 지침:**
+1. **주제 분석**: 
+   - 실제 README에서 언급된 기술적 관심사와 전문 분야만 파악
+   - 추측하지 말고 명시적으로 언급된 내용만 분석
+   - 실제 프로젝트와 성과를 중심으로 전문성 평가
 
-- 아키텍처 구조는 전체 앱의 흐름과 주요 컴포넌트 간 관계를 설명하세요
-- 외부 라이브러리는 사용된 주요 라이브러리와 API, 버전 정보를 포함하세요
-- LLM 모델 정보는 사용된 LLM 종류와 호출 방식을 설명하세요
+2. **기술 스택 분석**:
+   - 실제 README에서 언급된 기술들만 카테고리별로 분류
+   - 추측하지 말고 명시적으로 언급된 기술만 포함
+   - 기술 간의 실제 연관성만 분석
+
+3. **주요 기능/프로젝트 추출**:
+   - 실제 README에서 언급된 프로젝트만 식별
+   - 추측하지 말고 명시적으로 언급된 프로젝트만 포함
+   - 실제 언급된 기술적 난이도와 복잡성만 평가
+
+4. **아키텍처 구조 분석**:
+   - 실제 README에서 언급된 아키텍처 패턴만 분석
+   - 추측하지 말고 명시적으로 언급된 구조만 포함
+   - 실제 언급된 확장성과 유지보수성만 평가
+
+5. **외부 라이브러리 및 도구**:
+   - 실제 README에서 언급된 라이브러리, 프레임워크, 도구만 분석
+   - 추측하지 말고 명시적으로 언급된 것만 포함
+   - 실제 언급된 클라우드 서비스, API, 개발 도구만 분석
+
+6. **LLM 모델 정보**:
+   - 실제 README에서 언급된 AI/ML 관련 프로젝트나 기술만 분석
+   - 추측하지 말고 명시적으로 언급된 LLM 관련 경험만 포함
 
 다음 JSON 형식으로 응답해주세요:
 {{
@@ -1301,27 +3354,48 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
                 "llm_hints": repo.get('llm_hints', [])
             })
         
-        prompt = f"""당신은 GitHub 사용자의 여러 레포지토리를 분석하여 각각을 개별적으로 요약하는 전문가입니다.
+        prompt = f"""당신은 GitHub 사용자의 여러 레포지토리를 분석하여 각각을 개별적으로 요약하는 전문가입니다. GPT-4o의 강력한 분석 능력을 활용하여 실제 레포지토리 내용과 정확히 일치하는 분석을 제공해주세요.
+
+**중요**: 제공된 데이터만을 기반으로 분석하고, 추측이나 일반적인 내용을 포함하지 마세요. 각 레포지토리의 실제 파일 구조, 언어, 기술 스택을 정확히 반영해주세요.
 
 다음 {len(repos)}개의 레포지토리 데이터를 분석하여 각 레포지토리별로 '주제', '기술 스택', '주요 기능', '레포 주소', '아키텍처 구조', '외부 라이브러리', 'LLM 모델 정보'를 추출해주세요:
 
 **레포지토리 목록:**
 {json.dumps(repos_info, indent=2, ensure_ascii=False)}
 
-**중요한 지침:**
-- 기술 스택은 구체적인 라이브러리나 도구명 대신 카테고리별로 간단하게 표시하세요
-- 예: "Naver Search MCP", "Exa Search MCP" → "MCP"
-- 예: "React", "Vue.js", "Angular" → "Frontend Framework"
-- 예: "MongoDB", "PostgreSQL", "MySQL" → "Database"
-- 예: "Docker", "Kubernetes" → "Containerization"
+**GPT-4o 정확도 향상 분석 지침:**
+1. **개별 레포지토리 분석**:
+   - 실제 파일명, 폴더명, README 내용을 기반으로 정확한 프로젝트 목적 파악
+   - 추측하지 말고 제공된 데이터만으로 분석
+   - 각 레포지토리의 고유한 특징과 목적 파악
 
-        - 아키텍처 구조는 전체 앱의 흐름과 주요 컴포넌트 간 관계를 설명하세요
-        - README 정보가 부실하거나 모호하면 다음 힌트를 참고하여 보완하세요:
-          - toplevel_files: 상단 파일 목록으로 프레임워크/배포 방식을 유추
-          - external_libraries_hint: package.json/requirements.txt에서 수집한 의존성 후보
-          - llm_hints: LLM 관련 라이브러리 후보 (예: openai, google-generativeai, langchain 등)
-        - 외부 라이브러리는 위 힌트를 활용해 구체적인 라이브러리명/서비스명으로 작성하세요
-        - LLM 모델 정보는 라이브러리/플랫폼과 호출 방식을 근거와 함께 요약하세요
+2. **기술 스택 분석**:
+   - 실제 언어 사용량 비율을 정확히 반영
+   - 프레임워크는 실제 발견된 것만 포함
+   - 라이브러리는 실제 의존성 파일에서 확인된 것만 포함
+
+3. **주요 기능 추출**:
+   - 실제 파일 구조와 코드 패턴을 기반으로 구현된 기능만 식별
+   - README나 코드에서 명시적으로 확인된 기능만 포함
+   - 추측이 아닌 실제 구현된 기능만 분석
+
+4. **아키텍처 구조 분석**:
+   - 실제 폴더 구조와 파일 배치를 기반으로 아키텍처 패턴 분석
+   - 추측이 아닌 실제 구조를 반영
+   - 각 프로젝트의 실제 아키텍처 패턴 식별
+
+5. **외부 라이브러리 분석**:
+   - 실제 package.json, requirements.txt 등에서 확인된 라이브러리만 포함
+   - 버전 정보가 있다면 정확히 표시
+   - 추측하지 말고 실제 사용된 것만 분석
+
+6. **LLM 모델 정보**:
+   - 실제 코드에서 LLM 관련 라이브러리나 API 호출이 확인된 경우만 포함
+   - 추측하지 말고 실제 사용된 것만 분석
+
+7. **포트폴리오 관점 분석**:
+   - 전체 레포지토리 간의 실제 기술적 일관성과 다양성 평가
+   - 제공된 데이터를 기반으로 한 정확한 기술적 역량 평가
 
 다음 JSON 형식으로 응답해주세요:
 {{
@@ -1346,15 +3420,20 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
         "model": model,
         "messages": [
             {
+                "role": "system",
+                "content": "당신은 GitHub 레포지토리 분석 전문가입니다. GPT-4o의 강력한 분석 능력을 활용하여 실제 레포지토리 내용과 정확히 일치하는 분석을 제공해주세요. 제공된 데이터만을 기반으로 분석하고 추측하지 마세요. 항상 JSON 형식으로 응답해주세요."
+            },
+            {
                 "role": "user",
                 "content": prompt
             }
         ],
-        "temperature": 0.3,
-        "max_tokens": 2000
+        "temperature": 0.05,  # 최고 정확도를 위해 매우 낮은 temperature
+        "max_tokens": 10000,  # 더 상세한 분석을 위해 토큰 수 증가
+        "response_format": {"type": "json_object"}  # JSON 응답 강제
     }
     
-    async with httpx.AsyncClient(timeout=httpx.Timeout(60.0)) as client:
+    async with httpx.AsyncClient(timeout=httpx.Timeout(120.0)) as client:  # GPT-4o는 더 긴 응답 시간 필요
         response = await client.post(endpoint, json=payload, headers={
             'Content-Type': 'application/json',
             'Authorization': f'Bearer {api_key}'
@@ -1362,19 +3441,19 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
         response.raise_for_status()
         data = response.json()
         
+        # 토큰 사용량 추적
+        global openai_api_calls, openai_tokens_used
+        openai_api_calls += 1
+        if 'usage' in data:
+            usage = data['usage']
+            openai_tokens_used += usage.get('total_tokens', 0)
+            print(f"[TOKEN USAGE] API 호출: {openai_api_calls}, 총 토큰: {openai_tokens_used}")
+        
         response_text = data.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
         
         try:
-            # JSON 응답 파싱 (마크다운 코드 블록 제거)
-            cleaned_text = response_text.strip()
-            if cleaned_text.startswith('```json'):
-                cleaned_text = cleaned_text[7:]  # ```json 제거
-            if cleaned_text.startswith('```'):
-                cleaned_text = cleaned_text[3:]  # ``` 제거
-            if cleaned_text.endswith('```'):
-                cleaned_text = cleaned_text[:-3]  # 끝의 ``` 제거
-            
-            result = json.loads(cleaned_text.strip())
+            # GPT-4o의 response_format: json_object를 사용하므로 직접 파싱 가능
+            result = json.loads(response_text.strip())
             
             # 단일 레포지토리나 프로필 README인 경우 배열 형태로 변환
             if input_data["analysis_type"] in ["single_repo", "profile_readme"]:
@@ -1514,7 +3593,7 @@ async def generate_repo_language_chart(username: str, repo_name: str, token: Opt
 
 @router.post("/github/summary", response_model=GithubSummaryResponse)
 async def github_summary(request: GithubSummaryRequest):
-    """GitHub 사용자 요약"""
+    """GitHub 사용자 요약 - 캐싱 및 에러 처리 강화"""
     # 토큰 사용량 초기화
     reset_token_usage()
     
@@ -1548,6 +3627,50 @@ async def github_summary(request: GithubSummaryRequest):
         
         # 최종 검증: username이 동일한지 확인
         print(f"최종 검증 - username: {username}, repo_name: {repo_name}")
+        
+        # MongoDB에서 기존 분석 결과 확인 및 증분 업데이트 로직
+        print(f"MongoDB에서 기존 분석 확인: {username}/{repo_name or 'profile'}")
+        
+        # 1. 저장된 분석이 최근 것인지 확인 (24시간 이내)
+        cached_result = await github_storage_service.get_cached_analysis_if_fresh(username, repo_name, max_age_hours=24)
+        
+        if cached_result and repo_name:
+            # 2. 저장소가 지정된 경우, 파일 변경 사항 확인
+            try:
+                print(f"파일 변경사항 확인 중: {username}/{repo_name}")
+                current_file_hashes = await generate_file_hashes_from_github(username, repo_name, github_token)
+                
+                if current_file_hashes:
+                    update_needed, changed_files = await github_storage_service.check_if_update_needed(
+                        username, repo_name, current_file_hashes
+                    )
+                    
+                    if not update_needed:
+                        print(f"변경사항 없음 - 캐시된 결과 반환: {username}/{repo_name}")
+                        await github_storage_service.update_last_checked(username, repo_name)
+                        return cached_result
+                    else:
+                        print(f"변경된 파일 {len(changed_files)}개 감지 - 재분석 진행")
+                        # 변경 영향도 분석
+                        stored_hashes = await github_storage_service.get_stored_file_hashes(username, repo_name)
+                        changes = compare_file_hashes(stored_hashes, current_file_hashes)
+                        impact = calculate_change_impact(changes)
+                        
+                        if not should_trigger_full_reanalysis(changes, impact):
+                            print(f"변경사항이 미미함 - 캐시된 결과 반환 (영향도: {impact['impact_level']})")
+                            await github_storage_service.update_last_checked(username, repo_name)
+                            return cached_result
+                        else:
+                            print(f"중요한 변경사항 감지 - 전체 재분석 필요 (영향도: {impact['impact_level']})")
+                            
+            except Exception as e:
+                print(f"파일 변경사항 확인 중 오류: {e} - 기존 캐시 사용")
+                if cached_result:
+                    return cached_result
+        elif cached_result:
+            # 프로필 분석인 경우 (repo_name이 없음) 캐시된 결과 반환
+            print(f"프로필 분석 캐시된 결과 반환: {username}")
+            return cached_result
         
         github_token = os.getenv('GITHUB_TOKEN') or os.getenv('GH_TOKEN') or ''
         profile_url = f"https://github.com/{username}"
@@ -1609,6 +3732,8 @@ async def github_summary(request: GithubSummaryRequest):
 
                 # README가 부실한 경우를 대비해 의존성 힌트 수집 (핵심파일 선별 조회 방식)
                 dep_hints = await collect_dependency_hints(owner_login, repo_name, github_token)
+                
+
 
                 analysis_item = {
                     'name': target_repo_meta.get('name', repo_name),
@@ -1627,55 +3752,28 @@ async def github_summary(request: GithubSummaryRequest):
                     'deployment_configs': dep_hints.get('deployment_configs', [])
                 }
 
-                # 아키텍처 분석 실행
-                arch_result = await analyze_repository_architecture(owner_login, repo_name, github_token)
-                
-                # 아키텍처 분석 결과를 기존 분석 결과에 통합
-                if arch_result:
-                    analysis_item.update({
-                        'architecture_topic': arch_result.topic,
-                        'architecture_tech_stack': arch_result.tech_stack,
-                        'architecture_external_libs': arch_result.external_libs,
-                        'architecture_llm_models': arch_result.llm_models,
-                        'architecture_structure': arch_result.architecture,
-                        'architecture_opened_files': arch_result.opened_files,
-                        'architecture_analysis_time': arch_result.analysis_time
-                    })
+
                 
                 # 멀티 레포 분석 프롬프트를 사용하되, 대상 레포만 전달하여 동일한 추출 품질 확보
                 summaries = await generate_unified_summary(username, None, None, [analysis_item])
 
-                # detailed_analysis에 핵심파일 분석 결과와 아키텍처 분석 결과 포함
+                # detailed_analysis 구성 (고급 분석 제거)
                 detailed_analysis = {
                     'tech_stack': {
                         'languages': languages if not isinstance(languages, Exception) else {},
                         'frameworks': dep_hints.get('frameworks', []),
                         'build_tools': dep_hints.get('build_tools', []),
+                        'dependency_managers': dep_hints.get('dependency_managers', []),
+                        'databases': dep_hints.get('databases', []),
                         'deployment_configs': dep_hints.get('deployment_configs', [])
                     },
                     'dependencies': {
                         'external_libraries': dep_hints.get('external_libraries', []),
                         'llm_libraries': dep_hints.get('llm_hints', [])
-                    },
-                    'architecture_analysis': {
-                        'total_repos_analyzed': 1,
-                        'architecture_results': [
-                            {
-                                'owner': arch_result.owner,
-                                'repo': arch_result.repo,
-                                'topic': arch_result.topic,
-                                'tech_stack': arch_result.tech_stack,
-                                'external_libs': arch_result.external_libs,
-                                'llm_models': arch_result.llm_models,
-                                'architecture': arch_result.architecture,
-                                'opened_files': arch_result.opened_files,
-                                'analysis_time': arch_result.analysis_time
-                            }
-                        ] if arch_result else []
                     }
                 }
                 
-                return GithubSummaryResponse(
+                result = GithubSummaryResponse(
                     profileUrl=profile_url,
                     profileApiUrl=profile_api_url,
                     source=f'repos_meta_filtered_{repo_name}',
@@ -1686,6 +3784,20 @@ async def github_summary(request: GithubSummaryRequest):
                     original_language_stats=chart_response.original_stats,
                     token_usage=get_token_usage()
                 )
+                
+                # MongoDB에 분석 결과 저장 (파일 해시 포함)
+                try:
+                    current_file_hashes = await generate_file_hashes_from_github(username, repo_name, github_token)
+                    await github_storage_service.save_analysis(
+                        username, repo_name, result.dict(), current_file_hashes
+                    )
+                    print(f"MongoDB 저장 완료: {username}/{repo_name}")
+                except Exception as e:
+                    print(f"MongoDB 저장 중 오류: {e}")
+                    # 기존 파일 캐시 시스템도 유지 (백업용)
+                    await analysis_cache.cache_analysis(username, repo_name, result.dict())
+                
+                return result
 
             except httpx.HTTPStatusError as e:
                 if e.response.status_code == 404:
@@ -1699,7 +3811,7 @@ async def github_summary(request: GithubSummaryRequest):
             if profile_readme and profile_readme.get('text'):
                 print(f"프로필 README 발견 - 분석 진행")
                 summaries = await generate_unified_summary(username, None, profile_readme, None)
-                return GithubSummaryResponse(
+                result = GithubSummaryResponse(
                     profileUrl=profile_url,
                     profileApiUrl=profile_api_url,
                     source='profile_readme',
@@ -1709,6 +3821,17 @@ async def github_summary(request: GithubSummaryRequest):
                     original_language_stats=chart_response.original_stats,
                     token_usage=get_token_usage()
                 )
+                
+                # MongoDB에 프로필 분석 결과 저장
+                try:
+                    await github_storage_service.save_analysis(username, None, result.dict())
+                    print(f"MongoDB 프로필 저장 완료: {username}")
+                except Exception as e:
+                    print(f"MongoDB 프로필 저장 중 오류: {e}")
+                    # 기존 파일 캐시 시스템도 유지 (백업용)
+                    await analysis_cache.cache_analysis(username, None, result.dict())
+                
+                return result
             else:
                 print(f"프로필 README가 없습니다 - 리포지토리 메타데이터 분석으로 진행")
         except Exception as e:
@@ -1722,29 +3845,47 @@ async def github_summary(request: GithubSummaryRequest):
                 raise HTTPException(status_code=404, detail="공개 리포지토리를 찾을 수 없습니다.")
             
             print(f"발견된 리포지토리 수: {len(repos)}")
-            # 스마트 필터링을 통한 레포지토리 선택
-            top_repos = filter_relevant_repositories(repos, max_repos=5)
-            print(f"필터링 후 분석할 레포지토리 수: {len(top_repos)}")
+            
+            # 자격 판정 먼저 실행
+            try:
+                qualification_result = await repo_qualification.qualify_repositories(repos, github_token)
+                print(f"자격 판정 결과: {len(qualification_result.get('qualified', []))}개 통과, {len(qualification_result.get('hidden', []))}개 제외")
+            except Exception as e:
+                print(f"자격 판정 실패: {e}")
+                qualification_result = {
+                    'qualified': [],
+                    'hidden': [],
+                    'reasons': {}
+                }
+            
+            # 자격판정 통과한 레포지토리 우선 사용, 없으면 기존 필터링 사용
+            qualified_repos = qualification_result.get('qualified', [])
+            if qualified_repos:
+                top_repos = qualified_repos[:4]  # 최대 4개
+                print(f"자격판정 통과 레포지토리 {len(top_repos)}개 분석")
+            else:
+                # 자격판정 통과한 것이 없으면 기존 필터링 사용
+                top_repos = await filter_relevant_repositories(repos, max_repos=4)
+                print(f"기존 필터링으로 분석할 레포지토리 수: {len(top_repos)}")
             
             if not top_repos:
-                # 필터링 결과가 없는 경우 기존 방식으로 폴백
-                top_repos = [r for r in repos if not r.get('fork')][:3]
+                # 필터링 결과가 없는 경우 기존 방식으로 폴백 (4개로 증가)
+                top_repos = [r for r in repos if not r.get('fork')][:4]
                 if not top_repos:
-                    top_repos = repos[:3]
+                    top_repos = repos[:4]
                 print(f"필터링 실패로 폴백하여 분석: {len(top_repos)}개")
             
             analyses = []
-            architecture_results = []  # 아키텍처 분석 결과 저장
+
             
             for repo in top_repos:
                 owner_login = repo.get('owner', {}).get('login', username)
                 
-                # 기존 메타데이터 분석과 아키텍처 분석을 병렬로 실행
-                languages, repo_readme, dep_hints, arch_result = await asyncio.gather(
+                # 기존 메타데이터 분석 실행
+                languages, repo_readme, dep_hints = await asyncio.gather(
                     fetch_repo_languages(owner_login, repo['name'], github_token),
                     fetch_github_readme(owner_login, repo['name'], github_token),
                     collect_dependency_hints(owner_login, repo['name'], github_token),
-                    analyze_repository_architecture(owner_login, repo['name'], github_token),
                     return_exceptions=True
                 )
                 
@@ -1765,22 +3906,11 @@ async def github_summary(request: GithubSummaryRequest):
                     'deployment_configs': dep_hints.get('deployment_configs', []) if not isinstance(dep_hints, Exception) else []
                 }
                 
-                # 아키텍처 분석 결과가 성공적으로 완료된 경우 추가 정보 통합
-                if not isinstance(arch_result, Exception) and arch_result:
-                    analysis_item.update({
-                        'architecture_topic': arch_result.topic,
-                        'architecture_tech_stack': arch_result.tech_stack,
-                        'architecture_external_libs': arch_result.external_libs,
-                        'architecture_llm_models': arch_result.llm_models,
-                        'architecture_structure': arch_result.architecture,
-                        'architecture_opened_files': arch_result.opened_files,
-                        'architecture_analysis_time': arch_result.analysis_time
-                    })
-                    architecture_results.append(arch_result)
+
                 
                 analyses.append(analysis_item)
             
-            # 통합 요약 생성 (여러 레포지토리)
+            # 통합 요약 생성 (여러 레포지토리) - 정확도 향상
             summaries = await generate_unified_summary(username, None, None, analyses)
             
             # 전체 분석 결과에서 프레임워크, 빌드 도구, 배포 설정 정보 수집
@@ -1809,7 +3939,8 @@ async def github_summary(request: GithubSummaryRequest):
             all_external_libraries = list(set(all_external_libraries))
             all_llm_libraries = list(set(all_llm_libraries))
             
-            # detailed_analysis에 핵심파일 분석 결과와 아키텍처 분석 결과 포함
+            # detailed_analysis에 기술 스택 및 자격 판정 결과 포함 (고급 분석 제거)
+            print(f"자격 판정 결과 전달: {qualification_result}")
             detailed_analysis = {
                 'tech_stack': {
                     'languages': language_stats,
@@ -1821,22 +3952,7 @@ async def github_summary(request: GithubSummaryRequest):
                     'external_libraries': all_external_libraries,
                     'llm_libraries': all_llm_libraries
                 },
-                'architecture_analysis': {
-                    'total_repos_analyzed': len(architecture_results),
-                    'architecture_results': [
-                        {
-                            'owner': arch.owner,
-                            'repo': arch.repo,
-                            'topic': arch.topic,
-                            'tech_stack': arch.tech_stack,
-                            'external_libs': arch.external_libs,
-                            'llm_models': arch.llm_models,
-                            'architecture': arch.architecture,
-                            'opened_files': arch.opened_files,
-                            'analysis_time': arch.analysis_time
-                        } for arch in architecture_results
-                    ]
-                }
+                'qualification_results': qualification_result
             }
             
             return GithubSummaryResponse(
@@ -1885,6 +4001,46 @@ async def github_repo_analysis(request: GithubSummaryRequest):
         github_token = os.getenv('GITHUB_TOKEN') or os.getenv('GH_TOKEN') or ''
         profile_url = f"https://github.com/{username}"
         profile_api_url = f"https://api.github.com/users/{username}"
+        
+        # MongoDB에서 기존 분석 결과 확인 및 증분 업데이트 로직
+        print(f"repo-analysis MongoDB에서 기존 분석 확인: {username}/{request.repo_name}")
+        
+        # 저장된 분석이 최근 것인지 확인 (24시간 이내)
+        cached_result = await github_storage_service.get_cached_analysis_if_fresh(username, request.repo_name, max_age_hours=24)
+        
+        if cached_result:
+            # 파일 변경 사항 확인
+            try:
+                print(f"파일 변경사항 확인 중: {username}/{request.repo_name}")
+                current_file_hashes = await generate_file_hashes_from_github(username, request.repo_name, github_token)
+                
+                if current_file_hashes:
+                    update_needed, changed_files = await github_storage_service.check_if_update_needed(
+                        username, request.repo_name, current_file_hashes
+                    )
+                    
+                    if not update_needed:
+                        print(f"변경사항 없음 - 캐시된 결과 반환: {username}/{request.repo_name}")
+                        await github_storage_service.update_last_checked(username, request.repo_name)
+                        return GithubSummaryResponse(**cached_result)
+                    else:
+                        print(f"변경된 파일 {len(changed_files)}개 감지 - 재분석 진행")
+                        # 변경 영향도 분석
+                        stored_hashes = await github_storage_service.get_stored_file_hashes(username, request.repo_name)
+                        changes = compare_file_hashes(stored_hashes, current_file_hashes)
+                        impact = calculate_change_impact(changes)
+                        
+                        if not should_trigger_full_reanalysis(changes, impact):
+                            print(f"변경사항이 미미함 - 캐시된 결과 반환 (영향도: {impact['impact_level']})")
+                            await github_storage_service.update_last_checked(username, request.repo_name)
+                            return GithubSummaryResponse(**cached_result)
+                        else:
+                            print(f"중요한 변경사항 감지 - 전체 재분석 필요 (영향도: {impact['impact_level']})")
+                            
+            except Exception as e:
+                print(f"파일 변경사항 확인 중 오류: {e} - 기존 캐시 사용")
+                if cached_result:
+                    return GithubSummaryResponse(**cached_result)
         
         # 전체 레포 목록에서 대상 레포 탐색 후 분석
         repos_list = await fetch_user_repos(username, github_token)
@@ -1942,7 +4098,7 @@ async def github_repo_analysis(request: GithubSummaryRequest):
             language_stats = languages or {}
             language_total_bytes = sum((languages or {}).values()) if languages else 0
 
-        return GithubSummaryResponse(
+        result = GithubSummaryResponse(
             profileUrl=profile_url,
             profileApiUrl=profile_api_url,
             source=f'repo_analysis_{request.repo_name}',
@@ -1952,6 +4108,18 @@ async def github_repo_analysis(request: GithubSummaryRequest):
             original_language_stats=chart_response.original_stats,
             token_usage=None
         )
+        
+        # MongoDB에 분석 결과 저장 (파일 해시 포함)
+        try:
+            current_file_hashes = await generate_file_hashes_from_github(username, request.repo_name, github_token)
+            await github_storage_service.save_analysis(
+                username, request.repo_name, result.dict(), current_file_hashes
+            )
+            print(f"repo-analysis MongoDB 저장 완료: {username}/{request.repo_name}")
+        except Exception as e:
+            print(f"repo-analysis MongoDB 저장 중 오류: {e}")
+        
+        return result
         
     except httpx.HTTPStatusError as e:
         if e.response.status_code == 404:
@@ -1969,80 +4137,737 @@ async def github_repo_analysis(request: GithubSummaryRequest):
         print(f"오류 상세: {traceback.format_exc()}")
         raise HTTPException(status_code=500, detail=f"저장소 분석 중 오류가 발생했습니다: {str(error)}")
 
-@router.post("/github/architecture", response_model=GithubArchitectureResponse)
-async def github_architecture_analysis(request: GithubArchitectureRequest):
-    """GitHub 레포지토리 아키텍처 분석 (Planner-Executor 루프)"""
+
+@router.get("/github/analysis-status/{username}")
+async def get_analysis_status(username: str, repo_name: Optional[str] = None):
+    """분석 상태 및 히스토리 조회"""
     try:
-        print(f"=== 아키텍처 분석 시작 ===")
-        print(f"분석 대상: {request.owner}/{request.repo}")
+        stored_analysis = await github_storage_service.get_stored_analysis(username, repo_name)
         
+        if not stored_analysis:
+            return {
+                "status": "not_found",
+                "message": "저장된 분석 결과가 없습니다."
+            }
+        
+        return {
+            "status": "found",
+            "last_analyzed": stored_analysis.get('created_at'),
+            "last_checked": stored_analysis.get('last_checked'),
+            "repo_key": stored_analysis.get('repo_key'),
+            "has_file_hashes": bool(await github_storage_service.get_stored_file_hashes(username, repo_name))
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"분석 상태 조회 중 오류: {str(e)}")
+
+
+@router.post("/github/force-reanalysis")
+async def force_reanalysis(request: GithubSummaryRequest):
+    """강제 재분석 (캐시 무시)"""
+    try:
+        # 기존 분석 데이터 삭제
+        client = github_storage_service._get_client()
+        try:
+            collection, hashes_collection = github_storage_service._get_collections(client)
+            username = resolve_username(request.username)
+            repo_key = github_storage_service._generate_repo_key(username, request.repo_name)
+            
+            collection.delete_one({"repo_key": repo_key})
+            hashes_collection.delete_many({"repo_key": repo_key})
+            
+            print(f"기존 분석 데이터 삭제 완료: {repo_key}")
+            
+        finally:
+            client.close()
+        
+        # 새로운 분석 실행
+        if request.repo_name:
+            return await github_repo_analysis(request)
+        else:
+            return await github_summary(request)
+            
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"강제 재분석 중 오류: {str(e)}")
+
+
+@router.post("/github/cleanup-old-analyses")
+async def cleanup_old_analyses(days_old: int = 30):
+    """오래된 분석 결과 정리"""
+    try:
+        await github_storage_service.cleanup_old_analyses(days_old)
+        return {"status": "success", "message": f"{days_old}일 이상 된 분석 결과를 정리했습니다."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"정리 중 오류: {str(e)}")
+
+
+@router.get("/github/file-changes/{username}/{repo_name}")
+async def get_file_changes(username: str, repo_name: str):
+    """파일 변경사항 확인"""
+    try:
         github_token = os.getenv('GITHUB_TOKEN') or os.getenv('GH_TOKEN') or ''
         
-        # Planner-Executor 루프를 사용한 아키텍처 분석
-        result = await analyze_repository_architecture(request.owner, request.repo, github_token)
+        # 현재 파일 해시 생성
+        current_file_hashes = await generate_file_hashes_from_github(username, repo_name, github_token)
         
-        print(f"=== 아키텍처 분석 완료 ===")
-        print(f"분석 시간: {result.analysis_time:.2f}초")
-        print(f"열린 파일 수: {len(result.opened_files)}")
-        print(f"주제: {result.topic}")
-        print(f"기술 스택: {result.tech_stack}")
-        print(f"외부 라이브러리: {result.external_libs}")
-        print(f"LLM 모델: {result.llm_models}")
+        if not current_file_hashes:
+            return {"status": "error", "message": "파일 해시를 생성할 수 없습니다."}
         
-        return result
+        # 저장된 해시와 비교
+        update_needed, changed_files = await github_storage_service.check_if_update_needed(
+            username, repo_name, current_file_hashes
+        )
         
-    except httpx.HTTPStatusError as e:
-        if e.response.status_code == 404:
-            raise HTTPException(status_code=404, detail=f"레포지토리 '{request.owner}/{request.repo}'을 찾을 수 없습니다.")
-        elif e.response.status_code == 403:
-            raise HTTPException(status_code=403, detail="비공개 레포지토리입니다. 접근 권한이 필요합니다.")
-        raise
-    except httpx.ReadTimeout:
-        print("GitHub API 요청 타임아웃 발생")
-        raise HTTPException(status_code=408, detail="요청이 시간 초과되었습니다. 잠시 후 다시 시도해주세요.")
-    except httpx.ConnectTimeout:
-        print("GitHub API 연결 타임아웃 발생")
-        raise HTTPException(status_code=408, detail="연결이 시간 초과되었습니다. 네트워크 상태를 확인해주세요.")
-    except Exception as error:
-        import traceback
-        print(f"아키텍처 분석 오류: {error}")
-        print(f"오류 상세: {traceback.format_exc()}")
-        raise HTTPException(status_code=500, detail=f"아키텍처 분석 중 오류가 발생했습니다: {str(error)}")
+        if not update_needed:
+            return {
+                "status": "no_changes",
+                "message": "변경된 파일이 없습니다.",
+                "total_files": len(current_file_hashes)
+            }
+        
+        # 변경사항 분석
+        stored_hashes = await github_storage_service.get_stored_file_hashes(username, repo_name)
+        changes = compare_file_hashes(stored_hashes, current_file_hashes)
+        impact = calculate_change_impact(changes)
+        
+        return {
+            "status": "changes_detected",
+            "changes": changes,
+            "impact": impact,
+            "should_reanalyze": should_trigger_full_reanalysis(changes, impact),
+            "total_files": len(current_file_hashes),
+            "changed_files_count": len(changed_files)
+        }
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"파일 변경사항 확인 중 오류: {str(e)}")
 
-# 레포지토리 필터링 함수 추가
-def filter_relevant_repositories(repos, max_repos=5):
-    """
-    분석할 가치가 있는 레포지토리만 필터링
+
+
+
+
+# 레포지토리 자격 판정 및 점수화 시스템
+class RepositoryQualificationSystem:
+    """레포지토리 자격 판정 및 점수화 시스템"""
     
-    필터링 기준:
-    1. 최근 업데이트된 레포지토리 우선
-    2. 스타 수가 있는 레포지토리 우선
-    3. 설명이 있는 레포지토리 우선
-    4. 포크가 아닌 원본 레포지토리 우선
-    5. 특정 키워드가 포함된 레포지토리 제외 (개인용, 테스트용 등)
+    def __init__(self):
+        # 샘플 키워드 (강한 제외 신호)
+        self.sample_keywords = ['sample', 'demo', 'tutorial', 'study', 'practice', 'playground', 'test']
+        
+        # 빌드/실행 신호 파일들
+        self.build_signals = [
+            'package.json', 'requirements.txt', 'go.mod', 'cargo.toml', 'pom.xml', 'build.gradle',
+            'Dockerfile', 'docker-compose.yml', '.github/workflows', 'Makefile', 'CMakeLists.txt',
+            'setup.py', 'pyproject.toml', 'composer.json', 'Gemfile', 'Podfile', 'pubspec.yaml'
+        ]
+        
+        # 매니페스트 파일들
+        self.manifest_files = [
+            'package.json', 'requirements.txt', 'go.mod', 'cargo.toml', 'pom.xml', 'build.gradle',
+            'setup.py', 'pyproject.toml', 'composer.json', 'Gemfile', 'Podfile', 'pubspec.yaml'
+        ]
+        
+        # 테스트 관련 파일들
+        self.test_files = [
+            'test', 'tests', 'spec', 'specs', '__tests__', 'test_', 'spec_',
+            'jest.config', 'pytest.ini', 'tox.ini', '.coveragerc', 'coverage'
+        ]
+        
+        # CI/CD 관련 파일들
+        self.ci_files = [
+            '.github/workflows', '.gitlab-ci.yml', '.travis.yml', '.circleci',
+            'Jenkinsfile', 'azure-pipelines.yml', '.drone.yml', 'appveyor.yml'
+        ]
+        
+        # 인프라 관련 파일들
+        self.infra_files = [
+            'Dockerfile', 'docker-compose.yml', 'kubernetes', 'k8s', 'helm',
+            'terraform', 'ansible', 'puppet', 'chef', 'cloudformation'
+        ]
+
+    async def qualify_repositories(self, repos: List[Dict], token: Optional[str] = None) -> Dict:
+        """레포지토리 자격 판정 및 점수화"""
+        if not repos:
+            return {'qualified': [], 'hidden': [], 'reasons': {}}
+        
+        qualified_repos = []
+        hidden_repos = []
+        reasons = {}
+        
+        for repo in repos:
+            qualification_result = await self._qualify_single_repo(repo, token)
+            
+            if qualification_result['qualified']:
+                qualified_repos.append({
+                    **repo,
+                    '_score': qualification_result['score'],
+                    '_score_breakdown': qualification_result['score_breakdown']
+                })
+            else:
+                hidden_repos.append({
+                    **repo,
+                    '_exclusion_reason': qualification_result['exclusion_reason']
+                })
+                reasons[repo.get('name', '')] = qualification_result['exclusion_reason']
+        
+        # 점수 순으로 정렬
+        qualified_repos.sort(key=lambda x: x.get('_score', 0), reverse=True)
+        
+        return {
+            'qualified': qualified_repos,
+            'hidden': hidden_repos,
+            'reasons': reasons
+        }
+
+    async def _qualify_single_repo(self, repo: Dict, token: Optional[str] = None) -> Dict:
+        """단일 레포지토리 자격 판정"""
+        repo_name = repo.get('name', '').lower()
+        description = (repo.get('description') or '').lower()
+        
+        # 1. 자격 판정 (하드 필터)
+        
+        # 1-1. 코드 존재 여부 확인
+        code_ratio, code_loc = await self._check_code_existence(repo, token)
+        if code_ratio < 0.2 and code_loc < 200:
+            return {
+                'qualified': False,
+                'exclusion_reason': 'docs-only',
+                'score': 0,
+                'score_breakdown': {}
+            }
+        
+        # 1-2. 빌드/실행 신호 확인
+        has_build_signal = await self._check_build_signals(repo, token)
+        if not has_build_signal:
+            return {
+                'qualified': False,
+                'exclusion_reason': 'no-build-signal',
+                'score': 0,
+                'score_breakdown': {}
+            }
+        
+        # 1-3. 최근성 확인 (12개월 이내)
+        is_recent = self._check_recency(repo)
+        if not is_recent:
+            return {
+                'qualified': False,
+                'exclusion_reason': 'stale(>12m)',
+                'score': 0,
+                'score_breakdown': {}
+            }
+        
+        # 1-4. archived 확인
+        if repo.get('archived', False):
+            return {
+                'qualified': False,
+                'exclusion_reason': 'archived',
+                'score': 0,
+                'score_breakdown': {}
+            }
+        
+        # 1-5. 의미 있는 기여 없는 fork 확인
+        if repo.get('fork', False):
+            meaningful_fork = await self._check_meaningful_fork(repo, token)
+            if not meaningful_fork:
+                return {
+                    'qualified': False,
+                    'exclusion_reason': 'meaningless-fork',
+                    'score': 0,
+                    'score_breakdown': {}
+                }
+        
+        # 1-6. 샘플 키워드 + 코드 LOC < 1000 확인
+        has_sample_keyword = any(keyword in repo_name or keyword in description for keyword in self.sample_keywords)
+        if has_sample_keyword and code_loc < 1000:
+            return {
+                'qualified': False,
+                'exclusion_reason': 'tutorial',
+                'score': 0,
+                'score_breakdown': {}
+            }
+        
+        # 2. 점수화 (랭킹)
+        score_breakdown = await self._calculate_score(repo, token)
+        total_score = sum(score_breakdown.values())
+        
+        return {
+            'qualified': True,
+            'score': total_score,
+            'score_breakdown': score_breakdown,
+            'exclusion_reason': None
+        }
+
+    async def _check_code_existence(self, repo: Dict, token: Optional[str] = None) -> Tuple[float, int]:
+        """코드 존재 여부 확인 (코드 비율 ≥ 20% 또는 코드 LOC ≥ 200)"""
+        try:
+            owner = repo.get('owner', {}).get('login', '')
+            repo_name = repo.get('name', '')
+            
+            # 언어 통계 가져오기
+            languages = await fetch_repo_languages(owner, repo_name, token)
+            if not languages:
+                return 0.0, 0
+            
+            total_bytes = sum(languages.values())
+            code_bytes = sum(bytes for lang, bytes in languages.items() 
+                           if lang.lower() not in ['markdown', 'text', 'html', 'css'])
+            
+            code_ratio = code_bytes / total_bytes if total_bytes > 0 else 0.0
+            
+            # LOC 추정 (1KB ≈ 50 LOC)
+            code_loc = int(code_bytes / 1024 * 50)
+            
+            return code_ratio, code_loc
+            
+        except Exception as e:
+            print(f"코드 존재 확인 오류: {e}")
+            return 0.0, 0
+
+    async def _check_build_signals(self, repo: Dict, token: Optional[str] = None) -> bool:
+        """빌드/실행 신호 확인"""
+        try:
+            owner = repo.get('owner', {}).get('login', '')
+            repo_name = repo.get('name', '')
+            
+            # 최상위 파일 목록 가져오기
+            files = await fetch_repo_top_level_files(owner, repo_name, token)
+            file_names = [f['name'].lower() for f in files]
+            
+            # 빌드 신호 파일 확인
+            for signal in self.build_signals:
+                if any(signal in fname for fname in file_names):
+                    return True
+            
+            # 추가 신호 확인: 소스 코드 파일 존재
+            source_extensions = ['.js', '.ts', '.jsx', '.tsx', '.py', '.java', '.cpp', '.c', '.go', '.rs', '.php', '.rb']
+            has_source_files = any(any(ext in fname for ext in source_extensions) for fname in file_names)
+            
+            # README 파일 존재 확인
+            has_readme = any('readme' in fname for fname in file_names)
+            
+            # 소스 파일이 있고 README가 있으면 빌드 신호로 간주
+            if has_source_files and has_readme:
+                return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"빌드 신호 확인 오류: {e}")
+            return False
+
+    def _check_recency(self, repo: Dict) -> bool:
+        """최근성 확인 (12개월 이내)"""
+        try:
+            pushed_at = repo.get('pushed_at') or repo.get('updated_at')
+            if not pushed_at:
+                return False
+            
+            push_time = datetime.fromisoformat(pushed_at.replace('Z', '+00:00'))
+            now = datetime.now(timezone.utc)
+            days_diff = (now - push_time).days
+            
+            return days_diff <= 365  # 12개월 이내
+            
+        except Exception as e:
+            print(f"최근성 확인 오류: {e}")
+            return False
+
+    async def _check_meaningful_fork(self, repo: Dict, token: Optional[str] = None) -> bool:
+        """의미 있는 기여 없는 fork 확인"""
+        try:
+            # 스타 수가 원본보다 많거나, 최근 커밋이 있으면 의미 있는 fork
+            stars = repo.get('stargazers_count', 0)
+            forks = repo.get('forks_count', 0)
+            
+            # 스타나 포크가 있으면 의미 있는 fork로 간주
+            if stars > 0 or forks > 0:
+                return True
+            
+            # 최근 업데이트 확인
+            if self._check_recency(repo):
+                return True
+            
+            return False
+            
+        except Exception as e:
+            print(f"의미 있는 fork 확인 오류: {e}")
+            return False
+
+    async def _calculate_score(self, repo: Dict, token: Optional[str] = None) -> Dict[str, float]:
+        """점수화 (총점 100 기준)"""
+        score_breakdown = {
+            'maturity': 0,      # 성숙도 (30점)
+            'activity': 0,      # 활동성·커뮤니티 (25점)
+            'code_scale': 0,    # 코드 규모·구조 (20점)
+            'deployment': 0,    # 배포 흔적 (15점)
+            'impact': 0         # 영향도 (10점)
+        }
+        
+        try:
+            owner = repo.get('owner', {}).get('login', '')
+            repo_name = repo.get('name', '')
+            
+            # 1. 성숙도 (30점)
+            score_breakdown['maturity'] = await self._calculate_maturity_score(repo, token)
+            
+            # 2. 활동성·커뮤니티 (25점)
+            score_breakdown['activity'] = self._calculate_activity_score(repo)
+            
+            # 3. 코드 규모·구조 (20점)
+            score_breakdown['code_scale'] = await self._calculate_code_scale_score(repo, token)
+            
+            # 4. 배포 흔적 (15점)
+            score_breakdown['deployment'] = await self._calculate_deployment_score(repo, token)
+            
+            # 5. 영향도 (10점)
+            score_breakdown['impact'] = self._calculate_impact_score(repo)
+            
+        except Exception as e:
+            print(f"점수 계산 오류: {e}")
+        
+        return score_breakdown
+
+    async def _calculate_maturity_score(self, repo: Dict, token: Optional[str] = None) -> float:
+        """성숙도 점수 계산 (30점)"""
+        score = 0
+        try:
+            owner = repo.get('owner', {}).get('login', '')
+            repo_name = repo.get('name', '')
+            
+            # 파일 목록 가져오기
+            files = await fetch_repo_top_level_files(owner, repo_name, token)
+            file_names = [f['name'].lower() for f in files]
+            
+            # 매니페스트 파일 (6점)
+            has_manifest = any(any(manifest in fname for fname in file_names) 
+                             for manifest in self.manifest_files)
+            if has_manifest:
+                score += 6
+            
+            # 테스트 파일 (6점)
+            has_test = any(any(test in fname for fname in file_names) 
+                          for test in self.test_files)
+            if has_test:
+                score += 6
+            
+            # CI/CD 파일 (6점)
+            has_ci = any(any(ci in fname for fname in file_names) 
+                        for ci in self.ci_files)
+            if has_ci:
+                score += 6
+            
+            # 릴리스 정보 (6점)
+            releases = repo.get('releases_count', 0)
+            if releases > 0:
+                score += min(releases * 2, 6)
+            
+            # 인프라 파일 (6점)
+            has_infra = any(any(infra in fname for fname in file_names) 
+                           for infra in self.infra_files)
+            if has_infra:
+                score += 6
+            
+        except Exception as e:
+            print(f"성숙도 점수 계산 오류: {e}")
+        
+        return min(score, 30)
+
+    def _calculate_activity_score(self, repo: Dict) -> float:
+        """활동성·커뮤니티 점수 계산 (25점)"""
+        score = 0
+        
+        # Star 수 (로그 스케일, 10점)
+        stars = repo.get('stargazers_count', 0)
+        if stars > 0:
+            score += min(math.log(stars + 1) * 2, 10)
+        
+        # Fork 수 (로그 스케일, 8점)
+        forks = repo.get('forks_count', 0)
+        if forks > 0:
+            score += min(math.log(forks + 1) * 1.5, 8)
+        
+        # 최근 업데이트 (7점)
+        pushed_at = repo.get('pushed_at') or repo.get('updated_at')
+        if pushed_at:
+            try:
+                push_time = datetime.fromisoformat(pushed_at.replace('Z', '+00:00'))
+                now = datetime.now(timezone.utc)
+                days_diff = (now - push_time).days
+                
+                if days_diff <= 30:
+                    score += 7
+                elif days_diff <= 90:
+                    score += 5
+                elif days_diff <= 180:
+                    score += 3
+                elif days_diff <= 365:
+                    score += 1
+            except:
+                pass
+        
+        return min(score, 25)
+
+    async def _calculate_code_scale_score(self, repo: Dict, token: Optional[str] = None) -> float:
+        """코드 규모·구조 점수 계산 (20점)"""
+        score = 0
+        try:
+            owner = repo.get('owner', {}).get('login', '')
+            repo_name = repo.get('name', '')
+            
+            # 언어 통계 가져오기
+            languages = await fetch_repo_languages(owner, repo_name, token)
+            if languages:
+                total_bytes = sum(languages.values())
+                code_bytes = sum(bytes for lang, bytes in languages.items() 
+                               if lang.lower() not in ['markdown', 'text', 'html', 'css'])
+                
+                # LOC 기반 점수 (10점)
+                loc = int(code_bytes / 1024 * 50)
+                if loc >= 10000:
+                    score += 10
+                elif loc >= 5000:
+                    score += 8
+                elif loc >= 2000:
+                    score += 6
+                elif loc >= 1000:
+                    score += 4
+                elif loc >= 500:
+                    score += 2
+            
+            # 모듈 구조 점수 (10점)
+            files = await fetch_repo_top_level_files(owner, repo_name, token)
+            file_names = [f['name'].lower() for f in files]
+            
+            # 주요 디렉토리 구조 확인
+            has_src = any('src' in fname for fname in file_names)
+            has_lib = any('lib' in fname for fname in file_names)
+            has_app = any('app' in fname for fname in file_names)
+            has_components = any('components' in fname for fname in file_names)
+            has_utils = any('utils' in fname for fname in file_names)
+            
+            structure_score = sum([has_src, has_lib, has_app, has_components, has_utils])
+            score += min(structure_score * 2, 10)
+            
+        except Exception as e:
+            print(f"코드 규모 점수 계산 오류: {e}")
+        
+        return min(score, 20)
+
+    async def _calculate_deployment_score(self, repo: Dict, token: Optional[str] = None) -> float:
+        """배포 흔적 점수 계산 (15점)"""
+        score = 0
+        try:
+            owner = repo.get('owner', {}).get('login', '')
+            repo_name = repo.get('name', '')
+            
+            # 파일 목록 가져오기
+            files = await fetch_repo_top_level_files(owner, repo_name, token)
+            file_names = [f['name'].lower() for f in files]
+            
+            # Docker 관련 (5점)
+            has_docker = any('docker' in fname for fname in file_names)
+            if has_docker:
+                score += 5
+            
+            # K8s 관련 (3점)
+            has_k8s = any('kubernetes' in fname or 'k8s' in fname for fname in file_names)
+            if has_k8s:
+                score += 3
+            
+            # IaC 관련 (3점)
+            has_iac = any('terraform' in fname or 'ansible' in fname or 'puppet' in fname for fname in file_names)
+            if has_iac:
+                score += 3
+            
+            # README 품질 (4점)
+            readme = await fetch_github_readme(owner, repo_name, token)
+            if readme and readme.get('text'):
+                readme_text = readme['text']
+                # README 길이와 구조로 품질 평가
+                if len(readme_text) > 1000:
+                    score += 2
+                if '##' in readme_text:  # 섹션 구조
+                    score += 1
+                if '```' in readme_text:  # 코드 예제
+                    score += 1
+            
+        except Exception as e:
+            print(f"배포 점수 계산 오류: {e}")
+        
+        return min(score, 15)
+
+    def _calculate_impact_score(self, repo: Dict) -> float:
+        """영향도 점수 계산 (10점)"""
+        score = 0
+        
+        # 외부 참조 (5점)
+        # GitHub에서 외부 참조를 직접 확인하기 어려우므로 간접 지표 사용
+        stars = repo.get('stargazers_count', 0)
+        forks = repo.get('forks_count', 0)
+        
+        if stars > 100:
+            score += 3
+        elif stars > 50:
+            score += 2
+        elif stars > 10:
+            score += 1
+        
+        if forks > 50:
+            score += 2
+        elif forks > 20:
+            score += 1
+        
+        # 레지스트리 배포 (5점)
+        # package.json, setup.py 등이 있으면 배포 가능성으로 간주
+        description = (repo.get('description') or '').lower()
+        if any(keyword in description for keyword in ['npm', 'pypi', 'crates', 'maven', 'nuget']):
+            score += 5
+        elif 'package' in description or 'library' in description:
+            score += 3
+        
+        return min(score, 10)
+
+# 전역 인스턴스
+repo_qualification = RepositoryQualificationSystem()
+
+async def filter_relevant_repositories(repos, max_repos=5):
     """
+    새로운 자격 판정 및 점수화 시스템을 사용한 레포지토리 필터링
+    
+    자격 판정 (하드 필터):
+    - 코드 존재: 코드 비율 ≥ 20% 또는 코드 LOC ≥ 200
+    - 빌드/실행 신호: package.json/requirements.txt/go.mod/Dockerfile 등 하나 이상
+    - 최근성: pushed_at 12개월 이내
+    - 제외: archived=true, 의미 있는 기여 없는 fork
+    - 샘플 키워드 강함 & 코드 LOC < 1000 → 제외
+    
+    점수화 (랭킹):
+    - 성숙도(30): 매니페스트/테스트/CI/릴리스/인프라
+    - 활동성·커뮤니티(25): 최근 커밋·이슈/PR·Star/Fork(로그 스케일)
+    - 코드 규모·구조(20): LOC·모듈 구조
+    - 배포 흔적(15): Docker/K8s/IaC·README 품질
+    - 영향도(10): 외부 참조·레지스트리 배포
+    """
+    if not repos:
+        return []
+    
+    # 자격 판정 실행
+    try:
+        result = await repo_qualification.qualify_repositories(repos)
+        
+        qualified_repos = result['qualified']
+        hidden_repos = result['hidden']
+        reasons = result['reasons']
+        
+        # 최소 임계치 35점 이상만 선택
+        threshold_repos = [repo for repo in qualified_repos if repo.get('_score', 0) >= 35]
+        
+        # 동률 처리: 점수순 → 최근 커밋 → 최신 릴리스 → Star
+        def sort_key(repo):
+            score = repo.get('_score', 0)
+            pushed_at = repo.get('pushed_at') or repo.get('updated_at', '')
+            releases = repo.get('releases_count', 0)
+            stars = repo.get('stargazers_count', 0)
+            
+            # 날짜를 숫자로 변환 (최신일수록 큰 값)
+            try:
+                if pushed_at:
+                    push_time = datetime.fromisoformat(pushed_at.replace('Z', '+00:00'))
+                    date_score = push_time.timestamp()
+                else:
+                    date_score = 0
+            except:
+                date_score = 0
+            
+            return (score, date_score, releases, stars)
+        
+        # 정렬 후 상위 4~5개 선택
+        threshold_repos.sort(key=sort_key, reverse=True)
+        selected_repos = threshold_repos[:max_repos]
+        
+        # 임계치 미달 레포는 숨김으로 이동
+        below_threshold = [repo for repo in qualified_repos if repo.get('_score', 0) < 35]
+        for repo in below_threshold:
+            repo['_exclusion_reason'] = 'below-threshold'
+            hidden_repos.append(repo)
+            reasons[repo.get('name', '')] = 'below-threshold'
+        
+        # 핵심 배지 정보 추가
+        for repo in selected_repos:
+            repo['_hidden_count'] = len(hidden_repos)
+            repo['_hidden_reasons'] = reasons
+            
+            # 핵심 배지 생성
+            badges = []
+            
+            # Stars 배지
+            stars = repo.get('stargazers_count', 0)
+            if stars > 0:
+                badges.append(f"⭐ {stars}")
+            
+            # Recent commits 배지
+            pushed_at = repo.get('pushed_at') or repo.get('updated_at', '')
+            if pushed_at:
+                try:
+                    push_time = datetime.fromisoformat(pushed_at.replace('Z', '+00:00'))
+                    now = datetime.now(timezone.utc)
+                    days_diff = (now - push_time).days
+                    
+                    if days_diff <= 7:
+                        badges.append("🟢 Recent")
+                    elif days_diff <= 30:
+                        badges.append("🟡 Active")
+                    elif days_diff <= 90:
+                        badges.append("🟠 Recent")
+                except:
+                    pass
+            
+            # Releases 배지
+            releases = repo.get('releases_count', 0)
+            if releases > 0:
+                badges.append(f"📦 {releases}")
+            
+            # CI/Docker 배지 (기존 분석 결과에서 확인)
+            score_breakdown = repo.get('_score_breakdown', {})
+            if score_breakdown.get('maturity', 0) >= 6:  # CI/CD 파일이 있으면 성숙도 점수에서 확인
+                badges.append("🔄 CI")
+            if score_breakdown.get('deployment', 0) >= 5:  # Docker 관련 점수에서 확인
+                badges.append("🐳 Docker")
+            
+            repo['_badges'] = badges
+        
+        print(f"자격 판정 결과: {len(repos)}개 중 {len(qualified_repos)}개 자격 통과, {len(selected_repos)}개 선택")
+        print(f"숨김 레포: {len(hidden_repos)}개")
+        for reason, count in Counter(reasons.values()).items():
+            print(f"  - {reason}: {count}개")
+        
+        return selected_repos
+        
+    except Exception as e:
+        print(f"자격 판정 중 오류: {e}")
+        # 오류 발생 시 기존 방식으로 폴백
+        return _fallback_filter(repos, max_repos)
+
+def _fallback_filter(repos, max_repos=5):
+    """기존 필터링 방식 (폴백용)"""
     if not repos:
         return []
     
     # 제외할 키워드 (개인용, 테스트용, 학습용 등)
     exclude_keywords = [
         'test', 'demo', 'example', 'sample', 'tutorial', 'learning', 'study',
-        'practice', 'temp', 'tmp', 'backup', 'old', 'archive', 'deprecated',
-        'personal', 'private', 'notes', 'docs', 'documentation', 'blog',
-        'website', 'portfolio', 'resume', 'cv', 'profile', 'homepage'
+        'practice', 'playground', 'temp', 'tmp', 'backup', 'old', 'archive',
+        'deprecated', 'personal', 'notes', 'blog', 'website', 'portfolio',
+        'resume', 'cv', 'profile', 'homepage'
     ]
-    
-    # 제외할 파일 확장자 (특정 파일만 있는 레포지토리)
-    exclude_extensions = ['.md', '.txt', '.pdf', '.doc', '.docx']
     
     filtered_repos = []
     
     for repo in repos:
         repo_name = (repo.get('name') or '').lower()
         description = (repo.get('description') or '').lower()
-        language = (repo.get('language') or '').lower()
         
-        # 1. 제외 키워드 체크
+        # 제외 키워드 체크
         should_exclude = False
         for keyword in exclude_keywords:
             if keyword in repo_name or keyword in description:
@@ -2052,63 +4877,21 @@ def filter_relevant_repositories(repos, max_repos=5):
         if should_exclude:
             continue
         
-        # 2. 스코어 계산 (높을수록 분석 가치가 높음)
+        # 기본 스코어 계산
         score = 0
+        score += repo.get('stargazers_count', 0)
+        score += repo.get('forks_count', 0) * 0.5
         
-        # 최근 업데이트 (최근 1년 내: +10점, 6개월 내: +20점, 3개월 내: +30점)
-        updated_at = repo.get('updated_at')
-        if updated_at:
-            try:
-                update_time = datetime.fromisoformat(updated_at.replace('Z', '+00:00'))
-                now = datetime.now(timezone.utc)
-                days_diff = (now - update_time).days
-                
-                if days_diff <= 90:  # 3개월 내
-                    score += 30
-                elif days_diff <= 180:  # 6개월 내
-                    score += 20
-                elif days_diff <= 365:  # 1년 내
-                    score += 10
-            except:
-                pass
-        
-        # 스타 수 (1개당 +1점, 최대 50점)
-        stargazers = repo.get('stargazers_count', 0)
-        score += min(stargazers, 50)
-        
-        # 포크 수 (1개당 +0.5점, 최대 25점)
-        forks = repo.get('forks_count', 0)
-        score += min(forks * 0.5, 25)
-        
-        # 설명 유무 (+5점)
         if repo.get('description'):
             score += 5
         
-        # 포크가 아닌 원본 레포지토리 (+10점)
         if not repo.get('fork', False):
             score += 10
         
-        # 주요 프로그래밍 언어 (+5점)
-        major_languages = ['javascript', 'python', 'java', 'c++', 'c#', 'go', 'rust', 'typescript', 'php', 'ruby', 'swift', 'kotlin']
-        if language in major_languages:
-            score += 5
-        
-        # 크기 체크 (너무 작거나 큰 레포지토리 제외)
-        size = repo.get('size', 0)  # KB 단위
-        if size < 1 or size > 100000:  # 1KB 미만 또는 100MB 초과
-            score -= 20
-        
-        # 3. 최소 스코어 이상인 레포지토리만 포함
-        if score >= 5:  # 최소 5점 이상
+        if score >= 5:
             repo['_score'] = score
             filtered_repos.append(repo)
     
-    # 스코어 순으로 정렬하고 상위 N개 선택
     filtered_repos.sort(key=lambda x: x.get('_score', 0), reverse=True)
-    
-    print(f"필터링 결과: {len(repos)}개 중 {len(filtered_repos)}개 선택 (스코어 기준)")
-    for repo in filtered_repos[:max_repos]:
-        print(f"  - {repo.get('name', '')}: 스코어 {repo.get('_score', 0)} (스타: {repo.get('stargazers_count', 0)}, 포크: {repo.get('forks_count', 0)})")
-    
     return filtered_repos[:max_repos]
  
