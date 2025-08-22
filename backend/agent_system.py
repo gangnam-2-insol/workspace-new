@@ -54,7 +54,7 @@ class IntentDetectionNode:
             # OpenAI를 사용하여 의도 분류
             prompt = f"{self.system_prompt}\n\n사용자 입력: {user_input}"
             response = openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4o",
                 messages=[
                     {"role": "user", "content": prompt}
                 ],
@@ -327,7 +327,7 @@ class RecruitmentNode:
 """
             
             response = openai_client.chat.completions.create(
-                model="gpt-3.5-turbo",
+                model="gpt-4o",
                 messages=[
                     {"role": "user", "content": prompt}
                 ],

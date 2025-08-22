@@ -21,6 +21,8 @@ from routers.pdf_ocr import router as pdf_ocr_router
 from routers.applicants import router as applicants_router
 from routers.integrated_ocr import router as integrated_ocr_router
 from routers.portfolios import router as portfolios_router
+from routers.advanced_analysis import router as advanced_analysis_router
+from routers.cover_letter_analysis import router as cover_letter_analysis_router
 
 
 from similarity_service import SimilarityService
@@ -76,6 +78,16 @@ async def add_charset_header(request, call_next):
     
     return response
 
+# 헬스 체크 엔드포인트
+@app.get("/api/health")
+async def health_check():
+    try:
+        # MongoDB 연결 상태 확인
+        await client.admin.command('ping')
+        return {"status": "healthy", "message": "서버가 정상적으로 실행 중입니다", "timestamp": datetime.now().isoformat()}
+    except Exception as e:
+        return {"status": "unhealthy", "message": f"서버 상태 확인 실패: {str(e)}", "timestamp": datetime.now().isoformat()}
+
 # 라우터 등록
 app.include_router(chatbot_router, prefix="/api/chatbot", tags=["chatbot"])
 app.include_router(langgraph_router, prefix="/api/langgraph", tags=["langgraph"])
@@ -89,6 +101,8 @@ app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
 app.include_router(applicants_router)
 app.include_router(integrated_ocr_router)
 app.include_router(portfolios_router)
+app.include_router(advanced_analysis_router)
+app.include_router(cover_letter_analysis_router)
 
 
 # MongoDB 연결
@@ -374,8 +388,8 @@ async def get_applicants(skip: int = 0, limit: int = 20):
                 "has_more": (skip + limit) < len(csv_applicants)
             }
 
-        # 페이징으로 이력서(지원자) 목록 조회
-        applicants = await db.applicants.find().skip(skip).limit(limit).to_list(limit)
+        # 페이징으로 이력서(지원자) 목록 조회 (최신순 정렬)
+        applicants = await db.applicants.find().sort("created_at", -1).skip(skip).limit(limit).to_list(limit)
 
         # MongoDB의 _id를 id로 변환 및 ObjectId 필드들을 문자열로 변환
         for applicant in applicants:
@@ -529,6 +543,28 @@ async def get_applicant_cover_letter(applicant_id: str):
         
         cover_letter["basic_info"]["analysisScore"] = 0
         cover_letter["basic_info"]["analysisResult"] = cover_letter.get("summary", "")
+        
+        # 자소서 분석 데이터 생성
+        if "evaluation_rubric" in cover_letter and cover_letter["evaluation_rubric"]:
+            rubric = cover_letter["evaluation_rubric"]
+            # 분석 데이터 생성
+            analysis_data = {
+                "technical_suitability": min(100, int(rubric.get("job_relevance", 7) * 10)),
+                "job_understanding": min(100, int(rubric.get("clarity", 7) * 10)),
+                "growth_potential": min(100, int(rubric.get("problem_solving", 7) * 10)),
+                "teamwork_communication": min(100, int(rubric.get("professionalism", 7) * 10)),
+                "motivation_company_fit": min(100, int(rubric.get("impact", 7) * 10))
+            }
+            cover_letter["analysis"] = analysis_data
+        else:
+            # 기본 분석 데이터 (평가 루브릭이 없는 경우)
+            cover_letter["analysis"] = {
+                "technical_suitability": 75,
+                "job_understanding": 80,
+                "growth_potential": 85,
+                "teamwork_communication": 70,
+                "motivation_company_fit": 90
+            }
         
         return cover_letter
     except HTTPException:
@@ -1343,4 +1379,16 @@ async def check_coverletter_similarity(resume_id: str):
     return await check_resume_similarity(resume_id)
 
 if __name__ == "__main__":
-    uvicorn.run(app, host="0.0.0.0", port=8000, timeout_keep_alive=600)
+    import uvicorn
+    
+    # 백그라운드 AI 분석 프로세서 시작
+    try:
+        from pdf_ocr_module.background_processor import get_background_processor
+        processor = get_background_processor()
+        processor.start_worker()
+        print("🚀 백그라운드 AI 분석 프로세서 시작됨")
+    except Exception as e:
+        print(f"⚠️ 백그라운드 AI 분석 프로세서 시작 실패: {e}")
+    
+    # 서버 시작
+    uvicorn.run(app, host="0.0.0.0", port=8000)

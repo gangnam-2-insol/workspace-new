@@ -4,10 +4,14 @@ import { FiUpload, FiFileText, FiDownload, FiCopy, FiCheck, FiX } from 'react-ic
 
 const PDFOCRPage = () => {
   const [file, setFile] = useState(null);
-  const [isProcessing, setIsProcessing] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
+  const [isProcessing, setIsProcessing] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [processingMode, setProcessingMode] = useState('fast'); // 'fast' 또는 'detailed'
+  const [backgroundTaskId, setBackgroundTaskId] = useState(null);
+  const [backgroundTaskStatus, setBackgroundTaskStatus] = useState(null);
+  const [isMonitoringBackground, setIsMonitoringBackground] = useState(false);
   const fileInputRef = useRef(null);
 
   const handleFileChange = (event) => {
@@ -51,7 +55,14 @@ const PDFOCRPage = () => {
     formData.append('file', file);
 
     try {
-      const response = await fetch('/api/pdf-ocr/upload-pdf', {
+      // 처리 모드에 따라 다른 API 엔드포인트 사용
+      const endpoint = processingMode === 'fast' 
+        ? '/api/pdf-ocr/upload-pdf-fast' 
+        : '/api/pdf-ocr/upload-pdf';
+      
+      console.log(`🚀 ${processingMode === 'fast' ? '빠른' : '상세'} 처리 모드로 업로드 시작`);
+      
+      const response = await fetch(endpoint, {
         method: 'POST',
         body: formData,
       });
@@ -62,10 +73,65 @@ const PDFOCRPage = () => {
 
       const data = await response.json();
       setResult(data);
+      
+      // 빠른 처리 모드에서 백그라운드 작업 ID가 있으면 모니터링 시작
+      if (processingMode === 'fast' && data.background_task_id) {
+        setBackgroundTaskId(data.background_task_id);
+        startBackgroundMonitoring(data.background_task_id);
+      }
+      
+      console.log(`✅ ${processingMode === 'fast' ? '빠른' : '상세'} 처리 완료`);
     } catch (err) {
-      setError(`OCR 처리 중 오류가 발생했습니다: ${err.message}`);
+      setError(`${processingMode === 'fast' ? '빠른' : '상세'} OCR 처리 중 오류가 발생했습니다: ${err.message}`);
     } finally {
       setIsProcessing(false);
+    }
+  };
+
+  // 백그라운드 작업 모니터링 시작
+  const startBackgroundMonitoring = (taskId) => {
+    setIsMonitoringBackground(true);
+    setBackgroundTaskStatus('queued');
+    
+    // 주기적으로 상태 확인
+    const checkStatus = async () => {
+      try {
+        const response = await fetch(`/api/pdf-ocr/background-tasks/${taskId}`);
+        if (response.ok) {
+          const statusData = await response.json();
+          setBackgroundTaskStatus(statusData.status);
+          
+          if (statusData.status === 'completed') {
+            console.log('✅ 백그라운드 AI 분석 완료');
+            setIsMonitoringBackground(false);
+            // 완료된 경우 결과를 새로고침하거나 알림
+            showCompletionNotification();
+          } else if (statusData.status === 'failed') {
+            console.log('❌ 백그라운드 AI 분석 실패');
+            setIsMonitoringBackground(false);
+            setError(`백그라운드 AI 분석 실패: ${statusData.error}`);
+          }
+        }
+      } catch (error) {
+        console.error('백그라운드 작업 상태 확인 실패:', error);
+      }
+    };
+    
+    // 5초마다 상태 확인
+    const intervalId = setInterval(checkStatus, 5000);
+    
+    // 컴포넌트 언마운트 시 인터벌 정리
+    return () => clearInterval(intervalId);
+  };
+
+  // 완료 알림 표시
+  const showCompletionNotification = () => {
+    // 브라우저 알림 또는 토스트 메시지 표시
+    if ('Notification' in window && Notification.permission === 'granted') {
+      new Notification('AI 분석 완료', {
+        body: '백그라운드 AI 분석이 완료되었습니다.',
+        icon: '/favicon.ico'
+      });
     }
   };
 
@@ -142,6 +208,26 @@ const PDFOCRPage = () => {
 
       <Content>
         <UploadSection>
+          <ProcessingModeSelector>
+            <ModeLabel>처리 모드 선택:</ModeLabel>
+            <ModeButtons>
+              <ModeButton 
+                active={processingMode === 'fast'} 
+                onClick={() => setProcessingMode('fast')}
+              >
+                🚀 빠른 처리
+                <ModeDescription>기본 OCR + 간단한 분석 (빠름)</ModeDescription>
+              </ModeButton>
+              <ModeButton 
+                active={processingMode === 'detailed'} 
+                onClick={() => setProcessingMode('detailed')}
+              >
+                🔍 상세 분석
+                <ModeDescription>AI 분석 + 상세 정보 추출 (느림)</ModeDescription>
+              </ModeButton>
+            </ModeButtons>
+          </ProcessingModeSelector>
+
           <UploadArea
             onDrop={handleDrop}
             onDragOver={handleDragOver}
@@ -202,14 +288,39 @@ const PDFOCRPage = () => {
         {isProcessing && (
           <ProcessingMessage>
             <div className="spinner"></div>
-            PDF 파일을 분석하고 있습니다...
+            {processingMode === 'fast' 
+              ? 'PDF 파일을 빠르게 분석하고 있습니다... (예상 시간: 10-30초)' 
+              : 'PDF 파일을 상세하게 분석하고 있습니다... (예상 시간: 1-3분)'
+            }
           </ProcessingMessage>
+        )}
+
+        {/* 백그라운드 AI 분석 상태 표시 */}
+        {isMonitoringBackground && backgroundTaskStatus && (
+          <BackgroundProcessingMessage>
+            <div className="spinner"></div>
+            <div>
+              <div className="status-title">🚀 백그라운드 AI 분석 진행 중</div>
+              <div className="status-detail">
+                {backgroundTaskStatus === 'queued' && '대기 중...'}
+                {backgroundTaskStatus === 'processing' && 'AI 분석 중... (예상 시간: 2-5분)'}
+                {backgroundTaskStatus === 'completed' && 'AI 분석 완료! ✅'}
+                {backgroundTaskStatus === 'failed' && 'AI 분석 실패 ❌'}
+              </div>
+              <div className="task-id">작업 ID: {backgroundTaskId}</div>
+            </div>
+          </BackgroundProcessingMessage>
         )}
 
         {result && (
           <ResultSection>
             <ResultHeader>
               <h3>📋 OCR 처리 결과</h3>
+              <ResultInfo>
+                <ProcessingModeBadge mode={result.processing_mode || processingMode}>
+                  {result.processing_mode === 'fast' || processingMode === 'fast' ? '🚀 빠른 처리' : '🔍 상세 분석'}
+                </ProcessingModeBadge>
+              </ResultInfo>
               <ResultActions>
                 <ActionButton onClick={() => copyToClipboard(result.extracted_text)}>
                   {copied ? <FiCheck size={16} /> : <FiCopy size={16} />}
@@ -345,6 +456,54 @@ const UploadSection = styled.div`
   display: flex;
   flex-direction: column;
   gap: 16px;
+`;
+
+const ProcessingModeSelector = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  margin-bottom: 20px;
+  padding: 15px 20px;
+  background-color: #f7fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+`;
+
+const ModeLabel = styled.span`
+  font-size: 1rem;
+  color: #4a5568;
+  font-weight: 600;
+`;
+
+const ModeButtons = styled.div`
+  display: flex;
+  gap: 15px;
+`;
+
+const ModeButton = styled.button`
+  background-color: ${props => props.active ? '#4299e1' : 'transparent'};
+  color: ${props => props.active ? 'white' : '#4a5568'};
+  border: 1px solid ${props => props.active ? '#4299e1' : '#e2e8f0'};
+  padding: 8px 16px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+
+  &:hover {
+    background-color: ${props => props.active ? '#3182ce' : '#f7fafc'};
+  }
+`;
+
+const ModeDescription = styled.span`
+  font-size: 0.8rem;
+  color: #718096;
+  margin-top: 4px;
 `;
 
 const UploadArea = styled.div`
@@ -491,6 +650,31 @@ const ProcessingMessage = styled.div`
   }
 `;
 
+const BackgroundProcessingMessage = styled(ProcessingMessage)`
+  background-color: #f0fff4;
+  color: #2f855a;
+  border: 1px solid #c6f6d5;
+  margin-top: 20px;
+  padding: 15px;
+
+  .status-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    margin-bottom: 5px;
+  }
+
+  .status-detail {
+    font-size: 0.9rem;
+    color: #4a5568;
+    margin-bottom: 5px;
+  }
+
+  .task-id {
+    font-size: 0.8rem;
+    color: #718096;
+  }
+`;
+
 const ResultSection = styled.div`
   background-color: white;
   border-radius: 12px;
@@ -511,6 +695,29 @@ const ResultHeader = styled.div`
     color: #2d3748;
     font-size: 1.25rem;
   }
+`;
+
+const ResultInfo = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 10px;
+`;
+
+const ProcessingModeBadge = styled.span`
+  background-color: ${props => {
+    switch(props.mode) {
+      case 'fast': return '#48bb78';
+      case 'detailed': return '#4299e1';
+      default: return '#718096';
+    }
+  }};
+  color: white;
+  padding: 8px 16px;
+  border-radius: 20px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  text-align: center;
 `;
 
 const ResultActions = styled.div`
@@ -631,8 +838,6 @@ const DocumentTypeBadge = styled.div`
   font-weight: 600;
   text-align: center;
 `;
-
-
 
 const BasicInfoContainer = styled.div`
   display: flex;

@@ -204,3 +204,127 @@ def process_pdf(pdf_path: str | Path) -> Dict[str, Any]:
     }
 
 
+def process_pdf_fast(pdf_path: str | Path) -> Dict[str, Any]:
+    """빠른 PDF 처리 (기본 OCR + 백그라운드 AI 분석)"""
+    settings = Settings()
+    ensure_directories(settings)
+
+    pdf_path = Path(pdf_path)
+    if not pdf_path.exists():
+        raise FileNotFoundError(f"파일을 찾을 수 없습니다: {pdf_path}")
+
+    # 1) 우선 내장 텍스트/레이아웃 추출
+    layout = extract_text_with_layout(pdf_path)
+
+    # 2) PDF -> 이미지 (낮은 DPI로 빠른 처리)
+    page_image_dir = settings.images_dir / pdf_path.stem
+    image_paths: List[Path] = save_pdf_pages_to_images(pdf_path, page_image_dir, settings)
+    
+    # 3) 이미지 -> 텍스트 (빠른 OCR)
+    ocr_outputs = ocr_images_with_quality(image_paths, settings)
+    page_texts: List[str] = []
+    
+    # 내장 텍스트가 있으면 우선 사용, 부족하면 OCR 보완
+    for i in range(len(image_paths)):
+        page_spans = next((p.get("spans", []) for p in layout.get("pages", []) if p.get("page") == i + 1), [])
+        embedded_text = " ".join([s.get("text", "") for s in page_spans]).strip()
+        ocr_text = ocr_outputs[i]["result"]["text"]
+        chosen = embedded_text if len(embedded_text) >= max(50, len(ocr_text) * 0.5) else ocr_text
+        page_texts.append(chosen)
+    
+    full_text: str = "\n\n".join(page_texts)
+
+    # 4) 기본 정보만 추출 (규칙 기반)
+    basic_info = extract_basic_info(full_text[:settings.max_text_length]) if settings.enable_summary else {}
+    
+    # 5) 간단한 요약 (규칙 기반)
+    summary = generate_simple_summary(full_text) if settings.enable_summary else ""
+    
+    # 6) 기본 키워드 추출 (규칙 기반)
+    keywords = extract_basic_keywords(full_text) if settings.enable_keywords else []
+
+    # 7) 백그라운드에서 AI 분석 시작
+    background_task_id = None
+    if settings.enable_ai_analysis:
+        try:
+            from .background_processor import get_background_processor
+            processor = get_background_processor()
+            
+            # 고유한 작업 ID 생성
+            import uuid
+            background_task_id = str(uuid.uuid4())
+            
+            # 백그라운드 큐에 AI 분석 작업 추가
+            processor.add_to_queue(
+                task_id=background_task_id,
+                pdf_path=str(pdf_path),
+                extracted_text=full_text,
+                basic_info=basic_info,
+                document_type="resume"  # 기본값, 나중에 감지 가능
+            )
+            
+            print(f"🚀 백그라운드 AI 분석 작업 시작: {background_task_id}")
+            
+        except Exception as e:
+            print(f"⚠️ 백그라운드 AI 분석 작업 추가 실패: {e}")
+            background_task_id = None
+
+    return {
+        "success": True,
+        "full_text": full_text,
+        "summary": summary,
+        "keywords": keywords,
+        "basic_info": basic_info,
+        "num_pages": len(page_texts),
+        "processing_mode": "fast",
+        "background_task_id": background_task_id,
+        "ai_analysis_status": "queued" if background_task_id else "disabled"
+    }
+
+def generate_simple_summary(text: str) -> str:
+    """규칙 기반 간단한 요약 생성"""
+    if not text:
+        return ""
+    
+    # 첫 200자와 마지막 200자를 결합
+    if len(text) <= 400:
+        return text
+    
+    first_part = text[:200].strip()
+    last_part = text[-200:].strip()
+    
+    return f"{first_part}...\n\n{last_part}"
+
+def extract_basic_keywords(text: str) -> List[str]:
+    """규칙 기반 기본 키워드 추출"""
+    if not text:
+        return []
+    
+    # 기술 스택 관련 키워드
+    tech_keywords = [
+        'JavaScript', 'Python', 'Java', 'React', 'Vue', 'Angular',
+        'Node.js', 'Django', 'Flask', 'Spring', 'MySQL', 'MongoDB',
+        'AWS', 'Docker', 'Kubernetes', 'Git', 'Linux', 'Windows'
+    ]
+    
+    # 직무 관련 키워드
+    job_keywords = [
+        '개발자', '프로그래머', '엔지니어', '디자이너', '기획자',
+        '프론트엔드', '백엔드', '풀스택', 'DevOps', '데이터'
+    ]
+    
+    found_keywords = []
+    
+    # 기술 스택 키워드 검색
+    for keyword in tech_keywords:
+        if keyword.lower() in text.lower():
+            found_keywords.append(keyword)
+    
+    # 직무 키워드 검색
+    for keyword in job_keywords:
+        if keyword in text:
+            found_keywords.append(keyword)
+    
+    return found_keywords[:10]  # 최대 10개
+
+
