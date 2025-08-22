@@ -1589,9 +1589,9 @@ const ApplicantActionsBoard = styled.div`
 `;
 
 const StatusBadge = styled(motion.span)`
-  padding: 4px 12px;
+  padding: 8px 20px;
   border-radius: 20px;
-  font-size: 12px;
+  font-size: 16px;
   font-weight: 500;
   text-align: center;
   background: ${props => {
@@ -2288,9 +2288,9 @@ const RankItem = styled.div`
 `;
 
 const RankBadge = styled.span`
-  padding: 1px 3px;
-  border-radius: 3px;
-  font-size: 8px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  font-size: 16px;
   font-weight: 600;
   background: ${props => {
     if (props.rank <= 2) return '#10b981';
@@ -2446,7 +2446,7 @@ const ApplicantManagement = () => {
   const [selectedResumeApplicant, setSelectedResumeApplicant] = useState(null);
   const [resumeFile, setResumeFile] = useState(null);
   const [coverLetterFile, setCoverLetterFile] = useState(null);
-  const [portfolioFile, setPortfolioFile] = useState(null);
+  const [githubUrl, setGithubUrl] = useState('');
   const [documentType, setDocumentType] = useState('이력서');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [analysisResult, setAnalysisResult] = useState(null);
@@ -2582,9 +2582,9 @@ const ApplicantManagement = () => {
     if (rank === 1) return '🥇 1등';
     if (rank === 2) return '🥈 2등';
     if (rank === 3) return '🥉 3등';
-    if (rank <= Math.ceil(total * 0.1)) return `🏅 ${rank}등 (상위 10%)`;
-    if (rank <= Math.ceil(total * 0.3)) return `⭐ ${rank}등 (상위 30%)`;
-    if (rank <= Math.ceil(total * 0.5)) return `✨ ${rank}등 (상위 50%)`;
+    if (rank <= Math.ceil(total * 0.1)) return `🏅 ${rank}등`;
+    if (rank <= Math.ceil(total * 0.3)) return `⭐ ${rank}등`;
+    if (rank <= Math.ceil(total * 0.5)) return `✨ ${rank}등`;
     return `${rank}등`;
   }, []);
 
@@ -3224,7 +3224,7 @@ const ApplicantManagement = () => {
     setIsResumeModalOpen(false);
     setResumeFile(null);
     setCoverLetterFile(null);
-    setPortfolioFile(null);
+            setGithubUrl('');
     setIsAnalyzing(false);
     setAnalysisResult(null);
     setIsDragOver(false);
@@ -3261,10 +3261,7 @@ const ApplicantManagement = () => {
         if (fileName.includes('자기소개서') || fileName.includes('cover') || fileName.includes('coverletter')) {
           setCoverLetterFile(file);
           console.log('드래그 앤 드롭으로 자기소개서 파일이 업로드되었습니다:', file.name);
-        } else if (fileName.includes('포트폴리오') || fileName.includes('portfolio')) {
-          setPortfolioFile(file);
-          console.log('드래그 앤 드롭으로 포트폴리오 파일이 업로드되었습니다:', file.name);
-        } else {
+                  } else {
         setResumeFile(file);
           console.log('드래그 앤 드롭으로 이력서 파일이 업로드되었습니다:', file.name);
         }
@@ -3313,15 +3310,13 @@ const ApplicantManagement = () => {
     }
   };
 
-  const handlePortfolioFileChange = (event) => {
-    const file = event.target.files[0];
-    if (file) {
-      setPortfolioFile(file);
-      console.log('포트폴리오 파일이 선택되었습니다:', file.name);
-      
-      // 다른 파일이 선택되면 기존 지원자 정보 초기화
+  const handleGithubUrlChange = (event) => {
+    const url = event.target.value;
+    setGithubUrl(url);
+    
+    // 깃허브 URL이 변경되면 기존 지원자 정보 초기화
+    if (url.trim()) {
       setExistingApplicant(null);
-      // 교체 옵션도 초기화
       setReplaceExisting(false);
     }
   };
@@ -3397,11 +3392,11 @@ const ApplicantManagement = () => {
   const handleResumeSubmit = async () => {
     try {
       console.log('🚀 통합 문서 업로드 시작');
-      console.log('📁 선택된 파일들:', { resumeFile, coverLetterFile, portfolioFile });
+      console.log('📁 선택된 파일들:', { resumeFile, coverLetterFile, githubUrl });
       
-      // 최소 하나의 파일은 필요
-      if (!resumeFile && !coverLetterFile && !portfolioFile) {
-        alert('이력서, 자기소개서, 또는 포트폴리오 파일 중 하나는 선택해주세요.');
+      // 최소 하나의 입력은 필요
+      if (!resumeFile && !coverLetterFile && !githubUrl.trim()) {
+        alert('이력서, 자기소개서, 또는 깃허브 주소 중 하나는 입력해주세요.');
         return;
       }
 
@@ -3411,13 +3406,13 @@ const ApplicantManagement = () => {
         message += `현재 보유 서류:\n`;
         message += `이력서: ${existingApplicant.resume ? '✅ 있음' : '❌ 없음'}\n`;
         message += `자기소개서: ${existingApplicant.cover_letter ? '✅ 있음' : '❌ 없음'}\n`;
-        message += `포트폴리오: ${existingApplicant.portfolio ? '✅ 있음' : '❌ 없음'}\n\n`;
+        message += `깃허브: ${existingApplicant.github_url ? '✅ 있음' : '❌ 없음'}\n\n`;
         
         // 업로드하려는 서류와 기존 서류 비교
         const duplicateDocuments = [];
         if (resumeFile && existingApplicant.resume) duplicateDocuments.push('이력서');
         if (coverLetterFile && existingApplicant.cover_letter) duplicateDocuments.push('자기소개서');
-        if (portfolioFile && existingApplicant.portfolio) duplicateDocuments.push('포트폴리오');
+        if (githubUrl.trim() && existingApplicant.github_url) duplicateDocuments.push('깃허브');
         
         if (duplicateDocuments.length > 0) {
           message += `⚠️ 다음 서류는 이미 존재합니다:\n`;
@@ -3460,13 +3455,8 @@ const ApplicantManagement = () => {
         });
       }
 
-      if (portfolioFile) {
-        console.log('📁 포트폴리오 파일 정보:', {
-          name: portfolioFile.name,
-          size: portfolioFile.size,
-          type: portfolioFile.type,
-          lastModified: new Date(portfolioFile.lastModified).toLocaleString()
-        });
+      if (githubUrl.trim()) {
+        console.log('🔗 깃허브 URL:', githubUrl);
       }
 
       // 파일 유효성 검사 강화
@@ -3494,17 +3484,17 @@ const ApplicantManagement = () => {
           return;
         }
       }
-
-      if (portfolioFile) {
-        if (!portfolioFile.type.includes('pdf') && !portfolioFile.name.match(/\.pdf$/i)) {
-          alert('포트폴리오 파일은 PDF 형식만 지원됩니다.');
-          return;
-        }
-        if (portfolioFile.size > maxSize) {
-                      alert('포트폴리오 파일 크기가 50MB를 초과합니다.');
+      
+      // 깃허브 URL 유효성 검사
+      if (githubUrl.trim()) {
+        const githubUrlPattern = /^https?:\/\/github\.com\/[a-zA-Z0-9-]+\/[a-zA-Z0-9-._]+$/;
+        if (!githubUrlPattern.test(githubUrl.trim())) {
+          alert('올바른 깃허브 저장소 주소를 입력해주세요.\n예: https://github.com/username/repository');
           return;
         }
       }
+
+      
 
       // 분석 시작
       setIsAnalyzing(true);
@@ -3547,13 +3537,9 @@ const ApplicantManagement = () => {
         });
         formData.append('cover_letter_file', coverLetterFile);
       }
-      if (portfolioFile) {
-        console.log('📁 포트폴리오 파일 전송:', {
-          name: portfolioFile.name,
-          size: portfolioFile.size,
-          type: portfolioFile.type
-        });
-        formData.append('portfolio_file', portfolioFile);
+      if (githubUrl.trim()) {
+        console.log('🔗 깃허브 URL 전송:', githubUrl);
+        formData.append('github_url', githubUrl.trim());
       }
 
       const response = await fetch(`${API_BASE_URL}/api/integrated-ocr/upload-multiple-documents`, {
@@ -3589,16 +3575,16 @@ const ApplicantManagement = () => {
       // 분석 결과 생성
       const analysisResult = {
         documentType: result.data.uploaded_documents.join(' + '),
-        fileName: [resumeFile?.name, coverLetterFile?.name, portfolioFile?.name].filter(Boolean).join(', '),
+        fileName: [resumeFile?.name, coverLetterFile?.name, githubUrl.trim() ? '깃허브 URL' : ''].filter(Boolean).join(', '),
         analysisDate: new Date().toLocaleString(),
         processingTime: 0,
         extractedTextLength: 0,
         analysisResult: result.data.results,
         uploadResults: Object.entries(result.data.results).map(([type, data]) => ({
-          type: type === 'resume' ? 'resume' : type === 'cover_letter' ? 'cover_letter' : 'portfolio',
+          type: type === 'resume' ? 'resume' : type === 'cover_letter' ? 'cover_letter' : 'github',
           result: data
         })),
-        applicant: result.data.results.resume?.applicant || result.data.results.cover_letter?.applicant || result.data.results.portfolio?.applicant || null
+        applicant: result.data.results.resume?.applicant || result.data.results.cover_letter?.applicant || result.data.results.github?.applicant || null
       };
 
       setAnalysisResult(analysisResult);
@@ -3608,7 +3594,7 @@ const ApplicantManagement = () => {
       const uploadedDocs = result.data.uploaded_documents;
       const successMessage = uploadedDocs.length > 1 
         ? `${uploadedDocs.join(', ')} 문서들이 성공적으로 업로드되었습니다!\n\n지원자: ${analysisResult.applicant?.name || 'N/A'}`
-        : `${uploadedDocs[0] === 'resume' ? '이력서' : uploadedDocs[0] === 'cover_letter' ? '자기소개서' : '포트폴리오'}가 성공적으로 업로드되었습니다!\n\n지원자: ${analysisResult.applicant?.name || 'N/A'}`;
+        : `${uploadedDocs[0] === 'resume' ? '이력서' : uploadedDocs[0] === 'cover_letter' ? '자기소개서' : '깃허브'}가 성공적으로 업로드되었습니다!\n\n지원자: ${analysisResult.applicant?.name || 'N/A'}`;
       
       alert(successMessage);
       
@@ -3657,9 +3643,9 @@ const ApplicantManagement = () => {
       if (analysisData.cover_letter_analysis.keyword_diversity?.feedback) {
         skills.push(analysisData.cover_letter_analysis.keyword_diversity.feedback);
       }
-    } else if (documentType === '포트폴리오' && analysisData.portfolio_analysis) {
-      if (analysisData.portfolio_analysis.tech_stack?.feedback) {
-        skills.push(analysisData.portfolio_analysis.tech_stack.feedback);
+    } else if (documentType === '깃허브' && analysisData.github_analysis) {
+      if (analysisData.github_analysis.tech_stack?.feedback) {
+        skills.push(analysisData.github_analysis.tech_stack.feedback);
       }
     }
     
@@ -3681,9 +3667,9 @@ const ApplicantManagement = () => {
       if (analysisData.cover_letter_analysis.unique_experience?.feedback) {
         experiences.push(analysisData.cover_letter_analysis.unique_experience.feedback);
       }
-    } else if (documentType === '포트폴리오' && analysisData.portfolio_analysis) {
-      if (analysisData.portfolio_analysis.personal_contribution?.feedback) {
-        experiences.push(analysisData.portfolio_analysis.personal_contribution.feedback);
+    } else if (documentType === '깃허브' && analysisData.github_analysis) {
+      if (analysisData.github_analysis.personal_contribution?.feedback) {
+        experiences.push(analysisData.github_analysis.personal_contribution.feedback);
       }
     }
     
@@ -3696,8 +3682,8 @@ const ApplicantManagement = () => {
         return analysisData.resume_analysis.basic_info_completeness.feedback;
     } else if (documentType === '자기소개서' && analysisData.cover_letter_analysis?.job_understanding?.feedback) {
       return analysisData.cover_letter_analysis.job_understanding.feedback;
-    } else if (documentType === '포트폴리오' && analysisData.portfolio_analysis?.project_overview?.feedback) {
-      return analysisData.portfolio_analysis.project_overview.feedback;
+    } else if (documentType === '깃허브' && analysisData.github_analysis?.project_overview?.feedback) {
+      return analysisData.github_analysis.project_overview.feedback;
       }
       return '학력 정보를 추출할 수 없습니다.';
   };
@@ -4024,9 +4010,7 @@ const ApplicantManagement = () => {
               <FiBarChart2 size={20} />
               검색어 "{searchTerm}" 랭킹 결과
             </RankingTitle>
-                      <RankingStats>
-            총 {rankingResults.length}명 중 상위 5명 표시
-          </RankingStats>
+
             <RankingClearButton onClick={() => {
               setRankingResults(null);
               setSearchTerm('');
@@ -4046,10 +4030,14 @@ const ApplicantManagement = () => {
               <RankingTableHeaderCell>상태</RankingTableHeaderCell>
             </RankingTableHeader>
             
-            {/* 첫 화면에 보이는 상위 5명 */}
+            {/* 모든 랭킹 결과를 하나의 테이블 바디에 표시 */}
             <RankingTableBody>
-              {rankingResults.slice(0, 5).map((result, index) => (
-                <RankingTableRow key={result.applicant.id}>
+              {rankingResults.map((result, index) => (
+                <RankingTableRow 
+                  key={result.applicant.id}
+                  onClick={() => handleCardClick(result.applicant)}
+                  style={{ cursor: 'pointer' }}
+                >
                   <RankingTableCell>
                     <RankBadge rank={result.rank}>
                       {result.rankText}
@@ -4107,80 +4095,9 @@ const ApplicantManagement = () => {
                 </RankingTableRow>
               ))}
             </RankingTableBody>
-            
-            {/* 스크롤해서 볼 수 있는 나머지 결과들 */}
-            {rankingResults.length > 5 && (
-              <RankingTableBody style={{ maxHeight: '400px', marginTop: '16px' }}>
-                {rankingResults.slice(5).map((result, index) => (
-                  <RankingTableRow key={result.applicant.id}>
-                    <RankingTableCell>
-                      <RankBadge rank={result.rank}>
-                        {result.rankText}
-                      </RankBadge>
-                    </RankingTableCell>
-                    <RankingTableCell>
-                      <ApplicantInfo>
-                        <div>
-                          <div style={{ fontWeight: '600', fontSize: '14px' }}>{result.applicant.name}</div>
-                          <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>{result.applicant.email}</div>
-                        </div>
-                      </ApplicantInfo>
-                    </RankingTableCell>
-                    <RankingTableCell>
-                      <div style={{ fontSize: '13px' }}>{result.applicant.position}</div>
-                    </RankingTableCell>
-                    <RankingTableCell>
-                      <TotalScore>
-                        {result.totalScore}점
-                      </TotalScore>
-                    </RankingTableCell>
-                    <RankingTableCell>
-                      <ScoreBreakdown>
-                        <ScoreItem>
-                          <span>이력서:</span>
-                          <span style={{ color: result.breakdown.resume >= 7 ? '#10b981' : result.breakdown.resume >= 5 ? '#f59e0b' : '#ef4444' }}>
-                            {result.breakdown.resume}점
-                          </span>
-                        </ScoreItem>
-                        <ScoreItem>
-                          <span>자소서:</span>
-                          <span style={{ color: result.breakdown.coverLetter >= 7 ? '#10b981' : result.breakdown.coverLetter >= 5 ? '#f59e0b' : '#ef4444' }}>
-                            {result.breakdown.coverLetter}점
-                          </span>
-                        </ScoreItem>
-                        <ScoreItem>
-                          <span>포트폴리오:</span>
-                          <span style={{ color: result.breakdown.portfolio >= 7 ? '#10b981' : result.breakdown.portfolio >= 5 ? '#f59e0b' : '#ef4444' }}>
-                            {result.breakdown.portfolio}점
-                          </span>
-                        </ScoreItem>
-                        <ScoreItem>
-                          <span>키워드:</span>
-                          <span style={{ color: result.breakdown.keywordMatching >= 7 ? '#10b981' : result.breakdown.keywordMatching >= 5 ? '#f59e0b' : '#ef4444' }}>
-                            {result.breakdown.keywordMatching}점
-                          </span>
-                        </ScoreItem>
-                      </ScoreBreakdown>
-                    </RankingTableCell>
-                    <RankingTableCell>
-                      <StatusBadge status={result.applicant.status}>
-                        {getStatusText(result.applicant.status)}
-                      </StatusBadge>
-                    </RankingTableCell>
-                  </RankingTableRow>
-                ))}
-              </RankingTableBody>
-            )}
           </RankingTable>
           
-          {rankingResults.length > 5 && (
-            <RankingFooter>
-              <RankingFooterText>
-                전체 {rankingResults.length}명의 랭킹이 계산되었습니다. 
-                상위 5명이 먼저 표시되며, 나머지는 아래로 스크롤하여 확인할 수 있습니다.
-              </RankingFooterText>
-            </RankingFooter>
-          )}
+
         </RankingResultsSection>
       )}
 
@@ -5278,44 +5195,19 @@ const ApplicantManagement = () => {
                 </ResumeFormSection>
 
                 <ResumeFormSection>
-                  <ResumeFormTitle>포트폴리오 업로드</ResumeFormTitle>
+                  <ResumeFormTitle>깃허브 주소</ResumeFormTitle>
                   <DocumentUploadContainer>
-                    <FileUploadArea
-                      isDragOver={isDragOver}
-                      onDragOver={handleDragOver}
-                      onDragLeave={handleDragLeave}
-                      onDrop={handleDrop}
-                    >
-                      <FileUploadInput
-                        type="file"
-                        accept=".pdf"
-                        onChange={handlePortfolioFileChange}
-                        id="portfolio-file"
+                    <GithubInputContainer>
+                      <GithubInput
+                        type="text"
+                        placeholder="https://github.com/username/repository"
+                        value={githubUrl}
+                        onChange={handleGithubUrlChange}
                       />
-                      <FileUploadLabel htmlFor="portfolio-file">
-                        {portfolioFile ? (
-                          <FileSelected>
-                            <FiFile size={20} />
-                            <span>{portfolioFile.name}</span>
-                          </FileSelected>
-                        ) : (
-                          <FileUploadPlaceholder>
-                            {isDragOver ? (
-                              <FiFile size={32} style={{ color: 'var(--primary-color)' }} />
-                            ) : (
-                              <FiFileText size={24} />
-                            )}
-                            <span>
-                              {isDragOver 
-                                ? '파일을 여기에 놓으세요' 
-                                : '포트폴리오 파일을 선택하거나 드래그하세요'
-                              }
-                  </span>
-                            <small>PDF 파일만 지원</small>
-                          </FileUploadPlaceholder>
-                        )}
-                      </FileUploadLabel>
-                    </FileUploadArea>
+                      <GithubInputDescription>
+                        지원자의 깃허브 저장소 주소를 입력하세요
+                      </GithubInputDescription>
+                    </GithubInputContainer>
                   </DocumentUploadContainer>
                 </ResumeFormSection>
 
@@ -5345,11 +5237,11 @@ const ApplicantManagement = () => {
                           )}
                         </li>
                         <li>
-                          포트폴리오: {existingApplicant.portfolio ? '✅ 있음' : '❌ 없음'}
-                          {existingApplicant.portfolio && (
-                            <PreviewButton onClick={() => handlePreviewDocument('portfolio')}>
-                              👁️ 미리보기
-                            </PreviewButton>
+                          깃허브: {existingApplicant.github_url ? '✅ 있음' : '❌ 없음'}
+                          {existingApplicant.github_url && (
+                            <a href={existingApplicant.github_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-color)', textDecoration: 'none', marginLeft: '8px' }}>
+                              🔗 링크 열기
+                            </a>
                           )}
                         </li>
                       </ul>
@@ -5376,7 +5268,7 @@ const ApplicantManagement = () => {
                 <ResumeFormActions>
                   <ResumeSubmitButton 
                     onClick={handleResumeSubmit}
-                    disabled={(!resumeFile && !coverLetterFile && !portfolioFile) || isAnalyzing || isCheckingDuplicate}
+                    disabled={(!resumeFile && !coverLetterFile && !githubUrl.trim()) || isAnalyzing || isCheckingDuplicate}
                   >
                     {isAnalyzing ? '처리 중...' : isCheckingDuplicate ? '중복 체크 중...' : '업로드 및 저장'}
                   </ResumeSubmitButton>
@@ -5932,12 +5824,8 @@ const RankingTable = styled.div`
   border: 1px solid var(--border-color);
   border-radius: 12px;
   overflow: hidden;
-  max-height: 600px;
-`;
-
-const RankingTableBody = styled.div`
-  max-height: 500px;
-  overflow-y: auto;
+  max-height: 400px; /* 5개 행이 정확히 보이도록 조정 */
+  overflow-y: auto; /* 스크롤 활성화 */
   
   /* 스크롤바 스타일링 */
   &::-webkit-scrollbar {
@@ -5957,6 +5845,10 @@ const RankingTableBody = styled.div`
       background: var(--text-secondary);
     }
   }
+`;
+
+const RankingTableBody = styled.div`
+  /* 테이블 본문 스타일 */
 `;
 
 const RankingTableHeader = styled.div`
@@ -5989,9 +5881,12 @@ const RankingTableRow = styled.div`
   padding: 16px;
   border-bottom: 1px solid var(--border-color);
   transition: all 0.2s ease;
+  cursor: pointer;
   
   &:hover {
     background: var(--background-secondary);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
   
   &:last-child {
@@ -6058,6 +5953,41 @@ const RankingFooterText = styled.div`
   padding: 12px 24px;
   border-radius: 8px;
   border: 1px solid var(--border-color);
+`;
+
+// 깃허브 입력 필드 스타일 컴포넌트
+const GithubInputContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+`;
+
+const GithubInput = styled.input`
+  width: 100%;
+  padding: 12px 16px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 14px;
+  color: var(--text-primary);
+  background: white;
+  transition: all 0.2s ease;
+  
+  &:focus {
+    outline: none;
+    border-color: var(--primary-color);
+    box-shadow: 0 0 0 3px rgba(0, 200, 81, 0.1);
+  }
+  
+  &::placeholder {
+    color: var(--text-secondary);
+  }
+`;
+
+const GithubInputDescription = styled.small`
+  font-size: 12px;
+  color: var(--text-secondary);
+  line-height: 1.4;
 `;
 
 export default ApplicantManagement; 

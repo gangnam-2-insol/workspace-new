@@ -274,19 +274,7 @@ const Layout = ({ children }) => {
 				<IconButton title="채팅" onClick={() => window.dispatchEvent(new Event('openAgentChatbot'))}>
 					<FiMessageCircle size={20} />
 				</IconButton>
-            <div style={{
-              width: '40px',
-              height: '40px',
-              borderRadius: '50%',
-              background: 'linear-gradient(135deg, #00c851, #00a844)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontWeight: 'bold'
-            }}>
-              A
-            </div>
+            
           </div>
         </Header>
 
