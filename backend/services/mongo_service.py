@@ -198,6 +198,7 @@ class MongoService:
             
             # 새 지원자 생성
             applicant_dict["created_at"] = datetime.now()
+            applicant_dict["updated_at"] = datetime.now()
             result = self.sync_db.applicants.insert_one(applicant_dict)
             new_applicant_id = str(result.inserted_id)
             
@@ -304,7 +305,10 @@ class MongoService:
             else:
                 resume_dict = resume_data
             
+            # 새로운 스키마에 맞게 필드 설정
             resume_dict["created_at"] = datetime.now()
+            resume_dict["document_type"] = "resume"
+            
             result = self.sync_db.resumes.insert_one(resume_dict)
             resume_dict["id"] = str(result.inserted_id)
             return resume_dict
@@ -321,7 +325,10 @@ class MongoService:
             else:
                 cover_letter_dict = cover_letter_data
             
+            # 새로운 스키마에 맞게 필드 설정
             cover_letter_dict["created_at"] = datetime.now()
+            cover_letter_dict["document_type"] = "cover_letter"
+            
             result = self.sync_db.cover_letters.insert_one(cover_letter_dict)
             cover_letter_dict["id"] = str(result.inserted_id)
             return cover_letter_dict
@@ -338,7 +345,11 @@ class MongoService:
             else:
                 portfolio_dict = portfolio_data
             
+            # 새로운 스키마에 맞게 필드 설정
             portfolio_dict["created_at"] = datetime.now()
+            portfolio_dict["updated_at"] = datetime.now()
+            portfolio_dict["document_type"] = "portfolio"
+            
             result = self.sync_db.portfolios.insert_one(portfolio_dict)
             portfolio_dict["id"] = str(result.inserted_id)
             return portfolio_dict

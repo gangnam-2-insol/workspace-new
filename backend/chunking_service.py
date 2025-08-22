@@ -189,6 +189,13 @@ class ChunkingService:
             
             summary_text = " ".join(summary_parts)
         
+        # summary_text가 여전히 없으면 extracted_text에서 기본 정보 추출
+        if not summary_text:
+            extracted_text = document.get("extracted_text", "")
+            if extracted_text and len(extracted_text) > 10:
+                # extracted_text의 처음 100자 정도를 요약으로 사용
+                summary_text = extracted_text[:100] + "..." if len(extracted_text) > 100 else extracted_text
+        
         if summary_text:
             metadata = {
                 "section": "summary",
@@ -209,6 +216,15 @@ class ChunkingService:
         """키워드 청크 생성 - keywords 배열 사용"""
         keywords = document.get("keywords", [])
         
+        # keywords가 없으면 skills나 다른 필드에서 키워드 추출
+        if not keywords or not isinstance(keywords, list):
+            skills = document.get("skills", "")
+            if skills:
+                if isinstance(skills, list):
+                    keywords = skills
+                elif isinstance(skills, str):
+                    keywords = [skill.strip() for skill in skills.split(',') if skill.strip()]
+        
         if keywords and isinstance(keywords, list):
             keywords_text = ", ".join(keywords)
             metadata = {
@@ -219,6 +235,7 @@ class ChunkingService:
             }
             return {
                 "document_id": document_id,
+                "resume_id": document_id,  # VectorService에서 필요한 필드
                 "chunk_id": f"{document_id}_keywords",
                 "chunk_type": "keywords",
                 "text": f"키워드: {keywords_text}",
@@ -308,11 +325,48 @@ class ChunkingService:
                 }
                 return {
                     "document_id": document_id,
+                    "resume_id": document_id,  # VectorService에서 필요한 필드
                     "chunk_id": f"{document_id}_basic_info",
                     "chunk_type": "basic_info",
                     "text": " ".join(info_parts),
                     "metadata": metadata
                 }
+        
+        # basic_info가 없으면 extracted_text에서 기본 정보 추출
+        extracted_text = document.get("extracted_text", "")
+        if extracted_text and len(extracted_text) > 20:
+            # 이메일, 전화번호 등 기본 정보 추출
+            import re
+            info_parts = []
+            
+            # 이메일 추출
+            email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'
+            emails = re.findall(email_pattern, extracted_text)
+            if emails:
+                info_parts.append(f"이메일: {emails[0]}")
+            
+            # 전화번호 추출
+            phone_pattern = r'(\+?[\d\s\-\(\)]{10,})'
+            phones = re.findall(phone_pattern, extracted_text)
+            if phones:
+                info_parts.append(f"전화: {phones[0]}")
+            
+            if info_parts:
+                metadata = {
+                    "section": "basic_info",
+                    "original_field": "extracted_text",
+                    "info_fields": ["email", "phone"],
+                    **(base_metadata or {})
+                }
+                return {
+                    "document_id": document_id,
+                    "resume_id": document_id,  # VectorService에서 필요한 필드
+                    "chunk_id": f"{document_id}_basic_info",
+                    "chunk_type": "basic_info",
+                    "text": " ".join(info_parts),
+                    "metadata": metadata
+                }
+        
         return None
     
     def _create_cover_letter_specific_chunks(self, document: Dict[str, Any], document_id: str, base_metadata: Dict[str, Any]) -> List[Dict[str, Any]]:

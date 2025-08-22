@@ -9,6 +9,7 @@ import numpy as np
 import cv2
 
 from .config import Settings
+from .utils import correct_orientation_with_osd
 
 
 def _auto_rotate_and_deskew(pil_image: Image.Image) -> Image.Image:
@@ -49,6 +50,10 @@ def save_pdf_pages_to_images(pdf_path: Path, output_dir: Path, settings: Setting
         # 컬러→그레이스케일, 자동 회전/데스큐, 대비 강화
         processed = _auto_rotate_and_deskew(image)
         processed = ImageOps.autocontrast(processed)
+        
+        # Tesseract OSD를 사용한 회전 교정 추가
+        processed = correct_orientation_with_osd(processed)
+        
         image_path = output_dir / f"{pdf_path.stem}_page{index:04d}.png"
         processed.save(image_path, "PNG")
         image_paths.append(image_path)
@@ -82,6 +87,13 @@ def convert_pdf_to_images(pdf_path: str) -> List[Image.Image]:
         dpi=200,
         poppler_path=settings.poppler_path if settings.poppler_path else None,
     )
-    return images
+    
+    # 각 이미지에 OSD 회전 교정 적용
+    corrected_images = []
+    for image in images:
+        corrected_image = correct_orientation_with_osd(image)
+        corrected_images.append(corrected_image)
+    
+    return corrected_images
 
 

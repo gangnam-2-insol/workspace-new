@@ -239,21 +239,40 @@ class MongoSaver:
                 try:
                     self.mongo_service.update_applicant_sync(
                         applicant["id"],
-                        {"skills": ", ".join(basic_info["skills"])}
+                        {"skills": basic_info["skills"], "updated_at": datetime.now()}
                     )
                     print(f"✅ 지원자 데이터에 기술 스택 업데이트: {basic_info['skills']}")
                 except Exception as e:
                     print(f"⚠️ 기술 스택 업데이트 실패: {e}")
             
-            # 5. 이력서 데이터 생성 (application_id 제거)
+            # 5. 기본 정보와 파일 메타데이터 모델 생성
+            from models.document import BasicInfo, FileMetadata
+            
+            basic_info_model = BasicInfo(
+                emails=basic_info.get("emails", []),
+                phones=basic_info.get("phones", []),
+                names=basic_info.get("names", []),
+                urls=basic_info.get("urls", [])
+            )
+            
+            file_metadata_model = FileMetadata(
+                filename=file_metadata.get("filename", ""),
+                size=file_metadata.get("size", 0),
+                mime=file_metadata.get("mime", ""),
+                hash=file_metadata.get("hash", ""),
+                created_at=file_metadata.get("created_at", datetime.now()),
+                modified_at=file_metadata.get("modified_at", datetime.now())
+            )
+            
+            # 6. 이력서 데이터 생성
             resume_data = ResumeCreate(
                 applicant_id=applicant["id"],
                 extracted_text=ocr_result.get("extracted_text", ""),
                 summary=ocr_result.get("summary", ""),
                 keywords=ocr_result.get("keywords", []),
                 document_type="resume",
-                basic_info=basic_info,
-                file_metadata=file_metadata
+                basic_info=basic_info_model,
+                file_metadata=file_metadata_model
             )
             
             # 5. 이력서 저장
@@ -352,34 +371,52 @@ class MongoSaver:
                 try:
                     # 기존 기술 스택 가져오기
                     existing_applicant = self.mongo_service.get_applicant_by_id_sync(applicant["id"])
-                    existing_skills = existing_applicant.get("skills", "") if existing_applicant else ""
+                    existing_skills = existing_applicant.get("skills", []) if existing_applicant else []
                     
                     # 새로운 기술 스택과 기존 기술 스택 합치기
                     new_skills = basic_info["skills"]
                     if existing_skills:
-                        existing_skills_list = [s.strip() for s in existing_skills.split(",")]
-                        combined_skills = list(set(existing_skills_list + new_skills))
+                        combined_skills = list(set(existing_skills + new_skills))
                     else:
                         combined_skills = new_skills
                     
                     # 지원자 정보 업데이트
                     self.mongo_service.update_applicant_sync(
                         applicant["id"],
-                        {"skills": ", ".join(combined_skills)}
+                        {"skills": combined_skills, "updated_at": datetime.now()}
                     )
                     print(f"✅ 지원자 데이터에 기술 스택 추가: {new_skills}")
                 except Exception as e:
                     print(f"⚠️ 기술 스택 업데이트 실패: {e}")
             
-            # 6. 자기소개서 데이터 생성 (application_id 제거)
+            # 6. 기본 정보와 파일 메타데이터 모델 생성
+            from models.document import BasicInfo, FileMetadata
+            
+            basic_info_model = BasicInfo(
+                emails=basic_info.get("emails", []),
+                phones=basic_info.get("phones", []),
+                names=basic_info.get("names", []),
+                urls=basic_info.get("urls", [])
+            )
+            
+            file_metadata_model = FileMetadata(
+                filename=file_metadata.get("filename", ""),
+                size=file_metadata.get("size", 0),
+                mime=file_metadata.get("mime", ""),
+                hash=file_metadata.get("hash", ""),
+                created_at=file_metadata.get("created_at", datetime.now()),
+                modified_at=file_metadata.get("modified_at", datetime.now())
+            )
+            
+            # 7. 자기소개서 데이터 생성
             cover_letter_data = CoverLetterCreate(
                 applicant_id=applicant["id"],
                 extracted_text=ocr_result.get("extracted_text", ""),
                 summary=ocr_result.get("summary", ""),
                 keywords=ocr_result.get("keywords", []),
                 document_type="cover_letter",
-                basic_info=basic_info,
-                file_metadata=file_metadata,
+                basic_info=basic_info_model,
+                file_metadata=file_metadata_model,
                 careerHistory=cover_letter_fields["careerHistory"],
                 growthBackground=cover_letter_fields["growthBackground"],
                 motivation=cover_letter_fields["motivation"]
@@ -467,26 +504,44 @@ class MongoSaver:
                 try:
                     # 기존 기술 스택 가져오기
                     existing_applicant = self.mongo_service.get_applicant_by_id_sync(applicant["id"])
-                    existing_skills = existing_applicant.get("skills", "") if existing_applicant else ""
+                    existing_skills = existing_applicant.get("skills", []) if existing_applicant else []
                     
                     # 새로운 기술 스택과 기존 기술 스택 합치기
                     new_skills = basic_info["skills"]
                     if existing_skills:
-                        existing_skills_list = [s.strip() for s in existing_skills.split(",")]
-                        combined_skills = list(set(existing_skills_list + new_skills))
+                        combined_skills = list(set(existing_skills + new_skills))
                     else:
                         combined_skills = new_skills
                     
                     # 지원자 정보 업데이트
                     self.mongo_service.update_applicant_sync(
                         applicant["id"],
-                        {"skills": ", ".join(combined_skills)}
+                        {"skills": combined_skills, "updated_at": datetime.now()}
                     )
                     print(f"✅ 지원자 데이터에 기술 스택 추가: {new_skills}")
                 except Exception as e:
                     print(f"⚠️ 기술 스택 업데이트 실패: {e}")
             
-            # 5. 포트폴리오 아이템 생성
+            # 5. 기본 정보와 파일 메타데이터 모델 생성
+            from models.document import BasicInfo, FileMetadata
+            
+            basic_info_model = BasicInfo(
+                emails=basic_info.get("emails", []),
+                phones=basic_info.get("phones", []),
+                names=basic_info.get("names", []),
+                urls=basic_info.get("urls", [])
+            )
+            
+            file_metadata_model = FileMetadata(
+                filename=file_metadata.get("filename", ""),
+                size=file_metadata.get("size", 0),
+                mime=file_metadata.get("mime", ""),
+                hash=file_metadata.get("hash", ""),
+                created_at=file_metadata.get("created_at", datetime.now()),
+                modified_at=file_metadata.get("modified_at", datetime.now())
+            )
+            
+            # 6. 포트폴리오 아이템 생성
             portfolio_item = PortfolioItem(
                 item_id=f"item_{int(datetime.utcnow().timestamp())}",
                 title="포트폴리오 문서",
@@ -494,18 +549,19 @@ class MongoSaver:
                 artifacts=[]
             )
             
-            # 5. 포트폴리오 데이터 생성 (application_id 제거)
+            # 7. 포트폴리오 데이터 생성
             portfolio_data = PortfolioCreate(
                 applicant_id=applicant["id"],
                 extracted_text=ocr_result.get("extracted_text", ""),
                 summary=ocr_result.get("summary", ""),
                 keywords=ocr_result.get("keywords", []),
                 document_type="portfolio",
-                basic_info=basic_info,
-                file_metadata=file_metadata,
+                basic_info=basic_info_model,
+                file_metadata=file_metadata_model,
                 items=[portfolio_item],
-                analysis_score=0.0,  # 기본값 설정
-                status="active"
+                analysis_score=0,  # 기본값 설정
+                status="active",
+                version=1
             )
             
             # 6. 포트폴리오 저장

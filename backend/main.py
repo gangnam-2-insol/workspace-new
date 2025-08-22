@@ -113,8 +113,8 @@ class Resume(BaseModel):
     name: str
     position: str
     department: Optional[str] = ""
-    experience: str
-    skills: str
+    experience: int
+    skills: List[str]
     growthBackground: Optional[str] = ""
     motivation: Optional[str] = ""
     careerHistory: Optional[str] = ""
@@ -187,8 +187,6 @@ async def seed_applicants_from_csv_if_empty() -> None:
                     "name",
                     "position",
                     "department",
-                    "experience",
-                    "skills",
                     "growthBackground",
                     "motivation",
                     "careerHistory",
@@ -198,6 +196,22 @@ async def seed_applicants_from_csv_if_empty() -> None:
                 for field_name in string_fields:
                     value = row.get(field_name, "")
                     document[field_name] = "" if value is None else str(value)
+                
+                # experience 필드: 정수로 처리
+                try:
+                    experience_value = row.get("experience", "0")
+                    document["experience"] = int(experience_value) if experience_value else 0
+                except (ValueError, TypeError):
+                    document["experience"] = 0
+                
+                # skills 필드: 리스트로 처리
+                skills_value = row.get("skills", "")
+                if skills_value:
+                    # 쉼표로 구분된 문자열을 리스트로 변환
+                    skills_list = [skill.strip() for skill in str(skills_value).split(",") if skill.strip()]
+                    document["skills"] = skills_list
+                else:
+                    document["skills"] = []
 
                 # 숫자 필드
                 try:
@@ -218,9 +232,32 @@ async def seed_applicants_from_csv_if_empty() -> None:
 
         if documents_to_insert:
             print(f"🔎 시드 대상 문서 수: {len(documents_to_insert)}")
-            await db.applicants.insert_many(documents_to_insert)
+            
+            # 중복 체크 및 업데이트
+            inserted_count = 0
+            updated_count = 0
+            
+            for document in documents_to_insert:
+                try:
+                    # 기존 문서가 있는지 확인
+                    existing = await db.applicants.find_one({"name": document.get("name"), "position": document.get("position")})
+                    if existing:
+                        # 기존 문서 업데이트
+                        await db.applicants.update_one(
+                            {"_id": existing["_id"]},
+                            {"$set": document}
+                        )
+                        updated_count += 1
+                    else:
+                        # 새 문서 삽입
+                        await db.applicants.insert_one(document)
+                        inserted_count += 1
+                except Exception as e:
+                    print(f"문서 처리 실패: {e}")
+                    continue
+            
             new_count = await db.applicants.count_documents({})
-            print(f"📥 CSV에서 {len(documents_to_insert)}건 임포트 완료 → 현재 총 문서 수: {new_count}")
+            print(f"📥 CSV 처리 완료 → 삽입: {inserted_count}건, 업데이트: {updated_count}건, 총 문서 수: {new_count}")
     except Exception as seed_error:
                     print(f"[ERROR] CSV 임포트 실패: {seed_error}")
 
@@ -249,8 +286,6 @@ def load_applicants_from_csv() -> List[Dict[str, Any]]:
                     "name",
                     "position",
                     "department",
-                    "experience",
-                    "skills",
                     "growthBackground",
                     "motivation",
                     "careerHistory",
@@ -259,6 +294,22 @@ def load_applicants_from_csv() -> List[Dict[str, Any]]:
                 ]:
                     value = row.get(field_name, "")
                     item[field_name] = "" if value is None else str(value)
+                
+                # experience 필드: 정수로 처리
+                try:
+                    experience_value = row.get("experience", "0")
+                    item["experience"] = int(experience_value) if experience_value else 0
+                except (ValueError, TypeError):
+                    item["experience"] = 0
+                
+                # skills 필드: 리스트로 처리
+                skills_value = row.get("skills", "")
+                if skills_value:
+                    # 쉼표로 구분된 문자열을 리스트로 변환
+                    skills_list = [skill.strip() for skill in str(skills_value).split(",") if skill.strip()]
+                    item["skills"] = skills_list
+                else:
+                    item["skills"] = []
 
                 # score
                 try:
@@ -1015,17 +1066,30 @@ async def recommend_similar_applicants(applicant_id: str):
             }
         )
     except Exception as e:
-        print(f"[RESUME SIMILARITY] ❌ 시스템 오류: {str(e)}")
+        print(f"[SIMILAR_APPLICANTS] ❌ 시스템 오류: {str(e)}")
         import traceback
         error_traceback = traceback.format_exc()
-        print(f"[RESUME SIMILARITY] 상세 오류 정보:")
+        print(f"[SIMILAR_APPLICANTS] 상세 오류 정보:")
         print(error_traceback)
+        
+        # 지원자가 삭제되어 관련 데이터를 찾을 수 없는 경우 404 반환
+        error_message = str(e).lower()
+        if "not found" in error_message or "찾을 수 없" in error_message or "deleted" in error_message:
+            return JSONResponse(
+                status_code=404,
+                content={
+                    "success": False,
+                    "error": "APPLICANT_OR_DATA_NOT_FOUND",
+                    "message": "지원자 또는 관련 데이터를 찾을 수 없습니다."
+                }
+            )
+        
         return JSONResponse(
             status_code=500,
             content={
                 "success": False,
                 "error": "INTERNAL_SERVER_ERROR",
-                "message": f"이력서 유사도 체크 중 오류가 발생했습니다: {str(e)}"
+                "message": f"유사 인재 추천 중 오류가 발생했습니다: {str(e)}"
             }
         )
 

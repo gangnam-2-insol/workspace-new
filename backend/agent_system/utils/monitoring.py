@@ -14,8 +14,16 @@ from collections import defaultdict, deque
 from dataclasses import dataclass, asdict
 from threading import Lock
 import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
+
+# 이메일 관련 모듈 선택적 import
+try:
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    EMAIL_AVAILABLE = True
+except ImportError:
+    EMAIL_AVAILABLE = False
+    MIMEText = None
+    MIMEMultipart = None
 
 logger = logging.getLogger(__name__)
 
@@ -239,6 +247,10 @@ class MonitoringSystem:
     
     def _send_email_alert(self, alert_type: str, message: str, data: Dict[str, Any]):
         """이메일 알림 전송"""
+        if not EMAIL_AVAILABLE:
+            logger.warning("Email functionality not available")
+            return
+            
         try:
             smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
             smtp_port = int(os.getenv("SMTP_PORT", "587"))

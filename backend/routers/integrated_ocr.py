@@ -103,15 +103,24 @@ def _extract_contact_from_text(text: str) -> Dict[str, Optional[str]]:
 def _build_applicant_data(name: Optional[str], email: Optional[str], phone: Optional[str], ocr_result: Dict[str, Any], job_posting_id: Optional[str] = None) -> ApplicantCreate:
     """OCR 결과와 AI 분석 결과를 종합하여 지원자 데이터를 생성합니다."""
     
-    # 1. AI 분석 결과에서 기본 정보 추출
-    ai_basic_info = ocr_result.get("basic_info", {})
+    # 1. Vision API 분석 결과 우선 확인 (가장 정확함)
+    vision_analysis = ocr_result.get("vision_analysis", {})
+    vision_name = vision_analysis.get("name", "")
+    vision_email = vision_analysis.get("email", "")
+    vision_phone = vision_analysis.get("phone", "")
+    vision_position = vision_analysis.get("position", "")
+    vision_company = vision_analysis.get("company", "")
+    vision_education = vision_analysis.get("education", "")
+    vision_skills = vision_analysis.get("skills", "")
     
-    # AI 분석 결과에서 배열 형태로 저장된 정보 추출
+    # 2. AI 분석 결과에서 기본 정보 추출 (두 가지 구조 모두 확인)
+    # 구조 1: ocr_result.basic_info (배열 형태)
+    ai_basic_info = ocr_result.get("basic_info", {})
     ai_names = ai_basic_info.get("names", [])
     ai_emails = ai_basic_info.get("emails", [])
     ai_phones = ai_basic_info.get("phones", [])
     
-    # AI 분석 결과에서 단일 값으로 저장된 정보 추출 (structured_data에서)
+    # 구조 2: ocr_result.structured_data.basic_info (단일 값 형태)
     structured_data = ocr_result.get("structured_data", {})
     structured_basic_info = structured_data.get("basic_info", {})
     
@@ -120,13 +129,14 @@ def _build_applicant_data(name: Optional[str], email: Optional[str], phone: Opti
     ai_single_phone = structured_basic_info.get("phone", "")
     ai_position = structured_basic_info.get("position", "")
     
-    # 2. 텍스트에서 직접 추출 (백업용)
+    # 3. 텍스트에서 직접 추출 (백업용)
     text = ocr_result.get("extracted_text", "") or ocr_result.get("full_text", "") or ""
     extracted = _extract_contact_from_text(text)
     
-    # 3. 우선순위에 따라 최종 값 결정
-    # 이름: Form 입력 > AI 단일 값 > AI 배열 첫 번째 > 텍스트 추출 > 기본값
+    # 4. 우선순위에 따라 최종 값 결정
+    # 이름: Vision API > Form 입력 > AI 단일 값 > AI 배열 첫 번째 > 텍스트 추출 > 기본값
     final_name = (
+        vision_name or
         name or 
         ai_single_name or
         (ai_names[0] if ai_names else None) or 
@@ -134,8 +144,9 @@ def _build_applicant_data(name: Optional[str], email: Optional[str], phone: Opti
         "이름미상"
     )
     
-    # 이메일: Form 입력 > AI 단일 값 > AI 배열 첫 번째 > 텍스트 추출 > 기본값
+    # 이메일: Vision API > Form 입력 > AI 단일 값 > AI 배열 첫 번째 > 텍스트 추출 > 기본값
     final_email = (
+        vision_email or
         email or 
         ai_single_email or
         (ai_emails[0] if ai_emails else None) or 
@@ -143,20 +154,24 @@ def _build_applicant_data(name: Optional[str], email: Optional[str], phone: Opti
         f"unknown_{int(datetime.utcnow().timestamp())}@noemail.local"
     )
     
-    # 전화번호: Form 입력 > AI 단일 값 > AI 배열 첫 번째 > 텍스트 추출
+    # 전화번호: Vision API > Form 입력 > AI 단일 값 > AI 배열 첫 번째 > 텍스트 추출
     final_phone = (
+        vision_phone or
         phone or 
         ai_single_phone or
         (ai_phones[0] if ai_phones else None) or 
         extracted.get("phone")
     )
     
-    # 4. 추가 정보 추출 (AI 분석 결과에서)
+    # 5. 추가 정보 추출 (Vision API 우선, AI 분석 결과 백업)
     # 직무/포지션
-    final_position = ai_position or _extract_position_from_text(text)
+    final_position = vision_position or ai_position or _extract_position_from_text(text)
     
-    # 기술 스택
-    final_skills = _extract_skills_from_text(text)
+    # 기술 스택 (Vision API에서 추출된 스킬 우선)
+    if vision_skills:
+        final_skills = vision_skills
+    else:
+        final_skills = _extract_skills_from_text(text)
     
     # 경력 정보
     final_experience = _extract_experience_from_text(text)
@@ -164,43 +179,68 @@ def _build_applicant_data(name: Optional[str], email: Optional[str], phone: Opti
     # 부서 (기본값)
     final_department = "개발"  # 기본값
     
-    # 성장 배경 (요약에서 추출)
-    final_growth_background = ocr_result.get("summary", "")[:200] + "..." if ocr_result.get("summary") else ""
+    # 성장 배경 (Vision API 요약 우선)
+    vision_summary = vision_analysis.get("summary", "")
+    if vision_summary:
+        final_growth_background = vision_summary[:200] + "..." if len(vision_summary) > 200 else vision_summary
+    else:
+        final_growth_background = ocr_result.get("summary", "")[:200] + "..." if ocr_result.get("summary") else ""
     
     # 지원 동기 (기본값)
     final_motivation = "이력서를 통해 지원자의 역량과 경험을 확인했습니다."
     
-    # 경력 사항 (요약에서 추출)
-    final_career_history = ocr_result.get("summary", "")[:300] + "..." if ocr_result.get("summary") else ""
+    # 경력 사항 (Vision API 요약 우선)
+    if vision_summary:
+        final_career_history = vision_summary[:300] + "..." if len(vision_summary) > 300 else vision_summary
+    else:
+        final_career_history = ocr_result.get("summary", "")[:300] + "..." if ocr_result.get("summary") else ""
     
     # 분석 점수 (기본값)
     final_analysis_score = 65  # 기본값
     
-    # 분석 결과 (요약에서 추출)
-    final_analysis_result = ocr_result.get("summary", "")[:100] + "..." if ocr_result.get("summary") else ""
+    # 분석 결과 (Vision API 요약 우선)
+    if vision_summary:
+        final_analysis_result = vision_summary[:100] + "..." if len(vision_summary) > 100 else vision_summary
+    else:
+        final_analysis_result = ocr_result.get("summary", "")[:100] + "..." if ocr_result.get("summary") else ""
     
-    # 5. 디버깅을 위한 로그 (개발 중에만 사용)
+    # 6. 디버깅을 위한 로그 (개발 중에만 사용)
     print(f"🔍 지원자 정보 추출 결과:")
+    print(f"  - OCR 결과 구조: {list(ocr_result.keys())}")
+    print(f"  - Vision API 결과: name={vision_name}, email={vision_email}, phone={vision_phone}, position={vision_position}")
     print(f"  - AI 분석 결과 (배열): names={ai_names}, emails={ai_emails}, phones={ai_phones}")
     print(f"  - AI 분석 결과 (단일): name={ai_single_name}, email={ai_single_email}, phone={ai_single_phone}, position={ai_position}")
+    print(f"  - structured_data 구조: {list(structured_data.keys()) if structured_data else 'None'}")
     print(f"  - 텍스트 추출 결과: {extracted}")
     print(f"  - 최종 결정: name={final_name}, email={final_email}, phone={final_phone}, position={final_position}")
+    
+    # 경력 정보를 숫자로 변환
+    experience_years = 0
+    if final_experience:
+        # "3년", "1-3년", "신입" 등의 패턴에서 숫자 추출
+        import re
+        numbers = re.findall(r'\d+', final_experience)
+        if numbers:
+            experience_years = int(numbers[0])
+        elif "신입" in final_experience:
+            experience_years = 0
+    
+    # 스킬을 배열로 변환
+    skills_list = []
+    if final_skills:
+        if isinstance(final_skills, str):
+            # 콤마, 슬래시, 공백으로 구분된 스킬을 배열로 변환
+            skills_list = [skill.strip() for skill in re.split(r'[,/\s]+', final_skills) if skill.strip()]
+        elif isinstance(final_skills, list):
+            skills_list = final_skills
     
     return ApplicantCreate(
         name=final_name,
         email=final_email,
         phone=final_phone,
         position=final_position,
-        department=final_department,
-        experience=final_experience,
-        skills=final_skills,
-        growthBackground=final_growth_background,
-        motivation=final_motivation,
-        careerHistory=final_career_history,
-        analysisScore=final_analysis_score,
-        analysisResult=final_analysis_result,
-        status="pending",
-        job_posting_id=job_posting_id if job_posting_id else None
+        experience=experience_years,
+        skills=skills_list
     )
 
 def _extract_position_from_text(text: str) -> str:
@@ -882,9 +922,14 @@ async def upload_multiple_documents(
         # 최종 지원자 정보 가져오기
         final_applicant_info = None
         if applicant_id:
+            print(f"🔍 지원자 정보 조회 중... ID: {applicant_id}")
             final_applicant_info = mongo_saver.mongo_service.get_applicant_by_id_sync(applicant_id)
+            print(f"📊 조회된 지원자 정보: {final_applicant_info}")
             # ObjectId를 문자열로 직렬화
             final_applicant_info = serialize_mongo_data(final_applicant_info)
+            print(f"✅ 직렬화된 지원자 정보: {final_applicant_info}")
+        else:
+            print("⚠️ 지원자 ID가 없어 정보를 조회할 수 없습니다.")
         
         # 최종 결과 반환
         return JSONResponse(content={

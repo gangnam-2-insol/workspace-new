@@ -2705,6 +2705,10 @@ const ApplicantManagement = () => {
     });
 
     try {
+      if (!applicant || !applicant.id) {
+        throw new Error('지원자 정보가 없습니다.');
+      }
+
       console.log('🔍 유사 인재 분석 시작:', applicant.id);
       const response = await fetch(`${API_BASE_URL}/api/applicants/similar-recommendation/${applicant.id}`, {
         method: 'POST',
@@ -2714,6 +2718,16 @@ const ApplicantManagement = () => {
       });
 
       const result = await response.json();
+      
+      if (response.status === 404) {
+        console.log('⚠️ 지원자를 찾을 수 없음 (삭제되었을 가능성):', result.message);
+        setSimilarCandidates({
+          isLoading: false,
+          data: [],
+          error: '지원자 정보를 찾을 수 없습니다.'
+        });
+        return;
+      }
       
       if (result.success && result.data?.results) {
         console.log('✅ 하이브리드 유사 인재 분석 완료:', result.data.results.length, '명');
@@ -2804,8 +2818,18 @@ const ApplicantManagement = () => {
       if (response.ok) {
         console.log('✅ 지원자 삭제 성공');
         
+        // 유사 인재 분석 상태 즉시 초기화 (모달 닫기 전에)
+        setSimilarCandidates({
+          isLoading: false,
+          data: null,
+          error: null
+        });
+        
+        // 선택된 지원자 상태 즉시 초기화 (모달 닫기 전에)
+        setSelectedApplicant(null);
+        
         // 모달 닫기
-        handleCloseModal();
+        setIsModalOpen(false);
         
         // 지원자 목록 새로고침
         setCurrentPage(0);
@@ -3134,6 +3158,7 @@ const ApplicantManagement = () => {
 
       const result = await response.json();
       console.log('✅ 통합 업로드 성공:', result);
+      console.log('📊 지원자 정보 확인:', result.data.applicant_info);
 
       // 분석 결과 생성
       const analysisResult = {
@@ -3147,7 +3172,7 @@ const ApplicantManagement = () => {
           type: type === 'resume' ? 'resume' : type === 'cover_letter' ? 'cover_letter' : 'portfolio',
           result: data
         })),
-        applicant: result.data.results.resume?.applicant || result.data.results.cover_letter?.applicant || result.data.results.portfolio?.applicant || null
+        applicant: result.data.applicant_info || result.data.results.resume?.applicant || result.data.results.cover_letter?.applicant || result.data.results.portfolio?.applicant || null
       };
 
       setAnalysisResult(analysisResult);
@@ -3519,13 +3544,25 @@ const ApplicantManagement = () => {
                       </ContactItem>
                     </ApplicantPhoneBoard>
                     <ApplicantSkillsBoard>
-                      {(applicant.skills || '').split(',').slice(0, 3).map((skill, skillIndex) => (
-                        <SkillTagBoard key={skillIndex}>
-                          {skill.trim()}
-                        </SkillTagBoard>
-                      ))}
-                      {applicant.skills.length > 3 && (
+                      {Array.isArray(applicant.skills) 
+                        ? applicant.skills.slice(0, 3).map((skill, skillIndex) => (
+                            <SkillTagBoard key={skillIndex}>
+                              {skill}
+                            </SkillTagBoard>
+                          ))
+                        : typeof applicant.skills === 'string'
+                        ? applicant.skills.split(',').slice(0, 3).map((skill, skillIndex) => (
+                            <SkillTagBoard key={skillIndex}>
+                              {skill.trim()}
+                            </SkillTagBoard>
+                          ))
+                        : []
+                      }
+                      {Array.isArray(applicant.skills) && applicant.skills.length > 3 && (
                         <SkillTagBoard>+{applicant.skills.length - 3}</SkillTagBoard>
+                      )}
+                      {typeof applicant.skills === 'string' && applicant.skills.split(',').length > 3 && (
+                        <SkillTagBoard>+{applicant.skills.split(',').length - 3}</SkillTagBoard>
                       )}
                     </ApplicantSkillsBoard>
                     <ApplicantDateBoard>{applicant.appliedDate}</ApplicantDateBoard>
@@ -3645,11 +3682,20 @@ const ApplicantManagement = () => {
                   기술스택
                 </SkillsTitle>
                 <SkillsGrid>
-                  {(selectedApplicant.skills || '').split(',').map((skill, index) => (
-                    <SkillTag key={index}>
-                      {skill.trim()}
-                    </SkillTag>
-                  ))}
+                  {Array.isArray(selectedApplicant.skills) 
+                    ? selectedApplicant.skills.map((skill, index) => (
+                        <SkillTag key={index}>
+                          {skill}
+                        </SkillTag>
+                      ))
+                    : typeof selectedApplicant.skills === 'string'
+                    ? selectedApplicant.skills.split(',').map((skill, index) => (
+                        <SkillTag key={index}>
+                          {skill.trim()}
+                        </SkillTag>
+                      ))
+                    : []
+                  }
                 </SkillsGrid>
               </SkillsSection>
 
@@ -4615,9 +4661,16 @@ const ApplicantManagement = () => {
                         <ResumeAnalysisItem>
                           <ResumeAnalysisLabel>기술 스택:</ResumeAnalysisLabel>
                           <ResumeAnalysisSkills>
-                            {(analysisResult.applicant.skills || '').split(',').map((skill, index) => (
-                              <ResumeSkillTag key={index}>{skill.trim()}</ResumeSkillTag>
-                            ))}
+                            {Array.isArray(analysisResult.applicant.skills) 
+                              ? analysisResult.applicant.skills.map((skill, index) => (
+                                  <ResumeSkillTag key={index}>{skill}</ResumeSkillTag>
+                                ))
+                              : typeof analysisResult.applicant.skills === 'string'
+                              ? analysisResult.applicant.skills.split(',').map((skill, index) => (
+                                  <ResumeSkillTag key={index}>{skill.trim()}</ResumeSkillTag>
+                                ))
+                              : <ResumeSkillTag>기술 스택 정보 없음</ResumeSkillTag>
+                            }
                           </ResumeAnalysisSkills>
                         </ResumeAnalysisItem>
                       </>
