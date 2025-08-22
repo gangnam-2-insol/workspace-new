@@ -5,6 +5,36 @@ AI 기반 채용 관리 시스템으로, 이력서, 자기소개서, 포트폴�
 
 ## 🎯 주요 구현 완료 기능
 
+### 8. 지원자 현황 게시판 개선 및 적합도 랭킹 구현 (2025-08-21)
+- **게시판 글자 잘림 해결 (프론트엔드)**
+  - 파일: `frontend/src/pages/ApplicantManagement.js`
+  - 변경 사항:
+    - `ApplicantEmailBoard`: `min-width` 180px로 확대, `overflow: hidden` 처리
+    - `ApplicantPhoneBoard`: `min-width` 130px로 확대, `overflow: hidden` 처리
+    - `ContactItem`: `white-space: nowrap; overflow: hidden; text-overflow: ellipsis` 적용
+    - `ApplicantSkillsBoard`: `min-width` 180px, `flex-wrap: wrap` 적용, `gap` 12px로 조정
+    - `SkillTagBoard`: `max-width` 60px + ellipsis 처리로 태그 길이 제어
+    - `ApplicantCardBoard`: 높이 여유 확보(`min-height: 70px`) 및 패딩 20px로 조정
+    - `ApplicantHeaderBoard`: `width: 100%`, `flex-wrap: nowrap`로 레이아웃 안정화
+
+- **적합도 랭킹 시스템 (백엔드 + 프론트엔드 연동)**
+  - 백엔드
+    - 서비스: `backend/services/suitability_ranking_service.py`
+      - 이력서(`analysisScore` 40%) + 자소서(30%) + 포트폴리오(30%) 가중 평균으로 총점 계산
+      - 항목별/종합 랭킹 계산 후 DB 저장
+    - 라우터: `backend/routers/applicants.py`
+      - `POST /api/applicants/calculate-rankings` 전체 랭킹 계산
+      - `GET /api/applicants/{applicant_id}/rankings` 특정 지원자 랭킹 조회
+      - `GET /api/applicants/rankings/top/{category}` 카테고리별 상위 N명 조회
+    - 데이터 모델/컬렉션
+      - `applicants.ranks` 필드 추가: `resume`, `coverLetter`, `portfolio`, `total`
+      - 신규 컬렉션 `applicant_rankings` 저장: `{ category, applicant_id, name, score, rank, created_at }`
+    - 테스트 스크립트: `backend/test_ranking.py` (동기 실행)
+  - 프론트엔드
+    - `ApplicantManagement.js`
+      - 검색바 영역에 "랭킹 계산" 버튼 추가 → `POST /api/applicants/calculate-rankings` 호출
+      - 게시판 보기에서 항목별 랭킹 배지 표시(`ApplicantRanksBoard`)
+
 ### 1. 데이터베이스 연동 및 데이터 로딩
 - **파일**: `hireme.applicants.csv`
 - **기능**: 지원자 데이터를 CSV에서 MongoDB로 자동 로딩

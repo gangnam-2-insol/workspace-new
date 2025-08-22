@@ -1,0 +1,69 @@
+{
+  "mongo_id": "68a6b3f37a14e6acb34d0c50",
+  "doc_id": "a866c0b2-b381-4014-be9f-627b77fb5a1a",
+  "doc_hash": "406a00c774ce1b1c312bcfee0bf56d138e21b54d253ecd7a6f23c80d01f9e6af",
+  "file_name": "tmps_tch58p.pdf",
+  "num_pages": 1,
+  "preview": [
+    "pdf_ocr_data\\images\\tmps_tch58p\\thumbnails\\thumb_page_001.png"
+  ],
+  "pages": [
+    {
+      "page": 1,
+      "clean_text": "그래픽 디자인 웹 디자인 일러스트 모션 그래픽 이메일 연락처 주소 홈페이지 hello@reallygreatsite.com +123-456-7890 123 Anywhere St., Any City www.reallygreatsite.com 이수진 RESUME 학력사항 경력사항 자격증 업무 스킬 수상 2017년 2월 2015년 2월 정보처리 기사 그래픽스 운용 기능사 그래픽 디자인 대회 수상 (2020년 3월) 디자인 우수상 수상 프리랜서 그래픽 디자이너 Borcelle 회사 | 과장 그래픽 디자이너 Fauget 회사 | 대리 그래픽 디자이너 한국 대학교 석사 한국 대학교 학사 (2015년 7월) (2013년 7월) 2022년 11월 현재 2020년 4월 2022년 10월 2015년 7월 2020년 1월 시각 디자인 학과 시각 디자인 학과",
+      "quality_score": 0.95,
+      "trace": {
+        "attempts": [
+          {
+            "method": "llm_ocr",
+            "quality": 0.95
+          }
+        ]
+      }
+    }
+  ],
+  "text": "그래픽 디자인 웹 디자인 일러스트 모션 그래픽 이메일 연락처 주소 홈페이지 hello@reallygreatsite.com +123-456-7890 123 Anywhere St., Any City www.reallygreatsite.com 이수진 RESUME 학력사항 경력사항 자격증 업무 스킬 수상 2017년 2월 2015년 2월 정보처리 기사 그래픽스 운용 기능사 그래픽 디자인 대회 수상 (2020년 3월) 디자인 우수상 수상 프리랜서 그래픽 디자이너 Borcelle 회사 | 과장 그래픽 디자이너 Fauget 회사 | 대리 그래픽 디자이너 한국 대학교 석사 한국 대학교 학사 (2015년 7월) (2013년 7월) 2022년 11월 ~ 현재 2020년 4월 ~ 2022년 10월  2015년 7월 ~ 2020년 1월  시각 디자인 학과 시각 디자인 학과",
+  "fields": {
+    "emails": [
+      "hello@reallygreatsite.com"
+    ],
+    "phones": [
+      "+123-456-7890"
+    ],
+    "dates": [],
+    "numbers": [],
+    "urls": [],
+    "names": [
+      "이수진"
+    ],
+    "positions": [
+      "그래픽 디자이너"
+    ],
+    "companies": [
+      "Borcelle"
+    ],
+    "education": [
+      "한국 대학교 석사"
+    ],
+    "skills": [
+      "그래픽 디자인, 웹 디자인, 일러스트, 모션 그래픽"
+    ],
+    "addresses": [
+      "123 Anywhere St., Any City"
+    ]
+  },
+  "summary": "**이수진 - 그래픽 디자이너**  \n**연락처:**  \n이메일: hello@reallygreatsite.com  \n전화: +123-456-7890  \n주소: 123 Anywhere St., Any City  \n홈페이지: www.reallygreatsite.com  \n\n**학력:**  \n- 석사, 한국 대학교 (2022년 11월)  \n- 학사, 한국 대학교 (2015년 7월)  \n\n**경력:**  \n- 프리랜서 그래픽 디자이너 (2020년 1월 - 현재)  \n- Borcelle 회사, 과장 (2022년 4월 - 2022년 10월)  \n- Fauget 회사, 대리 (2015년 7월 - 2020년 1월)  \n\n**자격증:**  \n- 정보처리 기사  \n- 그래픽스 운용 기능사  \n\n**수상:**  \n- 그래픽 디자인 대회 디자인 우수상 (2020년 3월)  \n\n**업무 스킬:**  \n- 그래픽 디자인  \n- 웹 디자인  \n- 일러스트  \n- 모션 그래픽",
+  "keywords": [
+    "그래픽 디자인",
+    "웹 디자인",
+    "일러스트",
+    "모션 그래픽",
+    "이수진",
+    "정보처리 기사",
+    "그래픽스 운용 기능사",
+    "프리랜서 그래픽 디자이너",
+    "한국 대학교 석사",
+    "한국 대학교 학사"
+  ],
+  "created_at": "2025-08-21T05:51:47.391940"
+}

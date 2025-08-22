@@ -21,6 +21,123 @@ def get_mongo_saver():
     return MongoSaver(mongo_uri)
 
 
+@router.post("/check-duplicate")
+async def check_duplicate_applicant(
+    resume_file: UploadFile = File(...),
+    mongo_saver: MongoSaver = Depends(get_mongo_saver)
+):
+    """
+    이력서 파일을 분석하여 기존 지원자와 중복되는지 확인합니다.
+    """
+    try:
+        print(f"🔍 중복 체크 시작: {resume_file.filename}")
+        
+        # 임시 파일로 저장
+        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_file:
+            content = await resume_file.read()
+            temp_file.write(content)
+            temp_file_path = temp_file.name
+        
+        try:
+            print(f"📄 PDF 처리 시작: {temp_file_path}")
+            
+            # PDF 처리 및 텍스트 추출
+            ocr_result = process_pdf(temp_file_path)
+            print(f"📝 OCR 결과: {len(ocr_result.get('extracted_text', ''))} 문자")
+            
+            # AI 분석으로 기본 정보 추출
+            analysis_result = analyze_text(ocr_result.get("extracted_text", ""))
+            print(f"🤖 AI 분석 결과: {analysis_result}")
+            
+            # 기본 정보 추출
+            basic_info = analysis_result.get("basic_info", {})
+            names = basic_info.get("names", [])
+            emails = basic_info.get("emails", [])
+            phones = basic_info.get("phones", [])
+            
+            print(f"👤 추출된 정보 - 이름: {names}, 이메일: {emails}, 전화번호: {phones}")
+            
+            # 이름이나 이메일로 기존 지원자 검색
+            existing_applicant = None
+            
+            if names:
+                # 이름으로 검색
+                for name in names:
+                    if name and len(name.strip()) > 1:
+                        print(f"🔍 이름으로 검색: '{name.strip()}'")
+                        existing = mongo_saver.mongo_service.find_applicant_by_name(name.strip())
+                        if existing:
+                            print(f"✅ 이름으로 기존 지원자 발견: {existing}")
+                            existing_applicant = existing
+                            break
+            
+            if not existing_applicant and emails:
+                # 이메일로 검색
+                for email in emails:
+                    if email and '@' in email:
+                        print(f"🔍 이메일로 검색: '{email.strip()}'")
+                        existing = mongo_saver.mongo_service.find_applicant_by_email(email.strip())
+                        if existing:
+                            print(f"✅ 이메일로 기존 지원자 발견: {existing}")
+                            existing_applicant = existing
+                            break
+            
+            if not existing_applicant and phones:
+                # 전화번호로 검색
+                for phone in phones:
+                    if phone and len(phone.strip()) >= 10:
+                        print(f"🔍 전화번호로 검색: '{phone.strip()}'")
+                        existing = mongo_saver.mongo_service.find_applicant_by_phone(phone.strip())
+                        if existing:
+                            print(f"✅ 전화번호로 기존 지원자 발견: {existing}")
+                            existing_applicant = existing
+                            break
+            
+            # 기존 지원자 정보 반환
+            if existing_applicant:
+                print(f"🔄 기존 지원자 발견 - ID: {existing_applicant['_id']}")
+                
+                # 각 문서 타입별 존재 여부 확인
+                applicant_id = str(existing_applicant["_id"])
+                resume_exists = mongo_saver.mongo_service.check_document_exists(applicant_id, "resume")
+                cover_letter_exists = mongo_saver.mongo_service.check_document_exists(applicant_id, "cover_letter")
+                portfolio_exists = mongo_saver.mongo_service.check_document_exists(applicant_id, "portfolio")
+                
+                print(f"📋 문서 존재 여부 - 이력서: {resume_exists}, 자기소개서: {cover_letter_exists}, 포트폴리오: {portfolio_exists}")
+                
+                result = {
+                    "existing_applicant": {
+                        "_id": applicant_id,
+                        "name": existing_applicant.get("name", ""),
+                        "email": existing_applicant.get("email", ""),
+                        "phone": existing_applicant.get("phone", ""),
+                        "resume": resume_exists,
+                        "cover_letter": cover_letter_exists,
+                        "portfolio": portfolio_exists
+                    },
+                    "message": "기존 지원자를 발견했습니다."
+                }
+                
+                print(f"📤 응답 반환: {result}")
+                return result
+            else:
+                print("✅ 새로운 지원자 - 중복 없음")
+                return {
+                    "existing_applicant": None,
+                    "message": "새로운 지원자입니다."
+                }
+                
+        finally:
+            # 임시 파일 정리
+            if os.path.exists(temp_file_path):
+                os.unlink(temp_file_path)
+                print(f"🗑️ 임시 파일 정리: {temp_file_path}")
+                
+    except Exception as e:
+        print(f"❌ 중복 체크 중 오류: {e}")
+        raise HTTPException(status_code=500, detail=f"중복 체크 실패: {str(e)}")
+
+
 def _extract_contact_from_text(text: str) -> Dict[str, Optional[str]]:
     """텍스트에서 이메일/전화번호/이름 후보를 단순 추출합니다."""
     import re
@@ -564,9 +681,15 @@ async def upload_multiple_documents(
     email: Optional[str] = Form(None),
     phone: Optional[str] = Form(None),
     job_posting_id: Optional[str] = Form("default_job_posting"),
+    existing_applicant_id: Optional[str] = Form(None),
+    replace_existing: Optional[bool] = Form(False),
     mongo_saver: MongoSaver = Depends(get_mongo_saver)
 ):
     """여러 문서를 한 번에 업로드하고 OCR 처리 후 하나의 지원자 레코드로 통합 저장합니다."""
+    print(f"🚀 통합 문서 업로드 시작")
+    print(f"📁 파일 정보: resume={resume_file.filename if resume_file else 'None'}, cover_letter={cover_letter_file.filename if cover_letter_file else 'None'}, portfolio={portfolio_file.filename if portfolio_file else 'None'}")
+    print(f"🔄 교체 옵션: {replace_existing}")
+    print(f"👤 기존 지원자 ID: {existing_applicant_id}")
     try:
         # 최소 하나의 파일은 필요
         if not resume_file and not cover_letter_file and not portfolio_file:
@@ -579,6 +702,50 @@ async def upload_multiple_documents(
         results = {}
         temp_files = []
         applicant_id = None
+        
+        # 기존 지원자 ID가 있는 경우 처리
+        if existing_applicant_id:
+            print(f"🔄 기존 지원자 ID로 처리: {existing_applicant_id}")
+            # 기존 지원자 정보 조회
+            from bson import ObjectId
+            try:
+                existing_applicant = mongo_saver.db.applicants.find_one({"_id": ObjectId(existing_applicant_id)})
+                if existing_applicant:
+                    applicant_id = str(existing_applicant["_id"])
+                    print(f"✅ 기존 지원자 발견: {existing_applicant.get('name', 'N/A')} ({existing_applicant.get('email', 'N/A')})")
+                    
+                    # 기존 지원자의 문서 등록 상태 확인
+                    if resume_file:
+                        resume_exists = mongo_saver.mongo_service.check_document_exists(applicant_id, "resume")
+                        if resume_exists and not replace_existing:
+                            raise HTTPException(
+                                status_code=409, 
+                                detail=f"지원자 '{existing_applicant.get('name', 'N/A')}'의 이력서가 이미 등록되어 있습니다. 교체하려면 replace_existing=true로 설정하세요."
+                            )
+                    
+                    if cover_letter_file:
+                        cover_letter_exists = mongo_saver.mongo_service.check_document_exists(applicant_id, "cover_letter")
+                        if cover_letter_exists and not replace_existing:
+                            raise HTTPException(
+                                status_code=409, 
+                                detail=f"지원자 '{existing_applicant.get('name', 'N/A')}'의 자기소개서가 이미 등록되어 있습니다. 교체하려면 replace_existing=true로 설정하세요."
+                            )
+                    
+                    if portfolio_file:
+                        portfolio_exists = mongo_saver.mongo_service.check_document_exists(applicant_id, "portfolio")
+                        if portfolio_exists and not replace_existing:
+                            raise HTTPException(
+                                status_code=409, 
+                                detail=f"지원자 '{existing_applicant.get('name', 'N/A')}'의 포트폴리오가 이미 등록되어 있습니다. 교체하려면 replace_existing=true로 설정하세요."
+                            )
+                    
+                    print(f"✅ 문서 중복 검사 완료 - 교체 옵션: {replace_existing}")
+                else:
+                    print(f"⚠️ 기존 지원자 ID를 찾을 수 없음: {existing_applicant_id}")
+                    existing_applicant_id = None
+            except Exception as e:
+                print(f"⚠️ 기존 지원자 조회 실패: {e}")
+                existing_applicant_id = None
         
         # 1. 이력서 처리 (우선순위 1)
         if resume_file:
@@ -616,15 +783,125 @@ async def upload_multiple_documents(
                     "pages": ocr_result.get("num_pages", 0)
                 }
                 
-                # 지원자 데이터 생성
-                applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
+                # 문서 중복 검사
+                print(f"🔍 이력서 중복 검사 중...")
+                duplicate_check = mongo_saver.mongo_service.check_content_duplicate(
+                    enhanced_ocr_result["extracted_text"], 
+                    "resume", 
+                    applicant_id if existing_applicant_id else None
+                )
                 
-                # MongoDB에 저장
+                if duplicate_check["is_duplicate"]:
+                    # 100% 일치하는 문서가 있는 경우
+                    exact_match = duplicate_check["exact_matches"][0]
+                    existing_doc = exact_match["document"]
+                    existing_applicant_name = "알 수 없음"
+                    
+                    # 기존 문서의 지원자 정보 조회
+                    if existing_doc.get("applicant_id"):
+                        existing_applicant_info = mongo_saver.mongo_service.get_applicant_by_id(existing_doc["applicant_id"])
+                        if existing_applicant_info:
+                            existing_applicant_name = existing_applicant_info.get("name", "알 수 없음")
+                    
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "type": "exact_duplicate",
+                            "message": f"동일한 이력서가 이미 등록되어 있습니다",
+                            "subtitle": f"지원자: {existing_applicant_name}",
+                            "description": "이미 등록된 이력서와 100% 동일한 내용입니다.",
+                            "existing_applicant": existing_applicant_name,
+                            "similarity": exact_match["similarity"],
+                            "changes": exact_match["changes"]
+                        }
+                    )
+                
+                elif duplicate_check["has_similar_content"]:
+                    # 90% 이상 유사한 문서가 있는 경우
+                    similar_matches = duplicate_check["similar_matches"]
+                    similar_docs_info = []
+                    
+                    for match in similar_matches:
+                        doc = match["document"]
+                        existing_applicant_name = "알 수 없음"
+                        
+                        if doc.get("applicant_id"):
+                            existing_applicant_info = mongo_saver.mongo_service.get_applicant_by_id(doc["applicant_id"])
+                            if existing_applicant_info:
+                                existing_applicant_name = existing_applicant_info.get("name", "알 수 없음")
+                        
+                        similar_docs_info.append({
+                            "applicant_name": existing_applicant_name,
+                            "similarity": match["similarity"],
+                            "changes": match["changes"]
+                        })
+                    
+                    # 사용자 승인이 필요한 경우
+                    if not replace_existing:
+                        raise HTTPException(
+                            status_code=409,
+                            detail={
+                                "type": "similar_content",
+                                "message": "유사한 이력서가 발견되었습니다",
+                                "subtitle": "기존 이력서와 90% 이상 유사합니다",
+                                "description": "이미 등록된 이력서와 매우 유사한 내용이 감지되었습니다.",
+                                "similar_documents": similar_docs_info,
+                                "requires_approval": True
+                            }
+                        )
+                    
+                    print(f"⚠️ 유사한 이력서 발견 - 교체 옵션으로 진행: {len(similar_docs_info)}개")
+                
+                else:
+                    print(f"✅ 중복 검사 완료 - 새로운 이력서로 등록 가능")
+                
+                # 기존 지원자가 있는 경우 기존 정보 사용, 없는 경우 새로 생성
+                if existing_applicant_id and applicant_id:
+                    # 기존 지원자 정보 사용
+                    applicant_data = ApplicantCreate(
+                        name=existing_applicant.get("name", ""),
+                        email=existing_applicant.get("email", ""),
+                        phone=existing_applicant.get("phone", ""),
+                        position=existing_applicant.get("position", ""),
+                        department=existing_applicant.get("department", ""),
+                        experience=existing_applicant.get("experience", ""),
+                        skills=existing_applicant.get("skills", ""),
+                        growthBackground=existing_applicant.get("growthBackground", ""),
+                        motivation=existing_applicant.get("motivation", ""),
+                        careerHistory=existing_applicant.get("careerHistory", ""),
+                        analysisScore=existing_applicant.get("analysisScore", 65),
+                        analysisResult=existing_applicant.get("analysisResult", ""),
+                        status=existing_applicant.get("status", "pending"),
+                        job_posting_id=job_posting_id
+                    )
+                else:
+                    # 새 지원자 데이터 생성
+                    applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
+                    
+                    # 새 지원자 등록 시 이메일 중복 체크
+                    if email:
+                        existing_applicant_by_email = mongo_saver.mongo_service.find_applicant_by_email(email)
+                        if existing_applicant_by_email:
+                            raise HTTPException(
+                                status_code=409,
+                                detail={
+                                    "type": "duplicate_email",
+                                    "message": "이미 등록된 이메일입니다",
+                                    "subtitle": f"'{email}'로 등록된 지원자가 존재합니다",
+                                    "description": "동일한 이메일로 이미 지원자가 등록되어 있습니다.",
+                                    "email": email
+                                }
+                            )
+                
+                # MongoDB에 저장 (기존 지원자 ID가 있으면 사용)
+                print(f"📄 이력서 저장 시작 - 교체 옵션: {replace_existing}")
                 result = mongo_saver.save_resume_with_ocr(
                     ocr_result=enhanced_ocr_result,
                     applicant_data=applicant_data,
                     job_posting_id=job_posting_id,
-                    file_path=temp_file_path
+                    file_path=temp_file_path,
+                    existing_applicant_id=applicant_id if existing_applicant_id else None,
+                    replace_existing=replace_existing
                 )
                 
                 results["resume"] = result
@@ -691,6 +968,78 @@ async def upload_multiple_documents(
                     "pages": ocr_result.get("num_pages", 0)
                 }
                 
+                # 문서 중복 검사
+                print(f"🔍 자기소개서 중복 검사 중...")
+                duplicate_check = mongo_saver.mongo_service.check_content_duplicate(
+                    enhanced_ocr_result["extracted_text"], 
+                    "cover_letter", 
+                    applicant_id if applicant_id else None
+                )
+                
+                if duplicate_check["is_duplicate"]:
+                    # 100% 일치하는 문서가 있는 경우
+                    exact_match = duplicate_check["exact_matches"][0]
+                    existing_doc = exact_match["document"]
+                    existing_applicant_name = "알 수 없음"
+                    
+                    # 기존 문서의 지원자 정보 조회
+                    if existing_doc.get("applicant_id"):
+                        existing_applicant_info = mongo_saver.mongo_service.get_applicant_by_id(existing_doc["applicant_id"])
+                        if existing_applicant_info:
+                            existing_applicant_name = existing_applicant_info.get("name", "알 수 없음")
+                    
+                    raise HTTPException(
+                        status_code=409,
+                        detail={
+                            "type": "exact_duplicate",
+                            "message": f"동일한 자기소개서가 이미 등록되어 있습니다",
+                            "subtitle": f"지원자: {existing_applicant_name}",
+                            "description": "이미 등록된 자기소개서와 100% 동일한 내용입니다.",
+                            "existing_applicant": existing_applicant_name,
+                            "similarity": exact_match["similarity"],
+                            "changes": exact_match["changes"]
+                        }
+                    )
+                
+                elif duplicate_check["has_similar_content"]:
+                    # 90% 이상 유사한 문서가 있는 경우
+                    similar_matches = duplicate_check["similar_matches"]
+                    similar_docs_info = []
+                    
+                    for match in similar_matches:
+                        doc = match["document"]
+                        existing_applicant_name = "알 수 없음"
+                        
+                        if doc.get("applicant_id"):
+                            existing_applicant_info = mongo_saver.mongo_service.get_applicant_by_id(doc["applicant_id"])
+                            if existing_applicant_info:
+                                existing_applicant_name = existing_applicant_info.get("name", "알 수 없음")
+                        
+                        similar_docs_info.append({
+                            "applicant_name": existing_applicant_name,
+                            "similarity": match["similarity"],
+                            "changes": match["changes"]
+                        })
+                    
+                    # 사용자 승인이 필요한 경우
+                    if not replace_existing:
+                        raise HTTPException(
+                            status_code=409,
+                            detail={
+                                "type": "similar_content",
+                                "message": "유사한 자기소개서가 발견되었습니다",
+                                "subtitle": "기존 자기소개서와 90% 이상 유사합니다",
+                                "description": "이미 등록된 자기소개서와 매우 유사한 내용이 감지되었습니다.",
+                                "similar_docs_info": similar_docs_info,
+                                "requires_approval": True
+                            }
+                        )
+                    
+                    print(f"⚠️ 유사한 자기소개서 발견 - 교체 옵션으로 진행: {len(similar_docs_info)}개")
+                
+                else:
+                    print(f"✅ 중복 검사 완료 - 새로운 자기소개서로 등록 가능")
+                
                 # 기존 지원자 데이터 사용 또는 새로 생성
                 if applicant_id:
                     # 기존 지원자 정보 가져오기
@@ -716,13 +1065,25 @@ async def upload_multiple_documents(
                         applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
                 else:
                     applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
+                    
+                    # 새 지원자 등록 시 이메일 중복 체크
+                    if email:
+                        existing_applicant_by_email = mongo_saver.mongo_service.find_applicant_by_email(email)
+                        if existing_applicant_by_email:
+                            raise HTTPException(
+                                status_code=409,
+                                detail=f"이메일 '{email}'로 등록된 지원자가 이미 존재합니다. 기존 지원자 ID를 사용하거나 다른 이메일을 입력하세요."
+                            )
                 
-                # MongoDB에 저장
+                # MongoDB에 저장 (기존 지원자 ID가 있으면 사용)
+                print(f"📝 자기소개서 저장 시작 - 교체 옵션: {replace_existing}")
                 result = mongo_saver.save_cover_letter_with_ocr(
                     ocr_result=enhanced_ocr_result,
                     applicant_data=applicant_data,
                     job_posting_id=job_posting_id,
-                    file_path=temp_file_path
+                    file_path=temp_file_path,
+                    existing_applicant_id=applicant_id if applicant_id else None,
+                    replace_existing=replace_existing
                 )
                 
                 results["cover_letter"] = result
@@ -803,12 +1164,15 @@ async def upload_multiple_documents(
                 else:
                     applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
                 
-                # MongoDB에 저장
+                # MongoDB에 저장 (기존 지원자 ID가 있으면 사용)
+                print(f"📁 포트폴리오 저장 시작 - 교체 옵션: {replace_existing}")
                 result = mongo_saver.save_portfolio_with_ocr(
                     ocr_result=enhanced_ocr_result,
                     applicant_data=applicant_data,
                     job_posting_id=job_posting_id,
-                    file_path=temp_file_path
+                    file_path=temp_file_path,
+                    existing_applicant_id=applicant_id if applicant_id else None,
+                    replace_existing=replace_existing
                 )
                 
                 results["portfolio"] = result

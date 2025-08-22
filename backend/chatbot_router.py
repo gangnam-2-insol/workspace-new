@@ -16,7 +16,7 @@ load_dotenv()
 
 # OpenAI 모델 초기화
 try:
-    openai_service = OpenAIService(model_name="gpt-3.5-turbo")
+    openai_service = OpenAIService(model_name="gpt-4o")
     print("OpenAI 모델 초기화 성공")
 except Exception as e:
     print(f"OpenAI 모델 초기화 실패: {e}")

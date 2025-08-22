@@ -14,23 +14,39 @@ class Settings(BaseSettings):
     .env 파일 또는 환경변수에서 로드됩니다.
     """
 
-    # 경로 설정
-    data_dir: Path = Field(default=Path("data"))
-    uploads_dir: Path = Field(default=Path("data/uploads"))
-    images_dir: Path = Field(default=Path("data/images"))
-    results_dir: Path = Field(default=Path("data/results"))
+    # 기본 설정
+    base_dir: Path = Path("pdf_ocr_data")
+    data_dir: Path = base_dir / "data"
+    uploads_dir: Path = base_dir / "uploads"
+    images_dir: Path = base_dir / "images"
+    thumbnails_dir: Path = base_dir / "thumbnails"
+    embeddings_dir: Path = base_dir / "embeddings"
+    analysis_dir: Path = base_dir / "analysis"
+    results_dir: Path = base_dir / "results"
+    
+    # 성능 최적화 설정
+    enable_ai_analysis: bool = True  # AI 분석 활성화/비활성화
+    enable_embeddings: bool = False  # 임베딩 생성 비활성화 (처리 시간 단축)
+    enable_summary: bool = True      # 요약 생성
+    enable_keywords: bool = True     # 키워드 추출
+    
+    # OCR 설정
+    ocr_quality: str = "fast"       # "fast", "balanced", "high"
+    min_chunk_chars: int = 50       # 최소 청크 크기
+    chunk_size: int = 1000          # 청크 크기
+    chunk_overlap: int = 200        # 청크 겹침
+    
+    # AI 분석 설정
+    use_gpt4: bool = False          # GPT-4 사용 여부 (GPT-4o가 더 빠름)
+    max_text_length: int = 8000     # 분석할 최대 텍스트 길이
+    
+    # 이미지 처리 설정
+    image_dpi: int = 150            # 이미지 DPI (낮출수록 빠름)
+    thumbnail_size: tuple = (200, 200)  # 썸네일 크기
 
     # 외부 바이너리 경로 (선택)
     tesseract_cmd: Optional[str] = Field(default=None)
-    poppler_path: Optional[str] = Field(default=None)
-
-    # OCR 설정
-    ocr_lang: str = Field(default="kor+eng")  # 한국어 우선, 영어 병행
-    ocr_oem: int = Field(default=1)  # 0: Legacy + LSTM, 1: LSTM
-    ocr_default_psm: int = Field(default=6)  # 기본 단순 문단
-    dpi: int = Field(default=400)  # PDF → 이미지 변환 DPI (300에서 400으로 증가)
-    quality_threshold: float = Field(default=0.6)  # 품질 임계값 완화
-    max_retries: int = Field(default=3)  # 재시도 횟수 증가
+    # poppler_path 제거 - PyPDF2와 pdfplumber 사용
 
     # MongoDB
     mongodb_uri: str = Field(default="mongodb://localhost:27017")
@@ -63,12 +79,12 @@ class Settings(BaseSettings):
     index_generate_summary: bool = Field(default=True)
     index_generate_keywords: bool = Field(default=True)
 
-    # OpenAI (선택)
+    # OpenAI (기본)
     openai_api_key: Optional[str] = Field(default=None)
-    openai_model: str = Field(default="gpt-4o-mini")
+    openai_model: str = Field(default="gpt-4o")
 
     # LLM 제공자 설정
-    llm_provider: str = Field(default="groq")  # "groq" | "openai"
+    llm_provider: str = Field(default="openai")  # "groq" | "openai"
     # Groq (선택)
     groq_api_key: Optional[str] = Field(default=None)
     groq_model: str = Field(default="llama-3.1-70b-versatile")
@@ -79,26 +95,10 @@ class Settings(BaseSettings):
         super().__init__(**kwargs)
         
         # 환경변수에서 직접 읽기 (fallback)
-        if not self.poppler_path:
-            self.poppler_path = os.getenv("POPPLER_PATH")
-        
         if not self.tesseract_cmd:
             self.tesseract_cmd = os.getenv("TESSERACT_CMD")
         
         # 기본 경로 시도 (Windows)
-        if not self.poppler_path:
-            possible_poppler_paths = [
-                r"C:\tools\poppler\Library\bin",  # 사용자가 제공한 경로
-                r"C:\Program Files\poppler\bin",
-                r"C:\poppler\bin",
-                r"C:\ProgramData\chocolatey\lib\poppler\tools\poppler-23.11.0\Library\bin",
-                r"C:\ProgramData\chocolatey\lib\poppler\tools\poppler-24.02.0\Library\bin",
-            ]
-            for path in possible_poppler_paths:
-                if os.path.exists(path):
-                    self.poppler_path = path
-                    break
-        
         if not self.tesseract_cmd:
             possible_tesseract_paths = [
                 r"C:\Program Files\Tesseract-OCR\tesseract.exe",  # 사용자가 제공한 경로

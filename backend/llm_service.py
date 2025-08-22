@@ -16,7 +16,7 @@ class LLMService:
             print(f"[LLMService] OPENAI_API_KEY 확인됨 (길이: {len(api_key)})")
         
         self.client = OpenAI(api_key=api_key)
-        self.model_name = 'gpt-3.5-turbo'
+        self.model_name = 'gpt-4o'
         print(f"[LLMService] OpenAI 클라이언트 초기화 완료: {self.model_name}")
         print(f"[LLMService] === LLM 서비스 초기화 완료 ===")
         
