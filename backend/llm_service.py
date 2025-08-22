@@ -15,7 +15,32 @@ class LLMService:
         else:
             print(f"[LLMService] OPENAI_API_KEY 확인됨 (길이: {len(api_key)})")
         
-        self.client = OpenAI(api_key=api_key)
+        try:
+            # 환경 변수에서 proxies 관련 설정 제거
+            if 'HTTP_PROXY' in os.environ:
+                del os.environ['HTTP_PROXY']
+            if 'HTTPS_PROXY' in os.environ:
+                del os.environ['HTTPS_PROXY']
+            if 'http_proxy' in os.environ:
+                del os.environ['http_proxy']
+            if 'https_proxy' in os.environ:
+                del os.environ['https_proxy']
+            
+            # httpx 클라이언트 설정을 명시적으로 제거
+            import httpx
+            self.client = OpenAI(
+                api_key=api_key,
+                http_client=httpx.Client(
+                    timeout=httpx.Timeout(30.0),
+                    limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
+                )
+            )
+        except Exception as e:
+            print(f"[LLMService] OpenAI 클라이언트 초기화 오류: {e}")
+            # 기본 설정으로 재시도
+            import openai
+            openai.api_key = api_key
+            self.client = OpenAI(api_key=api_key)
         self.model_name = 'gpt-4o'
         print(f"[LLMService] OpenAI 클라이언트 초기화 완료: {self.model_name}")
         print(f"[LLMService] === LLM 서비스 초기화 완료 ===")

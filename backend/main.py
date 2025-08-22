@@ -14,13 +14,43 @@ import codecs
 from datetime import datetime
 from datetime import timedelta
 import csv
-from chatbot import chatbot_router, langgraph_router
+# chatbot 라우터 추가
 from github import router as github_router
 from routers.upload import router as upload_router
 from routers.pick_chatbot import router as pick_chatbot_router
 from routers.integrated_ocr import router as integrated_ocr_router
-
 from routers.pdf_ocr import router as pdf_ocr_router
+from routers.job_posting import router as job_posting_router
+from chatbot.chatbot.routers.chatbot_router import router as chatbot_router
+
+# 모듈화된 라우터 추가
+try:
+    from modules.resume.router import router as resume_router
+    print("✅ 이력서 라우터 import 성공")
+except ImportError as e:
+    print(f"⚠️ 이력서 모듈 import 오류: {e}")
+    resume_router = None
+
+try:
+    from modules.cover_letter.router import router as cover_letter_router
+    print("✅ 자기소개서 라우터 import 성공")
+except ImportError as e:
+    print(f"⚠️ 자기소개서 모듈 import 오류: {e}")
+    cover_letter_router = None
+
+try:
+    from modules.portfolio.router import router as portfolio_router
+    print("✅ 포트폴리오 라우터 import 성공")
+except ImportError as e:
+    print(f"⚠️ 포트폴리오 모듈 import 오류: {e}")
+    portfolio_router = None
+
+try:
+    from modules.hybrid.router import router as hybrid_router
+    print("✅ 하이브리드 라우터 import 성공")
+except ImportError as e:
+    print(f"⚠️ 하이브리드 모듈 import 오류: {e}")
+    hybrid_router = None
 
 
 from similarity_service import SimilarityService
@@ -66,16 +96,42 @@ async def add_charset_header(request, call_next):
     return response
 
 # 라우터 등록
-app.include_router(chatbot_router, prefix="/api/chatbot", tags=["chatbot"])
-app.include_router(langgraph_router, prefix="/api/langgraph", tags=["langgraph"])
-# 프론트엔드 호환을 위해 /api/langgraph-agent 프리픽스도 동일 라우터로 마운트
-app.include_router(langgraph_router, prefix="/api/langgraph-agent", tags=["langgraph-agent"])
 app.include_router(github_router, prefix="/api", tags=["github"])
 app.include_router(upload_router, tags=["upload"])
-app.include_router(pick_chatbot_router, prefix="/api", tags=["pick-chatbot"])
+app.include_router(pick_chatbot_router, prefix="/api/pick-chatbot", tags=["pick-chatbot"])
 app.include_router(integrated_ocr_router, tags=["integrated-ocr"])
-
 app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
+app.include_router(job_posting_router, tags=["job-postings"])
+app.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
+
+# 모듈화된 라우터 등록
+print("\n🔧 모듈화된 라우터 등록 시작...")
+
+if resume_router:
+    app.include_router(resume_router, prefix="/api/resume", tags=["resume"])
+    print("✅ 이력서 라우터 등록 완료")
+else:
+    print("❌ 이력서 라우터 등록 실패")
+
+if cover_letter_router:
+    app.include_router(cover_letter_router, prefix="/api/cover-letter", tags=["cover-letter"])
+    print("✅ 자기소개서 라우터 등록 완료")
+else:
+    print("❌ 자기소개서 라우터 등록 실패")
+
+if portfolio_router:
+    app.include_router(portfolio_router, prefix="/api/portfolio", tags=["portfolio"])
+    print("✅ 포트폴리오 라우터 등록 완료")
+else:
+    print("❌ 포트폴리오 라우터 등록 실패")
+
+if hybrid_router:
+    app.include_router(hybrid_router, prefix="/api/hybrid", tags=["hybrid"])
+    print("✅ 하이브리드 라우터 등록 완료")
+else:
+    print("❌ 하이브리드 라우터 등록 실패")
+
+print("🔧 모듈화된 라우터 등록 완료\n")
 
 
 # MongoDB 연결

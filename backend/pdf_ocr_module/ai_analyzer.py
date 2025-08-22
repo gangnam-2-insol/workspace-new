@@ -66,7 +66,7 @@ def clean_text_content(text: str) -> str:
 
 
 def extract_basic_info(text: str) -> Dict[str, Any]:
-    """기본 정보를 추출합니다 (Gemini AI 우선, 정규식 기반 폴백)."""
+    """기본 정보를 추출합니다 (OpenAI AI 우선, 정규식 기반 폴백)."""
     info = {
         "emails": [],
         "phones": [],
@@ -81,7 +81,7 @@ def extract_basic_info(text: str) -> Dict[str, Any]:
         "addresses": []
     }
     
-    # Gemini AI를 사용한 분석 시도
+    # OpenAI AI를 사용한 분석 시도
     try:
         openai_service = OpenAIService(model_name="gpt-4o") if OpenAIService else None
         
@@ -352,7 +352,7 @@ def extract_basic_info(text: str) -> Dict[str, Any]:
 def analyze_with_ai(text: str, settings: Settings) -> Dict[str, Any]:
     """AI LLM을 사용해서 텍스트를 분석합니다."""
     try:
-        # Gemini AI를 사용한 분석
+        # OpenAI AI를 사용한 분석
         openai_service = OpenAIService(model_name="gpt-4o") if OpenAIService else None
         
         # 비동기 함수를 동기적으로 실행
@@ -425,13 +425,13 @@ JSON 형태로 응답해주세요:
 
             # OpenAI 호출
             basic_info_response = loop.run_until_complete(
-                openai_service.generate_response(basic_info_prompt)
+                openai_service.chat_completion([{"role": "user", "content": basic_info_prompt}])
             )
             summary_response = loop.run_until_complete(
-                openai_service.generate_response(summary_prompt)
+                openai_service.chat_completion([{"role": "user", "content": summary_prompt}])
             )
             keywords_response = loop.run_until_complete(
-                openai_service.generate_response(keywords_prompt)
+                openai_service.chat_completion([{"role": "user", "content": keywords_prompt}])
             )
             
             # JSON 파싱 시도

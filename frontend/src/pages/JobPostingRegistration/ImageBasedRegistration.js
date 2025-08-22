@@ -765,19 +765,24 @@ const ImageBasedRegistration = ({
     }
   }, [isOpen]);
 
-  // 테스트 자동입력 처리 (주석 처리됨)
-  /*
+  // 테스트 자동입력 처리
   const handleTestAutoFill = (sampleData) => {
     console.log('테스트 자동입력 시작:', sampleData);
     
-    // 하드코딩된 테스트 값들
+    // 하드코딩된 테스트 값들 (모든 필드 포함)
     const testData = {
       department: '개발팀',
-      experience: '2년이상',
-      headCount: '0명',
+      experience: '경력',
+      experienceYears: '3',
+      headCount: '2명',
+      mainDuties: '웹개발, 프론트엔드 개발, React/Vue.js 활용, UI/UX 구현',
+      workHours: '09:00 - 18:00',
+      workDays: '주중 (월-금)',
+      locationCity: '서울특별시 강남구 테헤란로 123',
       salary: '연봉 4,000만원 - 6,000만원',
-      contactEmail: 'test@test.com',
-      deadline: '9월 3일까지'
+      contactEmail: 'hr@company.com',
+      deadline: '2024년 9월 30일까지',
+      benefits: '점심식대 지원, 야근식대 지원, 경조사 지원, 생일 축하금, 명절 선물, 연차휴가, 건강검진, 교육비 지원'
     };
 
     // 폼 데이터 일괄 업데이트
@@ -786,9 +791,8 @@ const ImageBasedRegistration = ({
     console.log('테스트 자동입력 완료:', testData);
     
     // 사용자에게 알림
-    alert('🧪 테스트 데이터가 자동으로 입력되었습니다!');
+    alert('🧪 테스트 데이터가 자동으로 입력되었습니다!\n\n📋 입력된 정보:\n• 부서: 개발팀\n• 경력: 경력 (3년)\n• 모집인원: 2명\n• 주요업무: 웹개발, 프론트엔드 개발\n• 근무시간: 09:00-18:00\n• 근무일: 주중 (월-금)\n• 근무위치: 서울 강남구\n• 연봉: 4,000만원-6,000만원\n• 연락처: hr@company.com\n• 마감일: 2024년 9월 30일\n• 복리후생: 점심식대, 야근식대, 경조사 지원 등');
   };
-  */
 
   // 단계별 렌더 함수들 (1~5단계)
   const renderStep1 = () => (
@@ -1314,7 +1318,36 @@ const ImageBasedRegistration = ({
             <Header>
               <Title>이미지 기반 채용공고 등록</Title>
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                {/* <TestAutoFillButton onAutoFill={handleTestAutoFill} /> */}
+                <button
+                  onClick={handleTestAutoFill}
+                  style={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    border: 'none',
+                    color: 'white',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    padding: '8px 16px',
+                    borderRadius: '20px',
+                    marginRight: '12px',
+                    transition: 'all 0.3s ease',
+                    fontWeight: '600',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 2px 8px rgba(102, 126, 234, 0.3)';
+                  }}
+                >
+                  <span style={{ fontSize: '14px' }}>🧪</span>
+                  테스트 데이터
+                </button>
                 <CloseButton onClick={onClose}>
                   <FiX />
                 </CloseButton>

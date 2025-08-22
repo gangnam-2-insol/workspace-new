@@ -4,7 +4,12 @@ from typing import Any, Dict, List
 import math
 from datetime import datetime
 
-from pinecone import Pinecone, ServerlessSpec
+try:
+    from pinecone import Pinecone, ServerlessSpec
+except ImportError:
+    # Pinecone이 설치되지 않은 경우를 위한 대체
+    Pinecone = None
+    ServerlessSpec = None
 
 from .config import Settings
 
@@ -17,21 +22,24 @@ def _ensure_index(settings: Settings):
     global _pc, _index
     if _index is not None:
         return _index
-    if not settings.pinecone_api_key:
-        # 키가 없으면 인덱싱/검색을 비활성화하고 호출부에서 무시
+    if not settings.pinecone_api_key or Pinecone is None:
+        # 키가 없거나 Pinecone이 설치되지 않으면 인덱싱/검색을 비활성화
         return None
-    _pc = Pinecone(api_key=settings.pinecone_api_key)
     try:
+        _pc = Pinecone(api_key=settings.pinecone_api_key)
         _index = _pc.Index(settings.pinecone_index_name)
     except Exception:
         # 인덱스가 없으면 생성 (MiniLM-L6-v2 = 384차원)
-        _pc.create_index(
-            name=settings.pinecone_index_name,
-            dimension=384,
-            metric="cosine",
-            spec=ServerlessSpec(cloud=settings.pinecone_cloud, region=settings.pinecone_region),
-        )
-        _index = _pc.Index(settings.pinecone_index_name)
+        if ServerlessSpec is not None:
+            _pc.create_index(
+                name=settings.pinecone_index_name,
+                dimension=384,
+                metric="cosine",
+                spec=ServerlessSpec(cloud=settings.pinecone_cloud, region=settings.pinecone_region),
+            )
+            _index = _pc.Index(settings.pinecone_index_name)
+        else:
+            return None
     return _index
 
 

@@ -61,6 +61,10 @@ colorama==0.4.6
 httpx==0.27.0
 websockets==15.0.1
 
+# 웹 자동화
+selenium==4.15.2
+webdriver-manager==4.0.1
+
 # ========================================
 # 설치 방법:
 # pip install -r requirements.txt

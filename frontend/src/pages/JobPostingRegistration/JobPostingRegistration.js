@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { 
@@ -17,12 +18,12 @@ import {
   FiZap
 } from 'react-icons/fi';
 import JobDetailModal from './JobDetailModal';
-import RegistrationMethodModal from './RegistrationMethodModal';
+
 import TextBasedRegistration from './TextBasedRegistration';
 import ImageBasedRegistration from './ImageBasedRegistration';
 import TemplateModal from './TemplateModal';
-import OrganizationModal from './OrganizationModal';
-import LangGraphJobRegistration from './LangGraphJobRegistration';
+
+import jobPostingApi from '../../services/jobPostingApi';
 
 const Container = styled.div`
   max-width: 1200px;
@@ -311,22 +312,19 @@ const ActionButton = styled.button`
 `;
 
 const JobPostingRegistration = () => {
+  const navigate = useNavigate();
   const [showForm, setShowForm] = useState(false);
   const [selectedJob, setSelectedJob] = useState(null);
   const [modalMode, setModalMode] = useState('view'); // 'view' or 'edit'
   const [showModal, setShowModal] = useState(false);
-  const [showMethodModal, setShowMethodModal] = useState(false);
+
   const [showTextRegistration, setShowTextRegistration] = useState(false);
   const [showImageRegistration, setShowImageRegistration] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
-  const [showOrganizationModal, setShowOrganizationModal] = useState(false);
-  const [showLangGraphRegistration, setShowLangGraphRegistration] = useState(false);
+
   const [templates, setTemplates] = useState([]);
-  const [organizationData, setOrganizationData] = useState({
-    structure: '',
-    departments: [],
-    organizationImage: null
-  });
+  const [autoFillData, setAutoFillData] = useState(null);
+
   const [formData, setFormData] = useState({
     title: '',
     company: '',
@@ -338,14 +336,42 @@ const JobPostingRegistration = () => {
     description: '',
     requirements: '',
     benefits: '',
-    deadline: ''
+    deadline: '',
+    // 지원자 요구 항목 (MongoDB 컬렉션 구조 기반)
+    required_documents: ['resume'],
+    required_skills: [],
+    required_experience_years: null,
+    require_portfolio_pdf: false,
+    require_github_url: false,
+    require_growth_background: false,
+    require_motivation: false,
+    require_career_history: false,
+    max_file_size_mb: 50,
+    allowed_file_types: ['pdf', 'doc', 'docx']
   });
 
       // 챗봇 액션 이벤트 리스너
     useEffect(() => {
+      // URL 파라미터에서 자동입력 데이터 확인
+      const urlParams = new URLSearchParams(window.location.search);
+      const autoFillParam = urlParams.get('autoFill');
+      if (autoFillParam) {
+        try {
+          const decodedData = JSON.parse(decodeURIComponent(autoFillParam));
+          setAutoFillData(decodedData);
+          console.log('자동입력 데이터 감지:', decodedData);
+        } catch (error) {
+          console.error('자동입력 데이터 파싱 오류:', error);
+        }
+      }
+
       const handleRegistrationMethod = () => {
-        console.log('=== 새 공고 등록 모달 열기 ===');
-        setShowMethodModal(true);
+        console.log('=== 새 공고 등록 - 픽톡 에이전트 시작 ===');
+        setShowTextRegistration(true);
+        // AI 챗봇 자동 시작
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('startTextBasedAIChatbot'));
+        }, 500);
       };
 
       const handleTextRegistration = () => {
@@ -360,42 +386,7 @@ const JobPostingRegistration = () => {
         setShowTemplateModal(true);
       };
 
-      const handleOrganizationModal = () => {
-        setShowOrganizationModal(true);
-      };
 
-      const handleLangGraphRegistration = () => {
-        console.log('=== 랭그래프모드용 채용공고등록도우미 열기 ===');
-        
-        // 기존 세트 완전히 닫기
-        console.log('기존 세트 닫기 시작...');
-        
-        // 1. 기존 AI 채용공고 등록 도우미 닫기
-        setShowTextRegistration(false);
-        setShowImageRegistration(false);
-        setShowMethodModal(false);
-        
-        // 2. 기존 AI 어시스턴트 (EnhancedModalChatbot) 닫기
-        window.dispatchEvent(new CustomEvent('closeEnhancedModalChatbot'));
-        
-        // 3. 플로팅 챗봇 완전히 숨기기
-        const floatingChatbot = document.querySelector('.floating-chatbot');
-        if (floatingChatbot) {
-          floatingChatbot.style.display = 'none';
-        }
-        
-        // 4. 기타 모달들도 닫기
-        setShowForm(false);
-        setShowModal(false);
-        setShowTemplateModal(false);
-        setShowOrganizationModal(false);
-        
-        console.log('기존 세트 닫기 완료');
-        
-        // 5. 랭그래프 세트 열기
-        setShowLangGraphRegistration(true);
-        console.log('랭그래프 세트 열기 완료');
-      };
 
     // 새로운 자동 플로우 핸들러들
     const handleStartTextBasedFlow = () => {
@@ -480,50 +471,20 @@ const JobPostingRegistration = () => {
       }
     };
 
-    // 기존 세트 복원 핸들러
-    const handleRestoreOriginalSet = () => {
-      console.log('=== 기존 세트 복원 시작 ===');
-      
-      // 플로팅 챗봇 다시 표시
-      const floatingChatbot = document.querySelector('.floating-chatbot');
-      if (floatingChatbot) {
-        floatingChatbot.style.display = 'flex';
-      }
-      
-      // 기존 모달들 상태 초기화 (닫기)
-      setShowLangGraphRegistration(false);
-      
-      console.log('=== 기존 세트 복원 완료 ===');
-    };
 
-    // 랭그래프 채용공고 등록 도우미 닫기 핸들러
-    const handleCloseLangGraphRegistration = () => {
-      console.log('=== 랭그래프 채용공고 등록 도우미 강제 닫기 ===');
-      
-      // 랭그래프 채용공고 등록 도우미 닫기
-      setShowLangGraphRegistration(false);
-      
-      // 플로팅 챗봇 다시 표시
-      const floatingChatbot = document.querySelector('.floating-chatbot');
-      if (floatingChatbot) {
-        floatingChatbot.style.display = 'flex';
-      }
-      
-      console.log('=== 랭그래프 채용공고 등록 도우미 강제 닫기 완료 ===');
-    };
+
+
 
     // 이벤트 리스너 등록
     window.addEventListener('openRegistrationMethod', handleRegistrationMethod);
     window.addEventListener('openTextRegistration', handleTextRegistration);
     window.addEventListener('openImageRegistration', handleImageRegistration);
     window.addEventListener('openTemplateModal', handleTemplateModal);
-    window.addEventListener('openOrganizationModal', handleOrganizationModal);
-    window.addEventListener('openLangGraphRegistration', handleLangGraphRegistration);
+
     window.addEventListener('startTextBasedFlow', handleStartTextBasedFlow);
     window.addEventListener('startImageBasedFlow', handleStartImageBasedFlow);
     window.addEventListener('startAIAssistant', handleStartAIAssistant);
-    window.addEventListener('restoreOriginalSet', handleRestoreOriginalSet);
-    window.addEventListener('closeLangGraphRegistration', handleCloseLangGraphRegistration);
+
     
     // 채팅봇 수정 명령 이벤트 리스너 등록
     window.addEventListener('updateDepartment', handleUpdateDepartment);
@@ -537,13 +498,11 @@ const JobPostingRegistration = () => {
       window.removeEventListener('openTextRegistration', handleTextRegistration);
       window.removeEventListener('openImageRegistration', handleImageRegistration);
       window.removeEventListener('openTemplateModal', handleTemplateModal);
-      window.removeEventListener('openOrganizationModal', handleOrganizationModal);
-      window.removeEventListener('openLangGraphRegistration', handleLangGraphRegistration);
+
       window.removeEventListener('startTextBasedFlow', handleStartTextBasedFlow);
       window.removeEventListener('startImageBasedFlow', handleStartImageBasedFlow);
       window.removeEventListener('startAIAssistant', handleStartAIAssistant);
-      window.removeEventListener('restoreOriginalSet', handleRestoreOriginalSet);
-      window.removeEventListener('closeLangGraphRegistration', handleCloseLangGraphRegistration);
+
       
       // 채팅봇 수정 명령 이벤트 리스너 제거
       window.removeEventListener('updateDepartment', handleUpdateDepartment);
@@ -558,12 +517,11 @@ const JobPostingRegistration = () => {
     console.log('=== 모든 모달창 초기화 시작 ===');
     setShowForm(false);
     setShowModal(false);
-    setShowMethodModal(false);
+
     setShowTextRegistration(false);
     setShowImageRegistration(false);
     setShowTemplateModal(false);
-    setShowOrganizationModal(false);
-    setShowLangGraphRegistration(false);
+
     setSelectedJob(null);
     setModalMode('view');
     
@@ -577,46 +535,28 @@ const JobPostingRegistration = () => {
     console.log('=== 모든 모달창 초기화 완료 ===');
   };
 
-  const [jobPostings, setJobPostings] = useState([
-    {
-      id: 1,
-      title: '시니어 프론트엔드 개발자',
-      company: '테크스타트업',
-      location: '서울 강남구',
-      type: 'full-time',
-      salary: '4,000만원 ~ 6,000만원',
-      experience: '5년 이상',
-      education: '대졸 이상',
-      status: 'draft',
-      deadline: '2024-02-15',
-      applicants: 24,
-      views: 156,
-      bookmarks: 8,
-      shares: 3,
-      description: 'React, Vue.js, TypeScript를 활용한 웹 애플리케이션 개발을 담당합니다. 사용자 경험을 최우선으로 하는 프론트엔드 개발을 진행하며, 팀과의 협업을 통해 고품질의 제품을 만들어갑니다.',
-      requirements: '• React, Vue.js, TypeScript 3년 이상 경험\n• 웹 표준 및 접근성에 대한 이해\n• Git을 활용한 협업 경험\n• 성능 최적화 경험\n• 반응형 웹 개발 경험',
-      benefits: '• 유연한 근무 시간\n• 원격 근무 가능\n• 건강보험, 국민연금\n• 점심식대 지원\n• 교육비 지원\n• 경조사 지원'
-    },
-    {
-      id: 2,
-      title: '백엔드 개발자 (Java)',
-      company: 'IT 서비스 회사',
-      location: '서울 마포구',
-      type: 'full-time',
-      salary: '3,500만원 ~ 5,500만원',
-      experience: '3년 이상',
-      education: '대졸 이상',
-      status: 'draft',
-      deadline: '2024-02-20',
-      applicants: 0,
-      views: 0,
-      bookmarks: 0,
-      shares: 0,
-      description: 'Spring Boot를 활용한 백엔드 시스템 개발을 담당합니다. 대용량 데이터 처리 및 API 설계 경험이 필요하며, 클린 코드 작성과 테스트 코드 작성에 능숙한 분을 찾습니다.',
-      requirements: '• Java, Spring Boot 3년 이상 경험\n• RESTful API 설계 경험\n• 데이터베이스 설계 및 최적화 경험\n• JUnit을 활용한 테스트 코드 작성 경험\n• Git을 활용한 협업 경험',
-      benefits: '• 정시 퇴근 문화\n• 주 1회 원격 근무\n• 건강보험, 국민연금\n• 점심식대 지원\n• 자기계발비 지원\n• 생일 축하금'
+  const [jobPostings, setJobPostings] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  // 채용공고 목록 로드
+  useEffect(() => {
+    loadJobPostings();
+  }, []);
+
+  const loadJobPostings = async () => {
+    try {
+      setLoading(true);
+      const data = await jobPostingApi.getJobPostings();
+      setJobPostings(data);
+      setError(null);
+    } catch (err) {
+      console.error('채용공고 로드 실패:', err);
+      setError('채용공고 목록을 불러오는데 실패했습니다.');
+    } finally {
+      setLoading(false);
     }
-  ]);
+  };
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
@@ -654,42 +594,65 @@ const JobPostingRegistration = () => {
     return salaryValue;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    const newJob = {
-      id: Date.now(),
-      ...formData,
-      status: 'draft',
-      applicants: 0
-    };
-    setJobPostings(prev => [newJob, ...prev]);
-    setFormData({
-      title: '',
-      company: '',
-      location: '',
-      type: 'full-time',
-      salary: '',
-      experience: '',
-      education: '',
-      description: '',
-      requirements: '',
-      benefits: '',
-      deadline: ''
-    });
-    setShowForm(false);
+    try {
+      const newJob = await jobPostingApi.createJobPosting(formData);
+      setJobPostings(prev => [newJob, ...prev]);
+      setFormData({
+        title: '',
+        company: '',
+        location: '',
+        type: 'full-time',
+        salary: '',
+        experience: '',
+        education: '',
+        description: '',
+        requirements: '',
+        benefits: '',
+        deadline: '',
+        // 지원자 요구 항목 초기화
+        required_documents: ['resume'],
+        required_skills: [],
+        required_experience_years: null,
+        require_portfolio_pdf: false,
+        require_github_url: false,
+        require_growth_background: false,
+        require_motivation: false,
+        require_career_history: false,
+        max_file_size_mb: 50,
+        allowed_file_types: ['pdf', 'doc', 'docx']
+      });
+      setShowForm(false);
+    } catch (err) {
+      console.error('채용공고 생성 실패:', err);
+      alert('채용공고 생성에 실패했습니다.');
+    }
   };
 
-  const handleDelete = (id) => {
-    setJobPostings(prev => prev.filter(job => job.id !== id));
-    setShowModal(false);
+  const handleDelete = async (id) => {
+    try {
+      await jobPostingApi.deleteJobPosting(id);
+      setJobPostings(prev => prev.filter(job => job.id !== id));
+      setShowModal(false);
+    } catch (err) {
+      console.error('채용공고 삭제 실패:', err);
+      alert('채용공고 삭제에 실패했습니다.');
+    }
   };
 
-  const handlePublish = (id) => {
-    setJobPostings(prev => 
-      prev.map(job => 
-        job.id === id ? { ...job, status: 'active' } : job
-      )
-    );
+  const handlePublish = async (id) => {
+    try {
+      await jobPostingApi.publishJobPosting(id);
+      setJobPostings(prev => 
+        prev.map(job => 
+          job.id === id ? { ...job, status: 'published' } : job
+        )
+      );
+    } catch (err) {
+      console.error('채용공고 발행 실패:', err);
+      alert('채용공고 발행에 실패했습니다.');
+    }
   };
 
   const handleViewJob = (job) => {
@@ -704,93 +667,82 @@ const JobPostingRegistration = () => {
     setShowModal(true);
   };
 
-  const handleSaveJob = (updatedJob) => {
-    setJobPostings(prev => 
-      prev.map(job => 
-        job.id === updatedJob.id ? updatedJob : job
-      )
-    );
-    setShowModal(false);
-  };
-
-  const handleMethodSelect = (method) => {
-    setShowMethodModal(false);
-    if (method === 'step_by_step') {
-      // 개별 입력형: 단계별 질문 방식
-      setShowTextRegistration(true);
-      // AI 챗봇 자동 시작
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('startTextBasedAIChatbot'));
-      }, 500);
-    } else if (method === 'free_text') {
-      // 자유 텍스트형: 자유롭게 입력하면 AI가 추출
-      setShowTextRegistration(true);
-      // 자유 텍스트 모드로 시작
-      setTimeout(() => {
-        window.dispatchEvent(new CustomEvent('startFreeTextMode'));
-      }, 500);
+  const handleSaveJob = async (updatedJob) => {
+    try {
+      const { id, ...updateData } = updatedJob;
+      await jobPostingApi.updateJobPosting(id, updateData);
+      setJobPostings(prev => 
+        prev.map(job => 
+          job.id === updatedJob.id ? updatedJob : job
+        )
+      );
+      setShowModal(false);
+    } catch (err) {
+      console.error('채용공고 수정 실패:', err);
+      alert('채용공고 수정에 실패했습니다.');
     }
   };
 
-  const handleTextRegistrationComplete = (data) => {
+
+
+  const handleTextRegistrationComplete = async (data) => {
     console.log('TextBasedRegistration 완료 데이터:', data);
     
-    const newJob = {
-      id: Date.now(),
-      title: data.title,
-      company: '관리자 소속 회사', // 자동 적용
-      location: data.locationCity || data.location || '서울특별시 강남구',
-      type: 'full-time',
-      salary: data.salary || '연봉 4,000만원 - 6,000만원',
-      experience: data.experience || '2년이상',
-      education: '대졸 이상',
-      description: data.mainDuties || data.description || '웹개발', // mainDuties를 description으로 매핑
-      requirements: data.requirements || 'JavaScript, React 실무 경험',
-      benefits: data.benefits || '주말보장, 재택가능',
-      deadline: data.deadline || '9월 3일까지',
-      status: 'draft',
-      applicants: 0,
-      views: 0,
-      bookmarks: 0,
-      shares: 0
-    };
-    
-    console.log('생성된 채용공고 데이터:', newJob);
-    setJobPostings(prev => [newJob, ...prev]);
-    
-    // 모든 모달창 초기화
-    resetAllModals();
+    try {
+      const jobData = {
+        title: data.title,
+        company: '관리자 소속 회사', // 자동 적용
+        location: data.locationCity || data.location || '서울특별시 강남구',
+        type: 'full-time',
+        salary: data.salary || '연봉 4,000만원 - 6,000만원',
+        experience: data.experience || '2년이상',
+        education: '대졸 이상',
+        description: data.mainDuties || data.description || '웹개발', // mainDuties를 description으로 매핑
+        requirements: data.requirements || 'JavaScript, React 실무 경험',
+        benefits: data.benefits || '주말보장, 재택가능',
+        deadline: data.deadline || '9월 3일까지'
+      };
+      
+      console.log('생성할 채용공고 데이터:', jobData);
+      const newJob = await jobPostingApi.createJobPosting(jobData);
+      setJobPostings(prev => [newJob, ...prev]);
+      
+      // 모든 모달창 초기화
+      resetAllModals();
+    } catch (err) {
+      console.error('채용공고 생성 실패:', err);
+      alert('채용공고 생성에 실패했습니다.');
+    }
   };
 
-  const handleImageRegistrationComplete = (data) => {
+  const handleImageRegistrationComplete = async (data) => {
     console.log('ImageBasedRegistration 완료 데이터:', data);
     
-    const newJob = {
-      id: Date.now(),
-      title: data.title,
-      company: '관리자 소속 회사', // 자동 적용
-      location: data.locationCity || data.location || '서울특별시 강남구',
-      type: 'full-time',
-      salary: data.salary || '연봉 4,000만원 - 6,000만원',
-      experience: data.experience || '2년이상',
-      education: '대졸 이상',
-      description: data.mainDuties || data.description || '웹개발',
-      requirements: data.requirements || 'JavaScript, React 실무 경험',
-      benefits: data.benefits || '주말보장, 재택가능',
-      deadline: data.deadline || '9월 3일까지',
-      status: 'draft',
-      applicants: 0,
-      views: 0,
-      bookmarks: 0,
-      shares: 0,
-      selectedImage: data.selectedImage
-    };
-    
-    console.log('생성된 채용공고 데이터:', newJob);
-    setJobPostings(prev => [newJob, ...prev]);
-    
-    // 모든 모달창 초기화
-    resetAllModals();
+    try {
+      const jobData = {
+        title: data.title,
+        company: '관리자 소속 회사', // 자동 적용
+        location: data.locationCity || data.location || '서울특별시 강남구',
+        type: 'full-time',
+        salary: data.salary || '연봉 4,000만원 - 6,000만원',
+        experience: data.experience || '2년이상',
+        education: '대졸 이상',
+        description: data.mainDuties || data.description || '웹개발',
+        requirements: data.requirements || 'JavaScript, React 실무 경험',
+        benefits: data.benefits || '주말보장, 재택가능',
+        deadline: data.deadline || '9월 3일까지'
+      };
+      
+      console.log('생성할 채용공고 데이터:', jobData);
+      const newJob = await jobPostingApi.createJobPosting(jobData);
+      setJobPostings(prev => [newJob, ...prev]);
+      
+      // 모든 모달창 초기화
+      resetAllModals();
+    } catch (err) {
+      console.error('채용공고 생성 실패:', err);
+      alert('채용공고 생성에 실패했습니다.');
+    }
   };
 
   const handleSaveTemplate = (template) => {
@@ -808,9 +760,7 @@ const JobPostingRegistration = () => {
     setTemplates(prev => prev.filter(template => template.id !== templateId));
   };
 
-  const handleSaveOrganization = (data) => {
-    setOrganizationData(data);
-  };
+
 
   const getStatusText = (status) => {
     switch (status) {
@@ -826,23 +776,14 @@ const JobPostingRegistration = () => {
       <Header>
         <Title>채용공고 등록</Title>
         <div style={{ display: 'flex', gap: '12px' }}>
-                     <AddButton
-             data-testid="add-job-button"
-             onClick={() => setShowMethodModal(true)}
-             whileHover={{ scale: 1.05 }}
-             whileTap={{ scale: 0.95 }}
-           >
-             <FiPlus size={20} />
-             새 공고 등록
-           </AddButton>
           <AddButton
-            onClick={() => setShowOrganizationModal(true)}
+            data-testid="add-job-button"
+            onClick={() => navigate('/ai-job-registration')}
             whileHover={{ scale: 1.05 }}
             whileTap={{ scale: 0.95 }}
-            style={{ background: 'linear-gradient(135deg, #ff6b6b, #ee5a24)' }}
           >
-            <FiUsers size={20} />
-            조직도 설정
+            <FiPlus size={20} />
+            새 공고 등록
           </AddButton>
           <AddButton
             onClick={() => setShowTemplateModal(true)}
@@ -852,18 +793,6 @@ const JobPostingRegistration = () => {
           >
             <FiFolder size={20} />
             템플릿 관리
-          </AddButton>
-          <AddButton
-            onClick={() => {
-              console.log('=== 랭그래프모드용 채용공고등록도우미 열기 ===');
-              setShowLangGraphRegistration(true);
-            }}
-            whileHover={{ scale: 1.05 }}
-            whileTap={{ scale: 0.95 }}
-            style={{ background: 'linear-gradient(135deg, #f093fb, #f5576c)' }}
-          >
-            <FiZap size={20} />
-            랭그래프 모드
           </AddButton>
         </div>
       </Header>
@@ -1029,6 +958,193 @@ const JobPostingRegistration = () => {
               />
             </FormGroup>
 
+            {/* 지원자 요구 항목 섹션 */}
+            <div style={{ 
+              borderTop: '2px solid #e5e7eb', 
+              marginTop: '32px', 
+              paddingTop: '24px' 
+            }}>
+              <h3 style={{ 
+                marginBottom: '24px', 
+                color: 'var(--text-primary)', 
+                fontSize: '18px',
+                fontWeight: '600'
+              }}>
+                📋 지원자 요구 항목
+              </h3>
+              
+              <FormGrid>
+                <FormGroup>
+                  <Label>필수 제출 서류 *</Label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={formData.required_documents.includes('resume')}
+                        onChange={(e) => {
+                          const newDocs = e.target.checked 
+                            ? [...formData.required_documents, 'resume']
+                            : formData.required_documents.filter(doc => doc !== 'resume');
+                          setFormData(prev => ({ ...prev, required_documents: newDocs }));
+                        }}
+                      />
+                      이력서 (필수)
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={formData.required_documents.includes('cover_letter')}
+                        onChange={(e) => {
+                          const newDocs = e.target.checked 
+                            ? [...formData.required_documents, 'cover_letter']
+                            : formData.required_documents.filter(doc => doc !== 'cover_letter');
+                          setFormData(prev => ({ ...prev, required_documents: newDocs }));
+                        }}
+                      />
+                      자기소개서
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={formData.required_documents.includes('portfolio')}
+                        onChange={(e) => {
+                          const newDocs = e.target.checked 
+                            ? [...formData.required_documents, 'portfolio']
+                            : formData.required_documents.filter(doc => doc !== 'portfolio');
+                          setFormData(prev => ({ ...prev, required_documents: newDocs }));
+                        }}
+                      />
+                      포트폴리오
+                    </label>
+                  </div>
+                </FormGroup>
+
+                <FormGroup>
+                  <Label>필수 기술 스택</Label>
+                  <Input
+                    type="text"
+                    placeholder="예: JavaScript, React, TypeScript (쉼표로 구분)"
+                    value={formData.required_skills.join(', ')}
+                    onChange={(e) => {
+                      const skills = e.target.value.split(',').map(skill => skill.trim()).filter(skill => skill);
+                      setFormData(prev => ({ ...prev, required_skills: skills }));
+                    }}
+                  />
+                </FormGroup>
+
+                <FormGroup>
+                  <Label>필수 경력 연차</Label>
+                  <Input
+                    type="number"
+                    placeholder="예: 3"
+                    value={formData.required_experience_years || ''}
+                    onChange={(e) => {
+                      const years = e.target.value ? parseInt(e.target.value) : null;
+                      setFormData(prev => ({ ...prev, required_experience_years: years }));
+                    }}
+                  />
+                </FormGroup>
+
+                <FormGroup>
+                  <Label>포트폴리오 요구사항</Label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={formData.require_portfolio_pdf}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          require_portfolio_pdf: e.target.checked 
+                        }))}
+                      />
+                      포트폴리오 PDF 제출 필수
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={formData.require_github_url}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          require_github_url: e.target.checked 
+                        }))}
+                      />
+                      GitHub URL 제출 필수
+                    </label>
+                  </div>
+                </FormGroup>
+
+                <FormGroup>
+                  <Label>자기소개서 추가 요구사항</Label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={formData.require_growth_background}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          require_growth_background: e.target.checked 
+                        }))}
+                      />
+                      성장 배경 작성 필수
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={formData.require_motivation}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          require_motivation: e.target.checked 
+                        }))}
+                      />
+                      지원 동기 작성 필수
+                    </label>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <input
+                        type="checkbox"
+                        checked={formData.require_career_history}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          require_career_history: e.target.checked 
+                        }))}
+                      />
+                      경력 사항 작성 필수
+                    </label>
+                  </div>
+                </FormGroup>
+
+                <FormGroup>
+                  <Label>파일 업로드 설정</Label>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                    <div>
+                      <label>최대 파일 크기 (MB):</label>
+                      <Input
+                        type="number"
+                        value={formData.max_file_size_mb}
+                        onChange={(e) => setFormData(prev => ({ 
+                          ...prev, 
+                          max_file_size_mb: parseInt(e.target.value) || 50 
+                        }))}
+                        style={{ width: '100px', marginLeft: '8px' }}
+                      />
+                    </div>
+                    <div>
+                      <label>허용 파일 형식:</label>
+                      <Input
+                        type="text"
+                        value={formData.allowed_file_types.join(', ')}
+                        onChange={(e) => {
+                          const types = e.target.value.split(',').map(type => type.trim()).filter(type => type);
+                          setFormData(prev => ({ ...prev, allowed_file_types: types }));
+                        }}
+                        placeholder="pdf, doc, docx"
+                        style={{ marginLeft: '8px' }}
+                      />
+                    </div>
+                  </div>
+                </FormGroup>
+              </FormGrid>
+            </div>
+
             <ButtonGroup>
               <Button type="button" className="secondary" onClick={() => setShowForm(false)}>
                 취소
@@ -1046,7 +1162,32 @@ const JobPostingRegistration = () => {
           등록된 채용공고 ({jobPostings.length})
         </h2>
 
-        {jobPostings.map((job) => (
+        {loading && (
+          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+            채용공고 목록을 불러오는 중...
+          </div>
+        )}
+
+        {error && (
+          <div style={{ 
+            textAlign: 'center', 
+            padding: '20px', 
+            color: '#dc3545', 
+            backgroundColor: '#f8d7da',
+            borderRadius: '8px',
+            marginBottom: '20px'
+          }}>
+            {error}
+          </div>
+        )}
+
+        {!loading && !error && jobPostings.length === 0 && (
+          <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
+            등록된 채용공고가 없습니다. 새로운 채용공고를 등록해보세요.
+          </div>
+        )}
+
+        {!loading && !error && jobPostings.map((job) => (
           <JobCard
             key={job.id}
             initial={{ opacity: 0, y: 20 }}
@@ -1149,32 +1290,21 @@ const JobPostingRegistration = () => {
         onDelete={handleDelete}
       />
 
-      <RegistrationMethodModal
-        isOpen={showMethodModal}
-        onClose={() => setShowMethodModal(false)}
-        onSelectMethod={handleMethodSelect}
-      />
+
 
               <TextBasedRegistration
           isOpen={showTextRegistration}
           onClose={() => setShowTextRegistration(false)}
           onComplete={handleTextRegistrationComplete}
-          organizationData={organizationData}
+          autoFillData={autoFillData}
         />
 
               <ImageBasedRegistration
           isOpen={showImageRegistration}
           onClose={() => setShowImageRegistration(false)}
           onComplete={handleImageRegistrationComplete}
-          organizationData={organizationData}
-        />
 
-      <OrganizationModal
-        isOpen={showOrganizationModal}
-        onClose={() => setShowOrganizationModal(false)}
-        organizationData={organizationData}
-        onSave={handleSaveOrganization}
-      />
+        />
 
       <TemplateModal
         isOpen={showTemplateModal}
@@ -1184,13 +1314,6 @@ const JobPostingRegistration = () => {
         onDeleteTemplate={handleDeleteTemplate}
         templates={templates}
         currentData={null}
-      />
-
-      <LangGraphJobRegistration
-        isOpen={showLangGraphRegistration}
-        onClose={() => setShowLangGraphRegistration(false)}
-        onComplete={handleTextRegistrationComplete}
-        organizationData={organizationData}
       />
     </Container>
   );

@@ -1,22 +1,21 @@
 import React from 'react';
-import { Routes, Route, useLocation, useNavigate } from 'react-router-dom';
+import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Layout from './components/Layout/Layout';
 import Dashboard from './pages/Dashboard/Dashboard';
 import JobPostingRegistration from './pages/JobPostingRegistration/JobPostingRegistration';
+import AIJobRegistrationPage from './pages/JobPostingRegistration/AIJobRegistrationPage';
 import ResumeManagement from './pages/ResumeManagement/ResumeManagement';
 import ApplicantManagement from './pages/ApplicantManagement';
 import InterviewManagement from './pages/InterviewManagement/InterviewManagement';
 import InterviewCalendar from './pages/InterviewManagement/InterviewCalendar';
-import PortfolioAnalysis from './pages/PortfolioAnalysis/PortfolioAnalysis';
+
 import CoverLetterValidation from './pages/CoverLetterValidation/CoverLetterValidation';
 import TalentRecommendation from './pages/TalentRecommendation/TalentRecommendation';
 import UserManagement from './pages/UserManagement/UserManagement';
 import Settings from './pages/Settings/Settings';
 import TestGithubSummary from './pages/TestGithubSummary';
 import PDFOCRPage from './pages/PDFOCRPage/PDFOCRPage';
-import FloatingChatbot from './chatbot/components/FloatingChatbot';
 import AITooltip from './components/AITooltip';
-import LangGraphChatbot from './components/LangGraphChatbot';
 import NewPickChatbot from './components/NewPickChatbot';
 
 
@@ -25,7 +24,7 @@ function App() {
   const location = useLocation();
   const navigate = useNavigate();
   const currentPage = location.pathname.replace('/', '') || 'dashboard';
-  const [isAgentChatbotOpen, setIsAgentChatbotOpen] = React.useState(false);
+  // 에이전트 챗봇 상태 제거됨
   
   // 픽톡 챗봇 상태 관리
   const [pickChatbotState, setPickChatbotState] = React.useState(() => {
@@ -44,29 +43,28 @@ function App() {
     console.log('[App.js] 전역 이벤트 리스너 등록: langGraphDataUpdate');
     window.addEventListener('langGraphDataUpdate', handleGlobalLangGraphDataUpdate);
 
+    // 전역 handlePageAction 함수 노출
+    window.handlePageAction = handlePageAction;
+
     return () => {
       console.log('[App.js] 전역 이벤트 리스너 해제');
       window.removeEventListener('langGraphDataUpdate', handleGlobalLangGraphDataUpdate);
+      delete window.handlePageAction;
     };
   }, []);
 
-  // 헤더에서 에이전트 챗봇 열기 이벤트 수신
-  React.useEffect(() => {
-    const openHandler = () => setIsAgentChatbotOpen(true);
-    window.addEventListener('openAgentChatbot', openHandler);
-    return () => window.removeEventListener('openAgentChatbot', openHandler);
-  }, []);
+  // 에이전트 챗봇 이벤트 리스너 제거됨
 
   const handlePageAction = (action) => { // 이 함수는 'action'이라는 인자 하나만 받습니다.
-    console.log('App.js에서 받은 페이지 액션:', action); // 디버깅을 위해 로그를 찍어보세요.
+    console.log('🎯 [App.js] 페이지 액션 수신:', action); // 디버깅을 위해 로그를 찍어보세요.
 
     // 챗봇에서 보낸 'changePage:' 액션 처리
     if (action.startsWith('changePage:')) {
       const targetPage = action.split(':')[1]; // 'job-posting' 추출
-      console.log(`App.js가 페이지 이동 요청 수신: /${targetPage}`); // 이동 요청 로그
-      console.log(`navigate 호출: /${targetPage}`); // 네비게이션 로그
+      console.log(`🎯 [App.js] 페이지 이동 요청 수신: /${targetPage}`); // 이동 요청 로그
+      console.log(`🎯 [App.js] navigate 호출: /${targetPage}`); // 네비게이션 로그
       navigate(`/${targetPage}`); // 실제 페이지 이동
-      console.log('페이지 이동 완료');
+      console.log('🎯 [App.js] 페이지 이동 완료');
       return; // 페이지 이동 처리 후 함수 종료
     }
 
@@ -151,6 +149,9 @@ function App() {
       // 랭그래프모드용 채용공고등록도우미 열기
       const event = new CustomEvent('openLangGraphRegistration');
       window.dispatchEvent(event);
+    } else if (action === 'openAIJobRegistration') {
+      // AI 채용공고 등록 페이지로 이동
+      navigate('/ai-job-registration');
     }
   };
 
@@ -160,11 +161,12 @@ function App() {
         <Routes>
           <Route path="/" element={<Dashboard />} />
           <Route path="/job-posting" element={<JobPostingRegistration />} />
+          <Route path="/ai-job-registration" element={<AIJobRegistrationPage />} />
           <Route path="/resume" element={<ResumeManagement />} />
           <Route path="/applicants" element={<ApplicantManagement />} />
           <Route path="/interview" element={<InterviewManagement />} />
           <Route path="/interview-calendar" element={<InterviewCalendar />} />
-          <Route path="/portfolio" element={<PortfolioAnalysis />} />
+          <Route path="/portfolio" element={<Navigate to="/github-test" replace />} />
           <Route path="/cover-letter" element={<CoverLetterValidation />} />
           <Route path="/talent" element={<TalentRecommendation />} />
           <Route path="/users" element={<UserManagement />} />
@@ -178,47 +180,7 @@ function App() {
       {/* AI 말풍선 컴포넌트 */}
       <AITooltip />
 
-      {/* 챗봇 컴포넌트 */}
-      <FloatingChatbot
-        page={currentPage}
-        onFieldUpdate={(field, value) => {
-          console.log('챗봇 필드 업데이트:', field, value);
-          
-          // 실제 폼 필드 업데이트를 위한 이벤트 발생
-          const event = new CustomEvent('updateFormField', {
-            detail: { field, value }
-          });
-          window.dispatchEvent(event);
-          
-          // 추가로 개별 필드별 이벤트도 발생
-          const fieldEvents = {
-            'department': 'updateDepartment',
-            'headcount': 'updateHeadcount', 
-            'salary': 'updateSalary',
-            'mainDuties': 'updateWorkContent',
-            'workHours': 'updateWorkHours',
-            'workDays': 'updateWorkDays',
-            'locationCity': 'updateLocation',
-            'contactEmail': 'updateContactEmail',
-            'deadline': 'updateDeadline'
-          };
-          
-          const eventName = fieldEvents[field];
-          if (eventName) {
-            const specificEvent = new CustomEvent(eventName, {
-              detail: { value }
-            });
-            window.dispatchEvent(specificEvent);
-          }
-        }}
-        onComplete={() => {
-          console.log('챗봇 완료');
-        }}
-        onPageAction={handlePageAction}
-      />
-
-      {/* 에이전트 챗봇 (LangGraph) */}
-      <LangGraphChatbot isOpen={isAgentChatbotOpen} onOpenChange={setIsAgentChatbotOpen} />
+      {/* 챗봇 컴포넌트 제거됨 */}
 
       {/* 픽톡 챗봇 */}
       <NewPickChatbot 
