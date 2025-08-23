@@ -14,10 +14,7 @@ from pydantic import BaseModel
 import re
 
 # .env 파일 로드 (현재 디렉토리에서)
-print(f"🔍 upload.py 현재 작업 디렉토리: {os.getcwd()}")
-print(f"🔍 upload.py .env 파일 존재 여부: {os.path.exists('.env')}")
 load_dotenv('.env')
-print(f"🔍 upload.py OPENAI_API_KEY 로드 후: {os.getenv('OPENAI_API_KEY')}")
 
 # OpenAI API 설정
 try:

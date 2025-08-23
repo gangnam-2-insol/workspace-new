@@ -202,5 +202,3 @@ class OpenAIService:
         except Exception as e:
             print(f"[ERROR] Vision API 응답 생성 실패: {e}")
             return f'{{"error": "Vision API 오류: {str(e)}"}}'
-
-

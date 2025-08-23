@@ -48,10 +48,10 @@ class LangChainHybridService:
     def _initialize_langchain_components(self):
         """LangChain 컴포넌트들 초기화"""
         try:
-            # OpenAI 임베딩
+            # OpenAI 임베딩 (기본 1536차원 사용)
             self.embeddings = OpenAIEmbeddings(
                 openai_api_key=self.openai_api_key,
-                model="text-embedding-3-small"  # 더 빠르고 효율적
+                model="text-embedding-3-small"  # 1536차원
             )
             
             # Pinecone 벡터 스토어
@@ -61,28 +61,20 @@ class LangChainHybridService:
                 pinecone_api_key=self.pinecone_api_key
             )
             
-            # Elasticsearch 스토어
-            self.es_store = ElasticsearchStore(
-                es_url=self.es_host,
-                index_name=self.es_index,
-                embedding=self.embeddings,
-                es_user=self.es_username,
-                es_password=self.es_password
-            )
+            # 기존 키워드 검색 서비스 사용 (벡터 필드 없는 Elasticsearch 호환)
+            from keyword_search_service import KeywordSearchService
+            self.keyword_search_service = KeywordSearchService()
             
-            # 앙상블 리트리버 (하이브리드 검색)
+            # 벡터 리트리버만 LangChain 사용 (applicant 타입 필터 추가)
             self.vector_retriever = self.vector_store.as_retriever(
-                search_kwargs={"k": 10}
-            )
-            self.keyword_retriever = self.es_store.as_retriever(
-                search_kwargs={"k": 10}
+                search_kwargs={
+                    "k": 20,  # 검색 결과 수를 기존과 동일하게
+                    "filter": {"chunk_type": "applicant"}  # 지원자 정보만 검색
+                }
             )
             
-            # 하이브리드 리트리버 (벡터 50% + 키워드 50%)
-            self.hybrid_retriever = EnsembleRetriever(
-                retrievers=[self.vector_retriever, self.keyword_retriever],
-                weights=[0.5, 0.5]  # 벡터 50%, 키워드 50%
-            )
+            # 하이브리드 검색은 수동으로 구현 (기존 구조 호환성 유지)
+            self.hybrid_retriever = None  # 수동 하이브리드 검색 사용
             
             print(f"[LangChainHybridService] LangChain 컴포넌트 초기화 완료")
             
@@ -94,6 +86,7 @@ class LangChainHybridService:
                                                 vector_query: str,
                                                 keyword_query: str, 
                                                 applicants_collection,
+                                                resumes_collection,
                                                 target_applicant: Dict[str, Any],
                                                 limit: int = 10) -> Dict[str, Any]:
         """
@@ -103,6 +96,7 @@ class LangChainHybridService:
             vector_query (str): 벡터 검색용 쿼리 (지원자 정보)
             keyword_query (str): 키워드 검색용 쿼리 (이력서 내용)
             applicants_collection: MongoDB 지원자 컬렉션
+            resumes_collection: MongoDB 이력서 컬렉션 (키워드 검색용)
             target_applicant (Dict): 기준 지원자 정보
             limit (int): 반환할 최대 결과 수
             
@@ -116,34 +110,48 @@ class LangChainHybridService:
             
             # 1. 벡터 검색 수행 (지원자 정보 기반)
             print(f"[LangChainHybridService] 벡터 검색 수행...")
+            print(f"[LangChainHybridService] 벡터 필터: {self.vector_retriever.search_kwargs}")
+            
+            # 필터 없이 전체 검색도 테스트
+            try:
+                test_retriever = self.vector_store.as_retriever(search_kwargs={"k": 5})
+                test_docs = await asyncio.to_thread(test_retriever.invoke, vector_query)
+                print(f"[LangChainHybridService] 필터 없는 전체 검색 결과: {len(test_docs)}개")
+            except Exception as e:
+                print(f"[LangChainHybridService] 테스트 검색 실패: {e}")
+            
             vector_docs = await asyncio.to_thread(
                 self.vector_retriever.invoke,
                 vector_query
             )
             print(f"[LangChainHybridService] 벡터 검색 결과: {len(vector_docs)}개")
             
-            # 2. 키워드 검색 수행 (이력서 내용 기반)
+            # 2. 키워드 검색 수행 (이력서 컬렉션 사용)
             keyword_docs = []
             if keyword_query:
-                print(f"[LangChainHybridService] 키워드 검색 수행...")
-                keyword_docs = await asyncio.to_thread(
-                    self.keyword_retriever.invoke,
-                    keyword_query
+                print(f"[LangChainHybridService] 키워드 검색 수행 (이력서 텍스트 대상)...")
+                keyword_result = await self.keyword_search_service.search_by_keywords(
+                    query=keyword_query,
+                    collection=resumes_collection,
+                    limit=10
                 )
+                keyword_docs = self._convert_keyword_results_to_docs(keyword_result)
                 print(f"[LangChainHybridService] 키워드 검색 결과: {len(keyword_docs)}개")
             
-            # 3. 하이브리드 검색 (앙상블)
-            print(f"[LangChainHybridService] 앙상블 하이브리드 검색 수행...")
-            if keyword_query:
-                # 두 검색 모두 가능한 경우 앙상블 사용
-                ensemble_query = f"{vector_query} {keyword_query}"
-                hybrid_docs = await asyncio.to_thread(
-                    self.hybrid_retriever.invoke,
-                    ensemble_query
-                )
-            else:
-                # 키워드 검색이 불가능한 경우 벡터 검색만 사용
-                hybrid_docs = vector_docs
+            # 3. 수동 하이브리드 검색 (벡터 + 키워드 결합)
+            print(f"[LangChainHybridService] 수동 하이브리드 검색 수행...")
+            hybrid_docs = vector_docs + keyword_docs  # 단순 결합
+            # 중복 제거
+            seen_ids = set()
+            unique_hybrid_docs = []
+            for doc in hybrid_docs:
+                doc_id = None
+                if hasattr(doc, 'metadata') and doc.metadata:
+                    doc_id = doc.metadata.get('resume_id') or doc.metadata.get('document_id')
+                if doc_id and doc_id not in seen_ids:
+                    seen_ids.add(doc_id)
+                    unique_hybrid_docs.append(doc)
+            hybrid_docs = unique_hybrid_docs
             
             print(f"[LangChainHybridService] 하이브리드 검색 결과: {len(hybrid_docs)}개")
             
@@ -181,14 +189,24 @@ class LangChainHybridService:
             # 하이브리드 결과 처리
             for i, doc in enumerate(hybrid_docs):
                 try:
-                    # Document의 메타데이터에서 resume_id 추출
+                    # Document의 메타데이터에서 식별자 추출 및 지원자 찾기
+                    applicant = None
                     resume_id = None
-                    if hasattr(doc, 'metadata') and doc.metadata:
-                        resume_id = doc.metadata.get('resume_id') or doc.metadata.get('document_id')
                     
-                    if resume_id and resume_id != target_resume_id:
-                        # resume_id로 지원자 찾기
-                        applicant = await applicants_collection.find_one({"resume_id": resume_id})
+                    if hasattr(doc, 'metadata') and doc.metadata:
+                        chunk_type = doc.metadata.get('chunk_type')
+                        
+                        if chunk_type == 'applicant':
+                            # 지원자 벡터의 경우: document_id가 applicant_id임
+                            applicant_id = doc.metadata.get('document_id')
+                            if applicant_id and applicant_id != str(target_applicant.get('_id')):
+                                from bson import ObjectId
+                                applicant = await applicants_collection.find_one({"_id": ObjectId(applicant_id)})
+                        else:
+                            # 이력서/키워드 검색 결과의 경우: resume_id 기준
+                            resume_id = doc.metadata.get('resume_id') or doc.metadata.get('document_id')
+                            if resume_id and resume_id != target_resume_id:
+                                applicant = await applicants_collection.find_one({"resume_id": resume_id})
                         if applicant:
                             applicant_id = str(applicant["_id"])
                             
@@ -199,12 +217,26 @@ class LangChainHybridService:
                             vector_score = 0
                             keyword_score = 0
                             
-                            # 벡터 결과에서 점수 찾기
+                            # 벡터 결과에서 점수 찾기 (지원자 벡터 고려)
                             for v_i, v_doc in enumerate(vector_docs):
+                                v_applicant_id = None
                                 v_resume_id = None
+                                
                                 if hasattr(v_doc, 'metadata') and v_doc.metadata:
-                                    v_resume_id = v_doc.metadata.get('resume_id') or v_doc.metadata.get('document_id')
-                                if v_resume_id == resume_id:
+                                    v_chunk_type = v_doc.metadata.get('chunk_type')
+                                    if v_chunk_type == 'applicant':
+                                        v_applicant_id = v_doc.metadata.get('document_id')
+                                    else:
+                                        v_resume_id = v_doc.metadata.get('resume_id') or v_doc.metadata.get('document_id')
+                                
+                                # 현재 지원자와 매칭되는지 확인
+                                is_match = False
+                                if chunk_type == 'applicant' and v_applicant_id == applicant_id:
+                                    is_match = True
+                                elif chunk_type != 'applicant' and v_resume_id == resume_id:
+                                    is_match = True
+                                
+                                if is_match:
                                     vector_score = max(0, (len(vector_docs) - v_i) / len(vector_docs))
                                     break
                             
@@ -387,3 +419,241 @@ class LangChainHybridService:
         except Exception as e:
             print(f"[LangChainHybridService] 이력서 키워드 스토어 추가 실패: {e}")
             return False
+
+    def _convert_keyword_results_to_docs(self, keyword_result: Dict[str, Any]) -> List[Document]:
+        """
+        기존 KeywordSearchService 결과를 LangChain Document 형태로 변환
+        """
+        docs = []
+        try:
+            if keyword_result.get("success") and keyword_result.get("results"):
+                for result in keyword_result["results"]:
+                    resume = result.get("resume", {})
+                    resume_id = resume.get("_id")
+                    
+                    if resume_id:
+                        # Document 생성
+                        content = result.get("highlight", "") or resume.get("name", "")
+                        doc = Document(
+                            page_content=content,
+                            metadata={
+                                "resume_id": resume_id,
+                                "document_id": resume_id,
+                                "bm25_score": result.get("bm25_score", 0),
+                                "document_type": "resume"
+                            }
+                        )
+                        docs.append(doc)
+            
+            print(f"[LangChainHybridService] 키워드 결과 변환: {len(docs)}개 문서")
+            return docs
+            
+        except Exception as e:
+            print(f"[LangChainHybridService] 키워드 결과 변환 실패: {e}")
+            return []
+
+    async def search_resumes_langchain_hybrid(self, 
+                                            query: str,
+                                            collection, 
+                                            search_type: str = "resume",
+                                            limit: int = 10) -> Dict[str, Any]:
+        """
+        LangChain 기반 하이브리드 검색으로 이력서 검색
+        
+        Args:
+            query (str): 검색 쿼리
+            collection: MongoDB 컬렉션
+            search_type (str): 검색할 타입
+            limit (int): 반환할 최대 결과 수
+            
+        Returns:
+            Dict[str, Any]: 검색 결과
+        """
+        try:
+            print(f"[LangChainHybridService] === 이력서 하이브리드 검색 시작 ===")
+            print(f"[LangChainHybridService] 검색 쿼리: {query}")
+            
+            # 1. 벡터 검색 수행
+            print(f"[LangChainHybridService] 벡터 검색 수행...")
+            vector_docs = await asyncio.to_thread(
+                self.vector_retriever.invoke,
+                query
+            )
+            print(f"[LangChainHybridService] 벡터 검색 결과: {len(vector_docs)}개")
+            
+            # 2. 키워드 검색 수행 (기존 서비스 사용)
+            print(f"[LangChainHybridService] 키워드 검색 수행...")
+            keyword_result = await self.keyword_search_service.search_by_keywords(
+                query=query,
+                collection=collection,
+                limit=10
+            )
+            keyword_docs = self._convert_keyword_results_to_docs(keyword_result)
+            print(f"[LangChainHybridService] 키워드 검색 결과: {len(keyword_docs)}개")
+            
+            # 3. 수동 하이브리드 검색 (벡터 + 키워드 결합)
+            print(f"[LangChainHybridService] 수동 하이브리드 검색 수행...")
+            hybrid_docs = vector_docs + keyword_docs  # 단순 결합
+            # 중복 제거
+            seen_ids = set()
+            unique_hybrid_docs = []
+            for doc in hybrid_docs:
+                doc_id = None
+                if hasattr(doc, 'metadata') and doc.metadata:
+                    doc_id = doc.metadata.get('resume_id') or doc.metadata.get('document_id')
+                if doc_id and doc_id not in seen_ids:
+                    seen_ids.add(doc_id)
+                    unique_hybrid_docs.append(doc)
+            hybrid_docs = unique_hybrid_docs
+            
+            print(f"[LangChainHybridService] 하이브리드 검색 결과: {len(hybrid_docs)}개")
+            print(f"[LangChainHybridService] 벡터: {len(vector_docs)}개, 키워드: {len(keyword_docs)}개")
+            
+            # 4. 결과를 이력서 정보로 변환
+            return await self._convert_docs_to_resumes(
+                hybrid_docs, vector_docs, keyword_docs,
+                collection, limit
+            )
+            
+        except Exception as e:
+            print(f"[LangChainHybridService] 이력서 하이브리드 검색 실패: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "LangChain 하이브리드 이력서 검색 중 오류가 발생했습니다."
+            }
+
+    async def _convert_docs_to_resumes(self, 
+                                     hybrid_docs: List[Document],
+                                     vector_docs: List[Document], 
+                                     keyword_docs: List[Document],
+                                     collection,
+                                     limit: int) -> Dict[str, Any]:
+        """
+        LangChain Document 객체들을 이력서 정보로 변환
+        """
+        try:
+            print(f"[LangChainHybridService] === 문서를 이력서 정보로 변환 시작 ===")
+            
+            # 문서에서 resume_id 추출하여 이력서 매핑
+            resume_scores = {}
+            
+            # 하이브리드 결과 처리
+            for i, doc in enumerate(hybrid_docs):
+                try:
+                    # Document의 메타데이터에서 resume_id 추출
+                    resume_id = None
+                    if hasattr(doc, 'metadata') and doc.metadata:
+                        resume_id = doc.metadata.get('resume_id') or doc.metadata.get('document_id')
+                    
+                    if resume_id:
+                        # 하이브리드 점수 계산 (순위 기반)
+                        hybrid_score = max(0, (len(hybrid_docs) - i) / len(hybrid_docs))
+                        
+                        # 벡터/키워드 개별 점수 계산
+                        vector_score = 0
+                        keyword_score = 0
+                        
+                        # 벡터 결과에서 점수 찾기
+                        for v_i, v_doc in enumerate(vector_docs):
+                            v_resume_id = None
+                            if hasattr(v_doc, 'metadata') and v_doc.metadata:
+                                v_resume_id = v_doc.metadata.get('resume_id') or v_doc.metadata.get('document_id')
+                            if v_resume_id == resume_id:
+                                vector_score = max(0, (len(vector_docs) - v_i) / len(vector_docs))
+                                break
+                        
+                        # 키워드 결과에서 점수 찾기
+                        for k_i, k_doc in enumerate(keyword_docs):
+                            k_resume_id = None
+                            if hasattr(k_doc, 'metadata') and k_doc.metadata:
+                                k_resume_id = k_doc.metadata.get('resume_id') or k_doc.metadata.get('document_id')
+                            if k_resume_id == resume_id:
+                                keyword_score = max(0, (len(keyword_docs) - k_i) / len(keyword_docs))
+                                break
+                        
+                        if resume_id not in resume_scores or hybrid_score > resume_scores[resume_id]['final_score']:
+                            resume_scores[resume_id] = {
+                                'final_score': hybrid_score,
+                                'vector_score': vector_score,
+                                'keyword_score': keyword_score,
+                                'search_methods': []
+                            }
+                            
+                            # 검색 방법 추가
+                            if vector_score > 0:
+                                resume_scores[resume_id]['search_methods'].append('vector')
+                            if keyword_score > 0:
+                                resume_scores[resume_id]['search_methods'].append('keyword')
+            
+                except Exception as e:
+                    print(f"[LangChainHybridService] 문서 {i} 처리 중 오류: {e}")
+                    continue
+            
+            # MongoDB에서 이력서 상세 정보 조회
+            from bson import ObjectId
+            resume_ids_obj = [ObjectId(rid) for rid in resume_scores.keys()]
+            resumes = await collection.find({"_id": {"$in": resume_ids_obj}}).to_list(1000)
+            
+            # 결과 정렬 및 포맷팅
+            results = []
+            for resume in resumes:
+                resume_id = str(resume["_id"])
+                score_data = resume_scores.get(resume_id)
+                
+                if score_data:
+                    # ID와 datetime 필드 처리
+                    resume["_id"] = str(resume["_id"])
+                    if "resume_id" in resume:
+                        resume["resume_id"] = str(resume["resume_id"])
+                    else:
+                        resume["resume_id"] = str(resume["_id"])
+                    
+                    # 모든 datetime 필드를 문자열로 변환
+                    for key, value in list(resume.items()):
+                        if hasattr(value, 'isoformat'):
+                            resume[key] = value.isoformat()
+                        elif key == "_id":
+                            resume[key] = str(value)
+                    
+                    results.append({
+                        "final_score": score_data['final_score'],
+                        "vector_score": score_data['vector_score'],
+                        "keyword_score": score_data['keyword_score'],
+                        "resume": resume,
+                        "search_methods": score_data['search_methods']
+                    })
+            
+            # 최종 점수 기준으로 정렬
+            results.sort(key=lambda x: x["final_score"], reverse=True)
+            final_results = results[:limit]
+            
+            print(f"[LangChainHybridService] 최종 결과: {len(final_results)}개 이력서")
+            for i, result in enumerate(final_results[:3]):
+                resume_name = result['resume'].get('name', '이름미상')
+                resume_position = result['resume'].get('position', 'N/A')
+                print(f"[LangChainHybridService] #{i+1}: {resume_name} ({resume_position}) "
+                      f"(최종:{result['final_score']:.3f}, V:{result['vector_score']:.3f}, "
+                      f"K:{result['keyword_score']:.3f})")
+            
+            return {
+                "success": True,
+                "message": "LangChain 하이브리드 이력서 검색 완료",
+                "data": {
+                    "search_method": "langchain_hybrid_resume",
+                    "ensemble_weights": {"vector": 0.5, "keyword": 0.5},
+                    "results": final_results,
+                    "total": len(final_results),
+                    "vector_count": len(vector_docs),
+                    "keyword_count": len(keyword_docs),
+                    "hybrid_count": len(hybrid_docs)
+                }
+            }
+            
+        except Exception as e:
+            print(f"[LangChainHybridService] 이력서 변환 실패: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "검색 결과 변환 중 오류가 발생했습니다."
+            }

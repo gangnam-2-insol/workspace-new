@@ -50,10 +50,10 @@ class VectorService:
             
             if self.index_name not in existing_indexes:
                 print(f"인덱스 '{self.index_name}'가 존재하지 않습니다. 새로 생성합니다...")
-                # 인덱스 생성 (384차원은 sentence-transformers 모델 기본 차원)
+                # 인덱스 생성 (1536차원은 OpenAI text-embedding-3-small 모델 차원)
                 self.pc.create_index(
                     name=self.index_name,
-                    dimension=384,
+                    dimension=1536,
                     metric="cosine",
                     spec=ServerlessSpec(
                         cloud="aws",
@@ -246,7 +246,7 @@ class VectorService:
             
             # 해당 이력서의 모든 벡터 검색 (매우 큰 top_k 사용)
             search_results = self.index.query(
-                vector=[0.0] * 384,  # 더미 벡터 (검색용)
+                vector=[0.0] * 1536,  # 더미 벡터 (검색용)
                 top_k=10000,  # 충분히 큰 수
                 include_metadata=True,
                 filter=filter_dict
@@ -268,6 +268,29 @@ class VectorService:
             print(f"[VectorService] Pinecone 벡터 삭제 실패: {e}")
             return False
 
+    def get_index_info(self) -> Dict[str, Any]:
+        """
+        Pinecone 인덱스 상세 정보를 반환합니다.
+        
+        Returns:
+            Dict[str, Any]: 인덱스 정보
+        """
+        try:
+            # Pinecone 인덱스 정보 가져오기
+            index_info = self.pc.describe_index(self.index_name)
+            
+            return {
+                "name": index_info.name,
+                "dimension": index_info.dimension,
+                "metric": index_info.metric,
+                "host": index_info.host,
+                "status": index_info.status,
+                "spec": str(index_info.spec)
+            }
+        except Exception as e:
+            print(f"인덱스 정보 조회 실패: {e}")
+            return {"error": str(e)}
+
     def get_stats(self) -> Dict[str, Any]:
         """
         Pinecone 벡터 저장소 통계를 반환합니다.
@@ -283,7 +306,7 @@ class VectorService:
                 "total_vectors": index_stats.get("total_vector_count", 0),
                 "index_name": self.index_name,
                 "storage_type": "pinecone",
-                "dimension": index_stats.get("dimension", 384),
+                "dimension": index_stats.get("dimension", 1536),
                 "namespaces": index_stats.get("namespaces", {}),
                 "environment": self.environment
             }

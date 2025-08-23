@@ -16,7 +16,16 @@ if (process.env.NODE_ENV === 'production') {
   // Keep warnings/errors
 }
 
-const queryClient = new QueryClient();
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      staleTime: 5 * 60 * 1000, // 5분 동안 데이터를 신선하게 유지
+      cacheTime: 10 * 60 * 1000, // 10분 동안 캐시 유지
+      refetchOnWindowFocus: false, // 창 포커스 시 자동 리페치 방지
+      retry: 1, // 실패 시 1회만 재시도
+    },
+  },
+});
 
 const root = ReactDOM.createRoot(document.getElementById('root'));
 root.render(

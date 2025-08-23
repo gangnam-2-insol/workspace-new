@@ -19,6 +19,7 @@ import pickChatbotApi from '../services/pickChatbotApi';
 const ChatbotContainer = styled(motion.div)`
   position: fixed;
   bottom: 80px;
+  height: 85%;
   right: 25px;
   z-index: 1000;
   display: flex;
@@ -28,7 +29,7 @@ const ChatbotContainer = styled(motion.div)`
 
 const ChatWindow = styled(motion.div)`
   width: 400px;
-  height: 800px;
+  height: 100%;
   background: white;
   border-radius: 20px;
   box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
@@ -431,16 +432,83 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
       setMessages(prev => [...prev, botMessage]);
       
       // 페이지 액션이 있으면 자동 처리
-                      if (botMessage.pageAction) {
-                  console.log('🔍 [DEBUG] 페이지 액션 감지:', botMessage.pageAction);
-                  setTimeout(() => {
-                    if (botMessage.pageAction.action === 'navigate') {
-                              // 챗창 상태를 유지하면서 페이지 이동
-        sessionStorage.setItem('pickChatbotIsOpen', 'true');
-                      window.location.href = botMessage.pageAction.target;
-                    }
-                  }, 2000); // 2초 후 자동 이동
-                }
+      if (botMessage.pageAction) {
+        console.log('🔍 [DEBUG] 페이지 액션 감지:', botMessage.pageAction);
+        
+        // 페이지 액션 우선순위 처리
+        const handlePageAction = () => {
+          if (botMessage.pageAction.action === 'navigate') {
+            // 새로운 페이지 네비게이션 처리
+            const pageAction = botMessage.pageAction;
+            console.log('🎯 [페이지 네비게이션] 처리:', pageAction);
+            
+            // 챗창 상태를 유지하면서 페이지 이동
+            sessionStorage.setItem('pickChatbotIsOpen', 'true');
+            
+            // React Router를 사용한 페이지 이동
+            if (window.handlePageAction) {
+              // App.js의 handlePageAction 함수 호출
+              console.log('🎯 [페이지 네비게이션] handlePageAction 호출:', `changePage:${pageAction.path.replace('/', '')}`);
+              window.handlePageAction(`changePage:${pageAction.path.replace('/', '')}`);
+              
+              // 완전자율에이전트: 페이지 이동 후 자동 액션 실행 (더 긴 지연 시간)
+              console.log('🤖 [완전자율에이전트] 자동 액션 예약:', pageAction);
+              setTimeout(() => {
+                console.log('🤖 [완전자율에이전트] 자동 액션 실행 시작');
+                executeAutoActions(pageAction);
+              }, 2000);
+            } else {
+              // fallback: 직접 URL 변경
+              console.log('🎯 [페이지 네비게이션] fallback URL 변경:', pageAction.path);
+              window.location.href = pageAction.path;
+            }
+            
+          } else if (botMessage.pageAction.action === 'openAIJobRegistration') {
+            // AI 채용공고 등록 페이지로 이동 (자동입력 데이터 포함)
+            sessionStorage.setItem('pickChatbotIsOpen', 'true');
+            
+            // 자동입력 데이터가 있으면 URL 파라미터로 전달
+            if (botMessage.pageAction.auto_fill_data) {
+              const autoFillParam = encodeURIComponent(JSON.stringify(botMessage.pageAction.auto_fill_data));
+              window.location.href = `/job-posting?autoFill=${autoFillParam}`;
+            } else {
+              window.location.href = '/job-posting';
+            }
+          }
+        };
+
+        // 페이지 액션 메시지가 있으면 사용자에게 안내
+        if (botMessage.pageAction.message) {
+          // 페이지 이동 안내 메시지를 별도로 표시
+          const navigationMessage = {
+            id: Date.now() + 2,
+            text: `🚀 ${botMessage.pageAction.message}\n\n페이지로 이동하여 더 자세한 정보를 확인하시겠습니까?`,
+            isUser: false,
+            timestamp: new Date(),
+            isNavigationPrompt: true,
+            pageAction: botMessage.pageAction,
+            suggestions: [
+              "페이지로 이동하기",
+              "현재 페이지에서 계속하기"
+            ]
+          };
+          
+          setMessages(prev => [...prev, navigationMessage]);
+          
+          // 자동 이동은 5초 후로 연장 (사용자 선택 시간 확보)
+          setTimeout(() => {
+            // 사용자가 아직 선택하지 않았다면 자동 이동
+            const currentMessages = messages;
+            const lastMessage = currentMessages[currentMessages.length - 1];
+            if (lastMessage && lastMessage.isNavigationPrompt) {
+              handlePageAction();
+            }
+          }, 5000);
+        } else {
+          // 메시지가 없으면 바로 이동 (기존 로직)
+          setTimeout(handlePageAction, 2000);
+        }
+      }
     } catch (error) {
       console.error('🔍 [DEBUG] 챗봇 API 오류:', error);
       
@@ -472,17 +540,121 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
   };
 
   const handleSuggestionClick = (suggestion) => {
+    // 페이지 이동 제안인지 확인
+    if (suggestion === "페이지로 이동하기") {
+      // 현재 메시지에서 페이지 액션 찾기
+      const currentMessage = messages[messages.length - 1];
+      if (currentMessage && currentMessage.isNavigationPrompt && currentMessage.pageAction) {
+        const pageAction = currentMessage.pageAction;
+        
+        if (pageAction.action === 'navigate') {
+          sessionStorage.setItem('pickChatbotIsOpen', 'true');
+          window.location.href = pageAction.target;
+        } else if (pageAction.action === 'openAIJobRegistration') {
+          sessionStorage.setItem('pickChatbotIsOpen', 'true');
+          
+          if (pageAction.auto_fill_data) {
+            const autoFillParam = encodeURIComponent(JSON.stringify(pageAction.auto_fill_data));
+            window.location.href = `/job-posting?autoFill=${autoFillParam}`;
+          } else {
+            window.location.href = '/job-posting';
+          }
+        }
+        return;
+      }
+    } else if (suggestion === "현재 페이지에서 계속하기") {
+      // 페이지 이동을 취소하고 계속 대화
+      const continueMessage = {
+        id: Date.now(),
+        text: "네, 현재 페이지에서 계속 도움을 드리겠습니다. 다른 질문이 있으시면 언제든 말씀해 주세요!",
+        isUser: false,
+        timestamp: new Date()
+      };
+      setMessages(prev => [...prev, continueMessage]);
+      return;
+    }
+    
+    // 기존 제안 처리 로직
     handleSendMessage(suggestion);
   };
 
-      const handleQuickActionClick = (action) => {
-      if (action.action === 'navigate') {
-        // 챗창 상태를 유지하면서 페이지 이동
-        sessionStorage.setItem('pickChatbotIsOpen', 'true');
-        window.location.href = action.target;
-      } else if (action.action === 'external') {
+        // 완전자율에이전트: 자동 액션 실행 함수
+  const executeAutoActions = (pageAction) => {
+    console.log('🤖 [완전자율에이전트] 자동 액션 실행:', pageAction);
+    
+    const { path, additional_data } = pageAction;
+    
+    // 페이지별 자동 액션 매핑
+    const autoActions = {
+      '/github-test': () => {
+        if (additional_data?.username) {
+          console.log('🤖 [완전자율에이전트] GitHub 분석 자동 실행:', additional_data.username);
+          
+          // 더 정확한 입력 필드 찾기
+          const usernameInput = document.querySelector('input[placeholder*="GitHub"], input[name="username"], #username, input[type="text"]');
+          if (usernameInput) {
+            console.log('🤖 [완전자율에이전트] 사용자명 입력 필드 찾음:', usernameInput);
+            usernameInput.value = additional_data.username;
+            usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
+            usernameInput.dispatchEvent(new Event('change', { bubbles: true }));
+            
+            // 분석 버튼 찾기 및 클릭 (더 정확한 선택자)
+            setTimeout(() => {
+              const analyzeButton = document.querySelector('button[type="submit"], button:contains("분석"), button:contains("Analyze"), button:contains("Submit"), button:contains("확인")');
+              if (analyzeButton) {
+                console.log('🤖 [완전자율에이전트] 분석 버튼 자동 클릭:', analyzeButton);
+                analyzeButton.click();
+              } else {
+                console.log('🤖 [완전자율에이전트] 분석 버튼을 찾을 수 없습니다. 모든 버튼:', document.querySelectorAll('button'));
+                // 폼 제출 시도
+                const form = document.querySelector('form');
+                if (form) {
+                  console.log('🤖 [완전자율에이전트] 폼 자동 제출');
+                  form.submit();
+                }
+              }
+            }, 1000);
+          } else {
+            console.log('🤖 [완전자율에이전트] 사용자명 입력 필드를 찾을 수 없습니다. 모든 입력 필드:', document.querySelectorAll('input'));
+          }
+        }
+      },
+      '/job-posting': () => {
+        if (additional_data?.auto_fill_data) {
+          console.log('🤖 [완전자율에이전트] 채용공고 자동 입력:', additional_data.auto_fill_data);
+          // 채용공고 자동 입력 로직
+        }
+      }
+    };
+    
+    // 해당 페이지의 자동 액션 실행
+    if (autoActions[path]) {
+      console.log('🤖 [완전자율에이전트] 페이지 액션 실행:', path);
+      autoActions[path]();
+    } else {
+      console.log('🤖 [완전자율에이전트] 해당 페이지의 자동 액션이 정의되지 않음:', path);
+    }
+  };
+
+  const handleQuickActionClick = (action) => {
+    if (action.action === 'navigate') {
+      // 챗창 상태를 유지하면서 페이지 이동
+      sessionStorage.setItem('pickChatbotIsOpen', 'true');
+      window.location.href = action.target;
+    } else if (action.action === 'external') {
       // 외부 링크 열기
       window.open(action.target, '_blank');
+    } else if (action.action === 'openAIJobRegistration') {
+      // AI 채용공고 등록 페이지로 이동
+      sessionStorage.setItem('pickChatbotIsOpen', 'true');
+      
+      // 자동입력 데이터가 있으면 URL 파라미터로 전달
+      if (action.auto_fill_data) {
+        const autoFillParam = encodeURIComponent(JSON.stringify(action.auto_fill_data));
+        window.location.href = `/job-posting?autoFill=${autoFillParam}`;
+      } else {
+        window.location.href = '/job-posting';
+      }
     }
   };
 

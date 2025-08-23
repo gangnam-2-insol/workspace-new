@@ -1,6 +1,6 @@
 import os
 import sys
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
@@ -14,13 +14,44 @@ import codecs
 from datetime import datetime
 from datetime import timedelta
 import csv
-from chatbot import chatbot_router, langgraph_router
+# chatbot 라우터 추가
 from github import router as github_router
 from routers.upload import router as upload_router
 from routers.pick_chatbot import router as pick_chatbot_router
 from routers.integrated_ocr import router as integrated_ocr_router
-
 from routers.pdf_ocr import router as pdf_ocr_router
+from routers.job_posting import router as job_posting_router
+from routers.applicants import router as applicants_router
+from chatbot.chatbot.routers.chatbot_router import router as chatbot_router
+
+# 모듈화된 라우터 추가
+try:
+    from modules.resume.router import router as resume_router
+    print("✅ 이력서 라우터 import 성공")
+except ImportError as e:
+    print(f"⚠️ 이력서 모듈 import 오류: {e}")
+    resume_router = None
+
+try:
+    from modules.cover_letter.router import router as cover_letter_router
+    print("✅ 자기소개서 라우터 import 성공")
+except ImportError as e:
+    print(f"⚠️ 자기소개서 모듈 import 오류: {e}")
+    cover_letter_router = None
+
+try:
+    from modules.portfolio.router import router as portfolio_router
+    print("✅ 포트폴리오 라우터 import 성공")
+except ImportError as e:
+    print(f"⚠️ 포트폴리오 모듈 import 오류: {e}")
+    portfolio_router = None
+
+try:
+    from modules.hybrid.router import router as hybrid_router
+    print("✅ 하이브리드 라우터 import 성공")
+except ImportError as e:
+    print(f"⚠️ 하이브리드 모듈 import 오류: {e}")
+    hybrid_router = None
 
 
 from similarity_service import SimilarityService
@@ -38,7 +69,12 @@ if sys.platform.startswith('win'):
     sys.stderr = codecs.getwriter('utf-8')(sys.stderr.detach())
 
 # FastAPI 앱 생성
-app = FastAPI(title="AI 채용 관리 시스템 API", version="1.0.0")
+app = FastAPI(
+    title="AI 채용 관리 시스템 API", 
+    version="1.0.0",
+    docs_url="/docs",
+    redoc_url="/redoc"
+)
 
 # CORS 설정
 app.add_middleware(
@@ -67,23 +103,57 @@ async def add_charset_header(request, call_next):
     return response
 
 # 라우터 등록
-app.include_router(chatbot_router, prefix="/api/chatbot", tags=["chatbot"])
-app.include_router(langgraph_router, prefix="/api/langgraph", tags=["langgraph"])
-# 프론트엔드 호환을 위해 /api/langgraph-agent 프리픽스도 동일 라우터로 마운트
-app.include_router(langgraph_router, prefix="/api/langgraph-agent", tags=["langgraph-agent"])
 app.include_router(github_router, prefix="/api", tags=["github"])
 app.include_router(upload_router, tags=["upload"])
-app.include_router(pick_chatbot_router, prefix="/api", tags=["pick-chatbot"])
+app.include_router(pick_chatbot_router, prefix="/api/pick-chatbot", tags=["pick-chatbot"])
 app.include_router(integrated_ocr_router, prefix="/api/integrated-ocr", tags=["integrated-ocr"])
-# 프론트엔드 호환을 위해 /upload 경로에도 등록
-app.include_router(integrated_ocr_router, prefix="/upload", tags=["upload-compat"])
-
 app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
+app.include_router(job_posting_router, tags=["job-postings"])
+app.include_router(applicants_router, tags=["applicants"])
+app.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
+
+# 모듈화된 라우터 등록
+print("\n🔧 모듈화된 라우터 등록 시작...")
+
+if resume_router:
+    app.include_router(resume_router, prefix="/api/resume", tags=["resume"])
+    print("✅ 이력서 라우터 등록 완료")
+else:
+    print("❌ 이력서 라우터 등록 실패")
+
+if cover_letter_router:
+    app.include_router(cover_letter_router, prefix="/api/cover-letter", tags=["cover-letter"])
+    print("✅ 자기소개서 라우터 등록 완료")
+else:
+    print("❌ 자기소개서 라우터 등록 실패")
+
+if portfolio_router:
+    app.include_router(portfolio_router, prefix="/api/portfolio", tags=["portfolio"])
+    print("✅ 포트폴리오 라우터 등록 완료")
+else:
+    print("❌ 포트폴리오 라우터 등록 실패")
+
+if hybrid_router:
+    app.include_router(hybrid_router, prefix="/api/hybrid", tags=["hybrid"])
+    print("✅ 하이브리드 라우터 등록 완료")
+else:
+    print("❌ 하이브리드 라우터 등록 실패")
+
+print("🔧 모듈화된 라우터 등록 완료\n")
 
 
-# MongoDB 연결
+# MongoDB 연결 최적화
 MONGODB_URI = os.getenv("MONGODB_URI", "mongodb://localhost:27017/hireme")
-client = AsyncIOMotorClient(MONGODB_URI)
+client = AsyncIOMotorClient(
+    MONGODB_URI,
+    maxPoolSize=50,  # 최대 연결 풀 크기
+    minPoolSize=10,  # 최소 연결 풀 크기
+    maxIdleTimeMS=30000,  # 유휴 연결 타임아웃
+    serverSelectionTimeoutMS=5000,  # 서버 선택 타임아웃
+    socketTimeoutMS=20000,  # 소켓 타임아웃
+    connectTimeoutMS=10000,  # 연결 타임아웃
+    retryWrites=True  # 쓰기 재시도
+)
 db = client.hireme
 
 # 환경 변수에서 API 키 로드
@@ -111,10 +181,10 @@ class Resume(BaseModel):
     id: Optional[str] = None
     resume_id: Optional[str] = None
     name: str
-    position: str
+    position: Optional[str] = ""
     department: Optional[str] = ""
-    experience: int
-    skills: List[str]
+    experience: Optional[str] = ""
+    skills: Optional[str] = ""
     growthBackground: Optional[str] = ""
     motivation: Optional[str] = ""
     careerHistory: Optional[str] = ""
@@ -1186,6 +1256,221 @@ async def check_coverletter_plagiarism(applicant_id: str):
                 "message": f"자소서 표절체크 중 오류가 발생했습니다: {str(e)}"
             }
         )
+
+# 메일 템플릿 및 설정 관련 엔드포인트
+@app.get("/api/mail-templates")
+async def get_mail_templates():
+    """메일 템플릿 조회"""
+    try:
+        templates = await db.mail_templates.find_one({"_id": "default"})
+        if not templates:
+            # 기본 템플릿 생성
+            default_templates = {
+                "_id": "default",
+                "passed": {
+                    "subject": "축하합니다! 서류 전형 합격 안내",
+                    "content": """안녕하세요, {applicant_name}님
+
+축하드립니다! {job_posting_title} 포지션에 대한 서류 전형에 합격하셨습니다.
+
+다음 단계인 면접 일정은 추후 별도로 안내드리겠습니다.
+
+감사합니다.
+{company_name} 채용팀"""
+                },
+                "rejected": {
+                    "subject": "서류 전형 결과 안내",
+                    "content": """안녕하세요, {applicant_name}님
+
+{job_posting_title} 포지션에 대한 서류 전형 결과를 안내드립니다.
+
+안타깝게도 이번 전형에서는 합격하지 못했습니다.
+앞으로 더 좋은 기회가 있을 때 다시 지원해 주시기 바랍니다.
+
+감사합니다.
+{company_name} 채용팀"""
+                },
+                "created_at": datetime.now(),
+                "updated_at": datetime.now()
+            }
+            await db.mail_templates.insert_one(default_templates)
+            templates = default_templates
+        
+        # _id 제거하고 반환
+        templates.pop("_id", None)
+        return templates
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"메일 템플릿 조회 실패: {str(e)}")
+
+@app.post("/api/mail-templates")
+async def save_mail_templates(templates: Dict[str, Any]):
+    """메일 템플릿 저장"""
+    try:
+        update_data = {
+            "passed": templates.get("passed", {}),
+            "rejected": templates.get("rejected", {}),
+            "updated_at": datetime.now()
+        }
+        
+        result = await db.mail_templates.update_one(
+            {"_id": "default"},
+            {"$set": update_data},
+            upsert=True
+        )
+        
+        return {"success": True, "message": "메일 템플릿이 저장되었습니다."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"메일 템플릿 저장 실패: {str(e)}")
+
+@app.get("/api/mail-settings")
+async def get_mail_settings():
+    """메일 설정 조회"""
+    try:
+        settings = await db.mail_settings.find_one({"_id": "default"})
+        if not settings:
+            # 기본 설정 생성
+            default_settings = {
+                "_id": "default",
+                "senderEmail": "",
+                "senderPassword": "",
+                "senderName": "",
+                "smtpServer": "smtp.gmail.com",
+                "smtpPort": 587,
+                "created_at": datetime.now(),
+                "updated_at": datetime.now()
+            }
+            await db.mail_settings.insert_one(default_settings)
+            settings = default_settings
+        
+        # _id 제거하고 반환
+        settings.pop("_id", None)
+        return settings
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"메일 설정 조회 실패: {str(e)}")
+
+@app.post("/api/mail-settings")
+async def save_mail_settings(settings: Dict[str, Any]):
+    """메일 설정 저장"""
+    try:
+        update_data = {
+            "senderEmail": settings.get("senderEmail", ""),
+            "senderPassword": settings.get("senderPassword", ""),
+            "senderName": settings.get("senderName", ""),
+            "smtpServer": settings.get("smtpServer", "smtp.gmail.com"),
+            "smtpPort": settings.get("smtpPort", 587),
+            "updated_at": datetime.now()
+        }
+        
+        result = await db.mail_settings.update_one(
+            {"_id": "default"},
+            {"$set": update_data},
+            upsert=True
+        )
+        
+        return {"success": True, "message": "메일 설정이 저장되었습니다."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"메일 설정 저장 실패: {str(e)}")
+
+@app.post("/api/send-test-mail")
+async def send_test_mail(request: Request):
+    """테스트 메일 발송"""
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        
+        data = await request.json()
+        print(f"받은 데이터: {data}")  # 디버깅용 로그
+        
+        test_email = data.get("testEmail")
+        mail_settings = data.get("mailSettings")
+        
+        print(f"테스트 이메일: {test_email}")  # 디버깅용 로그
+        print(f"메일 설정: {mail_settings}")  # 디버깅용 로그
+        
+        if not test_email or not mail_settings:
+            print("테스트 이메일 또는 메일 설정이 없습니다.")  # 디버깅용 로그
+            raise HTTPException(status_code=400, detail="테스트 이메일과 메일 설정이 필요합니다.")
+        
+        # 메일 템플릿 조회
+        mail_templates = await db.mail_templates.find_one({"_id": "default"})
+        if not mail_templates:
+            raise HTTPException(status_code=400, detail="메일 템플릿이 필요합니다.")
+        
+        # 테스트 메일 내용 생성
+        template = mail_templates.get("passed", {})
+        subject = template.get("subject", "테스트 메일")
+        content = template.get("content", "테스트 메일입니다.")
+        
+        # 변수 치환
+        content = content.format(
+            applicant_name="테스트 사용자",
+            job_posting_title="테스트 채용공고",
+            company_name="테스트 회사",
+            position="테스트 직무"
+        )
+        
+        # 메일 객체 생성
+        msg = MIMEMultipart()
+        msg['From'] = f"{mail_settings.get('senderName', '')} <{mail_settings.get('senderEmail')}>"
+        msg['To'] = test_email
+        msg['Subject'] = f"[테스트] {subject}"
+        
+        # 메일 본문 추가
+        msg.attach(MIMEText(content, 'plain', 'utf-8'))
+        
+        # SMTP 서버 연결 및 메일 발송
+        try:
+            print(f"SMTP 서버 연결 시도: {mail_settings.get('smtpServer')}:{mail_settings.get('smtpPort')}")  # 디버깅용 로그
+            print(f"발송자 이메일: {mail_settings.get('senderEmail')}")  # 디버깅용 로그
+            print(f"발송자 비밀번호 길이: {len(mail_settings.get('senderPassword', ''))}")  # 디버깅용 로그
+            print(f"발송자 비밀번호: {mail_settings.get('senderPassword', '')[:4]}***")  # 디버깅용 로그 (앞 4자리만)
+            
+            smtp_port = mail_settings.get('smtpPort', 587)
+            smtp_server = mail_settings.get('smtpServer', 'smtp.gmail.com')
+            
+            # 포트 465인 경우 SSL 사용
+            if smtp_port == 465:
+                with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+                    print("SMTP SSL 서버 연결 성공")  # 디버깅용 로그
+                    print(f"로그인 시도: {mail_settings.get('senderEmail')}")  # 디버깅용 로그
+                    server.login(mail_settings.get('senderEmail'), mail_settings.get('senderPassword'))
+                    print("로그인 성공")  # 디버깅용 로그
+                    server.send_message(msg)
+                    print("메일 발송 성공")  # 디버깅용 로그
+            else:
+                with smtplib.SMTP(smtp_server, smtp_port) as server:
+                    print("SMTP 서버 연결 성공")  # 디버깅용 로그
+                    server.starttls()
+                    print("STARTTLS 성공")  # 디버깅용 로그
+                    print(f"로그인 시도: {mail_settings.get('senderEmail')}")  # 디버깅용 로그
+                    server.login(mail_settings.get('senderEmail'), mail_settings.get('senderPassword'))
+                    print("로그인 성공")  # 디버깅용 로그
+                    server.send_message(msg)
+                    print("메일 발송 성공")  # 디버깅용 로그
+            
+            return {
+                "success": True,
+                "message": "테스트 메일이 성공적으로 발송되었습니다.",
+                "subject": f"[테스트] {subject}",
+                "to": test_email
+            }
+            
+        except smtplib.SMTPAuthenticationError as e:
+            print(f"인증 실패: {str(e)}")  # 디버깅용 로그
+            raise HTTPException(status_code=400, detail="인증 실패. 이메일 주소와 앱 비밀번호를 확인해주세요.")
+        except smtplib.SMTPException as e:
+            print(f"SMTP 오류: {str(e)}")  # 디버깅용 로그
+            raise HTTPException(status_code=400, detail=f"SMTP 오류: {str(e)}")
+        except Exception as e:
+            print(f"메일 발송 오류: {str(e)}")  # 디버깅용 로그
+            raise HTTPException(status_code=500, detail=f"메일 발송 오류: {str(e)}")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"테스트 메일 발송 중 오류: {str(e)}")  # 디버깅용 로그
+        raise HTTPException(status_code=500, detail=f"테스트 메일 발송 중 오류가 발생했습니다: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

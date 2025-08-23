@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import EnhancedModalChatbot from '../../chatbot/components/EnhancedModalChatbot';
+// EnhancedModalChatbot 컴포넌트 제거됨
 import { FiX, FiArrowLeft, FiArrowRight, FiCheck, FiFileText, FiClock, FiMapPin, FiDollarSign, FiUsers, FiMail, FiCalendar, FiFolder, FiSettings } from 'react-icons/fi';
 import './LangGraphJobRegistration.css';
 
@@ -597,7 +597,7 @@ const LangGraphJobRegistration = ({ isOpen, onClose, initialData = {} }) => {
   };
 
   const handleTestAutoFill = () => {
-    setFormData({
+    const testData = {
       department: '개발팀',
       position: '백엔드 개발자',
       headcount: '2명',
@@ -609,12 +609,17 @@ const LangGraphJobRegistration = ({ isOpen, onClose, initialData = {} }) => {
       locationCity: '서울',
       locationDistrict: '강남구',
       salary: '4,000만원 ~ 6,000만원',
-      mainDuties: '웹 서비스 백엔드 개발 및 운영, API 설계 및 구현, 데이터베이스 설계 및 최적화',
-      requirements: 'Java/Spring Boot 경험 3년 이상, RESTful API 설계 경험, MySQL/PostgreSQL 사용 경험',
-      benefits: '점심식대 지원, 야근식대 지원, 경조사 지원, 생일 축하금, 명절 선물',
+      mainDuties: '웹 서비스 백엔드 개발 및 운영, API 설계 및 구현, 데이터베이스 설계 및 최적화, 마이크로서비스 아키텍처 설계',
+      requirements: 'Java/Spring Boot 경험 3년 이상, RESTful API 설계 경험, MySQL/PostgreSQL 사용 경험, Docker/Kubernetes 경험 우대',
+      benefits: '점심식대 지원, 야근식대 지원, 경조사 지원, 생일 축하금, 명절 선물, 연차휴가, 건강검진, 교육비 지원',
       contactEmail: 'hr@company.com',
       deadline: '2024-12-31'
-    });
+    };
+    
+    setFormData(testData);
+    
+    // 사용자에게 알림
+    alert('🧪 테스트 데이터가 자동으로 입력되었습니다!\n\n📋 입력된 정보:\n• 부서: 개발팀\n• 직무: 백엔드 개발자\n• 모집인원: 2명\n• 경력: 3년 이상\n• 근무형태: 정규직\n• 근무시간: 09:00-18:00\n• 근무일: 월-금\n• 근무위치: 서울 강남구\n• 연봉: 4,000만원-6,000만원\n• 연락처: hr@company.com\n• 마감일: 2024-12-31');
   };
 
   return (
@@ -1314,58 +1319,7 @@ const LangGraphJobRegistration = ({ isOpen, onClose, initialData = {} }) => {
                 </>
               )}
 
-              {/* AI 어시스턴트 */}
-              <EnhancedModalChatbot
-                isOpen={aiChatbot.isActive}
-                onClose={() => {
-                  console.log('=== 랭그래프 어시스턴트 닫기 - 채용공고 등록 도우미도 함께 닫기 ===');
-                  // 어시스턴트 닫기
-                  setAiChatbot(prev => ({ ...prev, isActive: false }));
-                  // 채용공고 등록 도우미도 함께 닫기
-                  handleClose();
-                }}
-                onPageAction={(action) => {
-                  console.log('LangGraphJobRegistration에서 onPageAction 호출됨:', action);
-                  // 이미 LangGraphJobRegistration 안에 있으므로 다른 액션만 처리
-                  if (action !== 'openLangGraphRegistration') {
-                    const event = new CustomEvent(action);
-                    window.dispatchEvent(event);
-                  }
-                }}
-                onFieldUpdate={(field, value) => {
-                  console.log(`AI 어시스턴트 필드 업데이트: ${field} = ${value}`);
-                  setFormData(prev => ({ ...prev, [field]: value }));
-                  
-                  // 추가: 성공 알림
-                  console.log(`✅ ${field} 필드에 "${value}" 값이 성공적으로 입력되었습니다!`);
-                }}
-                onComplete={(data) => {
-                  console.log('AI 챗봇 완료:', data);
-                  setFormData(prev => ({ ...prev, ...data }));
-                  setAiChatbot(prev => ({ ...prev, isActive: false }));
-                }}
-                formData={formData}
-                pageId="langgraph_recruit_form"
-                initialAIMode="langgraph"
-                fields={[
-                  { key: 'department', label: '구인 부서 (LangGraph)', type: 'text' },
-                  { key: 'position', label: '직무명 (LangGraph)', type: 'text' },
-                  { key: 'headcount', label: '채용 인원 (LangGraph)', type: 'text' },
-                  { key: 'experience', label: '경력 요건 (LangGraph)', type: 'text' },
-                  { key: 'experienceYears', label: '경력 연차 (LangGraph)', type: 'text' },
-                  { key: 'workType', label: '근무 형태 (LangGraph)', type: 'text' },
-                  { key: 'workHours', label: '근무 시간 (LangGraph)', type: 'text' },
-                  { key: 'workDays', label: '근무 요일 (LangGraph)', type: 'text' },
-                  { key: 'locationCity', label: '근무 위치(도시) (LangGraph)', type: 'text' },
-                  { key: 'locationDistrict', label: '근무 위치(구/군) (LangGraph)', type: 'text' },
-                  { key: 'salary', label: '연봉 (LangGraph)', type: 'text' },
-                  { key: 'mainDuties', label: '주요 업무 (LangGraph)', type: 'textarea' },
-                  { key: 'requirements', label: '자격 요건 (LangGraph)', type: 'textarea' },
-                  { key: 'benefits', label: '복리후생 (LangGraph)', type: 'textarea' },
-                  { key: 'contactEmail', label: '연락처 이메일 (LangGraph)', type: 'email' },
-                  { key: 'deadline', label: '마감일 (LangGraph)', type: 'date' }
-                ]}
-              />
+              {/* AI 어시스턴트 - EnhancedModalChatbot 컴포넌트 제거됨 */}
             </Content>
           </Modal>
         </Overlay>

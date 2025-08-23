@@ -504,8 +504,8 @@ class KeywordSearchService:
             # 인덱스 매핑 재생성
             self._create_index_mapping()
             
-            # 모든 이력서 조회
-            resumes = list(collection.find({}))
+            # 모든 이력서 조회 (비동기)
+            resumes = await collection.find({}).to_list(1000)
             
             if not resumes:
                 return {

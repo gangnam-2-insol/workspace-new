@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import TemplateModal from './TemplateModal';
-import EnhancedModalChatbot from '../../chatbot/components/EnhancedModalChatbot';
+// EnhancedModalChatbot 컴포넌트 제거됨
 import TitleRecommendationModal from '../../components/TitleRecommendationModal';
 // import TestAutoFillButton from '../../components/TestAutoFillButton';
 import './TextBasedRegistration.css';
@@ -184,7 +184,8 @@ const TextBasedRegistration = ({
   isOpen, 
   onClose, 
   onComplete,
-  organizationData = { departments: [] }
+  organizationData = { departments: [] },
+  autoFillData = null
 }) => {
   const [formData, setFormData] = useState({
     department: '',
@@ -282,6 +283,16 @@ const TextBasedRegistration = ({
   useEffect(() => {
     if (isOpen) {
       console.log('=== TextBasedRegistration 모달 열림 - AI 도우미 자동 시작 ===');
+      
+      // 자동입력 데이터가 있으면 폼에 적용
+      if (autoFillData) {
+        console.log('자동입력 데이터 적용:', autoFillData);
+        setFormData(prev => ({
+          ...prev,
+          ...autoFillData
+        }));
+      }
+      
       // 먼저 모달을 AI 어시스턴트 크기로 설정
       setTimeout(() => {
         setAiChatbot({
@@ -291,7 +302,9 @@ const TextBasedRegistration = ({
         });
       }, 1200); // 1.2초 후 AI 도우미 시작 (모달 애니메이션 완료 후)
     }
-  }, [isOpen]);
+  }, [isOpen, autoFillData]);
+
+
 
   // AI 챗봇이 비활성화될 때 플로팅 챗봇 다시 표시
   useEffect(() => {
@@ -621,24 +634,23 @@ const TextBasedRegistration = ({
     }
   }, [isOpen]);
 
-  // 테스트 자동입력 처리 (주석 처리됨)
-  /*
+  // 테스트 자동입력 처리
   const handleTestAutoFill = (sampleData) => {
     console.log('테스트 자동입력 시작:', sampleData);
     
-    // 하드코딩된 테스트 값들
+    // 하드코딩된 테스트 값들 (모든 필드 포함)
     const testData = {
       department: '개발팀',
       experience: '2년이상',
-      experienceYears: '',
-      headcount: '0명',
-      mainDuties: '웹개발',
-      workHours: '9시부터 3시',
-      workDays: '주중',
-      locationCity: '서울특별시 강남구',
+      experienceYears: '2',
+      headcount: '2명',
+      mainDuties: '웹개발, 프론트엔드 개발, React/Vue.js 활용',
+      workHours: '09:00 - 18:00',
+      workDays: '주중 (월-금)',
+      locationCity: '서울특별시 강남구 테헤란로 123',
       salary: '연봉 4,000만원 - 6,000만원',
-      contactEmail: 'test@test.com',
-      deadline: '9월 3일까지'
+      contactEmail: 'hr@company.com',
+      deadline: '2024년 9월 30일까지'
     };
 
     // 폼 데이터 일괄 업데이트
@@ -647,9 +659,8 @@ const TextBasedRegistration = ({
     console.log('테스트 자동입력 완료:', testData);
     
     // 사용자에게 알림
-    alert('🧪 테스트 데이터가 자동으로 입력되었습니다!');
+    alert('🧪 테스트 데이터가 자동으로 입력되었습니다!\n\n📋 입력된 정보:\n• 부서: 개발팀\n• 경력: 2년이상 (2년)\n• 모집인원: 2명\n• 주요업무: 웹개발, 프론트엔드 개발\n• 근무시간: 09:00-18:00\n• 근무일: 주중 (월-금)\n• 근무위치: 서울 강남구\n• 연봉: 4,000만원-6,000만원\n• 연락처: hr@company.com\n• 마감일: 2024년 9월 30일');
   };
-  */
 
   return (
     <AnimatePresence>
@@ -671,7 +682,36 @@ const TextBasedRegistration = ({
             <Header>
               <Title>🤖 AI 채용공고 등록 도우미</Title>
               <div style={{ display: 'flex', alignItems: 'center' }}>
-                {/* <TestAutoFillButton onAutoFill={handleTestAutoFill} /> */}
+                <button
+                  onClick={handleTestAutoFill}
+                  style={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    border: 'none',
+                    color: 'white',
+                    fontSize: '12px',
+                    cursor: 'pointer',
+                    padding: '8px 16px',
+                    borderRadius: '20px',
+                    marginRight: '12px',
+                    transition: 'all 0.3s ease',
+                    fontWeight: '600',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
+                    boxShadow: '0 2px 8px rgba(102, 126, 234, 0.3)'
+                  }}
+                  onMouseEnter={(e) => {
+                    e.target.style.transform = 'translateY(-2px)';
+                    e.target.style.boxShadow = '0 4px 12px rgba(102, 126, 234, 0.4)';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.target.style.transform = 'translateY(0)';
+                    e.target.style.boxShadow = '0 2px 8px rgba(102, 126, 234, 0.3)';
+                  }}
+                >
+                  <span style={{ fontSize: '14px' }}>🧪</span>
+                  테스트 데이터
+                </button>
                 <CloseButton onClick={onClose}>
                   <FiX />
                 </CloseButton>
@@ -1001,70 +1041,7 @@ const TextBasedRegistration = ({
         </Overlay>
       )}
 
-      {/* AI 챗봇은 항상 마운트하여 상태를 보존하고, isOpen 으로 표시만 제어 */}
-              <EnhancedModalChatbot
-        key="enhanced-modal-chatbot"
-        isOpen={aiChatbot.isActive}
-        onClose={() => setAiChatbot(prev => ({ ...prev, isActive: false }))}
-        onTitleRecommendation={(data) => {
-          console.log('AI 챗봇에서 제목 추천 요청:', data);
-          setFormData(prev => ({ ...prev, ...data }));
-          setAiChatbot(prev => ({ ...prev, isActive: false }));
-          setTitleRecommendationModal({
-            isOpen: true,
-            finalFormData: { ...formData, ...data }
-          });
-        }}
-        onFieldUpdate={(field, value) => {
-             console.log('=== TextBasedRegistration - 필드 업데이트 콜백 ===');
-             console.log('필드:', field);
-             console.log('값:', value);
-             console.log('업데이트 전 formData:', formData);
-             
-             // 필드 업데이트 로직 개선
-             setFormData(prev => {
-               const newFormData = { ...prev, [field]: value };
-               console.log('업데이트 후 formData:', newFormData);
-               
-               // 추가: 필드 업데이트 후 즉시 시각적 피드백
-               setTimeout(() => {
-                 const fieldElement = document.querySelector(`[name="${field}"]`);
-                 if (fieldElement) {
-                   fieldElement.style.transition = 'all 0.3s ease';
-                   fieldElement.style.borderColor = '#667eea';
-                   fieldElement.style.boxShadow = '0 0 0 3px rgba(102, 126, 234, 0.2)';
-                   fieldElement.style.transform = 'scale(1.02)';
-                   
-                   setTimeout(() => {
-                     fieldElement.style.borderColor = '#e5e7eb';
-                     fieldElement.style.boxShadow = 'none';
-                     fieldElement.style.transform = 'scale(1)';
-                   }, 1000);
-                 }
-               }, 100);
-               
-               return newFormData;
-             });
-             
-             // 추가: 성공 알림
-             console.log(`✅ ${field} 필드에 "${value}" 값이 성공적으로 입력되었습니다!`);
-           }}
-           onComplete={(data) => {
-             console.log('AI 챗봇 완료:', data);
-             setFormData(prev => ({ ...prev, ...data }));
-              setAiChatbot(prev => ({ ...prev, isActive: false }));
-           }}
-            formData={formData}
-            fields={[
-              { key: 'department', label: '구인 부서', type: 'text' },
-              { key: 'headcount', label: '채용 인원', type: 'text' },
-              { key: 'mainDuties', label: '주요 업무', type: 'textarea' },
-              { key: 'workHours', label: '근무 시간', type: 'text' },
-              { key: 'salary', label: '급여 조건', type: 'text' },
-              { key: 'contactEmail', label: '연락처 이메일', type: 'email' },
-              { key: 'experience', label: '경력 요건', type: 'text' }
-            ]}
-          />
+      {/* AI 챗봇 - EnhancedModalChatbot 컴포넌트 제거됨 */}
 
       {/* 제목 추천 모달 */}
       <TitleRecommendationModal

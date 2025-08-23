@@ -565,4 +565,256 @@ class ChunkingService:
             if chunk.strip():
                 chunks.append(chunk.strip())
         
+        if career_history:
+            return {
+                "resume_id": resume_id,
+                "chunk_id": f"{resume_id}_career_history",
+                "chunk_type": "career_history",
+                "text": f"경력사항: {career_history}",
+                "metadata": {
+                    "section": "career_history",
+                    "original_field": "careerHistory"
+                }
+            }
+        return None
+    
+    def _split_into_items(self, text: str) -> List[str]:
+        """텍스트를 개별 항목으로 분할"""
+        if not text:
+            return []
+        
+        # 다양한 구분자로 분할
+        # 1. 숫자와 점 (1. 2. 3.)
+        # 2. 대시 (-, •, -, ●)
+        # 3. 줄바꿈으로 구분된 항목
+        
+        # 먼저 명확한 구분자들로 분할
+        items = re.split(r'(?:\d+\.|[-•●▪▫]|\n\s*[-•●▪▫]?|\n\s*\d+\.)', text)
+        
+        # 빈 항목 제거 및 정리
+        cleaned_items = []
+        for item in items:
+            item = item.strip()
+            if item and len(item) > 10:  # 너무 짧은 항목은 제외
+                cleaned_items.append(item)
+        
+        # 분할된 항목이 없으면 원본 텍스트를 하나의 항목으로 반환
+        if not cleaned_items and text.strip():
+            cleaned_items = [text.strip()]
+        
+        return cleaned_items
+    
+    def _create_keywords_chunk(self, document: Dict[str, Any], document_id: str, base_metadata: Dict[str, Any] = None) -> Dict[str, Any]:
+        """키워드 청크 생성 - keywords 배열 사용"""
+        keywords = document.get("keywords", [])
+        
+        if keywords and isinstance(keywords, list):
+            keywords_text = ", ".join(keywords)
+            metadata = {
+                "section": "keywords",
+                "original_field": "keywords",
+                "keyword_count": len(keywords),
+                **(base_metadata or {})
+            }
+            return {
+                "document_id": document_id,
+                "chunk_id": f"{document_id}_keywords",
+                "chunk_type": "keywords",
+                "text": f"키워드: {keywords_text}",
+                "metadata": metadata
+            }
+        return None
+    
+    def _create_extracted_text_chunks(self, document: Dict[str, Any], document_id: str, base_metadata: Dict[str, Any] = None) -> List[Dict[str, Any]]:
+        """추출된 텍스트를 청크로 분할 - extracted_text 또는 resume_text 필드 사용"""
+        chunks = []
+        
+        # extracted_text가 없거나 짧으면 resume_text를 사용
+        extracted_text = document.get("extracted_text", "").strip()
+        if not extracted_text or len(extracted_text) < 50:
+            extracted_text = document.get("resume_text", "").strip()
+            print(f"[ChunkingService] extracted_text 부족, resume_text 사용: {len(extracted_text)} 문자")
+        
+        if extracted_text:
+            # 문서 타입별 청킹 설정 적용
+            doc_type = base_metadata.get("document_type", "resume") if base_metadata else "resume"
+            config = self.chunk_configs.get(doc_type, self.chunk_configs["resume"])
+            chunk_size = config["chunk_size"]
+            overlap = config["overlap"]
+            
+            for i in range(0, len(extracted_text), chunk_size - overlap):
+                chunk_text = extracted_text[i:i + chunk_size]
+                if chunk_text.strip():
+                    metadata = {
+                        "section": "extracted_text",
+                        "chunk_index": i // (chunk_size - overlap) + 1,
+                        "original_field": "extracted_text",
+                        "start_position": i,
+                        "end_position": min(i + chunk_size, len(extracted_text)),
+                        **(base_metadata or {})
+                    }
+                    chunks.append({
+                        "document_id": document_id,
+                        "resume_id": document_id,  # VectorService에서 필요한 필드
+                        "chunk_id": f"{document_id}_text_{i // (chunk_size - overlap) + 1}",
+                        "chunk_type": "extracted_text",
+                        "text": chunk_text.strip(),
+                        "metadata": metadata
+                    })
+        
+        return chunks
+    
+    def _create_basic_info_chunk(self, document: Dict[str, Any], document_id: str, base_metadata: Dict[str, Any] = None) -> Dict[str, Any]:
+        """기본 정보 청크 생성 - basic_info 필드의 배열/문자열 모두 처리"""
+        basic_info = document.get("basic_info", {})
+        
+        if basic_info:
+            info_parts = []
+            processed_fields = {}
+            
+            for key, value in basic_info.items():
+                if not value:
+                    continue
+                    
+                # 배열 필드 처리 (emails, phones, names, urls)
+                if isinstance(value, list) and value:
+                    # 빈 값들 제거 후 처리
+                    clean_values = [str(v).strip() for v in value if v and str(v).strip()]
+                    if clean_values:
+                        if len(clean_values) == 1:
+                            info_parts.append(f"{key}: {clean_values[0]}")
+                        else:
+                            info_parts.append(f"{key}: {', '.join(clean_values)}")
+                        processed_fields[key] = clean_values
+                
+                # 문자열 필드 처리
+                elif isinstance(value, str) and value.strip():
+                    info_parts.append(f"{key}: {value.strip()}")
+                    processed_fields[key] = value.strip()
+                
+                # 기타 타입 처리 (숫자 등)
+                elif value:
+                    info_parts.append(f"{key}: {str(value)}")
+                    processed_fields[key] = str(value)
+            
+            # info_parts가 비어있어도 기본 청크 생성
+            if info_parts:
+                text_content = " ".join(info_parts)
+            else:
+                # 빈 정보라도 기본 텍스트로 청크 생성
+                text_content = f"기본정보: {document.get('name', '이름미상')}"
+                processed_fields = {"fallback": "기본 정보 없음"}
+            
+            metadata = {
+                "section": "basic_info",
+                "original_field": "basic_info",
+                "info_fields": list(processed_fields.keys()),
+                "processed_data": processed_fields,
+                **(base_metadata or {})
+            }
+            return {
+                "document_id": document_id,
+                "chunk_id": f"{document_id}_basic_info",
+                "chunk_type": "basic_info",
+                "text": text_content,
+                "metadata": metadata
+            }
+        return None
+    
+    def _create_cover_letter_specific_chunks(self, document: Dict[str, Any], document_id: str, base_metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """자기소개서 전용 청크 생성 - growthBackground, motivation, careerHistory 처리"""
+        chunks = []
+        
+        # cover_letters 컬렉션의 새로운 필드들
+        cover_letter_fields = {
+            "growthBackground": "성장배경",
+            "motivation": "지원동기", 
+            "careerHistory": "경력사항"
+        }
+        
+        # 특화 필드들 청킹
+        for field_name, field_desc in cover_letter_fields.items():
+            field_content = document.get(field_name, "")
+            if field_content and field_content.strip():
+                # cover_letter 타입의 청킹 설정 적용
+                config = self.chunk_configs["cover_letter"]
+                field_chunks = self._split_text_into_chunks(
+                    field_content.strip(), 
+                    chunk_size=config["chunk_size"], 
+                    overlap=config["overlap"]
+                )
+                
+                for i, chunk_text in enumerate(field_chunks):
+                    if chunk_text.strip():
+                        metadata = {
+                            "section": field_name,
+                            "section_description": field_desc,
+                            "original_field": field_name,
+                            "chunk_index": i + 1,
+                            "total_chunks": len(field_chunks),
+                            **(base_metadata or {})
+                        }
+                        
+                        chunk_id_suffix = f"_{i+1}" if len(field_chunks) > 1 else ""
+                        chunks.append({
+                            "document_id": document_id,
+                            "chunk_id": f"{document_id}_{field_name}{chunk_id_suffix}",
+                            "chunk_type": field_name,
+                            "text": f"{field_desc}: {chunk_text.strip()}",
+                            "metadata": metadata
+                        })
+        
+        return chunks
+    
+    def _create_portfolio_specific_chunks(self, document: Dict[str, Any], document_id: str, base_metadata: Dict[str, Any]) -> List[Dict[str, Any]]:
+        """포트폴리오 전용 청크 생성 - items, artifacts 구조 처리"""
+        chunks = []
+        
+        # portfolios 컬렉션의 items 배열 처리
+        items = document.get("items", [])
+        if items and isinstance(items, list):
+            for i, item in enumerate(items):
+                if isinstance(item, dict):
+                    item_id = item.get("item_id", f"item_{i+1}")
+                    title = item.get("title", "")
+                    item_type = item.get("type", "")
+                    
+                    # 아이템 기본 정보 청크
+                    item_info_parts = []
+                    if title:
+                        item_info_parts.append(f"제목: {title}")
+                    if item_type:
+                        item_info_parts.append(f"타입: {item_type}")
+                    
+                    if item_info_parts:
+                        metadata = {
+                            "section": "portfolio_item",
+                            "item_id": item_id,
+                            "item_index": i + 1,
+                            "item_type": item_type,
+                            "original_field": "items",
+                            **(base_metadata or {})
+                        }
+                        
+                        chunks.append({
+                            "document_id": document_id,
+                            "chunk_id": f"{document_id}_item_{i+1}",
+                            "chunk_type": "portfolio_item",
+                            "text": " ".join(item_info_parts),
+                            "metadata": metadata
+                        })
+        
+        return chunks
+    
+    def _split_text_into_chunks(self, text: str, chunk_size: int = 1000, overlap: int = 100) -> List[str]:
+        """긴 텍스트를 오버랩을 두고 청크로 분할"""
+        if not text or len(text) <= chunk_size:
+            return [text] if text.strip() else []
+        
+        chunks = []
+        for i in range(0, len(text), chunk_size - overlap):
+            chunk = text[i:i + chunk_size]
+            if chunk.strip():
+                chunks.append(chunk.strip())
+        
         return chunks

@@ -94,29 +94,6 @@ class MongoSaver:
             phones = re.findall(r'\b\d{2,3}-\d{3,4}-\d{4}\b', text)
             basic_info["phones"] = list(set(phones))
             
-            # 이름 추출 (한글 이름 패턴)
-            name_patterns = [
-                r'[가-힣]{2,4}\s*[가-힣]{1,2}',  # 한글 이름 (성+이름)
-                r'[A-Za-z]+\s+[A-Za-z]+',        # 영문 이름
-                r'[가-힣]{2,4}님',                # 한글 이름 + 님
-                r'[A-Za-z]+\s*[A-Za-z]*\s*[A-Za-z]*'  # 영문 이름 (성+이름+중간이름)
-            ]
-            
-            found_names = []
-            for pattern in name_patterns:
-                matches = re.findall(pattern, text)
-                found_names.extend(matches)
-            
-            # 이름 후보들 중에서 실제 이름으로 보이는 것들만 선택
-            filtered_names = []
-            for name in found_names:
-                name = name.strip()
-                # 너무 짧거나 긴 이름 제외
-                if 2 <= len(name) <= 20 and name not in filtered_names:
-                    filtered_names.append(name)
-            
-            basic_info["names"] = filtered_names[:3]  # 최대 3개까지만
-            
             # 기술 스택 추출 (ai_analyzer.py의 로직과 동일)
             skill_patterns = [
                 # 프로그래밍 언어
@@ -186,7 +163,7 @@ class MongoSaver:
 }}"""
 
             response = sync_client.chat.completions.create(
-                model="gpt-4o-mini",
+                model="gpt-4o",
                 messages=[
                     {"role": "system", "content": "너는 자기소개서 분석 AI야. 텍스트에서 경력사항, 성장배경, 지원동기를 정확히 추출해."},
                     {"role": "user", "content": ai_prompt}
@@ -239,40 +216,21 @@ class MongoSaver:
                 try:
                     self.mongo_service.update_applicant_sync(
                         applicant["id"],
-                        {"skills": basic_info["skills"], "updated_at": datetime.now()}
+                        {"skills": ", ".join(basic_info["skills"])}
                     )
                     print(f"✅ 지원자 데이터에 기술 스택 업데이트: {basic_info['skills']}")
                 except Exception as e:
                     print(f"⚠️ 기술 스택 업데이트 실패: {e}")
             
-            # 5. 기본 정보와 파일 메타데이터 모델 생성
-            from models.document import BasicInfo, FileMetadata
-            
-            basic_info_model = BasicInfo(
-                emails=basic_info.get("emails", []),
-                phones=basic_info.get("phones", []),
-                names=basic_info.get("names", []),
-                urls=basic_info.get("urls", [])
-            )
-            
-            file_metadata_model = FileMetadata(
-                filename=file_metadata.get("filename", ""),
-                size=file_metadata.get("size", 0),
-                mime=file_metadata.get("mime", ""),
-                hash=file_metadata.get("hash", ""),
-                created_at=file_metadata.get("created_at", datetime.now()),
-                modified_at=file_metadata.get("modified_at", datetime.now())
-            )
-            
-            # 6. 이력서 데이터 생성
+            # 5. 이력서 데이터 생성 (application_id 제거)
             resume_data = ResumeCreate(
                 applicant_id=applicant["id"],
                 extracted_text=ocr_result.get("extracted_text", ""),
                 summary=ocr_result.get("summary", ""),
                 keywords=ocr_result.get("keywords", []),
                 document_type="resume",
-                basic_info=basic_info_model,
-                file_metadata=file_metadata_model
+                basic_info=basic_info,
+                file_metadata=file_metadata
             )
             
             # 5. 이력서 저장
@@ -281,7 +239,6 @@ class MongoSaver:
             # 6. 의미론적 청킹 적용
             try:
                 # 지원자 데이터를 이력서 형태로 변환하여 청킹
-                # applicant_data (ApplicantCreate)에서 데이터 가져오기
                 if hasattr(applicant_data, 'dict'):
                     applicant_dict = applicant_data.dict()
                 else:
@@ -297,26 +254,27 @@ class MongoSaver:
                     "growthBackground": applicant_dict.get("growthBackground", "") or applicant.get("growthBackground", ""),
                     "motivation": applicant_dict.get("motivation", "") or applicant.get("motivation", ""),
                     "careerHistory": applicant_dict.get("careerHistory", "") or applicant.get("careerHistory", ""),
-                    "resume_text": ocr_result.get("extracted_text", "")
+                    "resume_text": ocr_result.get("extracted_text", ""),
+                    # ChunkingService에 필요한 필드들 추가
+                    "extracted_text": ocr_result.get("extracted_text", ""),
+                    "summary": ocr_result.get("summary", "") or "이력서 분석 결과",
+                    "keywords": ocr_result.get("keywords", []) or ["이력서"],
+                    "basic_info": ocr_result.get("basic_info", {}) or {
+                        "names": [applicant_dict.get("name", "")] if applicant_dict.get("name") else [],
+                        "emails": [applicant_dict.get("email", "")] if applicant_dict.get("email") else [],
+                        "phones": [applicant_dict.get("phone", "")] if applicant_dict.get("phone") else [],
+                        "name": applicant_dict.get("name", ""),
+                        "email": applicant_dict.get("email", ""),
+                        "phone": applicant_dict.get("phone", "")
+                    },
+                    "structured_data": ocr_result.get("structured_data", {}),
+                    "vision_analysis": ocr_result.get("vision_analysis", {})
                 }
-                
-                # 디버깅: 청킹용 데이터 확인
-                print(f"🔍 청킹용 데이터 확인:")
-                print(f"  - name: {resume_for_chunking['name']}")
-                print(f"  - skills: {resume_for_chunking['skills']}")
-                print(f"  - experience: {resume_for_chunking['experience']}")
-                print(f"  - resume_text 길이: {len(resume_for_chunking['resume_text'])}")
-                print(f"  - resume_text 앞 100자: {resume_for_chunking['resume_text'][:100]}...")
                 
                 chunks = self.chunking_service.chunk_resume_text(resume_for_chunking)
                 print(f"✅ 의미론적 청킹 완료: {len(chunks)}개 청크 생성")
                 
-                # 청크 타입 디버깅
-                for i, chunk in enumerate(chunks[:3]):
-                    print(f"[DEBUG] 청크 {i+1}: chunk_type='{chunk.get('chunk_type', 'missing')}', text={chunk['text'][:50]}...")
-                
-                
-                # 청킹 결과를 resume 데이터에 추가 (향후 벡터 저장 시 사용)
+                # 청킹 결과를 resume 데이터에 추가
                 if chunks:
                     self.mongo_service.update_resume_chunks(resume["id"], chunks)
                     
@@ -371,52 +329,34 @@ class MongoSaver:
                 try:
                     # 기존 기술 스택 가져오기
                     existing_applicant = self.mongo_service.get_applicant_by_id_sync(applicant["id"])
-                    existing_skills = existing_applicant.get("skills", []) if existing_applicant else []
+                    existing_skills = existing_applicant.get("skills", "") if existing_applicant else ""
                     
                     # 새로운 기술 스택과 기존 기술 스택 합치기
                     new_skills = basic_info["skills"]
                     if existing_skills:
-                        combined_skills = list(set(existing_skills + new_skills))
+                        existing_skills_list = [s.strip() for s in existing_skills.split(",")]
+                        combined_skills = list(set(existing_skills_list + new_skills))
                     else:
                         combined_skills = new_skills
                     
                     # 지원자 정보 업데이트
                     self.mongo_service.update_applicant_sync(
                         applicant["id"],
-                        {"skills": combined_skills, "updated_at": datetime.now()}
+                        {"skills": ", ".join(combined_skills)}
                     )
                     print(f"✅ 지원자 데이터에 기술 스택 추가: {new_skills}")
                 except Exception as e:
                     print(f"⚠️ 기술 스택 업데이트 실패: {e}")
             
-            # 6. 기본 정보와 파일 메타데이터 모델 생성
-            from models.document import BasicInfo, FileMetadata
-            
-            basic_info_model = BasicInfo(
-                emails=basic_info.get("emails", []),
-                phones=basic_info.get("phones", []),
-                names=basic_info.get("names", []),
-                urls=basic_info.get("urls", [])
-            )
-            
-            file_metadata_model = FileMetadata(
-                filename=file_metadata.get("filename", ""),
-                size=file_metadata.get("size", 0),
-                mime=file_metadata.get("mime", ""),
-                hash=file_metadata.get("hash", ""),
-                created_at=file_metadata.get("created_at", datetime.now()),
-                modified_at=file_metadata.get("modified_at", datetime.now())
-            )
-            
-            # 7. 자기소개서 데이터 생성
+            # 6. 자기소개서 데이터 생성 (application_id 제거)
             cover_letter_data = CoverLetterCreate(
                 applicant_id=applicant["id"],
                 extracted_text=ocr_result.get("extracted_text", ""),
                 summary=ocr_result.get("summary", ""),
                 keywords=ocr_result.get("keywords", []),
                 document_type="cover_letter",
-                basic_info=basic_info_model,
-                file_metadata=file_metadata_model,
+                basic_info=basic_info,
+                file_metadata=file_metadata,
                 careerHistory=cover_letter_fields["careerHistory"],
                 growthBackground=cover_letter_fields["growthBackground"],
                 motivation=cover_letter_fields["motivation"]
@@ -433,21 +373,21 @@ class MongoSaver:
                     "applicant_id": applicant["id"],
                     "document_type": "cover_letter",
                     "extracted_text": ocr_result.get("extracted_text", ""),
-                    "summary": ocr_result.get("summary", ""),
-                    "keywords": ocr_result.get("keywords", []),
-                    "basic_info": basic_info,
+                    "summary": ocr_result.get("summary", "") or "자기소개서 분석 결과",
+                    "keywords": ocr_result.get("keywords", []) or ["자기소개서"],
+                    "basic_info": ocr_result.get("basic_info", {}) or {
+                        "names": [applicant.get("name", "")] if applicant.get("name") else [],
+                        "emails": [applicant.get("email", "")] if applicant.get("email") else [],
+                        "phones": [applicant.get("phone", "")] if applicant.get("phone") else [],
+                        "name": applicant.get("name", ""),
+                        "email": applicant.get("email", ""),
+                        "phone": applicant.get("phone", "")
+                    },
                     "file_metadata": file_metadata,
                     "careerHistory": cover_letter_fields["careerHistory"],
                     "growthBackground": cover_letter_fields["growthBackground"],
                     "motivation": cover_letter_fields["motivation"]
                 }
-                
-                # 디버깅: 자기소개서 청킹용 데이터 확인
-                print(f"🔍 자기소개서 청킹용 데이터 확인:")
-                print(f"  - careerHistory: {cover_letter_for_chunking['careerHistory'][:50]}...")
-                print(f"  - growthBackground: {cover_letter_for_chunking['growthBackground'][:50]}...")
-                print(f"  - motivation: {cover_letter_for_chunking['motivation'][:50]}...")
-                print(f"  - extracted_text 길이: {len(cover_letter_for_chunking['extracted_text'])}")
                 
                 chunks = self.chunking_service.chunk_cover_letter(cover_letter_for_chunking)
                 print(f"✅ 자기소개서 의미론적 청킹 완료: {len(chunks)}개 청크 생성")
@@ -504,44 +444,26 @@ class MongoSaver:
                 try:
                     # 기존 기술 스택 가져오기
                     existing_applicant = self.mongo_service.get_applicant_by_id_sync(applicant["id"])
-                    existing_skills = existing_applicant.get("skills", []) if existing_applicant else []
+                    existing_skills = existing_applicant.get("skills", "") if existing_applicant else ""
                     
                     # 새로운 기술 스택과 기존 기술 스택 합치기
                     new_skills = basic_info["skills"]
                     if existing_skills:
-                        combined_skills = list(set(existing_skills + new_skills))
+                        existing_skills_list = [s.strip() for s in existing_skills.split(",")]
+                        combined_skills = list(set(existing_skills_list + new_skills))
                     else:
                         combined_skills = new_skills
                     
                     # 지원자 정보 업데이트
                     self.mongo_service.update_applicant_sync(
                         applicant["id"],
-                        {"skills": combined_skills, "updated_at": datetime.now()}
+                        {"skills": ", ".join(combined_skills)}
                     )
                     print(f"✅ 지원자 데이터에 기술 스택 추가: {new_skills}")
                 except Exception as e:
                     print(f"⚠️ 기술 스택 업데이트 실패: {e}")
             
-            # 5. 기본 정보와 파일 메타데이터 모델 생성
-            from models.document import BasicInfo, FileMetadata
-            
-            basic_info_model = BasicInfo(
-                emails=basic_info.get("emails", []),
-                phones=basic_info.get("phones", []),
-                names=basic_info.get("names", []),
-                urls=basic_info.get("urls", [])
-            )
-            
-            file_metadata_model = FileMetadata(
-                filename=file_metadata.get("filename", ""),
-                size=file_metadata.get("size", 0),
-                mime=file_metadata.get("mime", ""),
-                hash=file_metadata.get("hash", ""),
-                created_at=file_metadata.get("created_at", datetime.now()),
-                modified_at=file_metadata.get("modified_at", datetime.now())
-            )
-            
-            # 6. 포트폴리오 아이템 생성
+            # 5. 포트폴리오 아이템 생성
             portfolio_item = PortfolioItem(
                 item_id=f"item_{int(datetime.utcnow().timestamp())}",
                 title="포트폴리오 문서",
@@ -549,19 +471,18 @@ class MongoSaver:
                 artifacts=[]
             )
             
-            # 7. 포트폴리오 데이터 생성
+            # 5. 포트폴리오 데이터 생성 (application_id 제거)
             portfolio_data = PortfolioCreate(
                 applicant_id=applicant["id"],
                 extracted_text=ocr_result.get("extracted_text", ""),
                 summary=ocr_result.get("summary", ""),
                 keywords=ocr_result.get("keywords", []),
                 document_type="portfolio",
-                basic_info=basic_info_model,
-                file_metadata=file_metadata_model,
+                basic_info=basic_info,
+                file_metadata=file_metadata,
                 items=[portfolio_item],
-                analysis_score=0,  # 기본값 설정
-                status="active",
-                version=1
+                analysis_score=0.0,  # 기본값 설정
+                status="active"
             )
             
             # 6. 포트폴리오 저장
@@ -575,20 +496,21 @@ class MongoSaver:
                     "applicant_id": applicant["id"],
                     "document_type": "portfolio",
                     "extracted_text": ocr_result.get("extracted_text", ""),
-                    "summary": ocr_result.get("summary", ""),
-                    "keywords": ocr_result.get("keywords", []),
-                    "basic_info": basic_info,
+                    "summary": ocr_result.get("summary", "") or "포트폴리오 분석 결과",
+                    "keywords": ocr_result.get("keywords", []) or ["포트폴리오"],
+                    "basic_info": ocr_result.get("basic_info", {}) or {
+                        "names": [applicant.get("name", "")] if applicant.get("name") else [],
+                        "emails": [applicant.get("email", "")] if applicant.get("email") else [],
+                        "phones": [applicant.get("phone", "")] if applicant.get("phone") else [],
+                        "name": applicant.get("name", ""),
+                        "email": applicant.get("email", ""),
+                        "phone": applicant.get("phone", "")
+                    },
                     "file_metadata": file_metadata,
                     "items": [portfolio_item],
                     "analysis_score": 0.0,
                     "status": "active"
                 }
-                
-                # 디버깅: 포트폴리오 청킹용 데이터 확인
-                print(f"🔍 포트폴리오 청킹용 데이터 확인:")
-                print(f"  - items: {len(portfolio_for_chunking['items'])}개")
-                print(f"  - extracted_text 길이: {len(portfolio_for_chunking['extracted_text'])}")
-                print(f"  - keywords: {portfolio_for_chunking['keywords']}")
                 
                 chunks = self.chunking_service.chunk_portfolio(portfolio_for_chunking)
                 print(f"✅ 포트폴리오 의미론적 청킹 완료: {len(chunks)}개 청크 생성")

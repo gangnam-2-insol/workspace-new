@@ -12,7 +12,7 @@ import {
   FiStar
 } from 'react-icons/fi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
-import LangGraphChatbot from '../../components/LangGraphChatbot';
+// LangGraphChatbot 컴포넌트 제거됨
 
 const DashboardContainer = styled.div`
   padding: 24px 0;
@@ -272,7 +272,7 @@ const Dashboard = () => {
           인공지능이 지원하는 스마트한 채용 프로세스로 
           최고의 인재를 찾아보세요
         </HeroSubtitle>
-        <LangGraphChatbot />
+        {/* LangGraphChatbot 컴포넌트 제거됨 */}
       </HeroSection>
 
       <StatsGrid>

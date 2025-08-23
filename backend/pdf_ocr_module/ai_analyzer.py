@@ -79,146 +79,6 @@ def analyze_text_with_vision(image_paths: List[Path], text: str, settings: Setti
         return analyze_text(text, settings)
 
 
-def analyze_with_vision(image_paths: List[Path], text: str, settings: Settings) -> Dict[str, Any]:
-    """GPT Vision API를 사용하여 이미지를 직접 분석합니다."""
-    try:
-        if not OpenAIService:
-            print("OpenAI 서비스가 사용할 수 없습니다.")
-            return {"summary": "", "keywords": [], "structured_data": {}}
-        
-        openai_service = OpenAIService(model_name="gpt-4o")
-        
-        # 비동기 함수를 동기적으로 실행
-        async def run_vision_analysis():
-            try:
-                # 이미지를 base64로 인코딩
-                encoded_images = []
-                for image_path in image_paths:
-                    if image_path.exists():
-                        with open(image_path, "rb") as image_file:
-                            encoded_image = base64.b64encode(image_file.read()).decode('utf-8')
-                            encoded_images.append({
-                                "type": "image_url",
-                                "image_url": {
-                                    "url": f"data:image/jpeg;base64,{encoded_image}"
-                                }
-                            })
-                
-                if not encoded_images:
-                    print("분석할 이미지가 없습니다.")
-                    return {"summary": "", "keywords": [], "structured_data": {}}
-                
-                # Vision API 프롬프트
-                vision_prompt = f"""
-다음은 이력서 이미지와 추출된 텍스트입니다. 이미지와 텍스트를 모두 분석하여 정확한 정보를 추출해주세요.
-
-추출된 텍스트:
-{text}
-
-이미지에서 다음 정보들을 정확히 추출해주세요:
-1. 이름 (가장 가능성이 높은 하나의 이름만)
-2. 이메일 주소
-3. 전화번호
-4. 직책/포지션
-5. 회사명
-6. 학력 정보
-7. 주요 스킬/기술
-8. 주소
-
-응답은 반드시 다음과 같은 JSON 형태로만 작성해주세요:
-{{
-    "name": "추출된 이름",
-    "email": "추출된 이메일",
-    "phone": "추출된 전화번호", 
-    "position": "추출된 직책",
-    "company": "추출된 회사명",
-    "education": "추출된 학력",
-    "skills": "추출된 스킬",
-    "address": "추출된 주소",
-    "summary": "이력서 요약 (2-3문장)",
-    "keywords": ["키워드1", "키워드2", "키워드3", ...]
-}}
-
-만약 특정 정보를 찾을 수 없다면 해당 필드는 빈 문자열("")로 설정해주세요.
-이미지의 레이아웃과 시각적 정보를 활용하여 더 정확한 정보를 추출해주세요.
-"""
-
-                # Vision API 호출
-                vision_response = await openai_service.generate_response_with_vision(
-                    vision_prompt, 
-                    encoded_images
-                )
-                
-                # JSON 파싱 시도
-                try:
-                    json_start = vision_response.find('{')
-                    json_end = vision_response.rfind('}') + 1
-                    if json_start != -1 and json_end != 0:
-                        json_str = vision_response[json_start:json_end]
-                        vision_data = json.loads(json_str)
-                        
-                        # Vision 결과를 구조화
-                        basic_info = {
-                            "names": [vision_data.get("name", "")] if vision_data.get("name") else [],
-                            "emails": [vision_data.get("email", "")] if vision_data.get("email") else [],
-                            "phones": [vision_data.get("phone", "")] if vision_data.get("phone") else [],
-                            "positions": [vision_data.get("position", "")] if vision_data.get("position") else [],
-                            "companies": [vision_data.get("company", "")] if vision_data.get("company") else [],
-                            "education": [vision_data.get("education", "")] if vision_data.get("education") else [],
-                            "skills": [vision_data.get("skills", "")] if vision_data.get("skills") else [],
-                            "addresses": [vision_data.get("address", "")] if vision_data.get("address") else []
-                        }
-                        
-                        analysis = {
-                            "summary": vision_data.get("summary", ""),
-                            "keywords": vision_data.get("keywords", []),
-                            "basic_info": basic_info,
-                            "structured_data": {
-                                "document_type": "resume",
-                                "vision_analysis": True,
-                                "basic_info": {
-                                    "name": vision_data.get("name", ""),
-                                    "email": vision_data.get("email", ""),
-                                    "phone": vision_data.get("phone", ""),
-                                    "position": vision_data.get("position", ""),
-                                    "company": vision_data.get("company", ""),
-                                    "education": vision_data.get("education", ""),
-                                    "skills": vision_data.get("skills", ""),
-                                    "address": vision_data.get("address", "")
-                                }
-                            },
-                            "vision_analysis": vision_data
-                        }
-                        
-                        print(f"Vision 분석 결과: {vision_data}")
-                        return analysis
-                        
-                except Exception as e:
-                    print(f"Vision JSON 파싱 실패: {e}")
-                    return {"summary": "", "keywords": [], "structured_data": {}}
-                    
-            except Exception as e:
-                print(f"Vision 분석 실행 실패: {e}")
-                return {"summary": "", "keywords": [], "structured_data": {}}
-        
-        # 비동기 함수 실행
-        try:
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            result = loop.run_until_complete(run_vision_analysis())
-            return result
-        except Exception as e:
-            print(f"Vision 비동기 실행 실패: {e}")
-            return {"summary": "", "keywords": [], "structured_data": {}}
-        finally:
-            if 'loop' in locals():
-                loop.close()
-                
-    except Exception as e:
-        print(f"Vision 분석 중 오류 발생: {e}")
-        return {"summary": "", "keywords": [], "structured_data": {}}
-
-
 def clean_text_content(text: str) -> str:
     """텍스트를 정리하고 정규화합니다."""
     if not text:
@@ -269,7 +129,7 @@ def clean_ocr_text(text: str) -> str:
 
 
 def extract_basic_info(text: str) -> Dict[str, Any]:
-    """기본 정보를 추출합니다 (OpenAI GPT 우선, 정규식 기반 폴백)."""
+    """기본 정보를 추출합니다 (OpenAI AI 우선, 정규식 기반 폴백)."""
     info = {
         "emails": [],
         "phones": [],
@@ -284,18 +144,24 @@ def extract_basic_info(text: str) -> Dict[str, Any]:
         "addresses": []
     }
     
-    # 텍스트 전처리: OCR 노이즈 제거
-    cleaned_text = clean_ocr_text(text)
-    
     # OpenAI AI를 사용한 분석 시도
     try:
-        if OpenAIService:
-            openai_service = OpenAIService(model_name="gpt-4o")
+        openai_service = OpenAIService(model_name="gpt-4o") if OpenAIService else None
+        
+        # 비동기 함수를 동기적으로 실행 (안전한 이벤트 루프 처리)
+        try:
+            # 이미 실행 중인 이벤트 루프가 있는지 확인
+            try:
+                loop = asyncio.get_running_loop()
+                # 이미 실행 중인 루프가 있으면 새로 생성하지 않음
+                use_existing_loop = True
+            except RuntimeError:
+                # 실행 중인 루프가 없으면 새로 생성
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                use_existing_loop = False
             
-            # 비동기 함수를 동기적으로 실행
-            async def run_ai_analysis():
-                try:
-                    ai_prompt = f"""
+            ai_prompt = f"""
 다음은 이력서에서 추출한 텍스트입니다. 이 텍스트에서 다음 정보들을 정확히 추출해주세요:
 
 텍스트:
@@ -326,44 +192,20 @@ def extract_basic_info(text: str) -> Dict[str, Any]:
 만약 특정 정보를 찾을 수 없다면 해당 필드는 빈 문자열("")로 설정해주세요.
 """
 
-                    ai_response = await openai_service.generate_response(ai_prompt)
-                    
-                    # JSON 파싱 시도
-                    try:
-                        json_start = ai_response.find('{')
-                        json_end = ai_response.rfind('}') + 1
-                        if json_start != -1 and json_end != 0:
-                            json_str = ai_response[json_start:json_end]
-                            ai_data = json.loads(json_str)
-                            
-                            # AI 결과를 info에 매핑
-                            if ai_data.get('name'):
-                                info["names"] = [ai_data['name']]
-                            if ai_data.get('email'):
-                                info["emails"] = [ai_data['email']]
-                            if ai_data.get('phone'):
-                                info["phones"] = [ai_data['phone']]
-                            if ai_data.get('position'):
-                                info["positions"] = [ai_data['position']]
-                            if ai_data.get('company'):
-                                info["companies"] = [ai_data['company']]
-                            if ai_data.get('education'):
-                                info["education"] = [ai_data['education']]
-                            if ai_data.get('skills'):
-                                info["skills"] = [ai_data['skills']]
-                            if ai_data.get('address'):
-                                info["addresses"] = [ai_data['address']]
-                            
-                            print(f"AI 분석 결과: {ai_data}")
-                            return info
-                            
-                    except Exception as e:
-                        print(f"AI JSON 파싱 실패: {e}")
-                        
-                except Exception as e:
-                    print(f"AI 분석 실행 실패: {e}")
-                    
-            # 비동기 함수 실행
+            # 이벤트 루프에 따라 다른 방식으로 실행
+            if use_existing_loop:
+                # 이미 실행 중인 루프가 있으면 asyncio.create_task 사용
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, openai_service.generate_response(ai_prompt))
+                    ai_response = future.result()
+            else:
+                # 새로 생성한 루프 사용
+                ai_response = loop.run_until_complete(
+                    openai_service.generate_response(ai_prompt)
+                )
+            
+            # JSON 파싱 시도
             try:
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
@@ -371,10 +213,11 @@ def extract_basic_info(text: str) -> Dict[str, Any]:
                 if result:
                     return result
             except Exception as e:
-                print(f"비동기 실행 실패: {e}")
-            finally:
-                if 'loop' in locals():
-                    loop.close()
+                print(f"AI JSON 파싱 실패: {e}")
+                
+        finally:
+            if not use_existing_loop and 'loop' in locals():
+                loop.close()
             
     except Exception as e:
         print(f"AI 분석 실패, 규칙 기반으로 폴백: {e}")
@@ -575,14 +418,21 @@ def extract_basic_info(text: str) -> Dict[str, Any]:
 def analyze_with_ai(text: str, settings: Settings) -> Dict[str, Any]:
     """AI LLM을 사용해서 텍스트를 분석합니다."""
     try:
-        # OpenAI GPT를 사용한 분석
+        # OpenAI AI를 사용한 분석
         openai_service = OpenAIService(model_name="gpt-4o") if OpenAIService else None
         
-        # 비동기 함수를 동기적으로 실행
-        loop = asyncio.new_event_loop()
-        asyncio.set_event_loop(loop)
-        
+        # 비동기 함수를 동기적으로 실행 (안전한 이벤트 루프 처리)
         try:
+            # 이미 실행 중인 이벤트 루프가 있는지 확인
+            try:
+                loop = asyncio.get_running_loop()
+                # 이미 실행 중인 루프가 있으면 새로 생성하지 않음
+                use_existing_loop = True
+            except RuntimeError:
+                # 실행 중인 루프가 없으면 새로 생성
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                use_existing_loop = False
             # 기본 정보 추출을 위한 프롬프트
             basic_info_prompt = f"""
 다음은 이력서에서 추출한 텍스트입니다. 이 텍스트에서 다음 정보들을 정확히 추출해주세요:
@@ -646,16 +496,29 @@ JSON 형태로 응답해주세요:
 }}
 """
 
-            # OpenAI 호출
-            basic_info_response = loop.run_until_complete(
-                openai_service.generate_response(basic_info_prompt)
-            )
-            summary_response = loop.run_until_complete(
-                openai_service.generate_response(summary_prompt)
-            )
-            keywords_response = loop.run_until_complete(
-                openai_service.generate_response(keywords_prompt)
-            )
+            # OpenAI 호출 (이벤트 루프에 따라 다른 방식으로 실행)
+            if use_existing_loop:
+                # 이미 실행 중인 루프가 있으면 asyncio.run 사용
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    basic_info_future = executor.submit(asyncio.run, openai_service.chat_completion([{"role": "user", "content": basic_info_prompt}]))
+                    summary_future = executor.submit(asyncio.run, openai_service.chat_completion([{"role": "user", "content": summary_prompt}]))
+                    keywords_future = executor.submit(asyncio.run, openai_service.chat_completion([{"role": "user", "content": keywords_prompt}]))
+                    
+                    basic_info_response = basic_info_future.result()
+                    summary_response = summary_future.result()
+                    keywords_response = keywords_future.result()
+            else:
+                # 새로 생성한 루프 사용
+                basic_info_response = loop.run_until_complete(
+                    openai_service.chat_completion([{"role": "user", "content": basic_info_prompt}])
+                )
+                summary_response = loop.run_until_complete(
+                    openai_service.chat_completion([{"role": "user", "content": summary_prompt}])
+                )
+                keywords_response = loop.run_until_complete(
+                    openai_service.chat_completion([{"role": "user", "content": keywords_prompt}])
+                )
             
             # JSON 파싱 시도
             basic_info = {}
@@ -705,7 +568,8 @@ JSON 형태로 응답해주세요:
             }
             
         finally:
-            loop.close()
+            if not use_existing_loop and 'loop' in locals():
+                loop.close()
         
         return analysis
         
@@ -877,4 +741,156 @@ def clean_text(text: str) -> str:
     return clean_text_content(text)
 
 
+def analyze_with_vision(image_paths: List[Path], text: str, settings: Settings) -> Dict[str, Any]:
+    """GPT Vision API를 사용하여 이미지를 직접 분석합니다."""
+    try:
+        if not OpenAIService:
+            print("OpenAI 서비스가 사용할 수 없습니다.")
+            return {"summary": "", "keywords": [], "structured_data": {}}
+        
+        openai_service = OpenAIService(model_name="gpt-4o")
+        
+        # 비동기 함수를 동기적으로 실행
+        async def run_vision_analysis():
+            try:
+                # 이미지를 base64로 인코딩
+                encoded_images = []
+                for image_path in image_paths:
+                    if image_path.exists():
+                        with open(image_path, "rb") as image_file:
+                            encoded_image = base64.b64encode(image_file.read()).decode('utf-8')
+                            encoded_images.append({
+                                "type": "image_url",
+                                "image_url": {
+                                    "url": f"data:image/jpeg;base64,{encoded_image}"
+                                }
+                            })
+                
+                if not encoded_images:
+                    print("분석할 이미지가 없습니다.")
+                    return {"summary": "", "keywords": [], "structured_data": {}}
+                
+                # Vision API 프롬프트
+                vision_prompt = f"""
+다음은 이력서 이미지와 추출된 텍스트입니다. 이미지와 텍스트를 모두 분석하여 정확한 정보를 추출해주세요.
 
+추출된 텍스트:
+{text}
+
+이미지에서 다음 정보들을 정확히 추출해주세요:
+1. 이름 (가장 가능성이 높은 하나의 이름만)
+2. 이메일 주소
+3. 전화번호
+4. 직책/포지션
+5. 회사명
+6. 학력 정보
+7. 주요 스킬/기술
+8. 주소
+
+응답은 반드시 다음과 같은 JSON 형태로만 작성해주세요:
+{{
+    "name": "추출된 이름",
+    "email": "추출된 이메일",
+    "phone": "추출된 전화번호", 
+    "position": "추출된 직책",
+    "company": "추출된 회사명",
+    "education": "추출된 학력",
+    "skills": "추출된 스킬",
+    "address": "추출된 주소",
+    "summary": "이력서 요약 (2-3문장)",
+    "keywords": ["키워드1", "키워드2", "키워드3", ...]
+}}
+
+만약 특정 정보를 찾을 수 없다면 해당 필드는 빈 문자열("")로 설정해주세요.
+이미지의 레이아웃과 시각적 정보를 활용하여 더 정확한 정보를 추출해주세요.
+"""
+
+                # Vision API 호출
+                vision_response = await openai_service.generate_response_with_vision(
+                    vision_prompt, 
+                    encoded_images
+                )
+                
+                # JSON 파싱 시도
+                try:
+                    json_start = vision_response.find('{')
+                    json_end = vision_response.rfind('}') + 1
+                    if json_start != -1 and json_end != 0:
+                        json_str = vision_response[json_start:json_end]
+                        vision_data = json.loads(json_str)
+                        
+                        # Vision 결과를 구조화
+                        basic_info = {
+                            "names": [vision_data.get("name", "")] if vision_data.get("name") else [],
+                            "emails": [vision_data.get("email", "")] if vision_data.get("email") else [],
+                            "phones": [vision_data.get("phone", "")] if vision_data.get("phone") else [],
+                            "positions": [vision_data.get("position", "")] if vision_data.get("position") else [],
+                            "companies": [vision_data.get("company", "")] if vision_data.get("company") else [],
+                            "education": [vision_data.get("education", "")] if vision_data.get("education") else [],
+                            "skills": [vision_data.get("skills", "")] if vision_data.get("skills") else [],
+                            "addresses": [vision_data.get("address", "")] if vision_data.get("address") else []
+                        }
+                        
+                        analysis = {
+                            "summary": vision_data.get("summary", ""),
+                            "keywords": vision_data.get("keywords", []),
+                            "basic_info": basic_info,
+                            "structured_data": {
+                                "document_type": "resume",
+                                "vision_analysis": True,
+                                "basic_info": {
+                                    "name": vision_data.get("name", ""),
+                                    "email": vision_data.get("email", ""),
+                                    "phone": vision_data.get("phone", ""),
+                                    "position": vision_data.get("position", ""),
+                                    "company": vision_data.get("company", ""),
+                                    "education": vision_data.get("education", ""),
+                                    "skills": vision_data.get("skills", ""),
+                                    "address": vision_data.get("address", "")
+                                }
+                            },
+                            "vision_analysis": vision_data
+                        }
+                        
+                        print(f"Vision 분석 결과: {vision_data}")
+                        return analysis
+                        
+                except Exception as e:
+                    print(f"Vision JSON 파싱 실패: {e}")
+                    return {"summary": "", "keywords": [], "structured_data": {}}
+                    
+            except Exception as e:
+                print(f"Vision API 호출 실패: {e}")
+                return {"summary": "", "keywords": [], "structured_data": {}}
+        
+        # 비동기 함수 실행 (안전한 이벤트 루프 처리)
+        try:
+            # 이미 실행 중인 이벤트 루프가 있는지 확인
+            try:
+                loop = asyncio.get_running_loop()
+                # 이미 실행 중인 루프가 있으면 새로 생성하지 않음
+                use_existing_loop = True
+            except RuntimeError:
+                # 실행 중인 루프가 없으면 새로 생성
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                use_existing_loop = False
+            
+            if use_existing_loop:
+                # 이미 실행 중인 루프가 있으면 asyncio.run 사용
+                import concurrent.futures
+                with concurrent.futures.ThreadPoolExecutor() as executor:
+                    future = executor.submit(asyncio.run, run_vision_analysis())
+                    result = future.result()
+            else:
+                # 새로 생성한 루프 사용
+                result = loop.run_until_complete(run_vision_analysis())
+            
+            return result
+        finally:
+            if not use_existing_loop and 'loop' in locals():
+                loop.close()
+            
+    except Exception as e:
+        print(f"Vision 분석 전체 실패: {e}")
+        return {"summary": "", "keywords": [], "structured_data": {}}

@@ -5,7 +5,7 @@ import os
 import re
 from datetime import datetime, date
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
 import hashlib
 
 import pytesseract
@@ -105,69 +105,55 @@ def file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def correct_orientation_with_osd(image):
-    """
-    Tesseract OSD를 사용하여 이미지의 회전을 자동으로 교정합니다.
-    
-    Args:
-        image: PIL Image 객체 또는 numpy array
-        
-    Returns:
-        PIL Image: 교정된 이미지
-    """
+def encode_image_to_base64(image_path: Path) -> str:
+    """이미지를 base64로 인코딩합니다."""
+    import base64
     try:
-        # numpy array를 PIL Image로 변환 (필요한 경우)
-        if isinstance(image, np.ndarray):
-            pil_image = Image.fromarray(image)
-        else:
-            pil_image = image
-        
-        # Tesseract OSD로 회전 각도와 신뢰도 파싱
-        osd_data = pytesseract.image_to_osd(pil_image, lang="osd", config="--psm 0")
-        
-        # OSD 결과 파싱
-        angle = None
-        confidence = None
-        
-        for line in osd_data.split('\n'):
-            if 'Rotate:' in line:
-                angle = int(line.split(':')[1].strip())
-            elif 'Confidence:' in line:
-                confidence = float(line.split(':')[1].strip())
-        
-        print(f"[OSD] 감지된 회전 각도: {angle}도, 신뢰도: {confidence}%")
-        
-        # 조건 검사
-        # ① angle이 {0,90,180,270}에 속하지 않으면 0으로 간주
-        if angle not in [0, 90, 180, 270]:
-            print(f"[OSD] 유효하지 않은 각도 {angle}도, 0도로 간주")
-            angle = 0
-        
-        # ③ confidence < 10이면 회전하지 않음
-        if confidence < 10:
-            print(f"[OSD] 신뢰도가 낮음 ({confidence}%), 회전하지 않음")
-            return pil_image
-        
-        # ④ angle==0이면 그대로 저장
-        if angle == 0:
-            print(f"[OSD] 회전 불필요 (0도)")
-            return pil_image
-        
-        # ⑤ angle이 90/180/270일 때만 회전 적용
-        if angle in [90, 180, 270]:
-            print(f"[OSD] 이미지를 {angle}도 회전하여 교정")
-            corrected_image = pil_image.rotate(-angle, expand=True)
-            return corrected_image
-        
-        return pil_image
-        
+        with open(image_path, "rb") as image_file:
+            encoded_image = base64.b64encode(image_file.read()).decode('utf-8')
+            return encoded_image
     except Exception as e:
-        print(f"[OSD] 회전 교정 중 오류 발생: {e}")
-        # 오류 발생 시 원본 이미지 반환
-        if isinstance(image, np.ndarray):
-            return Image.fromarray(image)
-        return image
+        print(f"이미지 인코딩 실패: {e}")
+        return ""
 
 
+def validate_image_path(image_path: Path) -> bool:
+    """이미지 파일 경로가 유효한지 확인합니다."""
+    if not image_path.exists():
+        return False
+    
+    # 지원하는 이미지 형식 확인
+    supported_formats = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'}
+    return image_path.suffix.lower() in supported_formats
 
 
+def get_image_info(image_path: Path) -> Dict[str, Any]:
+    """이미지 파일의 기본 정보를 반환합니다."""
+    try:
+        from PIL import Image
+        with Image.open(image_path) as img:
+            return {
+                "width": img.width,
+                "height": img.height,
+                "format": img.format,
+                "mode": img.mode,
+                "size_bytes": image_path.stat().st_size
+            }
+    except Exception as e:
+        print(f"이미지 정보 추출 실패: {e}")
+        return {}
+
+
+def validate_vision_data(vision_data: Dict[str, Any]) -> bool:
+    """Vision API 응답 데이터의 유효성을 검증합니다."""
+    required_fields = ["name", "email", "phone", "position", "company", "education", "skills", "address"]
+    
+    if not isinstance(vision_data, dict):
+        return False
+    
+    # 필수 필드가 모두 있는지 확인
+    for field in required_fields:
+        if field not in vision_data:
+            return False
+    
+    return True

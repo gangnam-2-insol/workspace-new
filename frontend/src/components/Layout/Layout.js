@@ -186,8 +186,7 @@ const navigationItems = [
   {
     title: '시스템',
     items: [
-      { name: '사용자 관리', path: '/users', icon: FiUser },
-      { name: '설정', path: '/settings', icon: FiSettings }
+      { name: '설정 및 지원', path: '/settings', icon: FiSettings }
     ]
   },
   {

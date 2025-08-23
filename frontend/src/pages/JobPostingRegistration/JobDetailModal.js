@@ -351,7 +351,18 @@ const JobDetailModal = ({
     requirements: '',
     benefits: '',
     deadline: '',
-    status: 'draft'
+    status: 'draft',
+    // 지원자 요구 항목 (MongoDB 컬렉션 구조 기반)
+    required_documents: ['resume'],
+    required_skills: [],
+    required_experience_years: null,
+    require_portfolio_pdf: false,
+    require_github_url: false,
+    require_growth_background: false,
+    require_motivation: false,
+    require_career_history: false,
+    max_file_size_mb: 50,
+    allowed_file_types: ['pdf', 'doc', 'docx']
   });
 
   const [isEditing, setIsEditing] = useState(mode === 'edit');
@@ -370,7 +381,18 @@ const JobDetailModal = ({
         requirements: job.requirements || '',
         benefits: job.benefits || '',
         deadline: job.deadline || '',
-        status: job.status || 'draft'
+        status: job.status || 'draft',
+        // 지원자 요구 항목
+        required_documents: job.required_documents || ['resume'],
+        required_skills: job.required_skills || [],
+        required_experience_years: job.required_experience_years || null,
+        require_portfolio_pdf: job.require_portfolio_pdf || false,
+        require_github_url: job.require_github_url || false,
+        require_growth_background: job.require_growth_background || false,
+        require_motivation: job.require_motivation || false,
+        require_career_history: job.require_career_history || false,
+        max_file_size_mb: job.max_file_size_mb || 50,
+        allowed_file_types: job.allowed_file_types || ['pdf', 'doc', 'docx']
       });
     }
   }, [job]);
@@ -404,7 +426,18 @@ const JobDetailModal = ({
         requirements: job.requirements || '',
         benefits: job.benefits || '',
         deadline: job.deadline || '',
-        status: job.status || 'draft'
+        status: job.status || 'draft',
+        // 지원자 요구 항목
+        required_documents: job.required_documents || ['resume'],
+        required_skills: job.required_skills || [],
+        required_experience_years: job.required_experience_years || null,
+        require_portfolio_pdf: job.require_portfolio_pdf || false,
+        require_github_url: job.require_github_url || false,
+        require_growth_background: job.require_growth_background || false,
+        require_motivation: job.require_motivation || false,
+        require_career_history: job.require_career_history || false,
+        max_file_size_mb: job.max_file_size_mb || 50,
+        allowed_file_types: job.allowed_file_types || ['pdf', 'doc', 'docx']
       });
     }
     setIsEditing(false);
@@ -571,6 +604,105 @@ const JobDetailModal = ({
                       {job.benefits || '복리후생 정보가 없습니다.'}
                     </SectionContent>
                   </Section>
+
+                  {/* 지원자 요구 항목 섹션 */}
+                  <Section>
+                    <SectionTitle>
+                      📋 지원자 요구 항목
+                    </SectionTitle>
+                    <SectionContent>
+                      <div style={{ display: 'grid', gap: '16px' }}>
+                        <div>
+                          <strong>필수 제출 서류:</strong>
+                          <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                            {job.required_documents && job.required_documents.length > 0 ? (
+                              job.required_documents.map((doc, index) => (
+                                <span key={index} style={{
+                                  background: '#e3f2fd',
+                                  color: '#1976d2',
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                  fontWeight: '500'
+                                }}>
+                                  {doc === 'resume' ? '이력서' : 
+                                   doc === 'cover_letter' ? '자기소개서' : 
+                                   doc === 'portfolio' ? '포트폴리오' : doc}
+                                </span>
+                              ))
+                            ) : (
+                              <span style={{ color: '#666' }}>이력서</span>
+                            )}
+                          </div>
+                        </div>
+
+                        {job.required_skills && job.required_skills.length > 0 && (
+                          <div>
+                            <strong>필수 기술 스택:</strong>
+                            <div style={{ marginTop: '8px', display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
+                              {job.required_skills.map((skill, index) => (
+                                <span key={index} style={{
+                                  background: '#f3e5f5',
+                                  color: '#7b1fa2',
+                                  padding: '4px 8px',
+                                  borderRadius: '4px',
+                                  fontSize: '12px',
+                                  fontWeight: '500'
+                                }}>
+                                  {skill}
+                                </span>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+
+                        {job.required_experience_years && (
+                          <div>
+                            <strong>필수 경력 연차:</strong> {job.required_experience_years}년
+                          </div>
+                        )}
+
+                        {(job.require_portfolio_pdf || job.require_github_url) && (
+                          <div>
+                            <strong>포트폴리오 요구사항:</strong>
+                            <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              {job.require_portfolio_pdf && (
+                                <span style={{ color: '#2e7d32' }}>✓ 포트폴리오 PDF 제출 필수</span>
+                              )}
+                              {job.require_github_url && (
+                                <span style={{ color: '#2e7d32' }}>✓ GitHub URL 제출 필수</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        {(job.require_growth_background || job.require_motivation || job.require_career_history) && (
+                          <div>
+                            <strong>자기소개서 추가 요구사항:</strong>
+                            <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                              {job.require_growth_background && (
+                                <span style={{ color: '#2e7d32' }}>✓ 성장 배경 작성 필수</span>
+                              )}
+                              {job.require_motivation && (
+                                <span style={{ color: '#2e7d32' }}>✓ 지원 동기 작성 필수</span>
+                              )}
+                              {job.require_career_history && (
+                                <span style={{ color: '#2e7d32' }}>✓ 경력 사항 작성 필수</span>
+                              )}
+                            </div>
+                          </div>
+                        )}
+
+                        <div>
+                          <strong>파일 업로드 설정:</strong>
+                          <div style={{ marginTop: '8px', display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                            <span>최대 파일 크기: {job.max_file_size_mb || 50}MB</span>
+                            <span>허용 파일 형식: {job.allowed_file_types ? job.allowed_file_types.join(', ') : 'pdf, doc, docx'}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </SectionContent>
+                  </Section>
                 </>
               ) : (
                 // Edit Mode
@@ -705,6 +837,193 @@ const JobDetailModal = ({
                       onChange={handleInputChange}
                     />
                   </FormGroup>
+
+                  {/* 지원자 요구 항목 섹션 */}
+                  <div style={{ 
+                    borderTop: '2px solid #e5e7eb', 
+                    marginTop: '32px', 
+                    paddingTop: '24px' 
+                  }}>
+                    <h3 style={{ 
+                      marginBottom: '24px', 
+                      color: 'var(--text-primary)', 
+                      fontSize: '18px',
+                      fontWeight: '600'
+                    }}>
+                      📋 지원자 요구 항목
+                    </h3>
+                    
+                    <FormGrid>
+                      <FormGroup>
+                        <Label>필수 제출 서류 *</Label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="checkbox"
+                              checked={formData.required_documents.includes('resume')}
+                              onChange={(e) => {
+                                const newDocs = e.target.checked 
+                                  ? [...formData.required_documents, 'resume']
+                                  : formData.required_documents.filter(doc => doc !== 'resume');
+                                setFormData(prev => ({ ...prev, required_documents: newDocs }));
+                              }}
+                            />
+                            이력서 (필수)
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="checkbox"
+                              checked={formData.required_documents.includes('cover_letter')}
+                              onChange={(e) => {
+                                const newDocs = e.target.checked 
+                                  ? [...formData.required_documents, 'cover_letter']
+                                  : formData.required_documents.filter(doc => doc !== 'cover_letter');
+                                setFormData(prev => ({ ...prev, required_documents: newDocs }));
+                              }}
+                            />
+                            자기소개서
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="checkbox"
+                              checked={formData.required_documents.includes('portfolio')}
+                              onChange={(e) => {
+                                const newDocs = e.target.checked 
+                                  ? [...formData.required_documents, 'portfolio']
+                                  : formData.required_documents.filter(doc => doc !== 'portfolio');
+                                setFormData(prev => ({ ...prev, required_documents: newDocs }));
+                              }}
+                            />
+                            포트폴리오
+                          </label>
+                        </div>
+                      </FormGroup>
+
+                      <FormGroup>
+                        <Label>필수 기술 스택</Label>
+                        <Input
+                          type="text"
+                          placeholder="예: JavaScript, React, TypeScript (쉼표로 구분)"
+                          value={formData.required_skills.join(', ')}
+                          onChange={(e) => {
+                            const skills = e.target.value.split(',').map(skill => skill.trim()).filter(skill => skill);
+                            setFormData(prev => ({ ...prev, required_skills: skills }));
+                          }}
+                        />
+                      </FormGroup>
+
+                      <FormGroup>
+                        <Label>필수 경력 연차</Label>
+                        <Input
+                          type="number"
+                          placeholder="예: 3"
+                          value={formData.required_experience_years || ''}
+                          onChange={(e) => {
+                            const years = e.target.value ? parseInt(e.target.value) : null;
+                            setFormData(prev => ({ ...prev, required_experience_years: years }));
+                          }}
+                        />
+                      </FormGroup>
+
+                      <FormGroup>
+                        <Label>포트폴리오 요구사항</Label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="checkbox"
+                              checked={formData.require_portfolio_pdf}
+                              onChange={(e) => setFormData(prev => ({ 
+                                ...prev, 
+                                require_portfolio_pdf: e.target.checked 
+                              }))}
+                            />
+                            포트폴리오 PDF 제출 필수
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="checkbox"
+                              checked={formData.require_github_url}
+                              onChange={(e) => setFormData(prev => ({ 
+                                ...prev, 
+                                require_github_url: e.target.checked 
+                              }))}
+                            />
+                            GitHub URL 제출 필수
+                          </label>
+                        </div>
+                      </FormGroup>
+
+                      <FormGroup>
+                        <Label>자기소개서 추가 요구사항</Label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="checkbox"
+                              checked={formData.require_growth_background}
+                              onChange={(e) => setFormData(prev => ({ 
+                                ...prev, 
+                                require_growth_background: e.target.checked 
+                              }))}
+                            />
+                            성장 배경 작성 필수
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="checkbox"
+                              checked={formData.require_motivation}
+                              onChange={(e) => setFormData(prev => ({ 
+                                ...prev, 
+                                require_motivation: e.target.checked 
+                              }))}
+                            />
+                            지원 동기 작성 필수
+                          </label>
+                          <label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                            <input
+                              type="checkbox"
+                              checked={formData.require_career_history}
+                              onChange={(e) => setFormData(prev => ({ 
+                                ...prev, 
+                                require_career_history: e.target.checked 
+                              }))}
+                            />
+                            경력 사항 작성 필수
+                          </label>
+                        </div>
+                      </FormGroup>
+
+                      <FormGroup>
+                        <Label>파일 업로드 설정</Label>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                          <div>
+                            <label>최대 파일 크기 (MB):</label>
+                            <Input
+                              type="number"
+                              value={formData.max_file_size_mb}
+                              onChange={(e) => setFormData(prev => ({ 
+                                ...prev, 
+                                max_file_size_mb: parseInt(e.target.value) || 50 
+                              }))}
+                              style={{ width: '100px', marginLeft: '8px' }}
+                            />
+                          </div>
+                          <div>
+                            <label>허용 파일 형식:</label>
+                            <Input
+                              type="text"
+                              value={formData.allowed_file_types.join(', ')}
+                              onChange={(e) => {
+                                const types = e.target.value.split(',').map(type => type.trim()).filter(type => type);
+                                setFormData(prev => ({ ...prev, allowed_file_types: types }));
+                              }}
+                              placeholder="pdf, doc, docx"
+                              style={{ marginLeft: '8px' }}
+                            />
+                          </div>
+                        </div>
+                      </FormGroup>
+                    </FormGrid>
+                  </div>
                 </form>
               )}
 

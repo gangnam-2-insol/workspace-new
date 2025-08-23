@@ -3,6 +3,7 @@ from sentence_transformers import SentenceTransformer
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
+import openai
 
 class EmbeddingType(Enum):
     QUERY = "query"
@@ -11,9 +12,17 @@ class EmbeddingType(Enum):
 class EmbeddingService:
     def __init__(self):
         """임베딩 서비스 초기화"""
-        # 한국어 특화 모델로 업그레이드 (더 나은 한국어 의미 이해)
-        self.model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
-        print("한국어 특화 임베딩 모델 초기화 완료 (paraphrase-multilingual-MiniLM-L12-v2)")
+        # OpenAI API 키 설정
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        if not self.openai_api_key:
+            raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
+        
+        # OpenAI 클라이언트 초기화
+        self.client = openai.OpenAI(api_key=self.openai_api_key)
+        
+        # 백업용 SentenceTransformer 모델 (OpenAI 실패 시 사용)
+        self.fallback_model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
+        print("OpenAI text-embedding-3-small 모델 초기화 완료 (1536차원, 한국어 지원)")
     
     async def create_embedding(self, text: str, embedding_type: EmbeddingType = EmbeddingType.DOCUMENT) -> Optional[List[float]]:
         """
@@ -35,15 +44,33 @@ class EmbeddingService:
             # 임베딩 타입에 따른 전처리
             processed_text = self._preprocess_text(text, embedding_type)
             
-            # Sentence Transformers를 사용한 임베딩 생성
-            embedding = self.model.encode(processed_text)
-            
-            print(f"[EmbeddingService] 임베딩 생성 성공!")
-            print(f"[EmbeddingService] 임베딩 차원: {len(embedding)}")
-            print(f"[EmbeddingService] 임베딩 값 미리보기: {embedding[:5].tolist()}...")
-            print(f"[EmbeddingService] === 임베딩 생성 완료 ===")
-            
-            return embedding.tolist()  # numpy array를 list로 변환
+            # OpenAI API를 사용한 임베딩 생성
+            try:
+                response = self.client.embeddings.create(
+                    model="text-embedding-3-small",
+                    input=processed_text
+                )
+                embedding = response.data[0].embedding
+                
+                print(f"[EmbeddingService] OpenAI 임베딩 생성 성공!")
+                print(f"[EmbeddingService] 임베딩 차원: {len(embedding)}")
+                print(f"[EmbeddingService] 임베딩 값 미리보기: {embedding[:5]}...")
+                print(f"[EmbeddingService] === 임베딩 생성 완료 ===")
+                
+                return embedding
+                
+            except Exception as openai_error:
+                print(f"[EmbeddingService] OpenAI 임베딩 실패, 백업 모델 사용: {openai_error}")
+                
+                # 백업 모델 사용 (SentenceTransformer)
+                embedding = self.fallback_model.encode(processed_text)
+                
+                print(f"[EmbeddingService] 백업 임베딩 생성 성공!")
+                print(f"[EmbeddingService] 임베딩 차원: {len(embedding)}")
+                print(f"[EmbeddingService] 임베딩 값 미리보기: {embedding[:5].tolist()}...")
+                print(f"[EmbeddingService] === 백업 임베딩 생성 완료 ===")
+                
+                return embedding.tolist()  # numpy array를 list로 변환
         except Exception as e:
             print(f"[EmbeddingService] === 임베딩 생성 실패 ====")
             print(f"[EmbeddingService] 오류 메시지: {e}")

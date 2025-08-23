@@ -18,14 +18,14 @@ from .context_classifier import classify_context, is_recruitment_text
 from .context_classifier import FlexibleContextClassifier
 from .enhanced_field_extractor import enhanced_extractor
 from .two_stage_classifier import two_stage_classifier
+from .page_matcher import page_matcher, PageMatch
 
 load_dotenv()
 
 # OpenAI 설정
 try:
-    openai_service = OpenAIService(model_name="gpt-4o-mini") if OpenAIService else None
+    openai_service = OpenAIService(model_name="gpt-4o") if OpenAIService else None
 except Exception as e:
-    print(f"OpenAI 서비스 초기화 실패: {e}")
     openai_service = None
 
 @dataclass
@@ -67,6 +67,17 @@ class IntentDetectionNode:
         
         print(f"\n🎯 [의도 감지 시작] 모드: {mode}")
         print(f"🎯 [의도 감지] 사용자 입력: {user_input}")
+        
+        # 페이지 매칭 시도 (모든 모드에서)
+        page_match = page_matcher.match_page(user_input)
+        if page_match:
+            print(f"🎯 [페이지 매칭] 감지됨: {page_match.page_name} ({page_match.confidence:.1%})")
+            return {
+                "intent": "page_navigation",
+                "confidence": page_match.confidence,
+                "page_match": page_match,
+                "extracted_fields": {}
+            }
         
         # LangGraph 모드에서 강력 키워드 무시
         if mode == "langgraph":
@@ -134,6 +145,60 @@ class IntentDetectionNode:
             "confidence": confidence,
             "extracted_fields": extracted_fields
         }
+
+
+class PageNavigationNode:
+    """페이지 네비게이션 처리 노드"""
+    
+    def process_navigation(self, page_match: PageMatch) -> str:
+        """페이지 네비게이션 처리"""
+        try:
+
+            # OpenAI를 사용하여 의도 분류
+            prompt = f"{self.system_prompt}\n\n사용자 입력: {user_input}"
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=50,
+                temperature=0.3
+            )
+
+            print(f"\n🎯 [페이지 네비게이션] 처리 시작: {page_match.page_name}")
+
+            
+            # 프론트엔드 표준 포맷으로 응답 생성
+            # 완전자율에이전트: URL 파라미터 생성
+            url_params = ""
+            if page_match.additional_data.get("username"):
+                url_params = f"?username={page_match.additional_data['username']}"
+            
+            payload = {
+                "success": True,
+                "response": f"'{page_match.page_name}' 페이지로 이동하여 자동으로 분석을 시작합니다.",
+                "type": "page_navigation",
+                "page_action": {
+                    "action": "navigate",
+                    "path": page_match.page_path + url_params,
+                    "page_name": page_match.page_name,
+                    "confidence": page_match.confidence,
+                    "reason": page_match.reason,
+                    "additional_data": page_match.additional_data
+                }
+            }
+            
+            print(f"🎯 [페이지 네비게이션] 응답 생성: {payload}")
+            return json.dumps(payload, ensure_ascii=False)
+            
+        except Exception as e:
+            print(f"❌ [페이지 네비게이션] 오류: {e}")
+            return json.dumps({
+                "success": False,
+                "response": f"페이지 이동 중 오류가 발생했습니다: {str(e)}",
+                "type": "error"
+            }, ensure_ascii=False)
+
 
 class WebSearchNode:
     """웹 검색 도구 노드"""
@@ -385,6 +450,17 @@ class RecruitmentNode:
 답변은 한국어로 작성하고, 이모지를 적절히 사용하여 가독성을 높여주세요.
 """
             
+
+            response = openai_client.chat.completions.create(
+                model="gpt-4o",
+                messages=[
+                    {"role": "user", "content": prompt}
+                ],
+                max_tokens=1000,
+                temperature=0.7
+            )
+            return response.choices[0].message.content
+
             if openai_service:
                 try:
                     # 새로운 이벤트 루프 생성하여 사용
@@ -401,7 +477,7 @@ class RecruitmentNode:
                     return "죄송합니다. AI 서비스 호출 중 오류가 발생했습니다."
             else:
                 return "죄송합니다. AI 서비스를 사용할 수 없습니다."
-            
+
         except Exception as e:
             print(f"채용공고 작성 중 오류: {str(e)}")
             return "죄송합니다. 채용공고 작성 중 오류가 발생했습니다."
@@ -777,6 +853,7 @@ class AgentSystem:
     
     def __init__(self):
         self.intent_detector = IntentDetectionNode()
+        self.page_navigation = PageNavigationNode()
         self.web_search = WebSearchNode()
         self.calculator = CalculatorNode()
         self.recruitment = RecruitmentNode()
@@ -792,8 +869,9 @@ class AgentSystem:
             intent = intent_result["intent"]
             confidence = intent_result["confidence"]
             extracted_fields = intent_result["extracted_fields"]
+            page_match = intent_result.get("page_match")
             
-            # 2단계: DOM 액션 의도 감지
+            # 2단계: DOM 액션 의도 감지 (페이지 네비게이션보다 낮은 우선순위)
             print("\n" + "="*50)
             print("🔍 [DOM 액션 감지 디버깅]")
             print("="*50)
@@ -848,7 +926,10 @@ class AgentSystem:
             tool_result = ""
             error = ""
             
-            if is_dom_action or has_click or has_view:
+            # 페이지 네비게이션이 우선순위가 높으므로 먼저 확인
+            if intent == "page_navigation":
+                tool_result = self.page_navigation.process_navigation(page_match)
+            elif is_dom_action or has_click or has_view:
                 # DOM 액션 처리
                 print("🎯 [DOM] 액션 감지됨!")
                 intent = "dom_action"

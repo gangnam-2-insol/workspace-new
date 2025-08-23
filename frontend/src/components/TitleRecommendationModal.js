@@ -38,7 +38,7 @@ const TitleRecommendationModal = ({
 
       console.log('[TitleRecommendationModal] 제목 추천 요청:', formContent);
 
-      const response = await fetch(`${API_BASE_URL}/api/chatbot/generate-title`, {
+      const response = await fetch(`${API_BASE_URL}/api/pick-chatbot/generate-title`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -69,15 +69,47 @@ const TitleRecommendationModal = ({
       }
     } catch (error) {
       console.error('[TitleRecommendationModal] 제목 추천 오류:', error);
-      setError('제목 추천 중 오류가 발생했습니다.');
+      
+      // 오류 메시지 개선
+      let errorMessage = '제목 추천 중 오류가 발생했습니다.';
+      if (error.message.includes('Failed to fetch')) {
+        errorMessage = '서버에 연결할 수 없습니다. 네트워크 연결을 확인해주세요.';
+      } else if (error.message.includes('500')) {
+        errorMessage = '서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.';
+      } else if (error.message.includes('404')) {
+        errorMessage = '제목 추천 서비스를 찾을 수 없습니다.';
+      }
+      
+      setError(errorMessage);
       
       // 오류 시 기본 제목들 제공 (4가지 컨셉)
-      setRecommendations([
-        { concept: "신입친화형", title: `함께 성장할 ${formData.position || '직무'} 신입을 찾습니다` },
-        { concept: "전문가형", title: `전문성을 발휘할 ${formData.position || '직무'} 인재 모집` },
-        { concept: "일반형", title: `${formData.department || '부서'} ${formData.position || '직무'} 채용` },
-        { concept: "일반형 변형", title: `${formData.company || '회사'} ${formData.department || '부서'} 구인` }
-      ]);
+      const defaultTitles = [
+        { 
+          concept: "신입친화형", 
+          title: `함께 성장할 ${formData.position || formData.department || '직무'} 신입을 찾습니다`,
+          description: "신입 지원자들이 매력적으로 느낄 수 있는 제목"
+        },
+        { 
+          concept: "전문가형", 
+          title: `전문성을 발휘할 ${formData.position || formData.department || '직무'} 인재 모집`,
+          description: "경력자들이 전문성을 발휘할 수 있다고 느끼는 제목"
+        },
+        { 
+          concept: "일반형", 
+          title: `${formData.department || '부서'} ${formData.position || '직무'} 채용`,
+          description: "일반적인 채용공고 제목"
+        },
+        { 
+          concept: "창의형", 
+          title: `혁신을 이끌 ${formData.position || formData.department || '인재'}를 찾습니다`,
+          description: "독특하고 눈에 띄는 제목"
+        }
+      ];
+      
+      setRecommendations(defaultTitles);
+      
+      // 사용자에게 오류 상황 안내
+      console.log('[TitleRecommendationModal] 기본 제목으로 대체됨');
     } finally {
       setIsLoading(false);
     }
@@ -234,12 +266,29 @@ const TitleRecommendationModal = ({
               backgroundColor: '#fef2f2',
               border: '1px solid #fecaca',
               borderRadius: '8px',
-              padding: '12px 16px',
+              padding: '16px',
               marginBottom: '24px',
               color: '#dc2626',
-              fontSize: '14px'
+              fontSize: '14px',
+              lineHeight: '1.5'
             }}>
-              ⚠️ {error}
+              <div style={{ display: 'flex', alignItems: 'flex-start', gap: '8px' }}>
+                <span style={{ fontSize: '16px' }}>⚠️</span>
+                <div>
+                  <div style={{ fontWeight: '600', marginBottom: '4px' }}>
+                    제목 추천 서비스 일시적 오류
+                  </div>
+                  <div>{error}</div>
+                  <div style={{ 
+                    marginTop: '8px', 
+                    fontSize: '13px', 
+                    color: '#6b7280',
+                    fontStyle: 'italic'
+                  }}>
+                    기본 제목이 제공되었습니다. 직접 입력하거나 기본 제목을 선택해주세요.
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 
