@@ -5536,6 +5536,7 @@ const ApplicantManagement = () => {
                             </div>
                           </div>
                         )}
+                        
                       </div>
                     )}
                   </RecommendationContent>
