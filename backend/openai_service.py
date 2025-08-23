@@ -150,4 +150,55 @@ class OpenAIService:
             print(f"[ERROR] OpenAI JSON 응답 생성 실패: {e}")
             return f'{{"error": "OpenAI 서비스 오류: {str(e)}"}}'
 
+    async def generate_response_with_vision(self, prompt: str, images: List[Dict[str, Any]]) -> str:
+        """
+        Vision API를 사용하여 이미지와 텍스트를 함께 분석
+        
+        Args:
+            prompt: 분석 요청 프롬프트
+            images: base64로 인코딩된 이미지 리스트
+            
+        Returns:
+            분석 결과 텍스트
+        """
+        if not self.client:
+            return "OpenAI 서비스를 사용할 수 없습니다."
 
+        try:
+            # Vision API용 메시지 구성
+            content = [{"type": "text", "text": prompt}]
+            
+            # 이미지 추가
+            for image in images:
+                content.append(image)
+            
+            messages = [
+                {
+                    "role": "system",
+                    "content": (
+                        "당신은 이력서 분석 전문가입니다.\n"
+                        "이미지와 텍스트를 모두 분석하여 정확한 정보를 추출해주세요.\n"
+                        "JSON 형식으로 응답하되, 유효한 JSON만 반환해주세요."
+                    )
+                },
+                {
+                    "role": "user",
+                    "content": content
+                }
+            ]
+
+            response = await self.client.chat.completions.create(
+                model="gpt-4o",  # Vision API는 gpt-4o 사용
+                messages=messages,
+                temperature=0.3,
+                max_tokens=2000,
+                response_format={"type": "json_object"}
+            )
+
+            if response.choices and response.choices[0].message.content:
+                return response.choices[0].message.content
+            return '{"error": "Vision 분석 결과를 생성할 수 없습니다."}'
+
+        except Exception as e:
+            print(f"[ERROR] Vision API 응답 생성 실패: {e}")
+            return f'{{"error": "Vision API 오류: {str(e)}"}}'

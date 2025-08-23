@@ -12,6 +12,7 @@ import {
   FiSearch,
   FiFilter,
   FiCheck,
+  FiCheckCircle,
   FiX,
   FiStar,
   FiBriefcase,
@@ -2801,6 +2802,11 @@ const ApplicantManagement = () => {
   const [replaceExisting, setReplaceExisting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [showDetailedAnalysis, setShowDetailedAnalysis] = useState(false);
+  
+  // 인재추천 요청 상태
+  const [isRequestingRecommendation, setIsRequestingRecommendation] = useState(false);
+  const [recommendationResult, setRecommendationResult] = useState(null);
+  
   const [resumeData, setResumeData] = useState({
     name: '',
     email: '',
@@ -3538,6 +3544,8 @@ const ApplicantManagement = () => {
   const handleCardClick = (applicant) => {
     setSelectedApplicant(applicant);
     setIsModalOpen(true);
+    // 모달이 열릴 때 자동으로 유사인재 추천 요청
+    handleTalentRecommendationRequest(applicant);
   };
 
   const handleResumeModalOpen = (applicant) => {
@@ -3548,6 +3556,9 @@ const ApplicantManagement = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedApplicant(null);
+    // 유사인재 추천 상태 초기화
+    setRecommendationResult(null);
+    setIsRequestingRecommendation(false);
     // 이력서 모달이 열려있으면 닫지 않음
   };
 
@@ -3866,6 +3877,76 @@ const ApplicantManagement = () => {
     if ((selectedJobs || []).length > 0) filters.push(`직무: ${(selectedJobs || []).join(', ')}`);
     if ((selectedExperience || []).length > 0) filters.push(`경력: ${(selectedExperience || []).join(', ')}`);
     return filters.join(' | ');
+  };
+
+  // 인재추천 요청 핸들러
+  const handleTalentRecommendationRequest = async (applicant) => {
+    if (!applicant) return;
+    
+    setIsRequestingRecommendation(true);
+    setRecommendationResult(null);
+    
+    try {
+      console.log('🤖 인재추천 요청 시작:', applicant.name);
+      
+      // API 요청 데이터 구성
+      const requestData = {
+        applicant_id: applicant.id,
+        applicant_name: applicant.name,
+        position: applicant.position || '개발자',
+        skills: applicant.skills || [],
+        experience: applicant.experience || '신입',
+        email: applicant.email,
+        phone: applicant.phone,
+        analysisScore: applicant.analysisScore || 0
+      };
+      
+      console.log('📤 요청 데이터:', requestData);
+      
+      // 인재추천 API 호출 (실제 API 엔드포인트로 수정 필요)
+      const response = await fetch('/api/chatbot/recommendations', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          context: `지원자 ${applicant.name}(${applicant.position})에 대한 인재 추천을 요청합니다.`,
+          applicant_info: requestData
+        })
+      });
+      
+      if (!response.ok) {
+        throw new Error('인재추천 요청 실패');
+      }
+      
+      const result = await response.json();
+      console.log('✅ 인재추천 결과:', result);
+      
+      setRecommendationResult({
+        success: true,
+        data: result,
+        applicant: applicant,
+        requestTime: new Date().toLocaleString()
+      });
+      
+      // 성공 알림
+      alert(`${applicant.name} 지원자에 대한 인재추천 요청이 완료되었습니다!`);
+      
+    } catch (error) {
+      console.error('❌ 인재추천 요청 실패:', error);
+      
+      setRecommendationResult({
+        success: false,
+        error: error.message,
+        applicant: applicant,
+        requestTime: new Date().toLocaleString()
+      });
+      
+      // 실패 알림
+      alert(`인재추천 요청 중 오류가 발생했습니다: ${error.message}`);
+    } finally {
+      setIsRequestingRecommendation(false);
+    }
   };
 
   // 새 이력서 등록 핸들러들
@@ -5205,6 +5286,66 @@ const ApplicantManagement = () => {
                 </ProfileGrid>
               </ProfileSection>
 
+              {/* Vision 분석 결과 섹션 */}
+              {selectedApplicant.vision_analysis && Object.keys(selectedApplicant.vision_analysis).length > 0 && (
+                <VisionAnalysisSection>
+                  <SectionTitle>
+                    <FiCamera size={20} />
+                    Vision AI 분석 결과
+                  </SectionTitle>
+                  <VisionAnalysisGrid>
+                    <VisionAnalysisItem>
+                      <VisionAnalysisLabel>Vision 분석 이름</VisionAnalysisLabel>
+                      <VisionAnalysisValue>{selectedApplicant.vision_analysis.name || 'N/A'}</VisionAnalysisValue>
+                    </VisionAnalysisItem>
+                    <VisionAnalysisItem>
+                      <VisionAnalysisLabel>Vision 분석 이메일</VisionAnalysisLabel>
+                      <VisionAnalysisValue>{selectedApplicant.vision_analysis.email || 'N/A'}</VisionAnalysisValue>
+                    </VisionAnalysisItem>
+                    <VisionAnalysisItem>
+                      <VisionAnalysisLabel>Vision 분석 전화번호</VisionAnalysisLabel>
+                      <VisionAnalysisValue>{selectedApplicant.vision_analysis.phone || 'N/A'}</VisionAnalysisValue>
+                    </VisionAnalysisItem>
+                    <VisionAnalysisItem>
+                      <VisionAnalysisLabel>Vision 분석 직책</VisionAnalysisLabel>
+                      <VisionAnalysisValue>{selectedApplicant.vision_analysis.position || 'N/A'}</VisionAnalysisValue>
+                    </VisionAnalysisItem>
+                    <VisionAnalysisItem>
+                      <VisionAnalysisLabel>Vision 분석 회사</VisionAnalysisLabel>
+                      <VisionAnalysisValue>{selectedApplicant.vision_analysis.company || 'N/A'}</VisionAnalysisValue>
+                    </VisionAnalysisItem>
+                    <VisionAnalysisItem>
+                      <VisionAnalysisLabel>Vision 분석 학력</VisionAnalysisLabel>
+                      <VisionAnalysisValue>{selectedApplicant.vision_analysis.education || 'N/A'}</VisionAnalysisValue>
+                    </VisionAnalysisItem>
+                    <VisionAnalysisItem>
+                      <VisionAnalysisLabel>Vision 분석 스킬</VisionAnalysisLabel>
+                      <VisionAnalysisValue>{selectedApplicant.vision_analysis.skills || 'N/A'}</VisionAnalysisValue>
+                    </VisionAnalysisItem>
+                    <VisionAnalysisItem>
+                      <VisionAnalysisLabel>Vision 분석 주소</VisionAnalysisLabel>
+                      <VisionAnalysisValue>{selectedApplicant.vision_analysis.address || 'N/A'}</VisionAnalysisValue>
+                    </VisionAnalysisItem>
+                  </VisionAnalysisGrid>
+                  {selectedApplicant.vision_analysis.summary && (
+                    <VisionSummarySection>
+                      <VisionSummaryTitle>Vision AI 요약</VisionSummaryTitle>
+                      <VisionSummaryText>{selectedApplicant.vision_analysis.summary}</VisionSummaryText>
+                    </VisionSummarySection>
+                  )}
+                  {selectedApplicant.vision_analysis.keywords && selectedApplicant.vision_analysis.keywords.length > 0 && (
+                    <VisionKeywordsSection>
+                      <VisionKeywordsTitle>Vision AI 키워드</VisionKeywordsTitle>
+                      <VisionKeywordsGrid>
+                        {selectedApplicant.vision_analysis.keywords.map((keyword, index) => (
+                          <VisionKeywordTag key={index}>{keyword}</VisionKeywordTag>
+                        ))}
+                      </VisionKeywordsGrid>
+                    </VisionKeywordsSection>
+                  )}
+                </VisionAnalysisSection>
+              )}
+
               <SkillsSection>
                 <SkillsTitle>
                   <FiCode size={20} />
@@ -5270,6 +5411,41 @@ const ApplicantManagement = () => {
                 <FiX size={16} />
                 지원자 삭제
               </DeleteButton>
+
+              {/* 유사인재 추천 섹션 */}
+              <SimilarTalentSection>
+                <SectionTitle>
+                  <FiStar size={20} />
+                  유사인재 추천
+                </SectionTitle>
+                
+                {isRequestingRecommendation && (
+                  <LoadingMessage>
+                    <LoadingSpinner />
+                    유사인재를 검색하고 있습니다...
+                  </LoadingMessage>
+                )}
+                
+                {recommendationResult && recommendationResult.success && (
+                  <RecommendationContent>
+                    <RecommendationMessage>
+                      {selectedApplicant?.name} 지원자와 유사한 인재를 추천합니다.
+                    </RecommendationMessage>
+                    <RecommendationDetails>
+                      <RecommendationTime>
+                        추천 시간: {recommendationResult.requestTime}
+                      </RecommendationTime>
+                    </RecommendationDetails>
+                  </RecommendationContent>
+                )}
+                
+                {recommendationResult && !recommendationResult.success && (
+                  <ErrorMessage>
+                    <FiX size={16} />
+                    유사인재 추천 요청 실패: {recommendationResult.error}
+                  </ErrorMessage>
+                )}
+              </SimilarTalentSection>
             </ModalContent>
           </ModalOverlay>
         )}
@@ -6502,6 +6678,73 @@ const DeleteButton = styled.button`
   }
 `;
 
+// 유사인재 추천 섹션 스타일
+const SimilarTalentSection = styled.div`
+  margin-top: 24px;
+  padding: 20px;
+  background: linear-gradient(135deg, #f8faff 0%, #f0f7ff 100%);
+  border-radius: var(--border-radius);
+  border: 1px solid #e3f2fd;
+`;
+
+const LoadingMessage = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-top: 16px;
+`;
+
+const LoadingSpinner = styled.div`
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e3f2fd;
+  border-top: 2px solid var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+
+const RecommendationContent = styled.div`
+  margin-top: 16px;
+`;
+
+const RecommendationMessage = styled.p`
+  color: var(--text-primary);
+  font-size: 14px;
+  margin: 0 0 12px 0;
+  font-weight: 500;
+`;
+
+const RecommendationDetails = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const RecommendationTime = styled.span`
+  color: var(--text-secondary);
+  font-size: 12px;
+`;
+
+const ErrorMessage = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #e53e3e;
+  font-size: 14px;
+  margin-top: 16px;
+  padding: 12px;
+  background: #fef2f2;
+  border-radius: var(--border-radius);
+  border: 1px solid #fecaca;
+`;
+
 // 문서 미리보기 관련 스타일 컴포넌트들
 const DocumentPreviewModal = styled(motion.div)`
   position: fixed;
@@ -6840,9 +7083,107 @@ const ScoreItem = styled.div`
     color: var(--text-secondary);
     min-width: 60px;
   }
+`;
+
+// Vision 분석 결과 스타일 컴포넌트들
+const VisionAnalysisSection = styled.div`
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.05), rgba(147, 51, 234, 0.05));
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 12px;
+  padding: 20px;
+  margin-bottom: 20px;
+`;
+
+const VisionAnalysisGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+  margin-top: 16px;
+`;
+
+const VisionAnalysisItem = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const VisionAnalysisLabel = styled.span`
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+`;
+
+const VisionAnalysisValue = styled.span`
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-primary);
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: 6px;
+  border: 1px solid rgba(59, 130, 246, 0.1);
+`;
+
+const VisionSummarySection = styled.div`
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid rgba(59, 130, 246, 0.2);
+`;
+
+const VisionSummaryTitle = styled.h4`
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const VisionSummaryText = styled.p`
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  background: rgba(255, 255, 255, 0.9);
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid rgba(59, 130, 246, 0.1);
+`;
+
+const VisionKeywordsSection = styled.div`
+  margin-top: 16px;
+`;
+
+const VisionKeywordsTitle = styled.h4`
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const VisionKeywordsGrid = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+`;
+
+const VisionKeywordTag = styled.span`
+  background: linear-gradient(135deg, rgba(59, 130, 246, 0.1), rgba(147, 51, 234, 0.1));
+  color: var(--primary-color);
+  padding: 6px 12px;
+  border-radius: 20px;
+  font-size: 12px;
+  font-weight: 500;
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  transition: all 0.2s ease;
   
-  span:last-child {
-    font-weight: 600;
+  &:hover {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.2), rgba(147, 51, 234, 0.2));
+    transform: translateY(-1px);
   }
 `;
 

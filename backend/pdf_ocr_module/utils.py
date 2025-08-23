@@ -5,7 +5,7 @@ import os
 import re
 from datetime import datetime, date
 from pathlib import Path
-from typing import Any
+from typing import Any, Dict
 import hashlib
 
 from pdf_ocr_module.config import Settings
@@ -100,5 +100,55 @@ def file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def encode_image_to_base64(image_path: Path) -> str:
+    """이미지를 base64로 인코딩합니다."""
+    import base64
+    try:
+        with open(image_path, "rb") as image_file:
+            encoded_image = base64.b64encode(image_file.read()).decode('utf-8')
+            return encoded_image
+    except Exception as e:
+        print(f"이미지 인코딩 실패: {e}")
+        return ""
 
 
+def validate_image_path(image_path: Path) -> bool:
+    """이미지 파일 경로가 유효한지 확인합니다."""
+    if not image_path.exists():
+        return False
+    
+    # 지원하는 이미지 형식 확인
+    supported_formats = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'}
+    return image_path.suffix.lower() in supported_formats
+
+
+def get_image_info(image_path: Path) -> Dict[str, Any]:
+    """이미지 파일의 기본 정보를 반환합니다."""
+    try:
+        from PIL import Image
+        with Image.open(image_path) as img:
+            return {
+                "width": img.width,
+                "height": img.height,
+                "format": img.format,
+                "mode": img.mode,
+                "size_bytes": image_path.stat().st_size
+            }
+    except Exception as e:
+        print(f"이미지 정보 추출 실패: {e}")
+        return {}
+
+
+def validate_vision_data(vision_data: Dict[str, Any]) -> bool:
+    """Vision API 응답 데이터의 유효성을 검증합니다."""
+    required_fields = ["name", "email", "phone", "position", "company", "education", "skills", "address"]
+    
+    if not isinstance(vision_data, dict):
+        return False
+    
+    # 필수 필드가 모두 있는지 확인
+    for field in required_fields:
+        if field not in vision_data:
+            return False
+    
+    return True

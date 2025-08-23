@@ -105,7 +105,7 @@ async def add_charset_header(request, call_next):
 app.include_router(github_router, prefix="/api", tags=["github"])
 app.include_router(upload_router, tags=["upload"])
 app.include_router(pick_chatbot_router, prefix="/api/pick-chatbot", tags=["pick-chatbot"])
-app.include_router(integrated_ocr_router, tags=["integrated-ocr"])
+app.include_router(integrated_ocr_router, prefix="/api/integrated-ocr", tags=["integrated-ocr"])
 app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
 app.include_router(job_posting_router, tags=["job-postings"])
 app.include_router(applicants_router, tags=["applicants"])
