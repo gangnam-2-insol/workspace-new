@@ -1,5 +1,5 @@
 import React from 'react';
-import TestGithubSummary from '../TestGithubSummary';
+import TestGithubSummary from './TestGithubSummary';
 
 const GithubSummaryPanel = () => {
   return (
