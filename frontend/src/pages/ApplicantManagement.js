@@ -3919,10 +3919,11 @@ const ApplicantManagement = () => {
       console.log('✅ 인재추천 결과:', result);
       
       setRecommendationResult({
-        success: true,
-        data: result,
+        success: result.status === 'success',
+        data: result.recommendations,
         applicant: applicant,
-        requestTime: new Date().toLocaleString()
+        requestTime: new Date().toLocaleString(),
+        message: result.message
       });
       
       // 성공 알림
@@ -5432,6 +5433,112 @@ const ApplicantManagement = () => {
                         추천 시간: {recommendationResult.requestTime}
                       </RecommendationTime>
                     </RecommendationDetails>
+                    
+                    {recommendationResult.data && recommendationResult.data.success && recommendationResult.data.data && (
+                      <div style={{ marginTop: '16px' }}>
+                        <h4 style={{ marginBottom: '12px', color: 'var(--text-primary)' }}>
+                          추천된 유사 인재 ({recommendationResult.data.data.results?.length || 0}명)
+                        </h4>
+                        {recommendationResult.data.data.results?.map((talent, index) => {
+                          // 백엔드에서 applicant 객체 안에 인재 정보가 들어있음
+                          const applicant = talent.applicant || {};
+                          return (
+                            <div key={index} style={{
+                              background: 'var(--background-secondary)',
+                              padding: '12px',
+                              margin: '8px 0',
+                              borderRadius: 'var(--border-radius)',
+                              border: '1px solid var(--border-color)'
+                            }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                                <strong style={{ color: 'var(--text-primary)' }}>
+                                  {applicant.name || '이름미상'}
+                                </strong>
+                                <span style={{ 
+                                  background: 'var(--primary-color)', 
+                                  color: 'white', 
+                                  padding: '4px 8px', 
+                                  borderRadius: '12px', 
+                                  fontSize: '12px' 
+                                }}>
+                                  유사도: {Math.round((talent.final_score || 0) * 100)}%
+                                </span>
+                              </div>
+                              <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                                직무: {applicant.position || 'N/A'}
+                              </div>
+                              <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                                경력: {applicant.experience || 'N/A'}
+                              </div>
+                              <div style={{ fontSize: '14px', color: 'var(--text-secondary)', marginBottom: '4px' }}>
+                                이메일: {applicant.email || 'N/A'}
+                              </div>
+                              {applicant.skills && (
+                                <div style={{ fontSize: '12px', color: 'var(--text-secondary)' }}>
+                                  기술: {Array.isArray(applicant.skills) ? applicant.skills.join(', ') : applicant.skills}
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                        
+                        {recommendationResult.data.data.llm_analysis && (
+                          <div style={{ 
+                            marginTop: '16px', 
+                            padding: '16px', 
+                            background: '#f8f9fa', 
+                            borderRadius: 'var(--border-radius)',
+                            border: '1px solid var(--border-color)'
+                          }}>
+                            <h5 style={{ margin: '0 0 12px 0', color: 'var(--text-primary)', fontSize: '16px' }}>AI 분석 결과</h5>
+                            <div style={{ 
+                              fontSize: '14px', 
+                              color: 'var(--text-secondary)', 
+                              lineHeight: '1.6',
+                              whiteSpace: 'pre-line'
+                            }}>
+                              {(() => {
+                                const analysis = recommendationResult.data.data.llm_analysis.analysis || '';
+                                // **텍스트** 형식을 굵게 표시하기 위해 파싱
+                                return analysis
+                                  .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                  .split('\n')
+                                  .map((line, idx) => {
+                                    // - 으로 시작하는 줄은 리스트 아이템으로 처리
+                                    if (line.trim().startsWith('- ')) {
+                                      return (
+                                        <div key={idx} style={{ 
+                                          marginLeft: '12px', 
+                                          marginBottom: '4px',
+                                          position: 'relative'
+                                        }}>
+                                          <span style={{ 
+                                            position: 'absolute', 
+                                            left: '-12px', 
+                                            color: 'var(--primary-color)' 
+                                          }}>•</span>
+                                          <span dangerouslySetInnerHTML={{ 
+                                            __html: line.substring(2).replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                          }} />
+                                        </div>
+                                      );
+                                    }
+                                    // 일반 텍스트
+                                    return line.trim() ? (
+                                      <div key={idx} style={{ marginBottom: '8px' }}>
+                                        <span dangerouslySetInnerHTML={{ 
+                                          __html: line.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+                                        }} />
+                                      </div>
+                                    ) : <br key={idx} />;
+                                  });
+                              })()}
+                            </div>
+                          </div>
+                        )}
+                        
+                      </div>
+                    )}
                   </RecommendationContent>
                 )}
                 
