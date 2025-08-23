@@ -7,6 +7,7 @@ import time
 from collections import defaultdict
 from datetime import datetime
 import uuid
+import re
 
 # 기존 서비스들 import
 try:
@@ -2209,3 +2210,76 @@ async def get_agent_status():
                 "monitoring": "error"
             }
         }
+
+# 제목 생성 API 엔드포인트
+class TitleGenerationRequest(BaseModel):
+    form_data: Dict[str, Any]
+    content: Optional[str] = None
+
+class TitleGenerationResponse(BaseModel):
+    titles: List[Dict[str, str]]
+    message: str
+
+@router.post("/generate-title", response_model=TitleGenerationResponse)
+async def generate_title(request: TitleGenerationRequest):
+    """채용공고 제목을 생성합니다."""
+    try:
+        form_data = request.form_data
+        content = request.content or ""
+        
+        print(f"[API] 제목 생성 요청: {form_data}")
+        
+        # 폼 데이터에서 키워드 추출
+        keywords = []
+        if form_data.get('department'):
+            keywords.append(form_data['department'])
+        if form_data.get('position'):
+            keywords.append(form_data['position'])
+        if form_data.get('mainDuties'):
+            # 주요 업무에서 키워드 추출
+            duties = form_data['mainDuties']
+            # 간단한 키워드 추출 (첫 번째 명사나 동사)
+            words = duties.split()
+            if words:
+                keywords.append(words[0])
+        
+        # 기본 키워드가 없으면 기본값 사용
+        if not keywords:
+            keywords = ['직무', '인재']
+        
+        # AI 제목 생성 (실제로는 LLM 서비스 호출)
+        # 현재는 기본 제목 생성
+        generated_titles = [
+            {
+                "concept": "신입친화형",
+                "title": f"함께 성장할 {keywords[0]} 신입을 찾습니다",
+                "description": "신입 지원자들이 매력적으로 느낄 수 있는 제목"
+            },
+            {
+                "concept": "전문가형",
+                "title": f"전문성을 발휘할 {keywords[0]} 인재 모집",
+                "description": "경력자들이 전문성을 발휘할 수 있다고 느끼는 제목"
+            },
+            {
+                "concept": "일반형",
+                "title": f"{keywords[0]} {keywords[1] if len(keywords) > 1 else '직무'} 채용",
+                "description": "일반적인 채용공고 제목"
+            },
+            {
+                "concept": "창의형",
+                "title": f"혁신을 이끌 {keywords[0]}를 찾습니다",
+                "description": "독특하고 눈에 띄는 제목"
+            }
+        ]
+        
+        return TitleGenerationResponse(
+            titles=generated_titles,
+            message="AI가 생성한 제목 추천입니다."
+        )
+        
+    except Exception as e:
+        print(f"[API] 제목 생성 실패: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"제목 생성에 실패했습니다: {str(e)}"
+        )

@@ -19,7 +19,6 @@ load_dotenv()
 try:
     openai_service = OpenAIService(model_name="gpt-4o") if OpenAIService else None
 except Exception as e:
-    print(f"OpenAI 서비스 초기화 실패: {e}")
     openai_service = None
 
 class EnhancedFieldExtractor:

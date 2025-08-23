@@ -15,32 +15,7 @@ class LLMService:
         else:
             print(f"[LLMService] OPENAI_API_KEY 확인됨 (길이: {len(api_key)})")
         
-        try:
-            # 환경 변수에서 proxies 관련 설정 제거
-            if 'HTTP_PROXY' in os.environ:
-                del os.environ['HTTP_PROXY']
-            if 'HTTPS_PROXY' in os.environ:
-                del os.environ['HTTPS_PROXY']
-            if 'http_proxy' in os.environ:
-                del os.environ['http_proxy']
-            if 'https_proxy' in os.environ:
-                del os.environ['https_proxy']
-            
-            # httpx 클라이언트 설정을 명시적으로 제거
-            import httpx
-            self.client = OpenAI(
-                api_key=api_key,
-                http_client=httpx.Client(
-                    timeout=httpx.Timeout(30.0),
-                    limits=httpx.Limits(max_keepalive_connections=5, max_connections=10)
-                )
-            )
-        except Exception as e:
-            print(f"[LLMService] OpenAI 클라이언트 초기화 오류: {e}")
-            # 기본 설정으로 재시도
-            import openai
-            openai.api_key = api_key
-            self.client = OpenAI(api_key=api_key)
+        self.client = OpenAI(api_key=api_key)
         self.model_name = 'gpt-4o'
         print(f"[LLMService] OpenAI 클라이언트 초기화 완료: {self.model_name}")
         print(f"[LLMService] === LLM 서비스 초기화 완료 ===")
@@ -329,3 +304,102 @@ class LLMService:
                 "analysis": "표절 위험도 분석에 실패했습니다.",
                 "analyzed_at": datetime.now().isoformat()
             }
+
+    async def analyze_similar_applicants(self, target_applicant: Dict[str, Any], 
+                                       similar_applicants: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        유사 지원자들에 대한 LLM 분석 수행
+        
+        Args:
+            target_applicant (Dict): 기준 지원자 정보
+            similar_applicants (List[Dict]): 유사한 지원자들 정보
+            
+        Returns:
+            Dict: LLM 분석 결과
+        """
+        try:
+            print(f"[LLMService] === 유사 지원자 LLM 분석 시작 ===")
+            print(f"[LLMService] 기준 지원자: {target_applicant.get('name', 'N/A')}")
+            print(f"[LLMService] 유사 지원자 수: {len(similar_applicants)}")
+            
+            if not similar_applicants:
+                return {
+                    "success": False,
+                    "message": "분석할 유사 지원자가 없습니다."
+                }
+            
+            # LLM 프롬프트 구성
+            prompt = self._create_similar_applicants_analysis_prompt(target_applicant, similar_applicants)
+            
+            # OpenAI API 호출
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {"role": "system", "content": "당신은 인재 채용 전문가입니다. 유사한 지원자들을 분석하여 왜 유사한지, 어떤 특성이 비슷한지 구체적으로 설명해주세요."},
+                    {"role": "user", "content": prompt}
+                ],
+                temperature=0.3,
+                max_tokens=1000
+            )
+            
+            analysis_text = response.choices[0].message.content.strip()
+            
+            print(f"[LLMService] LLM 분석 완료")
+            
+            return {
+                "success": True,
+                "analysis": analysis_text,
+                "target_applicant": target_applicant,
+                "similar_count": len(similar_applicants),
+                "analyzed_at": datetime.now().isoformat()
+            }
+            
+        except Exception as e:
+            print(f"[LLMService] 유사 지원자 분석 실패: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "유사 지원자 분석 중 오류가 발생했습니다.",
+                "analyzed_at": datetime.now().isoformat()
+            }
+
+    def _create_similar_applicants_analysis_prompt(self, target_applicant: Dict[str, Any], 
+                                                 similar_applicants: List[Dict[str, Any]]) -> str:
+        """유사 지원자 분석용 프롬프트 생성"""
+        
+        # 기준 지원자 정보
+        prompt = f"""다음 기준 지원자와 유사한 지원자들을 찾았습니다. 왜 유사한지 분석해주세요.
+
+**기준 지원자:**
+- 이름: {target_applicant.get('name', 'N/A')}
+- 지원직무: {target_applicant.get('position', 'N/A')}
+- 경력: {target_applicant.get('experience', 'N/A')}
+- 기술스택: {target_applicant.get('skills', 'N/A')}
+- 부서: {target_applicant.get('department', 'N/A')}
+
+**유사한 지원자들:**
+"""
+        
+        # 유사 지원자들 정보
+        for applicant in similar_applicants:
+            prompt += f"""
+{applicant['rank']}순위. {applicant.get('name', 'N/A')}
+- 지원직무: {applicant.get('position', 'N/A')}
+- 경력: {applicant.get('experience', 'N/A')}
+- 기술스택: {applicant.get('skills', 'N/A')}
+- 부서: {applicant.get('department', 'N/A')}
+- 유사도 점수: {applicant.get('final_score', 0):.3f} (벡터: {applicant.get('vector_score', 0):.3f}, 키워드: {applicant.get('keyword_score', 0):.3f})
+"""
+        
+        prompt += """
+
+**분석 요청:**
+1. 기준 지원자와 각 유사 지원자 간의 공통점을 구체적으로 설명해주세요.
+2. 어떤 특성(직무, 경력, 기술스택, 부서 등)이 유사성에 가장 큰 영향을 미쳤는지 분석해주세요.
+3. 각 지원자별로 간단한 특징과 추천 이유를 제시해주세요.
+4. 전체적인 인재 풀의 특성과 트렌드를 요약해주세요.
+
+한국어로 자세하고 전문적으로 분석해주세요.
+"""
+        
+        return prompt

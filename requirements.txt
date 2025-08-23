@@ -30,6 +30,14 @@ sentence-transformers==2.2.2
 groq==0.4.2
 requests==2.31.0
 
+# LangChain (하이브리드 검색용)
+langchain==0.3.7
+langchain-community==0.3.5
+langchain-core==0.3.15
+langchain-openai==0.2.5
+langchain-pinecone==0.2.0
+langchain-elasticsearch==0.3.0
+
 # 음성 및 오디오 처리
 SpeechRecognition==3.14.3
 PyAudio==0.2.14
@@ -43,9 +51,10 @@ kiwipiepy==0.21.0
 
 # 키워드 검색 (다중 하이브리드 검색용)
 rank-bm25==0.2.2
+elasticsearch==8.15.3
 
 # PDF 및 문서 처리
-PyMuPDF==1.23.18
+PyMuPDF==1.24.14
 pdfplumber==0.10.3
 pdf2image==1.17.0
 pytesseract==0.3.10
@@ -60,6 +69,8 @@ scipy==1.11.4
 colorama==0.4.6
 httpx==0.27.0
 websockets==15.0.1
+aiohttp==3.9.1
+urllib3>=2.5.0
 
 # 웹 자동화
 selenium==4.15.2

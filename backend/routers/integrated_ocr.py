@@ -5,6 +5,7 @@ import os
 import tempfile
 from pathlib import Path
 from datetime import datetime
+import json
 
 # GPT-4o Vision API 기반 PDF OCR 모듈 import
 from pdf_ocr_module.main import process_pdf
@@ -12,8 +13,38 @@ from pdf_ocr_module.config import Settings
 from pdf_ocr_module.ai_analyzer import analyze_text
 from pdf_ocr_module.mongo_saver import MongoSaver
 from models.applicant import ApplicantCreate
+from chunking_service import ChunkingService
 
-router = APIRouter(prefix="/api/integrated-ocr", tags=["integrated-ocr"])
+router = APIRouter(tags=["integrated-ocr"])
+
+def serialize_mongo_data(data):
+    """MongoDB 데이터를 JSON 직렬화 가능한 형태로 변환합니다."""
+    if data is None:
+        return None
+    
+    try:
+        # ObjectId를 문자열로 변환
+        from bson import ObjectId
+        if isinstance(data, ObjectId):
+            return str(data)
+        elif isinstance(data, datetime):
+            return data.isoformat()
+        elif isinstance(data, dict):
+            return {key: serialize_mongo_data(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [serialize_mongo_data(item) for item in data]
+        else:
+            return data
+    except ImportError:
+        # bson이 없는 경우 datetime만 처리
+        if isinstance(data, datetime):
+            return data.isoformat()
+        elif isinstance(data, dict):
+            return {key: serialize_mongo_data(value) for key, value in data.items()}
+        elif isinstance(data, list):
+            return [serialize_mongo_data(item) for item in data]
+        else:
+            return data
 
 # MongoDB 서비스 의존성
 def get_mongo_saver():
@@ -291,7 +322,7 @@ async def upload_resume_with_ocr(
             applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
             
             # MongoDB에 저장
-            result = mongo_saver.save_resume_with_ocr(
+            result = await mongo_saver.save_resume_with_ocr(
                 ocr_result=enhanced_ocr_result,
                 applicant_data=applicant_data,
                 job_posting_id=job_posting_id,
@@ -358,7 +389,7 @@ async def upload_cover_letter_with_ocr(
             applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
             
             # MongoDB에 저장
-            result = mongo_saver.save_cover_letter_with_ocr(
+            result = await mongo_saver.save_cover_letter_with_ocr(
                 ocr_result=enhanced_ocr_result,
                 applicant_data=applicant_data,
                 job_posting_id=job_posting_id,
@@ -425,7 +456,7 @@ async def upload_portfolio_with_ocr(
             applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
             
             # MongoDB에 저장
-            result = mongo_saver.save_portfolio_with_ocr(
+            result = await mongo_saver.save_portfolio_with_ocr(
                 ocr_result=enhanced_ocr_result,
                 applicant_data=applicant_data,
                 job_posting_id=job_posting_id,
@@ -482,7 +513,7 @@ async def upload_multiple_documents(
             ocr_result = process_pdf(str(temp_file_path))
             if not applicant_data:
                 applicant_data = _build_applicant_data(name, email, phone, ocr_result, job_posting_id)
-            result = mongo_saver.save_resume_with_ocr(
+            result = await mongo_saver.save_resume_with_ocr(
                 ocr_result=ocr_result,
                 applicant_data=applicant_data,
                 job_posting_id=job_posting_id,
@@ -504,7 +535,7 @@ async def upload_multiple_documents(
             ocr_result = process_pdf(str(temp_file_path))
             if not applicant_data:
                 applicant_data = _build_applicant_data(name, email, phone, ocr_result, job_posting_id)
-            result = mongo_saver.save_cover_letter_with_ocr(
+            result = await mongo_saver.save_cover_letter_with_ocr(
                 ocr_result=ocr_result,
                 applicant_data=applicant_data,
                 job_posting_id=job_posting_id,
@@ -526,7 +557,7 @@ async def upload_multiple_documents(
             ocr_result = process_pdf(str(temp_file_path))
             if not applicant_data:
                 applicant_data = _build_applicant_data(name, email, phone, ocr_result, job_posting_id)
-            result = mongo_saver.save_portfolio_with_ocr(
+            result = await mongo_saver.save_portfolio_with_ocr(
                 ocr_result=ocr_result,
                 applicant_data=applicant_data,
                 job_posting_id=job_posting_id,
@@ -539,10 +570,22 @@ async def upload_multiple_documents(
             if temp_file_path.exists():
                 temp_file_path.unlink()
         
+        # 지원자 정보 가져오기 (첫 번째 결과에서)
+        applicant_info = None
+        for result in results.values():
+            if result and result.get("applicant"):
+                applicant_info = result["applicant"]
+                break
+        
         return JSONResponse(content={
             "success": True,
             "message": "문서들 OCR 처리 및 저장 완료",
-            "data": results
+            "data": {
+                "applicant": applicant_info,  # 프론트엔드 호환성
+                "applicant_info": applicant_info,
+                "results": results,
+                "uploaded_documents": list(results.keys())
+            }
         })
         
     except Exception as e:
@@ -694,7 +737,7 @@ async def upload_multiple_documents(
                 # 기존 지원자 데이터 사용 또는 새로 생성
                 if applicant_id:
                     # 기존 지원자 정보 가져오기
-                    existing_applicant = mongo_saver.mongo_service.get_applicant_by_id(applicant_id)
+                    existing_applicant = mongo_saver.mongo_service.get_applicant_by_id_sync(applicant_id)
                     if existing_applicant:
                         applicant_data = ApplicantCreate(
                             name=existing_applicant.get("name", name),
@@ -780,7 +823,7 @@ async def upload_multiple_documents(
                 # 기존 지원자 데이터 사용 또는 새로 생성
                 if applicant_id:
                     # 기존 지원자 정보 가져오기
-                    existing_applicant = mongo_saver.mongo_service.get_applicant_by_id(applicant_id)
+                    existing_applicant = mongo_saver.mongo_service.get_applicant_by_id_sync(applicant_id)
                     if existing_applicant:
                         applicant_data = ApplicantCreate(
                             name=existing_applicant.get("name", name),
@@ -836,13 +879,21 @@ async def upload_multiple_documents(
         print(f"✅ 모든 문서 처리 완료! 지원자 ID: {applicant_id}")
         print(f"📊 업로드된 문서: {list(results.keys())}")
         
+        # 최종 지원자 정보 가져오기
+        final_applicant_info = None
+        if applicant_id:
+            final_applicant_info = mongo_saver.mongo_service.get_applicant_by_id_sync(applicant_id)
+            # ObjectId를 문자열로 직렬화
+            final_applicant_info = serialize_mongo_data(final_applicant_info)
+        
         # 최종 결과 반환
         return JSONResponse(content={
             "success": True,
             "message": "모든 문서 OCR 처리 및 저장 완료",
             "data": {
                 "applicant_id": applicant_id,
-                "results": results,
+                "applicant_info": final_applicant_info,
+                "results": serialize_mongo_data(results),
                 "uploaded_documents": list(results.keys())
             }
         })

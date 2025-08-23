@@ -27,12 +27,9 @@ class AIService:
         try:
             if OpenAIService:
                 self.openai_service = OpenAIService(model_name="gpt-4o")
-                print("[SUCCESS] OpenAI 서비스 초기화 성공")
             else:
-                print("[ERROR] OpenAI 서비스를 사용할 수 없습니다")
                 self.openai_service = None
         except Exception as e:
-            print(f"[ERROR] OpenAI 서비스 초기화 실패: {e}")
             self.openai_service = None
     
     async def handle_ai_assistant_request(self, request: ChatbotRequest) -> ChatbotResponse:

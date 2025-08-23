@@ -8,10 +8,16 @@ import os
 from models.applicant import ApplicantCreate
 from models.document import ResumeCreate, CoverLetterCreate, PortfolioCreate, PortfolioItem, PortfolioItemType, Artifact, ArtifactKind
 from services.mongo_service import MongoService
+from chunking_service import ChunkingService
+from embedding_service import EmbeddingService
+from vector_service import VectorService
 
 class MongoSaver:
     def __init__(self, mongo_uri: str = None):
         self.mongo_service = MongoService(mongo_uri)
+        self.chunking_service = ChunkingService()
+        self.embedding_service = EmbeddingService()
+        self.vector_service = VectorService()
     
     def _serialize_datetime(self, obj):
         """datetime 객체와 ObjectId를 JSON 직렬화 가능한 형태로 변환합니다."""
@@ -187,7 +193,7 @@ class MongoSaver:
         
         return fields
     
-    def save_resume_with_ocr(self, 
+    async def save_resume_with_ocr(self, 
                            ocr_result: Dict[str, Any], 
                            applicant_data: ApplicantCreate,
                            job_posting_id: str,
@@ -195,7 +201,7 @@ class MongoSaver:
         """이력서 OCR 결과를 저장합니다."""
         try:
             # 1. 지원자 생성/조회
-            applicant = self.mongo_service.create_or_get_applicant(applicant_data)
+            applicant = self.mongo_service.create_or_get_applicant_sync(applicant_data)
             
             # 2. 파일 메타데이터 생성
             file_metadata = {}
@@ -208,10 +214,9 @@ class MongoSaver:
             # 4. 지원자 데이터에 기술 스택 정보 업데이트
             if basic_info.get("skills"):
                 try:
-                    from bson import ObjectId
-                    self.mongo_service.applicants.update_one(
-                        {"_id": ObjectId(applicant.id)},
-                        {"$set": {"skills": ", ".join(basic_info["skills"])}}
+                    self.mongo_service.update_applicant_sync(
+                        applicant["id"],
+                        {"skills": ", ".join(basic_info["skills"])}
                     )
                     print(f"✅ 지원자 데이터에 기술 스택 업데이트: {basic_info['skills']}")
                 except Exception as e:
@@ -219,7 +224,7 @@ class MongoSaver:
             
             # 5. 이력서 데이터 생성 (application_id 제거)
             resume_data = ResumeCreate(
-                applicant_id=applicant.id,
+                applicant_id=applicant["id"],
                 extracted_text=ocr_result.get("extracted_text", ""),
                 summary=ocr_result.get("summary", ""),
                 keywords=ocr_result.get("keywords", []),
@@ -231,14 +236,47 @@ class MongoSaver:
             # 5. 이력서 저장
             resume = self.mongo_service.create_resume(resume_data)
             
-            # 6. 지원자 데이터에 resume_id 업데이트
+            # 6. 의미론적 청킹 적용
             try:
-                from bson import ObjectId
-                self.mongo_service.applicants.update_one(
-                    {"_id": ObjectId(applicant.id)},
-                    {"$set": {"resume_id": str(resume.id)}}
+                # 지원자 데이터를 이력서 형태로 변환하여 청킹
+                if hasattr(applicant_data, 'dict'):
+                    applicant_dict = applicant_data.dict()
+                else:
+                    applicant_dict = applicant_data
+                
+                resume_for_chunking = {
+                    "_id": resume["id"],
+                    "name": applicant_dict.get("name", "") or applicant.get("name", ""),
+                    "position": applicant_dict.get("position", "") or applicant.get("position", ""),
+                    "department": applicant_dict.get("department", "") or applicant.get("department", ""),
+                    "experience": applicant_dict.get("experience", "") or applicant.get("experience", ""),
+                    "skills": applicant_dict.get("skills", "") or applicant.get("skills", ""),
+                    "growthBackground": applicant_dict.get("growthBackground", "") or applicant.get("growthBackground", ""),
+                    "motivation": applicant_dict.get("motivation", "") or applicant.get("motivation", ""),
+                    "careerHistory": applicant_dict.get("careerHistory", "") or applicant.get("careerHistory", ""),
+                    "resume_text": ocr_result.get("extracted_text", "")
+                }
+                
+                chunks = self.chunking_service.chunk_resume_text(resume_for_chunking)
+                print(f"✅ 의미론적 청킹 완료: {len(chunks)}개 청크 생성")
+                
+                # 청킹 결과를 resume 데이터에 추가
+                if chunks:
+                    self.mongo_service.update_resume_chunks(resume["id"], chunks)
+                    
+                    # 벡터 DB에 저장 (이력서로 타입 통일)
+                    await self._save_chunks_to_vector_db(chunks, document_type="resume")
+                    
+            except Exception as e:
+                print(f"⚠️ 청킹 처리 실패: {e}")
+            
+            # 7. 지원자 데이터에 resume_id 업데이트
+            try:
+                self.mongo_service.update_applicant_sync(
+                    applicant["id"],
+                    {"resume_id": str(resume["id"])}
                 )
-                print(f"✅ 지원자 데이터에 resume_id 업데이트: {str(resume.id)}")
+                print(f"✅ 지원자 데이터에 resume_id 업데이트: {str(resume['id'])}")
             except Exception as e:
                 print(f"⚠️ resume_id 업데이트 실패: {e}")
             
@@ -251,7 +289,7 @@ class MongoSaver:
         except Exception as e:
             raise Exception(f"이력서 저장 실패: {str(e)}")
     
-    def save_cover_letter_with_ocr(self, 
+    async def save_cover_letter_with_ocr(self, 
                                  ocr_result: Dict[str, Any], 
                                  applicant_data: ApplicantCreate,
                                  job_posting_id: str,
@@ -259,7 +297,7 @@ class MongoSaver:
         """자기소개서 OCR 결과를 저장합니다."""
         try:
             # 1. 지원자 생성/조회
-            applicant = self.mongo_service.create_or_get_applicant(applicant_data)
+            applicant = self.mongo_service.create_or_get_applicant_sync(applicant_data)
             
             # 2. 파일 메타데이터 생성
             file_metadata = {}
@@ -275,9 +313,8 @@ class MongoSaver:
             # 5. 지원자 데이터에 기술 스택 정보 업데이트 (기존 기술 스택에 추가)
             if basic_info.get("skills"):
                 try:
-                    from bson import ObjectId
                     # 기존 기술 스택 가져오기
-                    existing_applicant = self.mongo_service.applicants.find_one({"_id": ObjectId(applicant.id)})
+                    existing_applicant = self.mongo_service.get_applicant_by_id_sync(applicant["id"])
                     existing_skills = existing_applicant.get("skills", "") if existing_applicant else ""
                     
                     # 새로운 기술 스택과 기존 기술 스택 합치기
@@ -288,9 +325,10 @@ class MongoSaver:
                     else:
                         combined_skills = new_skills
                     
-                    self.mongo_service.applicants.update_one(
-                        {"_id": ObjectId(applicant.id)},
-                        {"$set": {"skills": ", ".join(combined_skills)}}
+                    # 지원자 정보 업데이트
+                    self.mongo_service.update_applicant_sync(
+                        applicant["id"],
+                        {"skills": ", ".join(combined_skills)}
                     )
                     print(f"✅ 지원자 데이터에 기술 스택 추가: {new_skills}")
                 except Exception as e:
@@ -298,7 +336,7 @@ class MongoSaver:
             
             # 6. 자기소개서 데이터 생성 (application_id 제거)
             cover_letter_data = CoverLetterCreate(
-                applicant_id=applicant.id,
+                applicant_id=applicant["id"],
                 extracted_text=ocr_result.get("extracted_text", ""),
                 summary=ocr_result.get("summary", ""),
                 keywords=ocr_result.get("keywords", []),
@@ -313,14 +351,43 @@ class MongoSaver:
             # 5. 자기소개서 저장
             cover_letter = self.mongo_service.create_cover_letter(cover_letter_data)
             
-            # 6. 지원자 데이터에 cover_letter_id 업데이트
+            # 6. 의미론적 청킹 적용
             try:
-                from bson import ObjectId
-                self.mongo_service.applicants.update_one(
-                    {"_id": ObjectId(applicant.id)},
-                    {"$set": {"cover_letter_id": str(cover_letter.id)}}
+                # 자기소개서 데이터를 청킹용 형태로 변환
+                cover_letter_for_chunking = {
+                    "_id": cover_letter["id"],
+                    "applicant_id": applicant["id"],
+                    "document_type": "cover_letter",
+                    "extracted_text": ocr_result.get("extracted_text", ""),
+                    "summary": ocr_result.get("summary", ""),
+                    "keywords": ocr_result.get("keywords", []),
+                    "basic_info": basic_info,
+                    "file_metadata": file_metadata,
+                    "careerHistory": cover_letter_fields["careerHistory"],
+                    "growthBackground": cover_letter_fields["growthBackground"],
+                    "motivation": cover_letter_fields["motivation"]
+                }
+                
+                chunks = self.chunking_service.chunk_cover_letter(cover_letter_for_chunking)
+                print(f"✅ 자기소개서 의미론적 청킹 완료: {len(chunks)}개 청크 생성")
+                
+                # 청킹 결과를 cover_letter 데이터에 추가
+                if chunks:
+                    self.mongo_service.update_cover_letter_chunks(cover_letter["id"], chunks)
+                    
+                    # 벡터 DB에 저장 (자소서로 타입 통일)
+                    await self._save_chunks_to_vector_db(chunks, document_type="cover_letter")
+                    
+            except Exception as e:
+                print(f"⚠️ 자기소개서 청킹 처리 실패: {e}")
+            
+            # 7. 지원자 데이터에 cover_letter_id 업데이트
+            try:
+                self.mongo_service.update_applicant_sync(
+                    applicant["id"],
+                    {"cover_letter_id": str(cover_letter["id"])}
                 )
-                print(f"✅ 지원자 데이터에 cover_letter_id 업데이트: {str(cover_letter.id)}")
+                print(f"✅ 지원자 데이터에 cover_letter_id 업데이트: {str(cover_letter['id'])}")
             except Exception as e:
                 print(f"⚠️ cover_letter_id 업데이트 실패: {e}")
             
@@ -333,7 +400,7 @@ class MongoSaver:
         except Exception as e:
             raise Exception(f"자기소개서 저장 실패: {str(e)}")
     
-    def save_portfolio_with_ocr(self, 
+    async def save_portfolio_with_ocr(self, 
                               ocr_result: Dict[str, Any], 
                               applicant_data: ApplicantCreate,
                               job_posting_id: str,
@@ -341,7 +408,7 @@ class MongoSaver:
         """포트폴리오 OCR 결과를 저장합니다."""
         try:
             # 1. 지원자 생성/조회
-            applicant = self.mongo_service.create_or_get_applicant(applicant_data)
+            applicant = self.mongo_service.create_or_get_applicant_sync(applicant_data)
             
             # 2. 파일 메타데이터 생성
             file_metadata = {}
@@ -354,9 +421,8 @@ class MongoSaver:
             # 4. 지원자 데이터에 기술 스택 정보 업데이트 (기존 기술 스택에 추가)
             if basic_info.get("skills"):
                 try:
-                    from bson import ObjectId
                     # 기존 기술 스택 가져오기
-                    existing_applicant = self.mongo_service.applicants.find_one({"_id": ObjectId(applicant.id)})
+                    existing_applicant = self.mongo_service.get_applicant_by_id_sync(applicant["id"])
                     existing_skills = existing_applicant.get("skills", "") if existing_applicant else ""
                     
                     # 새로운 기술 스택과 기존 기술 스택 합치기
@@ -367,9 +433,10 @@ class MongoSaver:
                     else:
                         combined_skills = new_skills
                     
-                    self.mongo_service.applicants.update_one(
-                        {"_id": ObjectId(applicant.id)},
-                        {"$set": {"skills": ", ".join(combined_skills)}}
+                    # 지원자 정보 업데이트
+                    self.mongo_service.update_applicant_sync(
+                        applicant["id"],
+                        {"skills": ", ".join(combined_skills)}
                     )
                     print(f"✅ 지원자 데이터에 기술 스택 추가: {new_skills}")
                 except Exception as e:
@@ -385,7 +452,7 @@ class MongoSaver:
             
             # 5. 포트폴리오 데이터 생성 (application_id 제거)
             portfolio_data = PortfolioCreate(
-                applicant_id=applicant.id,
+                applicant_id=applicant["id"],
                 extracted_text=ocr_result.get("extracted_text", ""),
                 summary=ocr_result.get("summary", ""),
                 keywords=ocr_result.get("keywords", []),
@@ -400,14 +467,43 @@ class MongoSaver:
             # 6. 포트폴리오 저장
             portfolio = self.mongo_service.create_portfolio(portfolio_data)
             
-            # 7. 지원자 데이터에 portfolio_id 업데이트
+            # 7. 의미론적 청킹 적용
             try:
-                from bson import ObjectId
-                self.mongo_service.applicants.update_one(
-                    {"_id": ObjectId(applicant.id)},
-                    {"$set": {"portfolio_id": str(portfolio.id)}}
+                # 포트폴리오 데이터를 청킹용 형태로 변환
+                portfolio_for_chunking = {
+                    "_id": portfolio["id"],
+                    "applicant_id": applicant["id"],
+                    "document_type": "portfolio",
+                    "extracted_text": ocr_result.get("extracted_text", ""),
+                    "summary": ocr_result.get("summary", ""),
+                    "keywords": ocr_result.get("keywords", []),
+                    "basic_info": basic_info,
+                    "file_metadata": file_metadata,
+                    "items": [portfolio_item],
+                    "analysis_score": 0.0,
+                    "status": "active"
+                }
+                
+                chunks = self.chunking_service.chunk_portfolio(portfolio_for_chunking)
+                print(f"✅ 포트폴리오 의미론적 청킹 완료: {len(chunks)}개 청크 생성")
+                
+                # 청킹 결과를 portfolio 데이터에 추가
+                if chunks:
+                    self.mongo_service.update_portfolio_chunks(portfolio["id"], chunks)
+                    
+                    # 벡터 DB에 저장 (포트폴리오로 타입 통일)
+                    await self._save_chunks_to_vector_db(chunks, document_type="portfolio")
+                    
+            except Exception as e:
+                print(f"⚠️ 포트폴리오 청킹 처리 실패: {e}")
+            
+            # 8. 지원자 데이터에 portfolio_id 업데이트
+            try:
+                self.mongo_service.update_applicant_sync(
+                    applicant["id"],
+                    {"portfolio_id": str(portfolio["id"])}
                 )
-                print(f"✅ 지원자 데이터에 portfolio_id 업데이트: {str(portfolio.id)}")
+                print(f"✅ 지원자 데이터에 portfolio_id 업데이트: {str(portfolio['id'])}")
             except Exception as e:
                 print(f"⚠️ portfolio_id 업데이트 실패: {e}")
             
@@ -419,6 +515,30 @@ class MongoSaver:
             
         except Exception as e:
             raise Exception(f"포트폴리오 저장 실패: {str(e)}")
+    
+    async def _save_chunks_to_vector_db(self, chunks, document_type="resume"):
+        """청크를 벡터 DB에 저장합니다."""
+        try:
+            print(f"[MongoSaver] === 벡터 DB 저장 시작 ({document_type}) ===")
+            print(f"[MongoSaver] 저장할 청크 수: {len(chunks)}")
+            
+            # 청크 타입을 문서 타입으로 통일
+            unified_chunks = []
+            for chunk in chunks:
+                unified_chunk = chunk.copy()
+                unified_chunk["chunk_type"] = document_type  # 필터링을 위해 타입 통일
+                unified_chunks.append(unified_chunk)
+                
+            print(f"[MongoSaver] 청크 타입을 '{document_type}'로 통일")
+            
+            # VectorService를 사용해 청크들을 벡터로 변환하여 저장
+            saved_vector_ids = await self.vector_service.save_chunk_vectors(unified_chunks, self.embedding_service)
+            
+            print(f"[MongoSaver] 벡터 DB 저장 완료: {len(saved_vector_ids)}개 벡터")
+            print(f"[MongoSaver] === 벡터 DB 저장 완료 ===")
+            
+        except Exception as e:
+            print(f"[MongoSaver] 벡터 DB 저장 실패: {e}")
     
     def close(self):
         """MongoDB 연결을 종료합니다."""

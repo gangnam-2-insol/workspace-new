@@ -1,10 +1,13 @@
 from typing import List, Dict, Any, Optional, Tuple
 from bson import ObjectId
 from pymongo.collection import Collection
-from rank_bm25 import BM25Okapi
 import re
 from datetime import datetime
 import logging
+import os
+from dotenv import load_dotenv
+
+load_dotenv()
 try:
     from kiwipiepy import Kiwi
     KIWI_AVAILABLE = True
@@ -13,20 +16,43 @@ except ImportError:
     Kiwi = None
     KIWI_AVAILABLE = False
 
+try:
+    from elasticsearch import Elasticsearch
+    from elasticsearch.exceptions import ConnectionError, NotFoundError
+    ELASTICSEARCH_AVAILABLE = True
+except ImportError:
+    print("Warning: elasticsearch not available, install with: pip install elasticsearch")
+    Elasticsearch = None
+    ELASTICSEARCH_AVAILABLE = False
+
 class KeywordSearchService:
     def __init__(self):
         """
         키워드 검색 서비스 초기화
-        BM25 알고리즘을 사용한 키워드 기반 검색
+        Elasticsearch를 사용한 키워드 기반 검색
         """
-        self.bm25_index = None
-        self.indexed_documents = []
-        self.document_ids = []
-        self.index_created_at = None
-        
         # 로깅 설정
         logging.basicConfig(level=logging.INFO)
         self.logger = logging.getLogger(__name__)
+        
+        # Elasticsearch 설정
+        self.es_host = os.getenv("ELASTICSEARCH_HOST", "localhost:9200")
+        self.es_index = os.getenv("ELASTICSEARCH_INDEX", "resume_search")
+        self.es_username = os.getenv("ELASTICSEARCH_USERNAME")
+        self.es_password = os.getenv("ELASTICSEARCH_PASSWORD")
+        
+        # 디버깅: 환경변수 값 확인
+        self.logger.info(f"ES_HOST: {self.es_host}")
+        self.logger.info(f"ES_USERNAME: {self.es_username}")
+        self.logger.info(f"ES_PASSWORD: {'*' * len(self.es_password) if self.es_password else None}")
+        
+        self.es_client = None
+        
+        # Elasticsearch 연결 초기화
+        if ELASTICSEARCH_AVAILABLE:
+            self._initialize_elasticsearch()
+        else:
+            self.logger.error("Elasticsearch가 설치되지 않았습니다. pip install elasticsearch로 설치하세요.")
         
         # Kiwi 형태소 분석기 초기화
         if KIWI_AVAILABLE:
@@ -74,6 +100,109 @@ class KeywordSearchService:
             ('데이터', '분석'): '데이터분석',
             ('시스템', '개발'): '시스템개발'
         }
+    
+    def _initialize_elasticsearch(self):
+        """Elasticsearch 클라이언트 초기화 및 인덱스 설정"""
+        try:
+            # Elasticsearch 클라이언트 생성
+            auth = None
+            if self.es_username and self.es_password:
+                auth = (self.es_username, self.es_password)
+                self.logger.info(f"Using auth: {self.es_username}:***")
+            else:
+                self.logger.info("No auth credentials found")
+            
+            self.es_client = Elasticsearch(
+                self.es_host,
+                verify_certs=False,
+                ssl_show_warn=False,
+                basic_auth=auth,
+                request_timeout=30
+            )
+            
+            # 연결 테스트
+            info = self.es_client.info()
+            self.logger.info(f"Elasticsearch 연결 성공: {self.es_host}, 버전: {info['version']['number']}")
+            
+            # 인덱스 매핑 설정
+            self._create_index_mapping()
+            
+        except Exception as e:
+            self.logger.warning(f"Elasticsearch 연결 실패: {e}. 키워드 검색 기능이 비활성화됩니다.")
+            self.es_client = None
+    
+    def _create_index_mapping(self):
+        """Elasticsearch 인덱스 매핑 설정"""
+        try:
+            # 인덱스가 이미 존재하는지 확인
+            if self.es_client.indices.exists(index=self.es_index):
+                self.logger.info(f"기존 인덱스 사용: {self.es_index}")
+                return
+            
+            # 인덱스 매핑 정의
+            mapping = {
+                "mappings": {
+                    "properties": {
+                        "resume_id": {"type": "keyword"},
+                        "name": {
+                            "type": "text",
+                            "analyzer": "standard"
+                        },
+                        "position": {
+                            "type": "text",
+                            "analyzer": "standard"
+                        },
+                        "department": {
+                            "type": "text",
+                            "analyzer": "standard"
+                        },
+                        "skills": {
+                            "type": "text",
+                            "analyzer": "standard"
+                        },
+                        "experience": {
+                            "type": "text",
+                            "analyzer": "standard"
+                        },
+                        "growth_background": {
+                            "type": "text",
+                            "analyzer": "standard"
+                        },
+                        "motivation": {
+                            "type": "text",
+                            "analyzer": "standard"
+                        },
+                        "career_history": {
+                            "type": "text",
+                            "analyzer": "standard"
+                        },
+                        "resume_text": {
+                            "type": "text",
+                            "analyzer": "standard"
+                        },
+                        "all_content": {
+                            "type": "text",
+                            "analyzer": "standard"
+                        },
+                        "tokens": {
+                            "type": "keyword"
+                        },
+                        "created_at": {"type": "date"},
+                        "indexed_at": {"type": "date"}
+                    }
+                },
+                "settings": {
+                    "number_of_shards": 1,
+                    "number_of_replicas": 0
+                }
+            }
+            
+            # 인덱스 생성 (8.x 버전 호환)
+            self.es_client.indices.create(index=self.es_index, **mapping)
+            self.logger.info(f"Elasticsearch 인덱스 생성 완료: {self.es_index}")
+            
+        except Exception as e:
+            self.logger.error(f"인덱스 매핑 생성 실패: {str(e)}")
         
     def _preprocess_text(self, text: str) -> List[str]:
         """
@@ -282,9 +411,74 @@ class KeywordSearchService:
         combined_text = " ".join(text_parts)
         return combined_text
     
+    async def index_document(self, resume: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        단일 이력서를 Elasticsearch에 인덱싱합니다.
+        
+        Args:
+            resume (Dict[str, Any]): 이력서 데이터
+            
+        Returns:
+            Dict[str, Any]: 인덱싱 결과
+        """
+        if not self.es_client:
+            return {
+                "success": False,
+                "message": "Elasticsearch 연결이 없습니다."
+            }
+        
+        try:
+            resume_id = str(resume["_id"])
+            
+            # 검색 가능한 텍스트 추출
+            searchable_text = self._extract_searchable_text(resume)
+            tokens = self._preprocess_text(searchable_text)
+            
+            # Elasticsearch 문서 생성
+            doc = {
+                "resume_id": resume_id,
+                "name": resume.get("name", ""),
+                "position": resume.get("position", ""),
+                "department": resume.get("department", ""),
+                "skills": resume.get("skills", ""),
+                "experience": resume.get("experience", ""),
+                "growth_background": resume.get("growthBackground", ""),
+                "motivation": resume.get("motivation", ""),
+                "career_history": resume.get("careerHistory", ""),
+                "resume_text": resume.get("resume_text", ""),
+                "all_content": searchable_text,
+                "tokens": tokens,
+                "created_at": resume.get("created_at", datetime.now()),
+                "indexed_at": datetime.now()
+            }
+            
+            # Elasticsearch에 문서 인덱싱 (8.x 버전 호환)
+            response = self.es_client.index(
+                index=self.es_index,
+                id=resume_id,
+                document=doc
+            )
+            
+            self.logger.info(f"문서 인덱싱 완료: {resume.get('name', 'Unknown')} ({len(tokens)} 토큰)")
+            
+            return {
+                "success": True,
+                "message": "문서 인덱싱이 완료되었습니다.",
+                "resume_id": resume_id,
+                "tokens_count": len(tokens),
+                "es_response": response
+            }
+            
+        except Exception as e:
+            self.logger.error(f"문서 인덱싱 실패: {str(e)}")
+            return {
+                "success": False,
+                "message": f"문서 인덱싱 중 오류가 발생했습니다: {str(e)}"
+            }
+    
     async def build_index(self, collection: Collection) -> Dict[str, Any]:
         """
-        모든 이력서에 대한 BM25 인덱스를 구축합니다.
+        모든 이력서에 대한 Elasticsearch 인덱스를 구축합니다.
         
         Args:
             collection (Collection): MongoDB 이력서 컬렉션
@@ -292,11 +486,26 @@ class KeywordSearchService:
         Returns:
             Dict[str, Any]: 인덱스 구축 결과
         """
+        if not self.es_client:
+            return {
+                "success": False,
+                "message": "Elasticsearch 연결이 없습니다.",
+                "total_documents": 0
+            }
+        
         try:
-            self.logger.info("=== BM25 인덱스 구축 시작 ===")
+            self.logger.info("=== Elasticsearch 인덱스 구축 시작 ===")
             
-            # 모든 이력서 조회
-            resumes = list(collection.find({}))
+            # 기존 인덱스 삭제 후 재생성
+            if self.es_client.indices.exists(index=self.es_index):
+                self.es_client.indices.delete(index=self.es_index)
+                self.logger.info(f"기존 인덱스 삭제: {self.es_index}")
+            
+            # 인덱스 매핑 재생성
+            self._create_index_mapping()
+            
+            # 모든 이력서 조회 (비동기)
+            resumes = await collection.find({}).to_list(1000)
             
             if not resumes:
                 return {
@@ -305,48 +514,32 @@ class KeywordSearchService:
                     "total_documents": 0
                 }
             
-            # 문서 텍스트 추출 및 토큰화
-            tokenized_docs = []
-            document_ids = []
+            # 배치 인덱싱
+            indexed_count = 0
+            failed_count = 0
             
             for resume in resumes:
-                # 검색 가능한 텍스트 추출
-                searchable_text = self._extract_searchable_text(resume)
-                
-                # 텍스트 토큰화
-                tokens = self._preprocess_text(searchable_text)
-                
-                if tokens:  # 토큰이 있는 경우만 포함
-                    tokenized_docs.append(tokens)
-                    document_ids.append(str(resume["_id"]))
-                    
-                    self.logger.debug(f"문서 인덱싱: {resume.get('name', 'Unknown')} "
-                                    f"({len(tokens)} 토큰)")
+                result = await self.index_document(resume)
+                if result["success"]:
+                    indexed_count += 1
+                else:
+                    failed_count += 1
             
-            if not tokenized_docs:
-                return {
-                    "success": False,
-                    "message": "인덱싱할 유효한 문서가 없습니다.",
-                    "total_documents": 0
-                }
+            # 인덱스 새로고침
+            self.es_client.indices.refresh(index=self.es_index)
             
-            # BM25 인덱스 생성
-            self.bm25_index = BM25Okapi(tokenized_docs)
-            self.indexed_documents = tokenized_docs
-            self.document_ids = document_ids
-            self.index_created_at = datetime.now()
-            
-            self.logger.info(f"BM25 인덱스 구축 완료: {len(tokenized_docs)}개 문서")
+            self.logger.info(f"Elasticsearch 인덱스 구축 완료: {indexed_count}개 성공, {failed_count}개 실패")
             
             return {
                 "success": True,
-                "message": "BM25 인덱스 구축이 완료되었습니다.",
-                "total_documents": len(tokenized_docs),
-                "index_created_at": self.index_created_at.isoformat()
+                "message": "Elasticsearch 인덱스 구축이 완료되었습니다.",
+                "total_documents": indexed_count,
+                "failed_documents": failed_count,
+                "index_created_at": datetime.now().isoformat()
             }
             
         except Exception as e:
-            self.logger.error(f"BM25 인덱스 구축 실패: {str(e)}")
+            self.logger.error(f"Elasticsearch 인덱스 구축 실패: {str(e)}")
             return {
                 "success": False,
                 "message": f"인덱스 구축 중 오류가 발생했습니다: {str(e)}",
@@ -356,16 +549,23 @@ class KeywordSearchService:
     async def search_by_keywords(self, query: str, collection: Collection, 
                                limit: int = 10) -> Dict[str, Any]:
         """
-        키워드 기반으로 이력서를 검색합니다.
+        Elasticsearch를 사용한 키워드 기반 이력서 검색
         
         Args:
             query (str): 검색 쿼리
-            collection (Collection): MongoDB 이력서 컬렉션
+            collection (Collection): MongoDB 이력서 컬렉션 (호환성)
             limit (int): 반환할 최대 결과 수
             
         Returns:
             Dict[str, Any]: 검색 결과
         """
+        if not self.es_client:
+            return {
+                "success": False,
+                "message": "Elasticsearch 연결이 없습니다.",
+                "results": []
+            }
+        
         try:
             if not query or not query.strip():
                 return {
@@ -374,21 +574,7 @@ class KeywordSearchService:
                     "results": []
                 }
             
-            # 인덱스가 없거나 오래된 경우 재구축
-            if (not self.bm25_index or 
-                not self.index_created_at or
-                (datetime.now() - self.index_created_at).total_seconds() > 3600):  # 1시간
-                
-                self.logger.info("인덱스 재구축 필요")
-                index_result = await self.build_index(collection)
-                if not index_result["success"]:
-                    return {
-                        "success": False,
-                        "message": "인덱스 구축에 실패했습니다.",
-                        "results": []
-                    }
-            
-            self.logger.info(f"키워드 검색 시작: '{query}'")
+            self.logger.info(f"Elasticsearch 키워드 검색 시작: '{query}'")
             
             # 쿼리 토큰화
             query_tokens = self._preprocess_text(query)
@@ -402,20 +588,64 @@ class KeywordSearchService:
             
             self.logger.info(f"검색 토큰: {query_tokens}")
             
-            # BM25 점수 계산
-            scores = self.bm25_index.get_scores(query_tokens)
+            # Elasticsearch 검색 쿼리 구성
+            search_body = {
+                "query": {
+                    "bool": {
+                        "should": [
+                            # 멀티 필드 검색 (BM25 기본 사용)
+                            {
+                                "multi_match": {
+                                    "query": query,
+                                    "fields": [
+                                        "name^3",           # 이름에 가중치 3
+                                        "position^2",       # 직무에 가중치 2
+                                        "skills^2",         # 기술스택에 가중치 2
+                                        "department^1.5",   # 부서에 가중치 1.5
+                                        "experience",
+                                        "growth_background",
+                                        "motivation",
+                                        "career_history",
+                                        "resume_text",
+                                        "all_content"
+                                    ],
+                                    "type": "best_fields",
+                                    "fuzziness": "AUTO"
+                                }
+                            },
+                            # 토큰 기반 정확 매칭
+                            {
+                                "terms": {
+                                    "tokens": query_tokens,
+                                    "boost": 1.5
+                                }
+                            }
+                        ]
+                    }
+                },
+                "highlight": {
+                    "fields": {
+                        "all_content": {},
+                        "name": {},
+                        "position": {},
+                        "skills": {}
+                    },
+                    "pre_tags": ["**"],
+                    "post_tags": ["**"]
+                },
+                "size": limit,
+                "_source": ["resume_id", "name", "position", "department", "skills", "indexed_at"]
+            }
             
-            # 점수와 문서 ID 매핑
-            scored_docs = [(score, doc_id) for score, doc_id in zip(scores, self.document_ids)]
+            # Elasticsearch 검색 실행 (8.x 버전 호환)
+            response = self.es_client.search(
+                index=self.es_index,
+                **search_body
+            )
             
-            # 점수 기준 내림차순 정렬
-            scored_docs.sort(key=lambda x: x[0], reverse=True)
+            hits = response["hits"]["hits"]
             
-            # 상위 결과만 선택 (점수가 0보다 큰 것만)
-            top_docs = [(score, doc_id) for score, doc_id in scored_docs 
-                       if score > 0.0][:limit]
-            
-            if not top_docs:
+            if not hits:
                 return {
                     "success": True,
                     "message": "검색 결과가 없습니다.",
@@ -424,13 +654,16 @@ class KeywordSearchService:
                 }
             
             # MongoDB에서 상세 정보 조회
-            doc_ids = [ObjectId(doc_id) for _, doc_id in top_docs]
-            resumes = list(collection.find({"_id": {"$in": doc_ids}}))
+            resume_ids = [ObjectId(hit["_source"]["resume_id"]) for hit in hits]
+            resumes = {str(r["_id"]): r for r in collection.find({"_id": {"$in": resume_ids}})}
             
             # 결과 매핑
             results = []
-            for score, doc_id in top_docs:
-                resume = next((r for r in resumes if str(r["_id"]) == doc_id), None)
+            for hit in hits:
+                resume_id = hit["_source"]["resume_id"]
+                score = hit["_score"]
+                
+                resume = resumes.get(resume_id)
                 if resume:
                     # ObjectId를 문자열로 변환
                     resume["_id"] = str(resume["_id"])
@@ -443,11 +676,20 @@ class KeywordSearchService:
                     if "created_at" in resume:
                         resume["created_at"] = resume["created_at"].isoformat()
                     
-                    # 검색 점수 및 하이라이트 추가
-                    highlight_text = self._highlight_query_terms(
-                        self._extract_searchable_text(resume), 
-                        query_tokens
-                    )
+                    # 하이라이트 텍스트 추출
+                    highlight_text = ""
+                    if "highlight" in hit:
+                        highlight_parts = []
+                        for field, highlights in hit["highlight"].items():
+                            highlight_parts.extend(highlights)
+                        highlight_text = " ... ".join(highlight_parts)
+                    
+                    # 하이라이트가 없으면 기본 방식 사용
+                    if not highlight_text:
+                        highlight_text = self._highlight_query_terms(
+                            self._extract_searchable_text(resume), 
+                            query_tokens
+                        )
                     
                     results.append({
                         "bm25_score": round(score, 4),
@@ -455,7 +697,7 @@ class KeywordSearchService:
                         "highlight": highlight_text[:200] + "..." if len(highlight_text) > 200 else highlight_text
                     })
             
-            self.logger.info(f"키워드 검색 완료: {len(results)}개 결과")
+            self.logger.info(f"Elasticsearch 검색 완료: {len(results)}개 결과")
             
             return {
                 "success": True,
@@ -467,7 +709,7 @@ class KeywordSearchService:
             }
             
         except Exception as e:
-            self.logger.error(f"키워드 검색 실패: {str(e)}")
+            self.logger.error(f"Elasticsearch 검색 실패: {str(e)}")
             return {
                 "success": False,
                 "message": f"검색 중 오류가 발생했습니다: {str(e)}",
@@ -497,30 +739,98 @@ class KeywordSearchService:
         
         return highlighted_text
     
+    async def delete_document(self, resume_id: str) -> Dict[str, Any]:
+        """
+        Elasticsearch에서 문서를 삭제합니다.
+        
+        Args:
+            resume_id (str): 삭제할 이력서 ID
+            
+        Returns:
+            Dict[str, Any]: 삭제 결과
+        """
+        if not self.es_client:
+            return {
+                "success": False,
+                "message": "Elasticsearch 연결이 없습니다."
+            }
+        
+        try:
+            response = self.es_client.delete(
+                index=self.es_index,
+                id=resume_id
+            )
+            
+            self.logger.info(f"문서 삭제 완료: {resume_id}")
+            
+            return {
+                "success": True,
+                "message": "문서 삭제가 완료되었습니다.",
+                "resume_id": resume_id,
+                "es_response": response
+            }
+            
+        except NotFoundError:
+            return {
+                "success": True,
+                "message": "삭제할 문서가 존재하지 않습니다.",
+                "resume_id": resume_id
+            }
+        except Exception as e:
+            self.logger.error(f"문서 삭제 실패: {str(e)}")
+            return {
+                "success": False,
+                "message": f"문서 삭제 중 오류가 발생했습니다: {str(e)}"
+            }
+    
     async def get_index_stats(self) -> Dict[str, Any]:
         """
-        현재 인덱스 통계를 반환합니다.
+        현재 Elasticsearch 인덱스 통계를 반환합니다.
         
         Returns:
             Dict[str, Any]: 인덱스 통계
         """
-        if not self.bm25_index:
+        if not self.es_client:
             return {
                 "indexed": False,
                 "total_documents": 0,
-                "index_created_at": None
+                "index_created_at": None,
+                "message": "Elasticsearch 연결이 없습니다."
             }
         
-        return {
-            "indexed": True,
-            "total_documents": len(self.document_ids),
-            "index_created_at": self.index_created_at.isoformat() if self.index_created_at else None,
-            "average_doc_length": sum(len(doc) for doc in self.indexed_documents) / len(self.indexed_documents) if self.indexed_documents else 0
-        }
+        try:
+            # 인덱스 존재 확인
+            if not self.es_client.indices.exists(index=self.es_index):
+                return {
+                    "indexed": False,
+                    "total_documents": 0,
+                    "index_created_at": None,
+                    "message": "인덱스가 존재하지 않습니다."
+                }
+            
+            # 인덱스 통계 조회
+            stats = self.es_client.indices.stats(index=self.es_index)
+            count_result = self.es_client.count(index=self.es_index)
+            
+            return {
+                "indexed": True,
+                "total_documents": count_result["count"],
+                "index_name": self.es_index,
+                "index_size": stats["indices"][self.es_index]["total"]["store"]["size_in_bytes"],
+                "shard_count": stats["indices"][self.es_index]["total"]["docs"]["count"]
+            }
+            
+        except Exception as e:
+            self.logger.error(f"인덱스 통계 조회 실패: {str(e)}")
+            return {
+                "indexed": False,
+                "total_documents": 0,
+                "error": str(e)
+            }
     
     async def suggest_keywords(self, partial_query: str, limit: int = 5) -> List[str]:
         """
-        부분 쿼리에 대한 키워드 제안을 제공합니다.
+        Elasticsearch를 사용한 키워드 자동완성 제안
         
         Args:
             partial_query (str): 부분 검색어
@@ -529,19 +839,49 @@ class KeywordSearchService:
         Returns:
             List[str]: 제안 키워드 리스트
         """
-        if not self.indexed_documents or not partial_query:
+        if not self.es_client or not partial_query:
             return []
         
-        partial_query = partial_query.lower()
-        suggestions = set()
-        
-        # 모든 문서의 토큰에서 부분 쿼리와 매칭되는 단어 찾기
-        for doc_tokens in self.indexed_documents:
-            for token in doc_tokens:
-                if token.startswith(partial_query) and len(token) > len(partial_query):
-                    suggestions.add(token)
-        
-        # 빈도순으로 정렬 (간단한 구현)
-        sorted_suggestions = sorted(list(suggestions))[:limit]
-        
-        return sorted_suggestions
+        try:
+            # Elasticsearch suggest API 사용
+            suggest_body = {
+                "suggest": {
+                    "keyword_suggest": {
+                        "prefix": partial_query.lower(),
+                        "completion": {
+                            "field": "tokens",
+                            "size": limit
+                        }
+                    }
+                }
+            }
+            
+            # 간단한 terms aggregation으로 대체
+            search_body = {
+                "size": 0,
+                "aggs": {
+                    "keywords": {
+                        "terms": {
+                            "field": "tokens",
+                            "include": f"{partial_query.lower()}.*",
+                            "size": limit
+                        }
+                    }
+                }
+            }
+            
+            response = self.es_client.search(
+                index=self.es_index,
+                **search_body
+            )
+            
+            suggestions = []
+            if "aggregations" in response and "keywords" in response["aggregations"]:
+                buckets = response["aggregations"]["keywords"]["buckets"]
+                suggestions = [bucket["key"] for bucket in buckets]
+            
+            return suggestions
+            
+        except Exception as e:
+            self.logger.error(f"키워드 제안 실패: {str(e)}")
+            return []

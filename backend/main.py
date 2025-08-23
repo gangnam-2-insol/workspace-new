@@ -21,6 +21,7 @@ from routers.pick_chatbot import router as pick_chatbot_router
 from routers.integrated_ocr import router as integrated_ocr_router
 from routers.pdf_ocr import router as pdf_ocr_router
 from routers.job_posting import router as job_posting_router
+from routers.applicants import router as applicants_router
 from chatbot.chatbot.routers.chatbot_router import router as chatbot_router
 
 # 모듈화된 라우터 추가
@@ -107,6 +108,7 @@ app.include_router(pick_chatbot_router, prefix="/api/pick-chatbot", tags=["pick-
 app.include_router(integrated_ocr_router, tags=["integrated-ocr"])
 app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
 app.include_router(job_posting_router, tags=["job-postings"])
+app.include_router(applicants_router, tags=["applicants"])
 app.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
 
 # 모듈화된 라우터 등록
@@ -178,13 +180,13 @@ class Resume(BaseModel):
     id: Optional[str] = None
     resume_id: Optional[str] = None
     name: str
-    position: str
-    department: str
-    experience: str
-    skills: str
-    growthBackground: str
-    motivation: str
-    careerHistory: str
+    position: Optional[str] = ""
+    department: Optional[str] = ""
+    experience: Optional[str] = ""
+    skills: Optional[str] = ""
+    growthBackground: Optional[str] = ""
+    motivation: Optional[str] = ""
+    careerHistory: Optional[str] = ""
     analysisScore: int = 0
     analysisResult: str = ""
     status: str = "pending"
@@ -1196,6 +1198,120 @@ async def check_resume_similarity(resume_id: str):
 async def check_coverletter_similarity(resume_id: str):
     """커버레터 유사도 체크 별칭 엔드포인트 (현재는 이력서 비교 로직 재사용)"""
     return await check_resume_similarity(resume_id)
+
+# 메일 템플릿 및 설정 관련 엔드포인트
+@app.get("/api/mail-templates")
+async def get_mail_templates():
+    """메일 템플릿 조회"""
+    try:
+        templates = await db.mail_templates.find_one({"_id": "default"})
+        if not templates:
+            # 기본 템플릿 생성
+            default_templates = {
+                "_id": "default",
+                "passed": {
+                    "subject": "축하합니다! 서류 전형 합격 안내",
+                    "content": """안녕하세요, {applicant_name}님
+
+축하드립니다! {job_posting_title} 포지션에 대한 서류 전형에 합격하셨습니다.
+
+다음 단계인 면접 일정은 추후 별도로 안내드리겠습니다.
+
+감사합니다.
+{company_name} 채용팀"""
+                },
+                "rejected": {
+                    "subject": "서류 전형 결과 안내",
+                    "content": """안녕하세요, {applicant_name}님
+
+{job_posting_title} 포지션에 대한 서류 전형 결과를 안내드립니다.
+
+안타깝게도 이번 전형에서는 합격하지 못했습니다.
+앞으로 더 좋은 기회가 있을 때 다시 지원해 주시기 바랍니다.
+
+감사합니다.
+{company_name} 채용팀"""
+                },
+                "created_at": datetime.now(),
+                "updated_at": datetime.now()
+            }
+            await db.mail_templates.insert_one(default_templates)
+            templates = default_templates
+        
+        # _id 제거하고 반환
+        templates.pop("_id", None)
+        return templates
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"메일 템플릿 조회 실패: {str(e)}")
+
+@app.post("/api/mail-templates")
+async def save_mail_templates(templates: Dict[str, Any]):
+    """메일 템플릿 저장"""
+    try:
+        update_data = {
+            "passed": templates.get("passed", {}),
+            "rejected": templates.get("rejected", {}),
+            "updated_at": datetime.now()
+        }
+        
+        result = await db.mail_templates.update_one(
+            {"_id": "default"},
+            {"$set": update_data},
+            upsert=True
+        )
+        
+        return {"success": True, "message": "메일 템플릿이 저장되었습니다."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"메일 템플릿 저장 실패: {str(e)}")
+
+@app.get("/api/mail-settings")
+async def get_mail_settings():
+    """메일 설정 조회"""
+    try:
+        settings = await db.mail_settings.find_one({"_id": "default"})
+        if not settings:
+            # 기본 설정 생성
+            default_settings = {
+                "_id": "default",
+                "senderEmail": "",
+                "senderPassword": "",
+                "senderName": "",
+                "smtpServer": "smtp.gmail.com",
+                "smtpPort": 587,
+                "created_at": datetime.now(),
+                "updated_at": datetime.now()
+            }
+            await db.mail_settings.insert_one(default_settings)
+            settings = default_settings
+        
+        # _id 제거하고 반환
+        settings.pop("_id", None)
+        return settings
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"메일 설정 조회 실패: {str(e)}")
+
+@app.post("/api/mail-settings")
+async def save_mail_settings(settings: Dict[str, Any]):
+    """메일 설정 저장"""
+    try:
+        update_data = {
+            "senderEmail": settings.get("senderEmail", ""),
+            "senderPassword": settings.get("senderPassword", ""),
+            "senderName": settings.get("senderName", ""),
+            "smtpServer": settings.get("smtpServer", "smtp.gmail.com"),
+            "smtpPort": settings.get("smtpPort", 587),
+            "updated_at": datetime.now()
+        }
+        
+        result = await db.mail_settings.update_one(
+            {"_id": "default"},
+            {"$set": update_data},
+            upsert=True
+        )
+        
+        return {"success": True, "message": "메일 설정이 저장되었습니다."}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"메일 설정 저장 실패: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
