@@ -16,7 +16,7 @@ const CoverLetterValidation = React.lazy(() => import('./pages/CoverLetterValida
 const TalentRecommendation = React.lazy(() => import('./pages/TalentRecommendation/TalentRecommendation'));
 const UserManagement = React.lazy(() => import('./pages/UserManagement/UserManagement'));
 const Settings = React.lazy(() => import('./pages/Settings/Settings'));
-const TestGithubSummary = React.lazy(() => import('./pages/TestGithubSummary'));
+const TestGithubSummary = React.lazy(() => import('./pages/PortfolioSummary/TestGithubSummary'));
 const PDFOCRPage = React.lazy(() => import('./pages/PDFOCRPage/PDFOCRPage'));
 
 
