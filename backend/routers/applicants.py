@@ -137,6 +137,49 @@ async def search_similar_applicants(
             detail=f"유사 지원자 검색 중 오류가 발생했습니다: {str(e)}"
         )
 
+@router.post("/{applicant_id}/recommendations")
+async def get_talent_recommendations(
+    applicant_id: str,
+    mongo_service: MongoService = Depends(get_mongo_service)
+):
+    """지원자 기반 유사 인재 추천"""
+    try:
+        print(f"[INFO] 유사 인재 추천 요청 - applicant_id: {applicant_id}")
+        
+        # 1. 지원자 존재 확인
+        from bson import ObjectId
+        applicant_collection = mongo_service.db.applicants
+        target_applicant = await applicant_collection.find_one({"_id": ObjectId(applicant_id)})
+        
+        if not target_applicant:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
+        
+        # 2. 유사도 서비스 초기화
+        similarity_service = get_similarity_service()
+        
+        # 3. 유사 인재 추천 수행
+        result = await similarity_service.search_similar_applicants_hybrid(
+            target_applicant=target_applicant,
+            applicants_collection=applicant_collection,
+            limit=5
+        )
+        
+        return {
+            "status": "success",
+            "applicant_id": applicant_id,
+            "recommendations": result,
+            "message": "유사 인재 추천 완료"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 유사 인재 추천 실패: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"유사 인재 추천 중 오류가 발생했습니다: {str(e)}"
+        )
+
 @router.post("/{applicant_id}/cover-letter")
 async def check_cover_letter_plagiarism(
     applicant_id: str,

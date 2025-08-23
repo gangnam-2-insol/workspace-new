@@ -3903,16 +3903,12 @@ const ApplicantManagement = () => {
       
       console.log('📤 요청 데이터:', requestData);
       
-      // 인재추천 API 호출 (실제 API 엔드포인트로 수정 필요)
-      const response = await fetch('/api/chatbot/recommendations', {
+      // 인재추천 API 호출
+      const response = await fetch(`/api/applicants/${applicant.id}/recommendations`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          context: `지원자 ${applicant.name}(${applicant.position})에 대한 인재 추천을 요청합니다.`,
-          applicant_info: requestData
-        })
+        }
       });
       
       if (!response.ok) {
@@ -5421,7 +5417,7 @@ const ApplicantManagement = () => {
                 
                 {isRequestingRecommendation && (
                   <LoadingMessage>
-                    <LoadingSpinner />
+                    <RecommendationSpinner />
                     유사인재를 검색하고 있습니다...
                   </LoadingMessage>
                 )}
@@ -6696,7 +6692,7 @@ const LoadingMessage = styled.div`
   margin-top: 16px;
 `;
 
-const LoadingSpinner = styled.div`
+const RecommendationSpinner = styled.div`
   width: 16px;
   height: 16px;
   border: 2px solid #e3f2fd;
