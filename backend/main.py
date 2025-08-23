@@ -1,6 +1,6 @@
 import os
 import sys
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
@@ -1312,6 +1312,107 @@ async def save_mail_settings(settings: Dict[str, Any]):
         return {"success": True, "message": "메일 설정이 저장되었습니다."}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"메일 설정 저장 실패: {str(e)}")
+
+@app.post("/api/send-test-mail")
+async def send_test_mail(request: Request):
+    """테스트 메일 발송"""
+    try:
+        import smtplib
+        from email.mime.text import MIMEText
+        from email.mime.multipart import MIMEMultipart
+        
+        data = await request.json()
+        print(f"받은 데이터: {data}")  # 디버깅용 로그
+        
+        test_email = data.get("testEmail")
+        mail_settings = data.get("mailSettings")
+        
+        print(f"테스트 이메일: {test_email}")  # 디버깅용 로그
+        print(f"메일 설정: {mail_settings}")  # 디버깅용 로그
+        
+        if not test_email or not mail_settings:
+            print("테스트 이메일 또는 메일 설정이 없습니다.")  # 디버깅용 로그
+            raise HTTPException(status_code=400, detail="테스트 이메일과 메일 설정이 필요합니다.")
+        
+        # 메일 템플릿 조회
+        mail_templates = await db.mail_templates.find_one({"_id": "default"})
+        if not mail_templates:
+            raise HTTPException(status_code=400, detail="메일 템플릿이 필요합니다.")
+        
+        # 테스트 메일 내용 생성
+        template = mail_templates.get("passed", {})
+        subject = template.get("subject", "테스트 메일")
+        content = template.get("content", "테스트 메일입니다.")
+        
+        # 변수 치환
+        content = content.format(
+            applicant_name="테스트 사용자",
+            job_posting_title="테스트 채용공고",
+            company_name="테스트 회사",
+            position="테스트 직무"
+        )
+        
+        # 메일 객체 생성
+        msg = MIMEMultipart()
+        msg['From'] = f"{mail_settings.get('senderName', '')} <{mail_settings.get('senderEmail')}>"
+        msg['To'] = test_email
+        msg['Subject'] = f"[테스트] {subject}"
+        
+        # 메일 본문 추가
+        msg.attach(MIMEText(content, 'plain', 'utf-8'))
+        
+        # SMTP 서버 연결 및 메일 발송
+        try:
+            print(f"SMTP 서버 연결 시도: {mail_settings.get('smtpServer')}:{mail_settings.get('smtpPort')}")  # 디버깅용 로그
+            print(f"발송자 이메일: {mail_settings.get('senderEmail')}")  # 디버깅용 로그
+            print(f"발송자 비밀번호 길이: {len(mail_settings.get('senderPassword', ''))}")  # 디버깅용 로그
+            print(f"발송자 비밀번호: {mail_settings.get('senderPassword', '')[:4]}***")  # 디버깅용 로그 (앞 4자리만)
+            
+            smtp_port = mail_settings.get('smtpPort', 587)
+            smtp_server = mail_settings.get('smtpServer', 'smtp.gmail.com')
+            
+            # 포트 465인 경우 SSL 사용
+            if smtp_port == 465:
+                with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+                    print("SMTP SSL 서버 연결 성공")  # 디버깅용 로그
+                    print(f"로그인 시도: {mail_settings.get('senderEmail')}")  # 디버깅용 로그
+                    server.login(mail_settings.get('senderEmail'), mail_settings.get('senderPassword'))
+                    print("로그인 성공")  # 디버깅용 로그
+                    server.send_message(msg)
+                    print("메일 발송 성공")  # 디버깅용 로그
+            else:
+                with smtplib.SMTP(smtp_server, smtp_port) as server:
+                    print("SMTP 서버 연결 성공")  # 디버깅용 로그
+                    server.starttls()
+                    print("STARTTLS 성공")  # 디버깅용 로그
+                    print(f"로그인 시도: {mail_settings.get('senderEmail')}")  # 디버깅용 로그
+                    server.login(mail_settings.get('senderEmail'), mail_settings.get('senderPassword'))
+                    print("로그인 성공")  # 디버깅용 로그
+                    server.send_message(msg)
+                    print("메일 발송 성공")  # 디버깅용 로그
+            
+            return {
+                "success": True,
+                "message": "테스트 메일이 성공적으로 발송되었습니다.",
+                "subject": f"[테스트] {subject}",
+                "to": test_email
+            }
+            
+        except smtplib.SMTPAuthenticationError as e:
+            print(f"인증 실패: {str(e)}")  # 디버깅용 로그
+            raise HTTPException(status_code=400, detail="인증 실패. 이메일 주소와 앱 비밀번호를 확인해주세요.")
+        except smtplib.SMTPException as e:
+            print(f"SMTP 오류: {str(e)}")  # 디버깅용 로그
+            raise HTTPException(status_code=400, detail=f"SMTP 오류: {str(e)}")
+        except Exception as e:
+            print(f"메일 발송 오류: {str(e)}")  # 디버깅용 로그
+            raise HTTPException(status_code=500, detail=f"메일 발송 오류: {str(e)}")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"테스트 메일 발송 중 오류: {str(e)}")  # 디버깅용 로그
+        raise HTTPException(status_code=500, detail=f"테스트 메일 발송 중 오류가 발생했습니다: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
