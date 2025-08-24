@@ -181,8 +181,26 @@ const ChartContainer = styled.div`
 
 const ChartWrapper = styled.div`
   height: 500px;
+  width: 100%;
   position: relative;
   margin: 20px 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  
+  /* Chart.js 컨테이너 중앙 정렬 - 오른쪽으로 20px 이동 */
+  > div {
+    position: absolute !important;
+    top: 50% !important;
+    left: calc(50% + 20px) !important;
+    transform: translate(-50%, -50%) !important;
+  }
+  
+  /* Canvas 중앙 정렬 */
+  canvas {
+    display: block !important;
+    margin: 0 auto !important;
+  }
 `;
 
 const ChartDescription = styled.p`
@@ -309,7 +327,13 @@ const CoverLetterAnalysisModal = ({ isOpen, onClose, coverLetterData, analysisDa
       // 차트 데이터 준비
       prepareChartData();
       // 차트 애니메이션을 위한 지연
-      setTimeout(() => setIsChartReady(true), 500);
+      setTimeout(() => {
+        setIsChartReady(true);
+        // 차트가 렌더링된 후 준비 완료
+        setTimeout(() => {
+          setIsChartReady(true);
+        }, 100);
+      }, 500);
     } else {
       setIsChartReady(false);
     }
@@ -333,32 +357,29 @@ const CoverLetterAnalysisModal = ({ isOpen, onClose, coverLetterData, analysisDa
         '성장 가능성/학습 능력 (Growth Potential)',
         '자소서 표현력/논리성 (Clarity & Grammar)'
       ],
-      datasets: [
-        {
-          label: '자소서 분석 점수',
-          data: [
-            coverLetterAnalysis.motivation_relevance?.score || 75,
-            coverLetterAnalysis.job_understanding?.score || 75,
-            coverLetterAnalysis.unique_experience?.score || 75,
-            coverLetterAnalysis.quantitative_impact?.score || 75,
-            coverLetterAnalysis.problem_solving_STAR?.score || 75,
-            coverLetterAnalysis.logical_flow?.score || 75,
-            coverLetterAnalysis.keyword_diversity?.score || 75,
-            coverLetterAnalysis.sentence_readability?.score || 75,
-            coverLetterAnalysis.typos_and_errors?.score || 75
-          ],
-          backgroundColor: 'rgba(102, 126, 234, 0.2)',
-          borderColor: 'rgba(102, 126, 234, 1)',
-          borderWidth: 3,
-          pointBackgroundColor: 'rgba(102, 126, 234, 1)',
-          pointBorderColor: '#fff',
-          pointHoverBackgroundColor: '#fff',
-          pointHoverBorderColor: 'rgba(102, 126, 234, 1)',
-          pointRadius: 6,
-          pointHoverRadius: 8,
-          fill: true,
-        },
-      ],
+              datasets: [
+          {
+            label: '자소서 분석 점수',
+            data: [
+              coverLetterAnalysis.motivation_relevance?.score || 75,
+              coverLetterAnalysis.job_understanding?.score || 75,
+              coverLetterAnalysis.unique_experience?.score || 75,
+              coverLetterAnalysis.quantitative_impact?.score || 75,
+              coverLetterAnalysis.problem_solving_STAR?.score || 75,
+              coverLetterAnalysis.logical_flow?.score || 75,
+              coverLetterAnalysis.keyword_diversity?.score || 75,
+              coverLetterAnalysis.sentence_readability?.score || 75,
+              coverLetterAnalysis.typos_and_errors?.score || 75
+            ],
+            fill: true,
+            backgroundColor: 'rgba(98, 181, 255, 0.2)',
+            borderColor: '#377EF8',
+            borderWidth: 1,
+            pointRadius: 0,
+            pointHoverBackgroundColor: '#fff',
+            pointHoverBorderColor: '#377EF8',
+          },
+        ],
     };
 
     setChartData(chartData);
@@ -387,13 +408,42 @@ const CoverLetterAnalysisModal = ({ isOpen, onClose, coverLetterData, analysisDa
   const overallScore = getOverallScore();
 
   const chartOptions = {
-    responsive: true,
+    responsive: false,
     maintainAspectRatio: false,
+    layout: {
+      padding: {
+        top: 20,
+        bottom: 20,
+        left: 20,
+        right: 20
+      }
+    },
     scales: {
       r: {
         beginAtZero: true,
         max: 100,
         min: 0,
+        center: {
+          x: 0.5,
+          y: 0.5
+        },
+        grid: {
+          circular: true,
+          color: 'rgba(0, 0, 0, 0.1)',
+          lineWidth: 1,
+          drawBorder: false
+        },
+        angleLines: {
+          color: 'rgba(0, 0, 0, 0.1)',
+          lineWidth: 1
+        },
+        pointLabels: {
+          font: {
+            size: 13,
+          },
+          color: '#A6A6A6',
+          padding: 20
+        },
         ticks: {
           stepSize: 20,
           color: '#666',
@@ -404,72 +454,27 @@ const CoverLetterAnalysisModal = ({ isOpen, onClose, coverLetterData, analysisDa
             return value + '점';
           }
         },
-        grid: {
-          color: 'rgba(0, 0, 0, 0.1)',
-        },
-        angleLines: {
-          color: 'rgba(0, 0, 0, 0.1)',
-        },
-        pointLabels: {
-          color: '#333',
-          font: {
-            size: 11,
-            weight: 'bold',
-          },
-          callback: function(value, index) {
-            const words = value.split(' ');
-            if (words.length > 4) {
-              return words.slice(0, 3).join(' ') + '\n' + words.slice(3).join(' ');
-            } else if (words.length > 2) {
-              const mid = Math.ceil(words.length / 2);
-              return words.slice(0, mid).join(' ') + '\n' + words.slice(mid).join(' ');
-            }
-            return value;
-          }
-        },
       },
     },
     plugins: {
       legend: {
         display: false,
       },
-      tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.9)',
-        titleColor: '#fff',
-        bodyColor: '#fff',
-        borderColor: 'rgba(102, 126, 234, 1)',
-        borderWidth: 2,
-        cornerRadius: 8,
-        displayColors: false,
-        callbacks: {
-          title: function(context) {
-            return context[0].label;
-          },
-          label: function(context) {
-            return `점수: ${context.parsed.r}점`;
-          },
-          afterLabel: function(context) {
-            const descriptions = [
-              '지원 직무와의 연관성 및 적합성',
-              'JD에 명시된 기술과 이력서 기술 스택 일치도',
-              '경험한 프로젝트가 지원 포지션과의 관련성',
-              '프로그래밍 언어, 프레임워크, DB 등 기술 역량',
-              '단순 참여 vs 주도적 역할, 수치화된 성과',
-              '문제 상황 → 해결 과정 → 성과 구조',
-              '팀 프로젝트 경험, 협업 도구 사용 경험',
-              '새로운 기술 학습/적용, 꾸준한 학습 습관',
-              '글의 흐름, 논리적 전개, 맞춤법/문법'
-            ];
-            return descriptions[context.dataIndex] || '';
-          }
-        }
+    },
+    elements: {
+      line: {
+        borderWidth: 1,
       },
+      point: {
+        radius: 0,
+        hoverRadius: 0
+      }
     },
     interaction: {
       mode: 'nearest',
       axis: 'r',
       intersect: false
-    },
+    }
   };
 
   if (!isOpen) return null;
@@ -522,11 +527,7 @@ const CoverLetterAnalysisModal = ({ isOpen, onClose, coverLetterData, analysisDa
             </OverallScore>
 
             {/* 레이더 차트 */}
-            <RadarChartSection
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6, duration: 0.5 }}
-            >
+            <RadarChartSection>
               <SectionTitle>
                 <FiStar />
                 9개 평가 항목 레이더 차트
@@ -539,13 +540,7 @@ const CoverLetterAnalysisModal = ({ isOpen, onClose, coverLetterData, analysisDa
                 
                 <ChartWrapper>
                   {chartData && isChartReady && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.8, duration: 0.6 }}
-                    >
-                      <Radar data={chartData} options={chartOptions} />
-                    </motion.div>
+                    <Radar data={chartData} options={chartOptions} width={500} height={500} />
                   )}
                 </ChartWrapper>
               </ChartContainer>

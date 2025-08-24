@@ -1595,12 +1595,6 @@ const ApplicantHeaderBoard = styled.div`
   gap: 16px;
 `;
 
-const ApplicantInfo = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 12px;
-`;
-
 const ApplicantInfoBoard = styled.div`
   display: flex;
   align-items: center;
@@ -4895,15 +4889,15 @@ const ApplicantManagement = () => {
           </StatContent>
         </StatCard>
 
-                 <StatCard
-           key={`waiting-${stats.waiting}`}
-           initial={{ opacity: 0, y: 20, scale: 0.9 }}
-           animate={{ opacity: 1, y: 0, scale: 1 }}
-           transition={{ delay: 0.15, duration: 0.3, ease: "easeOut" }}
-           $variant="waiting"
-           whileHover={{ scale: 1.02 }}
-           whileTap={{ scale: 0.98 }}
-         >
+        <StatCard
+          key={`waiting-${stats.waiting}`}
+          initial={{ opacity: 0, y: 20, scale: 0.9 }}
+          animate={{ opacity: 1, y: 0, scale: 1 }}
+          transition={{ delay: 0.15, duration: 0.3, ease: "easeOut" }}
+          $variant="waiting"
+          whileHover={{ scale: 1.02 }}
+          whileTap={{ scale: 0.98 }}
+        >
           <StatIcon>
             <FiClock size={24} />
           </StatIcon>
@@ -6799,7 +6793,7 @@ const MailButton = styled.button`
   top: 8px;
   right: 8px;
   background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
+          color: white;
   border: none;
   border-radius: 6px;
   padding: 6px 10px;
@@ -6873,7 +6867,7 @@ const ResumeFormActions = styled.div`
 
 const ResumeSubmitButton = styled.button`
   background-color: #48bb78;
-  color: white;
+          color: white;
   border: none;
   padding: 14px 28px;
   border-radius: 8px;
@@ -7034,7 +7028,7 @@ const PaginationContainer = styled.div`
 
 const PaginationButton = styled.button`
   background-color: transparent;
-  color: #4a5568;
+          color: #4a5568;
   border: 1px solid #e2e8f0;
   padding: 8px 16px;
   border-radius: 6px;
@@ -7146,7 +7140,6 @@ const RankingClearButton = styled.button`
     color: #374151;
     transform: translateY(-1px);
   }
-`;
 
 const RankingTable = styled.div`
   border: 1px solid var(--border-color);

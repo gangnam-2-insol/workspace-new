@@ -1,17 +1,21 @@
 import React, { memo, useCallback } from 'react';
-import { FiCheck, FiClock, FiX, FiMail, FiPhone, FiCalendar, FiCode } from 'react-icons/fi';
+import { FiCheck, FiClock, FiX, FiMail, FiPhone, FiCalendar, FiCode, FiBriefcase } from 'react-icons/fi';
 import * as S from '../styles';
 import { formatDate, getStatusText } from '../utils';
 import api from '../services/api';
 
-const ApplicantCard = memo(({ applicant, onClick, selectedJob }) => {
+const ApplicantCard = memo(({ applicant, onClick, selectedJob, onStatusChange }) => {
   const handleStatus = useCallback(async (newStatus) => {
     try {
       await api.updateApplicantStatus(applicant.id, newStatus);
+      // 상태 변경 후 상위 컴포넌트에 알림
+      if (onStatusChange) {
+        onStatusChange(applicant.id, newStatus);
+      }
     } catch(e){
       console.error(e);
     }
-  }, [applicant.id]);
+  }, [applicant.id, onStatusChange]);
 
   return (
     <S.ApplicantCard onClick={() => onClick(applicant)} whileHover={{scale:1.02}} whileTap={{scale:0.98}}>
@@ -28,6 +32,12 @@ const ApplicantCard = memo(({ applicant, onClick, selectedJob }) => {
         <S.InfoRow><FiPhone /> {applicant.phone || '전화번호 없음'}</S.InfoRow>
         <S.InfoRow><FiCalendar /> {formatDate(applicant.appliedDate || applicant.created_at)}</S.InfoRow>
         <S.InfoRow><FiCode /> {Array.isArray(applicant.skills) ? applicant.skills.join(', ') : applicant.skills || '기술 정보 없음'}</S.InfoRow>
+        {applicant.job_posting_info && (
+          <S.InfoRow>
+            <FiBriefcase />
+            {applicant.job_posting_info.title} ({applicant.job_posting_info.company})
+          </S.InfoRow>
+        )}
       </S.CardContent>
 
       <S.CardActions>

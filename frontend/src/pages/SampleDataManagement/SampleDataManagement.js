@@ -326,7 +326,8 @@ const SampleDataManagement = () => {
   const [stats, setStats] = useState({
     totalApplicants: 0,
     totalJobPostings: 0,
-    totalResumes: 0
+    totalResumes: 0,
+    totalCoverLetters: 0
   });
   const [loading, setLoading] = useState(false);
   const [progress, setProgress] = useState(0);
@@ -335,6 +336,7 @@ const SampleDataManagement = () => {
   const [activeTab, setActiveTab] = useState('help');
   const [uploadedFile, setUploadedFile] = useState(null);
   const [jobPostings, setJobPostings] = useState([]);
+  const [applicants, setApplicants] = useState([]);
 
   // 현재 데이터 통계 조회
   const loadCurrentStats = async () => {
@@ -350,7 +352,8 @@ const SampleDataManagement = () => {
       setStats({
         totalApplicants: applicantsData.total_applicants || 0,
         totalJobPostings: jobPostingsData.total_jobs || 0,
-        totalResumes: applicantsData.total_applicants || 0 // 이력서는 지원자와 동일
+        totalResumes: applicantsData.total_applicants || 0, // 이력서는 지원자와 동일
+        totalCoverLetters: applicantsData.total_applicants || 0 // 자소서는 지원자와 동일
       });
     } catch (error) {
       console.error('통계 조회 실패:', error);
@@ -378,18 +381,33 @@ const SampleDataManagement = () => {
     }
   };
 
+  // 기존 지원자 목록 조회
+  const loadApplicants = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/applicants?limit=1000`);
+      if (response.ok) {
+        const data = await response.json();
+        setApplicants(data.applicants || []);
+      }
+    } catch (error) {
+      console.error('지원자 조회 실패:', error);
+      setApplicants([]);
+    }
+  };
+
   useEffect(() => {
     loadCurrentStats();
     loadJobPostings();
+    loadApplicants();
   }, []);
 
   // 샘플 지원자 데이터 생성 (기존 채용공고 확인 후)
   const generateSampleApplicants = async (count = 50) => {
     // 먼저 기존 채용공고 확인
     if (jobPostings.length === 0) {
-      setMessage({ 
-        type: 'error', 
-        text: '지원자를 생성하기 전에 먼저 채용공고를 생성해주세요. 지원자는 반드시 채용공고에 소속되어야 합니다.' 
+      setMessage({
+        type: 'error',
+        text: '지원자를 생성하기 전에 먼저 채용공고를 생성해주세요. 지원자는 반드시 채용공고에 소속되어야 합니다.'
       });
       return;
     }
@@ -411,11 +429,15 @@ const SampleDataManagement = () => {
       if (response.ok) {
         const result = await response.json();
         let successMessage = `${result.generated_count}명의 지원자 샘플 데이터가 생성되었습니다!`;
-        
+
         if (result.job_postings_used) {
-          successMessage += ` (${result.job_postings_used}개 채용공고에 분배)`;
+          successMessage += ` (${result.job_postings_used}개 직무의 채용공고에 매칭)`;
         }
-        
+
+        if (result.position_matching) {
+          successMessage += `\n${result.position_matching}`;
+        }
+
         setMessage({ type: 'success', text: successMessage });
         setProgress(100);
         loadCurrentStats(); // 통계 새로고침
@@ -427,6 +449,50 @@ const SampleDataManagement = () => {
     } catch (error) {
       setMessage({ type: 'error', text: error.message || '지원자 샘플 데이터 생성에 실패했습니다.' });
       console.error('지원자 생성 오류:', error);
+    } finally {
+      setLoading(false);
+      setCurrentOperation('');
+    }
+  };
+
+  // 샘플 자소서 데이터 생성
+  const generateSampleCoverLetters = async (count = 50) => {
+    // 먼저 기존 지원자 확인
+    if (applicants.length === 0) {
+      setMessage({
+        type: 'error',
+        text: '자소서를 생성하기 전에 먼저 지원자를 생성해주세요. 자소서는 반드시 지원자에 소속되어야 합니다.'
+      });
+      return;
+    }
+
+    setLoading(true);
+    setProgress(0);
+    setCurrentOperation('자소서 샘플 데이터 생성 중...');
+    setMessage({ type: 'info', text: '자소서 샘플 데이터를 생성하고 있습니다...' });
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/sample/generate-cover-letters`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ count })
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setMessage({ type: 'success', text: result.message });
+        setProgress(100);
+        loadCurrentStats(); // 통계 새로고침
+        loadApplicants(); // 지원자 목록 새로고침
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '자소서 데이터 생성 실패');
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || '자소서 샘플 데이터 생성에 실패했습니다.' });
+      console.error('자소서 생성 오류:', error);
     } finally {
       setLoading(false);
       setCurrentOperation('');
@@ -451,7 +517,17 @@ const SampleDataManagement = () => {
 
       if (response.ok) {
         const result = await response.json();
-        setMessage({ type: 'success', text: `${result.generated_count}개의 채용공고 샘플 데이터가 생성되었습니다!` });
+        let successMessage = `${result.generated_count}개의 채용공고 샘플 데이터가 생성되었습니다!`;
+
+        if (result.position_distribution) {
+          successMessage += `\n직무별 분포: ${Object.entries(result.position_distribution).map(([pos, count]) => `${pos} ${count}개`).join(', ')}`;
+        }
+
+        if (result.matching_ready) {
+          successMessage += `\n${result.matching_ready}`;
+        }
+
+        setMessage({ type: 'success', text: successMessage });
         setProgress(100);
         loadCurrentStats(); // 통계 새로고침
         loadJobPostings(); // 채용공고 목록 새로고침
@@ -636,6 +712,22 @@ const SampleDataManagement = () => {
               </div>
               <StatIcon style={{ background: '#ff6b35' }}>
                 <FiDatabase size={24} />
+              </StatIcon>
+            </StatHeader>
+          </StatCard>
+
+          <StatCard
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.3 }}
+          >
+            <StatHeader>
+              <div>
+                <StatValue>{stats.totalCoverLetters.toLocaleString()}</StatValue>
+                <StatLabel>자소서</StatLabel>
+              </div>
+              <StatIcon style={{ background: '#28a745' }}>
+                <FiFileText size={24} />
               </StatIcon>
             </StatHeader>
           </StatCard>
@@ -985,6 +1077,24 @@ const SampleDataManagement = () => {
               </InfoList>
             </InfoCard>
 
+            {/* 현재 지원자 및 자소서 상태 표시 */}
+            <InfoCard>
+              <InfoTitle>
+                <FiUsers />
+                현재 지원자 및 자소서 현황
+              </InfoTitle>
+              <InfoList>
+                <InfoItem>
+                  <span>등록된 지원자</span>
+                  <span>{applicants.length}명</span>
+                </InfoItem>
+                <InfoItem>
+                  <span>자소서 생성 가능</span>
+                  <span>{applicants.length > 0 ? '가능' : '불가능 (지원자 필요)'}</span>
+                </InfoItem>
+              </InfoList>
+            </InfoCard>
+
             <ButtonGroup>
               {/* 채용공고 생성 버튼들을 먼저 배치 */}
               <Button
@@ -1027,6 +1137,30 @@ const SampleDataManagement = () => {
                 <FiUsers />
                 100명 지원자 생성
                 {jobPostings.length === 0 && ' (채용공고 필요)'}
+              </Button>
+
+              {/* 구분선 */}
+              <div style={{ width: '100%', height: '1px', background: '#dee2e6', margin: '16px 0' }} />
+
+              {/* 자소서 생성 버튼들 */}
+              <Button
+                onClick={() => generateSampleCoverLetters(50)}
+                disabled={loading || applicants.length === 0}
+                variant={applicants.length === 0 ? 'danger' : 'success'}
+              >
+                <FiFileText />
+                50개 자소서 생성
+                {applicants.length === 0 && ' (지원자 필요)'}
+              </Button>
+
+              <Button
+                onClick={() => generateSampleCoverLetters(100)}
+                disabled={loading || applicants.length === 0}
+                variant={applicants.length === 0 ? 'danger' : 'success'}
+              >
+                <FiFileText />
+                100개 자소서 생성
+                {applicants.length === 0 && ' (지원자 필요)'}
               </Button>
 
               <Button

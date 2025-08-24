@@ -1,17 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import {
-  FiX,
-  FiCheck,
-  FiMail,
-  FiPhone,
-  FiMapPin,
-  FiCalendar,
-  FiAward,
-  FiBookOpen,
-  FiTarget,
-  FiTrendingUp,
+import { 
+  FiX, 
+  FiCheck, 
+  FiMail, 
+  FiPhone, 
+  FiMapPin, 
+  FiCalendar, 
+  FiAward, 
+  FiBookOpen, 
+  FiTarget, 
+  FiTrendingUp, 
   FiBarChart2,
   FiEye,
   FiDownload,
@@ -20,8 +20,7 @@ import {
   FiStar,
   FiTrendingDown,
   FiAlertCircle,
-  FiPlus,
-  FiBriefcase
+  FiPlus
 } from 'react-icons/fi';
 
 const ModalOverlay = styled(motion.div)`
@@ -255,7 +254,7 @@ const AnalysisGrid = styled.div`
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 24px;
-
+  
   @media (max-width: 768px) {
     grid-template-columns: 1fr;
   }
@@ -289,7 +288,7 @@ const OverallScoreCard = styled(AnalysisCard)`
   box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
   position: relative;
   overflow: hidden;
-
+  
   &::before {
     content: '';
     position: absolute;
@@ -300,7 +299,7 @@ const OverallScoreCard = styled(AnalysisCard)`
     background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
     animation: float 6s ease-in-out infinite;
   }
-
+  
   @keyframes float {
     0%, 100% { transform: translateY(0px) rotate(0deg); }
     50% { transform: translateY(-20px) rotate(180deg); }
@@ -343,7 +342,7 @@ const ScoreCircle = styled.div`
   box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
   position: relative;
   border: 4px solid rgba(255, 255, 255, 0.3);
-
+  
   &::after {
     content: '';
     position: absolute;
@@ -357,7 +356,7 @@ const ScoreCircle = styled.div`
     animation: gradientShift 3s ease infinite;
     z-index: -1;
   }
-
+  
   @keyframes gradientShift {
     0% { background-position: 0% 50%; }
     50% { background-position: 100% 50%; }
@@ -438,7 +437,7 @@ const ScoreProgressFill = styled.div`
   border-radius: 4px;
   transition: width 1s ease-in-out;
   position: relative;
-
+  
   &::after {
     content: '';
     position: absolute;
@@ -449,7 +448,7 @@ const ScoreProgressFill = styled.div`
     background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.3) 50%, transparent 100%);
     animation: shimmer 2s infinite;
   }
-
+  
   @keyframes shimmer {
     0% { transform: translateX(-100%); }
     100% { transform: translateX(100%); }
@@ -474,12 +473,12 @@ const ChartItem = styled.div`
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.2s ease;
-
+  
   &:hover {
     background: #f7fafc;
     transform: translateX(4px);
   }
-
+  
   &.selected {
     background: #edf2f7;
     border-left: 4px solid #667eea;
@@ -537,12 +536,12 @@ const DetailButton = styled.button`
   justify-content: center;
   transition: all 0.2s ease;
   flex-shrink: 0;
-
+  
   &:hover {
     background: #5a67d8;
     transform: scale(1.1);
   }
-
+  
   &:active {
     transform: scale(0.95);
   }
@@ -712,7 +711,7 @@ const DetailCriteriaItem = styled.li`
   background: white;
   border-radius: 6px;
   border: 1px solid #e2e8f0;
-
+  
   svg {
     color: #48bb78;
     flex-shrink: 0;
@@ -724,43 +723,6 @@ const DetailCriteriaItem = styled.li`
 const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
   // 선택된 항목 상태 - Hook은 항상 최상위에서 호출되어야 함
   const [selectedItem, setSelectedItem] = useState(null);
-  const [jobPosting, setJobPosting] = useState(null);
-  const [isLoadingJobPosting, setIsLoadingJobPosting] = useState(false);
-
-  // 채용공고 정보 가져오기 - Hook은 조건문 밖에서 호출되어야 함
-  useEffect(() => {
-    const fetchJobPosting = async () => {
-      if (!applicant?.job_posting_id) {
-        setJobPosting(null);
-        return;
-      }
-
-      setIsLoadingJobPosting(true);
-      try {
-        const response = await fetch(`/api/job-postings/${applicant.job_posting_id}`);
-        if (response.ok) {
-          const result = await response.json();
-          // BaseResponse 형태로 응답이 오므로 data 필드에서 실제 데이터 추출
-          if (result.success && result.data) {
-            setJobPosting(result.data);
-          } else {
-            console.error('채용공고 정보를 가져올 수 없습니다:', result.message);
-            setJobPosting(null);
-          }
-        } else {
-          console.error('채용공고 정보를 가져올 수 없습니다.');
-          setJobPosting(null);
-        }
-      } catch (error) {
-        console.error('채용공고 정보 조회 실패:', error);
-        setJobPosting(null);
-      } finally {
-        setIsLoadingJobPosting(false);
-      }
-    };
-
-    fetchJobPosting();
-  }, [applicant?.job_posting_id]);
 
   if (!applicant) return null;
 
@@ -782,113 +744,113 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
   // 이력서 내용에서 학력 정보 추출 (마크다운 형식 제거)
   const extractEducationFromResume = (resumeContent) => {
     if (!resumeContent) return '학력 정보가 없습니다.';
-
+    
     // 마크다운 형식 제거
     let cleanContent = resumeContent
       .replace(/\*\*/g, '')  // ** 제거
       .replace(/#{1,6}\s/g, '')  // # 제거
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');  // [링크텍스트](URL) -> 링크텍스트
-
+    
     // 학력 부분만 추출
     const educationMatch = cleanContent.match(/학력:([\s\S]*?)(?=경력:|$)/);
     if (educationMatch) {
       return educationMatch[1].trim();
     }
-
+    
     // 학력 관련 키워드로 검색
     const educationKeywords = ['학력', '졸업', '대학교', '학과', '학사', '석사', '박사'];
     const lines = cleanContent.split('\n');
-
-    const educationLines = lines.filter(line =>
+    
+    const educationLines = lines.filter(line => 
       educationKeywords.some(keyword => line.includes(keyword))
     );
-
+    
     if (educationLines.length > 0) {
       return educationLines.join('\n').trim();
     }
-
+    
     return '학력 정보가 없습니다.';
   };
 
   // 이력서 내용에서 경력 정보 추출 (마크다운 형식 제거)
   const extractCareerFromResume = (resumeContent) => {
     if (!resumeContent) return '경력 정보가 없습니다.';
-
+    
     // 마크다운 형식 제거
     let cleanContent = resumeContent
       .replace(/\*\*/g, '')  // ** 제거
       .replace(/#{1,6}\s/g, '')  // # 제거
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');  // [링크텍스트](URL) -> 링크텍스트
-
+    
     // 경력 부분만 추출
     const careerMatch = cleanContent.match(/경력:([\s\S]*?)(?=자격증:|$)/);
     if (careerMatch) {
       return careerMatch[1].trim();
     }
-
+    
     // 경력 관련 키워드로 검색
     const careerKeywords = ['경력', '회사', '근무', '프로젝트', '과장', '대리', '사원'];
     const lines = cleanContent.split('\n');
-
-    const careerLines = lines.filter(line =>
+    
+    const careerLines = lines.filter(line => 
       careerKeywords.some(keyword => line.includes(keyword))
     );
-
+    
     if (careerLines.length > 0) {
       return careerLines.join('\n').trim();
     }
-
+    
     return '경력 정보가 없습니다.';
   };
 
   // 자격증 정보 추출
   const extractCertificates = (resumeContent) => {
     if (!resumeContent) return '자격증 정보가 없습니다.';
-
+    
     // 마크다운 형식 제거
     let cleanContent = resumeContent
       .replace(/\*\*/g, '')  // ** 제거
       .replace(/#{1,6}\s/g, '')  // # 제거
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
-
+    
     // 자격증 부분만 추출
     const certificateMatch = cleanContent.match(/자격증:([\s\S]*?)(?=업무 스킬:|$)/);
     if (certificateMatch) {
       return certificateMatch[1].trim();
     }
-
+    
     return '자격증 정보가 없습니다.';
   };
 
   // 수상 정보 추출
   const extractAwards = (resumeContent) => {
     if (!resumeContent) return '수상 정보가 없습니다.';
-
+    
     // 마크다운 형식 제거
     let cleanContent = resumeContent
       .replace(/\*\*/g, '')  // ** 제거
       .replace(/#{1,6}\s/g, '')  // # 제거
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
-
+    
     // 수상 부분만 추출
     const awardMatch = cleanContent.match(/수상:([\s\S]*?)(?=\n|$)/);
     if (awardMatch) {
       return awardMatch[1].trim();
     }
-
+    
     return '수상 정보가 없습니다.';
   };
 
   // 성장 배경에서 핵심 내용만 추출 (연락처, 학력, 경력, 자격증, 수상 제외)
   const extractGrowthBackground = (resumeContent) => {
     if (!resumeContent) return '성장 배경 정보가 없습니다.';
-
+    
     // 마크다운 형식 제거
     let cleanContent = resumeContent
       .replace(/\*\*/g, '')  // ** 제거
       .replace(/#{1,6}\s/g, '')  // # 제거
       .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1');
-
+    
     // 연락처 정보 제거
     cleanContent = cleanContent
       .replace(/연락처 정보:[\s\S]*?주소:.*?\n/g, '')
@@ -896,7 +858,7 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
       .replace(/전화번호:.*?\n/g, '')
       .replace(/주소:.*?\n/g, '')
       .replace(/홈페이지:.*?\n/g, '');
-
+    
     // 학력, 경력, 자격증, 업무 스킬, 수상 정보 제거
     cleanContent = cleanContent
       .replace(/학력:[\s\S]*?(?=경력:|$)/g, '')
@@ -904,21 +866,21 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
       .replace(/자격증:[\s\S]*?(?=업무 스킬:|$)/g, '')
       .replace(/업무 스킬:[\s\S]*?(?=수상:|$)/g, '')
       .replace(/수상:[\s\S]*?(?=\n|$)/g, '');
-
+    
     // 남은 내용 정리
     const remainingContent = cleanContent.trim();
-
+    
     if (remainingContent) {
       return remainingContent;
     }
-
+    
     return '성장 배경 정보가 없습니다.';
   };
 
   // 분석 점수 계산 (실제 DB 데이터 기반, 고정값 사용)
   const calculateAnalysisScores = () => {
     const baseScore = applicant.analysisScore || 75;
-
+    
     // 고정된 점수 계산 (Math.random() 제거)
     const scores = {
       education: Math.max(60, Math.min(95, baseScore - 5)),
@@ -927,7 +889,7 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
       projects: Math.max(60, Math.min(95, baseScore + 1)),
       growth: Math.max(60, Math.min(95, baseScore + 4))
     };
-
+    
     return scores;
   };
 
@@ -935,7 +897,7 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
 
   // 종합 점수 계산
   const totalScore = Math.round(
-    Object.values(analysisScores).reduce((sum, score) => sum + score, 0) /
+    Object.values(analysisScores).reduce((sum, score) => sum + score, 0) / 
     Object.keys(analysisScores).length
   );
 
@@ -1001,10 +963,10 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
   // 종합 평가 요약 생성 (5줄)
   const generateOverallSummary = () => {
     const avgScore = Math.round(
-      Object.values(analysisScores).reduce((sum, score) => sum + score, 0) /
+      Object.values(analysisScores).reduce((sum, score) => sum + score, 0) / 
       Object.keys(analysisScores).length
     );
-
+    
     // 점수별 등급 판정
     let grade = '';
     let gradeColor = '';
@@ -1028,7 +990,7 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
     // 강점과 약점 분석
     const strengths = [];
     const weaknesses = [];
-
+    
     Object.entries(analysisScores).forEach(([key, score]) => {
       if (score >= 80) {
         strengths.push(getItemTitle(key));
@@ -1114,7 +1076,7 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                   다운로드
                 </ActionButton>
               </HeaderActions>
-
+              
               <Title>{applicant.name || '지원자'}</Title>
               <Subtitle>
                 <span>{applicant.position || '지원 직무 정보 없음'}</span>
@@ -1142,7 +1104,7 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                         <InfoValue>{applicant.phone || '정보 없음'}</InfoValue>
                       </InfoContent>
                     </InfoItem>
-
+                    
                     <InfoItem>
                       <InfoIcon>
                         <FiMail size={16} />
@@ -1152,7 +1114,7 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                         <InfoValue>{applicant.email || '정보 없음'}</InfoValue>
                       </InfoContent>
                     </InfoItem>
-
+                    
                     <InfoItem>
                       <InfoIcon>
                         <FiMapPin size={16} />
@@ -1162,7 +1124,7 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                         <InfoValue>{applicant.department || '정보 없음'}</InfoValue>
                       </InfoContent>
                     </InfoItem>
-
+                    
                     <InfoItem>
                       <InfoIcon>
                         <FiCalendar size={16} />
@@ -1170,31 +1132,6 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                       <InfoContent>
                         <InfoLabel>지원일시</InfoLabel>
                         <InfoValue>{formatDate(applicant.created_at)}</InfoValue>
-                      </InfoContent>
-                    </InfoItem>
-
-                    <InfoItem>
-                      <InfoIcon>
-                        <FiBriefcase size={16} />
-                      </InfoIcon>
-                      <InfoContent>
-                        <InfoLabel>지원 공고</InfoLabel>
-                        <InfoValue>
-                          {isLoadingJobPosting ? (
-                            '로딩 중...'
-                          ) : jobPosting ? (
-                            <div>
-                              <div style={{ fontWeight: '600', marginBottom: '4px' }}>
-                                {jobPosting.title || '제목 없음'}
-                              </div>
-                              <div style={{ fontSize: '12px', color: '#666' }}>
-                                {jobPosting.company || '회사명 없음'}
-                              </div>
-                            </div>
-                          ) : (
-                            '공고 정보 없음'
-                          )}
-                        </InfoValue>
                       </InfoContent>
                     </InfoItem>
                   </InfoGrid>
@@ -1209,8 +1146,8 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                 </SectionTitle>
                 <SectionContent>
                   <TextContent>
-                    {applicant.growthBackground ?
-                      extractEducationFromResume(applicant.growthBackground) :
+                    {applicant.growthBackground ? 
+                      extractEducationFromResume(applicant.growthBackground) : 
                       '학력 정보가 없습니다.'
                     }
                   </TextContent>
@@ -1225,8 +1162,8 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                 </SectionTitle>
                 <SectionContent>
                   <TextContent>
-                    {applicant.careerHistory ?
-                      extractCareerFromResume(applicant.careerHistory) :
+                    {applicant.careerHistory ? 
+                      extractCareerFromResume(applicant.careerHistory) : 
                       '경력 정보가 없습니다.'
                     }
                   </TextContent>
@@ -1254,8 +1191,8 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                 </SectionTitle>
                 <SectionContent>
                   <TextContent>
-                    {applicant.growthBackground ?
-                      extractCertificates(applicant.growthBackground) :
+                    {applicant.growthBackground ? 
+                      extractCertificates(applicant.growthBackground) : 
                       '자격증 정보가 없습니다.'
                     }
                   </TextContent>
@@ -1270,8 +1207,8 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                 </SectionTitle>
                 <SectionContent>
                   <TextContent>
-                    {applicant.growthBackground ?
-                      extractAwards(applicant.growthBackground) :
+                    {applicant.growthBackground ? 
+                      extractAwards(applicant.growthBackground) : 
                       '수상 정보가 없습니다.'
                     }
                   </TextContent>
@@ -1286,8 +1223,8 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                 </SectionTitle>
                 <SectionContent>
                   <TextContent>
-                    {applicant.growthBackground ?
-                      extractGrowthBackground(applicant.growthBackground) :
+                    {applicant.growthBackground ? 
+                      extractGrowthBackground(applicant.growthBackground) : 
                       '성장 배경 정보가 없습니다.'
                     }
                   </TextContent>
@@ -1313,7 +1250,7 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                   <FiBarChart2 size={20} />
                   이력서 분석 결과
                 </SectionTitle>
-
+                
                 <AnalysisGrid>
                   {/* 항목별 분석 */}
                   <AnalysisCard>
@@ -1321,7 +1258,7 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                       <FiBarChart2 size={16} />
                       항목별 분석
                     </AnalysisCardTitle>
-
+                    
                     {/* 총평 요약 */}
                     <SummaryOverview>
                       <SummaryOverviewTitle>
@@ -1332,9 +1269,9 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                         {generateOverallSummary()}
                       </SummaryOverviewContent>
                     </SummaryOverview>
-
+                    
                     <AnalysisChart>
-                      <ChartItem
+                      <ChartItem 
                         onClick={() => setSelectedItem('education')}
                         className={selectedItem === 'education' ? 'selected' : ''}
                       >
@@ -1350,8 +1287,8 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                           <FiPlus size={14} />
                         </DetailButton>
                       </ChartItem>
-
-                      <ChartItem
+                      
+                      <ChartItem 
                         onClick={() => setSelectedItem('experience')}
                         className={selectedItem === 'experience' ? 'selected' : ''}
                       >
@@ -1367,8 +1304,8 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                           <FiPlus size={14} />
                         </DetailButton>
                       </ChartItem>
-
-                      <ChartItem
+                      
+                      <ChartItem 
                         onClick={() => setSelectedItem('skills')}
                         className={selectedItem === 'skills' ? 'selected' : ''}
                       >
@@ -1384,8 +1321,8 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                           <FiPlus size={14} />
                         </DetailButton>
                       </ChartItem>
-
-                      <ChartItem
+                      
+                      <ChartItem 
                         onClick={() => setSelectedItem('projects')}
                         className={selectedItem === 'projects' ? 'selected' : ''}
                       >
@@ -1401,8 +1338,8 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                           <FiPlus size={14} />
                         </DetailButton>
                       </ChartItem>
-
-                      <ChartItem
+                      
+                      <ChartItem 
                         onClick={() => setSelectedItem('growth')}
                         className={selectedItem === 'growth' ? 'selected' : ''}
                       >
@@ -1468,13 +1405,13 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                     <FiTarget size={16} />
                     분석 요약
                   </SummaryTitle>
-
+                  
                   {summary.strengths.length > 0 && (
                     <div style={{ marginBottom: '16px' }}>
-                      <div style={{
-                        fontSize: '14px',
-                        fontWeight: '600',
-                        color: '#38a169',
+                      <div style={{ 
+                        fontSize: '14px', 
+                        fontWeight: '600', 
+                        color: '#38a169', 
                         marginBottom: '8px',
                         display: 'flex',
                         alignItems: 'center',
@@ -1488,13 +1425,13 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                       </SummaryText>
                     </div>
                   )}
-
+                  
                   {summary.improvements.length > 0 && (
                     <div>
-                      <div style={{
-                        fontSize: '14px',
-                        fontWeight: '600',
-                        color: '#e53e3e',
+                      <div style={{ 
+                        fontSize: '14px', 
+                        fontWeight: '600', 
+                        color: '#e53e3e', 
                         marginBottom: '8px',
                         display: 'flex',
                         alignItems: 'center',

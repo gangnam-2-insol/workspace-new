@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiX, FiCheck, FiAlertCircle, FiStar, FiTrendingUp, FiTrendingDown, FiFileText, FiMessageSquare, FiCode, FiBarChart2, FiEye } from 'react-icons/fi';
+import { FiX, FiCheck, FiAlertCircle, FiStar, FiTrendingUp, FiTrendingDown, FiFileText, FiMessageSquare, FiCode, FiBarChart2, FiEye, FiBriefcase } from 'react-icons/fi';
 
 const ModalOverlay = styled(motion.div)`
   position: fixed;
@@ -139,6 +139,88 @@ const ScoreValue = styled.div`
   opacity: 0.8;
 `;
 
+const JobPostingSection = styled.div`
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 20px;
+  margin: 24px 0;
+  border-left: 4px solid #007bff;
+`;
+
+const JobPostingHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+`;
+
+const JobPostingTitle = styled.h3`
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+`;
+
+const JobPostingInfo = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+  margin-top: 12px;
+`;
+
+const JobPostingItem = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+`;
+
+const JobPostingLabel = styled.span`
+  font-size: 12px;
+  color: #666;
+  font-weight: 500;
+`;
+
+const JobPostingValue = styled.span`
+  font-size: 14px;
+  color: #333;
+  font-weight: 500;
+`;
+
+const DocumentSection = styled.div`
+  margin: 32px 0;
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 20px;
+  border-left: 4px solid #28a745;
+`;
+
+const DocumentHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+`;
+
+const DocumentTitle = styled.h3`
+  font-size: 18px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+`;
+
+const DocumentContent = styled.div`
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #e9ecef;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #333;
+  white-space: pre-wrap;
+`;
+
 const AnalysisSection = styled.div`
   margin: 32px 0;
 `;
@@ -240,6 +322,31 @@ const StatusIcon = styled.div`
 
 const DetailedAnalysisModal = ({ isOpen, onClose, applicantData }) => {
   const [showJson, setShowJson] = useState(false);
+  const [jobPostingInfo, setJobPostingInfo] = useState(null);
+
+  // 채용공고 정보 설정
+  useEffect(() => {
+    if (applicantData && applicantData.job_posting_info) {
+      // 백엔드에서 이미 가져온 채용공고 정보 사용
+      setJobPostingInfo(applicantData.job_posting_info);
+    } else if (applicantData && applicantData.job_posting_id) {
+      // 백엔드에서 가져오지 못한 경우 직접 API 호출
+      const fetchJobPostingInfo = async () => {
+        try {
+          const response = await fetch(`/api/job-postings/${applicantData.job_posting_id}`);
+          if (response.ok) {
+            const jobPosting = await response.json();
+            setJobPostingInfo(jobPosting);
+          } else {
+            console.log('채용공고 정보를 찾을 수 없습니다:', applicantData.job_posting_id);
+          }
+        } catch (error) {
+          console.error('채용공고 정보 가져오기 실패:', error);
+        }
+      };
+      fetchJobPostingInfo();
+    }
+  }, [isOpen, applicantData]);
 
   if (!isOpen || !applicantData) return null;
 
@@ -247,27 +354,27 @@ const DetailedAnalysisModal = ({ isOpen, onClose, applicantData }) => {
   const analysisData = applicantData.analysis_result || applicantData.analysis || {};
   const resumeAnalysis = analysisData.resume_analysis || {};
   const coverLetterAnalysis = analysisData.cover_letter_analysis || {};
-  
+
   // 전체 점수 계산
   const calculateOverallScore = () => {
     const allScores = [];
-    
+
     // 이력서 분석 점수들
     Object.values(resumeAnalysis).forEach(item => {
       if (item && typeof item === 'object' && 'score' in item) {
         allScores.push(item.score);
       }
     });
-    
+
     // 자기소개서 분석 점수들
     Object.values(coverLetterAnalysis).forEach(item => {
       if (item && typeof item === 'object' && 'score' in item) {
         allScores.push(item.score);
       }
     });
-    
+
     if (allScores.length === 0) return 8; // 기본값
-    
+
     const average = allScores.reduce((sum, score) => sum + score, 0) / allScores.length;
     return Math.round(average * 10) / 10; // 소수점 첫째자리까지
   };
@@ -353,6 +460,38 @@ const DetailedAnalysisModal = ({ isOpen, onClose, applicantData }) => {
             </Header>
 
             <Content>
+              {/* 지원공고 정보 */}
+              {jobPostingInfo && (
+                <JobPostingSection>
+                  <JobPostingHeader>
+                    <FiBriefcase size={18} color="#007bff" />
+                    <JobPostingTitle>지원공고 정보</JobPostingTitle>
+                  </JobPostingHeader>
+                  <JobPostingInfo>
+                    <JobPostingItem>
+                      <JobPostingLabel>공고 제목</JobPostingLabel>
+                      <JobPostingValue>{jobPostingInfo.title || '제목 없음'}</JobPostingValue>
+                    </JobPostingItem>
+                    <JobPostingItem>
+                      <JobPostingLabel>회사명</JobPostingLabel>
+                      <JobPostingValue>{jobPostingInfo.company || '회사명 없음'}</JobPostingValue>
+                    </JobPostingItem>
+                    <JobPostingItem>
+                      <JobPostingLabel>근무지</JobPostingLabel>
+                      <JobPostingValue>{jobPostingInfo.location || '근무지 없음'}</JobPostingValue>
+                    </JobPostingItem>
+                    <JobPostingItem>
+                      <JobPostingLabel>공고 상태</JobPostingLabel>
+                      <JobPostingValue>
+                        {jobPostingInfo.status === 'published' ? '모집중' :
+                         jobPostingInfo.status === 'closed' ? '마감' :
+                         jobPostingInfo.status === 'draft' ? '임시저장' : '기타'}
+                      </JobPostingValue>
+                    </JobPostingItem>
+                  </JobPostingInfo>
+                </JobPostingSection>
+              )}
+
               {/* 전체 평가 점수 */}
               <OverallScore>
                 <ScoreCircle>{overallScore}</ScoreCircle>
@@ -362,6 +501,32 @@ const DetailedAnalysisModal = ({ isOpen, onClose, applicantData }) => {
                 </ScoreInfo>
               </OverallScore>
 
+              {/* 자소서 내용 */}
+              {applicantData.cover_letter_content && (
+                <DocumentSection>
+                  <DocumentHeader>
+                    <FiFileText size={18} color="#28a745" />
+                    <DocumentTitle>자기소개서 내용</DocumentTitle>
+                  </DocumentHeader>
+                  <DocumentContent>
+                    {applicantData.cover_letter_content}
+                  </DocumentContent>
+                </DocumentSection>
+              )}
+
+              {/* 이력서 내용 */}
+              {applicantData.resume_content && (
+                <DocumentSection>
+                  <DocumentHeader>
+                    <FiFileText size={18} color="#007bff" />
+                    <DocumentTitle>이력서 내용</DocumentTitle>
+                  </DocumentHeader>
+                  <DocumentContent>
+                    {applicantData.resume_content}
+                  </DocumentContent>
+                </DocumentSection>
+              )}
+
               {/* 이력서 분석 */}
               {Object.keys(resumeAnalysis).length > 0 && (
                 <AnalysisSection>
@@ -369,10 +534,10 @@ const DetailedAnalysisModal = ({ isOpen, onClose, applicantData }) => {
                   <AnalysisGrid>
                     {Object.entries(resumeAnalysis).map(([key, item]) => {
                       if (!item || typeof item !== 'object' || !('score' in item)) return null;
-                      
+
                       const { status, icon } = getScoreStatus(item.score);
                       const label = getResumeAnalysisLabel(key);
-                      
+
                       return (
                         <AnalysisItem key={key} className={status}>
                           <ItemHeader>
@@ -402,10 +567,10 @@ const DetailedAnalysisModal = ({ isOpen, onClose, applicantData }) => {
                   <AnalysisGrid>
                     {Object.entries(coverLetterAnalysis).map(([key, item]) => {
                       if (!item || typeof item !== 'object' || !('score' in item)) return null;
-                      
+
                       const { status, icon } = getScoreStatus(item.score);
                       const label = getCoverLetterAnalysisLabel(key);
-                      
+
                       return (
                         <AnalysisItem key={key} className={status}>
                           <ItemHeader>
