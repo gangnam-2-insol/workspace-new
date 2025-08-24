@@ -32,9 +32,11 @@ import DetailedAnalysisModal from '../components/DetailedAnalysisModal';
 import ResumeModal from '../components/ResumeModal';
 import CoverLetterSummary from '../components/CoverLetterSummary';
 import CoverLetterAnalysis from '../components/CoverLetterAnalysis';
+import CoverLetterAnalysisModal from '../components/CoverLetterAnalysisModal';
 import GithubSummaryPanel from './PortfolioSummary/GithubSummaryPanel';
 import PortfolioSummaryPanel from './PortfolioSummary/PortfolioSummaryPanel';
 import jobPostingApi from '../services/jobPostingApi';
+import CoverLetterAnalysisApi from '../services/coverLetterAnalysisApi';
 
 // 평균 점수 계산 함수
 const calculateAverageScore = (analysisData) => {
@@ -2880,6 +2882,11 @@ const ApplicantManagement = () => {
   const [previewDocument, setPreviewDocument] = useState(null);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
+  // 자소서 분석 모달 상태
+  const [isCoverLetterAnalysisModalOpen, setIsCoverLetterAnalysisModalOpen] = useState(false);
+  const [selectedCoverLetterData, setSelectedCoverLetterData] = useState(null);
+  const [selectedApplicantForCoverLetter, setSelectedApplicantForCoverLetter] = useState(null);
+
   // 키워드 랭킹 관련 상태 추가
   const [isCalculatingRanking, setIsCalculatingRanking] = useState(false);
   const [rankingResults, setRankingResults] = useState(null);
@@ -3861,6 +3868,51 @@ const ApplicantManagement = () => {
     setSelectedResumeApplicant(null);
   };
 
+  // 자소서 분석 모달 관련 함수들
+  const handleCoverLetterAnalysisModalOpen = async (applicant) => {
+    setSelectedApplicantForCoverLetter(applicant);
+    setIsCoverLetterAnalysisModalOpen(true);
+
+    try {
+      // 지원자의 자소서 데이터를 API에서 가져오기
+      const applicantId = applicant._id || applicant.id;
+      const coverLetterData = await CoverLetterAnalysisApi.getApplicantCoverLetter(applicantId);
+
+      if (coverLetterData && coverLetterData.success) {
+        setSelectedCoverLetterData(coverLetterData.data?.cover_letter_analysis || coverLetterData.data?.analysis_result?.cover_letter_analysis);
+      } else {
+        // API에서 데이터를 가져올 수 없는 경우 기존 데이터 사용
+        setSelectedCoverLetterData(applicant.cover_letter_analysis || applicant.analysis_result?.cover_letter_analysis);
+      }
+    } catch (error) {
+      console.error('자소서 데이터 로드 오류:', error);
+      // 에러 발생 시 기존 데이터 사용
+      setSelectedCoverLetterData(applicant.cover_letter_analysis || applicant.analysis_result?.cover_letter_analysis);
+    }
+  };
+
+  const handleCoverLetterAnalysisModalClose = () => {
+    setIsCoverLetterAnalysisModalOpen(false);
+    setSelectedCoverLetterData(null);
+    setSelectedApplicantForCoverLetter(null);
+  };
+
+  // 자소서 분석 수행 함수
+  const handlePerformCoverLetterAnalysis = async (applicantId, analysisRequest = {}) => {
+    try {
+      const result = await CoverLetterAnalysisApi.analyzeApplicantCoverLetter(applicantId, analysisRequest);
+      if (result && result.success) {
+        setSelectedCoverLetterData(result.data?.cover_letter_analysis || result.data?.analysis_result?.cover_letter_analysis);
+        return result;
+      } else {
+        throw new Error(result?.message || '자소서 분석에 실패했습니다.');
+      }
+    } catch (error) {
+      console.error('자소서 분석 오류:', error);
+      throw error;
+    }
+  };
+
   const handleDocumentClick = async (type, applicant) => {
     console.log('문서 클릭:', type, applicant);
 
@@ -3897,6 +3949,24 @@ const ApplicantManagement = () => {
           if (coverLetterResponse.ok) {
             documentData = await coverLetterResponse.json();
             console.log('✅ 자소서 데이터 로드 완료:', documentData);
+
+            // 자소서 분석 수행
+            try {
+              const analysisResponse = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/cover-letter/analysis`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' }
+              });
+
+              if (analysisResponse.ok) {
+                const analysisData = await analysisResponse.json();
+                documentData.analysis = analysisData.analysis || analysisData;
+                console.log('✅ 자소서 분석 완료:', analysisData);
+              } else {
+                console.error('❌ 자소서 분석 실패:', analysisResponse.status);
+              }
+            } catch (analysisError) {
+              console.error('❌ 자소서 분석 오류:', analysisError);
+            }
           } else {
             console.error('❌ 자소서 데이터 로드 실패:', coverLetterResponse.status);
           }
@@ -5667,6 +5737,20 @@ const ApplicantManagement = () => {
                   <FiMessageSquare size={16} />
                   자소서
                 </DocumentButton>
+                <DocumentButton
+                  onClick={() => handleCoverLetterAnalysisModalOpen(selectedApplicant)}
+                  style={{ backgroundColor: '#667eea' }}
+                >
+                  <FiBarChart2 size={16} />
+                  자소서 분석
+                </DocumentButton>
+                <DocumentButton
+                  onClick={() => setShowDetailedAnalysis(true)}
+                  style={{ backgroundColor: '#764ba2' }}
+                >
+                  <FiStar size={16} />
+                  통합 분석
+                </DocumentButton>
                 <DocumentButton onClick={() => handleDocumentClick('portfolio', selectedApplicant)}>
                   <FiCode size={16} />
                   포트폴리오
@@ -5950,6 +6034,18 @@ const ApplicantManagement = () => {
                         </DocumentCard>
                       </DocumentGrid>
                     </DocumentSection>
+
+                    {/* 자소서 원본 내용 */}
+                    {documentModal.documentData?.extracted_text && (
+                      <DocumentSection>
+                        <DocumentSectionTitle>자소서 내용</DocumentSectionTitle>
+                        <DocumentCard>
+                          <DocumentCardText style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+                            {documentModal.documentData.extracted_text}
+                          </DocumentCardText>
+                        </DocumentCard>
+                      </DocumentSection>
+                    )}
                   </>
                 )}
 
@@ -6000,16 +6096,28 @@ const ApplicantManagement = () => {
 
                 {documentModal.type === 'coverLetter' && !documentModal.isOriginal && (
                   <>
-                    {/* 자소서 분석 결과 섹션 - 유사도 체크 결과 위에 배치 */}
+                    {/* 자소서 원본 내용 섹션 */}
+                    {documentModal.documentData?.extracted_text && (
+                      <DocumentSection>
+                        <DocumentSectionTitle>자소서 내용</DocumentSectionTitle>
+                        <DocumentCard>
+                          <DocumentCardText style={{ whiteSpace: 'pre-wrap', lineHeight: '1.6' }}>
+                            {documentModal.documentData.extracted_text}
+                          </DocumentCardText>
+                        </DocumentCard>
+                      </DocumentSection>
+                    )}
+
+                    {/* 자소서 분석 결과 섹션 */}
                     <DocumentSection>
                       <DocumentSectionTitle>자소서 분석 결과</DocumentSectionTitle>
                       <CoverLetterAnalysis
-                        analysisData={{
-                          technical_suitability: documentModal.documentData?.analysis?.technical_suitability || 75,
-                          job_understanding: documentModal.documentData?.analysis?.job_understanding || 80,
-                          growth_potential: documentModal.documentData?.analysis?.growth_potential || 85,
-                          teamwork_communication: documentModal.documentData?.analysis?.teamwork_communication || 70,
-                          motivation_company_fit: documentModal.documentData?.analysis?.motivation_company_fit || 90
+                        analysisData={documentModal.documentData?.analysis || {
+                          technical_suitability: { score: 75, feedback: '기술적합성에 대한 분석이 필요합니다.' },
+                          job_understanding: { score: 80, feedback: '직무이해도에 대한 분석이 필요합니다.' },
+                          growth_potential: { score: 85, feedback: '성장가능성에 대한 분석이 필요합니다.' },
+                          teamwork_communication: { score: 70, feedback: '팀워크 및 커뮤니케이션에 대한 분석이 필요합니다.' },
+                          motivation_company_fit: { score: 90, feedback: '지원동기/회사 가치관 부합도에 대한 분석이 필요합니다.' }
                         }}
                       />
                     </DocumentSection>
@@ -6654,11 +6762,12 @@ const ApplicantManagement = () => {
       <DetailedAnalysisModal
         isOpen={showDetailedAnalysis}
         onClose={() => setShowDetailedAnalysis(false)}
-        applicantData={{
+        analysisData={{
           ...selectedApplicant,
           analysis_result: analysisResult,
           analysisScore: selectedApplicant?.analysisScore
         }}
+        applicantName={selectedApplicant?.name || '지원자'}
       />
 
       {/* 새로운 이력서 모달 */}
@@ -6670,6 +6779,16 @@ const ApplicantManagement = () => {
           handleResumeModalClose();
           // 요약보기 로직 추가
         }}
+      />
+
+      {/* 자소서 분석 모달 */}
+      <CoverLetterAnalysisModal
+        isOpen={isCoverLetterAnalysisModalOpen}
+        onClose={handleCoverLetterAnalysisModalClose}
+        analysisData={selectedCoverLetterData}
+        applicantName={selectedApplicantForCoverLetter?.name || '지원자'}
+        onPerformAnalysis={handlePerformCoverLetterAnalysis}
+        applicantId={selectedApplicantForCoverLetter?._id || selectedApplicantForCoverLetter?.id}
       />
 
       {/* 문서 미리보기 모달 */}
