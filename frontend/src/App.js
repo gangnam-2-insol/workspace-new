@@ -16,7 +16,8 @@ const CoverLetterValidation = React.lazy(() => import('./pages/CoverLetterValida
 const TalentRecommendation = React.lazy(() => import('./pages/TalentRecommendation/TalentRecommendation'));
 const UserManagement = React.lazy(() => import('./pages/UserManagement/UserManagement'));
 const Settings = React.lazy(() => import('./pages/Settings/Settings'));
-const TestGithubSummary = React.lazy(() => import('./pages/PortfolioSummary/TestGithubSummary'));
+const SampleDataManagement = React.lazy(() => import('./pages/SampleDataManagement/SampleDataManagement'));
+const TestGithubSummary = React.lazy(() => import('./pages/TestGithubSummary'));
 const PDFOCRPage = React.lazy(() => import('./pages/PDFOCRPage/PDFOCRPage'));
 
 
@@ -173,6 +174,7 @@ function App() {
             <Route path="/talent" element={<TalentRecommendation />} />
             <Route path="/users" element={<UserManagement />} />
             <Route path="/settings" element={<Settings />} />
+            <Route path="/sample-data" element={<SampleDataManagement />} />
             <Route path="/github-test" element={<TestGithubSummary />} />
             <Route path="/pdf-ocr" element={<PDFOCRPage />} />
             <Route path="*" element={<div style={{ padding: '20px', textAlign: 'center' }}>페이지를 찾을 수 없습니다.</div>} />

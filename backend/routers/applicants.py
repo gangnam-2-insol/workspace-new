@@ -1,17 +1,18 @@
-from fastapi import APIRouter, HTTPException, Depends, Query
-from typing import Optional, List, Dict, Any
-from models.applicant import Applicant, ApplicantCreate
-from services.mongo_service import MongoService
-from similarity_service import SimilarityService
-from embedding_service import EmbeddingService
-from vector_service import VectorService
 import os
+from typing import Any, Dict, List, Optional
+
+from embedding_service import EmbeddingService
+from fastapi import APIRouter, Depends, HTTPException, Query
+from models.applicant import Applicant, ApplicantCreate
+from services_mj.mongo_service import MongoService
+from similarity_service import SimilarityService
+from vector_service import VectorService
 
 router = APIRouter(prefix="/api/applicants", tags=["applicants"])
 
 # MongoDB 서비스 의존성
 def get_mongo_service():
-    mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
+    mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/hireme")
     return MongoService(mongo_uri)
 
 # SimilarityService 의존성
@@ -19,7 +20,7 @@ def get_similarity_service():
     # 환경 변수에서 API 키 로드
     pinecone_api_key = os.getenv("PINECONE_API_KEY", "dummy-key")
     pinecone_index_name = os.getenv("PINECONE_INDEX_NAME", "resume-vectors")
-    
+
     embedding_service = EmbeddingService()
     vector_service = VectorService(
         api_key=pinecone_api_key,
@@ -60,9 +61,35 @@ async def get_all_applicants(
 ):
     """모든 지원자 목록을 조회합니다."""
     try:
+        print(f"🔍 API 라우터 호출 - MongoDB URI: {mongo_service.mongo_uri}")
+        print(f"🔍 API 라우터 호출 - skip: {skip}, limit: {limit}, status: {status}, position: {position}")
+
         result = await mongo_service.get_all_applicants(skip=skip, limit=limit, status=status, position=position)
+
+        # 디버깅: 응답 데이터 확인
+        if result.get('applicants') and len(result['applicants']) > 0:
+            first_applicant = result['applicants'][0]
+            print(f"🔍 API 응답 - 첫 번째 지원자 필드들: {list(first_applicant.keys())}")
+            print(f"🔍 API 응답 - email 존재: {'email' in first_applicant}")
+            print(f"🔍 API 응답 - phone 존재: {'phone' in first_applicant}")
+            if 'email' in first_applicant:
+                print(f"🔍 API 응답 - email 값: {first_applicant['email']}")
+            if 'phone' in first_applicant:
+                print(f"🔍 API 응답 - phone 값: {first_applicant['phone']}")
+
+        # 응답 데이터에 email과 phone 필드가 포함되도록 보장
+        if result.get('applicants'):
+            for applicant in result['applicants']:
+                # MongoDB에서 직접 email과 phone 필드 가져오기
+                if '_id' in applicant:
+                    db_applicant = await mongo_service.db.applicants.find_one({'_id': applicant['_id']})
+                    if db_applicant:
+                        applicant['email'] = db_applicant.get('email')
+                        applicant['phone'] = db_applicant.get('phone')
+
         return result
     except Exception as e:
+        print(f"❌ API 라우터 오류: {e}")
         raise HTTPException(status_code=500, detail=f"지원자 목록 조회 실패: {str(e)}")
 
 @router.put("/{applicant_id}/status")
@@ -76,11 +103,11 @@ async def update_applicant_status(
         new_status = status_data.get("status")
         if not new_status:
             raise HTTPException(status_code=400, detail="상태 값이 필요합니다")
-        
+
         result = await mongo_service.update_applicant_status(applicant_id, new_status)
         if not result:
             raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
-        
+
         return {"message": "상태가 성공적으로 업데이트되었습니다", "status": new_status}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"상태 업데이트 실패: {str(e)}")
@@ -104,16 +131,16 @@ async def search_similar_applicants(
     """유사한 지원자를 검색합니다."""
     try:
         print(f"[INFO] 유사 지원자 검색 요청 - 기준: {search_criteria}")
-        
+
         # 검색 기준 추출
         position = search_criteria.get("position", "")
         skills = search_criteria.get("skills", "")
         experience = search_criteria.get("experience", "")
         department = search_criteria.get("department", "")
-        
+
         # 유사도 서비스 초기화
         similarity_service = get_similarity_service()
-        
+
         # 유사 지원자 검색 수행
         similar_applicants = await similarity_service.find_similar_applicants(
             position=position,
@@ -122,62 +149,19 @@ async def search_similar_applicants(
             department=department,
             limit=10
         )
-        
+
         return {
             "status": "success",
             "applicants": similar_applicants,
             "search_criteria": search_criteria,
             "message": f"{len(similar_applicants)}명의 유사한 지원자를 발견했습니다."
         }
-    
+
     except Exception as e:
         print(f"[ERROR] 유사 지원자 검색 실패: {str(e)}")
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"유사 지원자 검색 중 오류가 발생했습니다: {str(e)}"
-        )
-
-@router.post("/{applicant_id}/recommendations")
-async def get_talent_recommendations(
-    applicant_id: str,
-    mongo_service: MongoService = Depends(get_mongo_service)
-):
-    """지원자 기반 유사 인재 추천"""
-    try:
-        print(f"[INFO] 유사 인재 추천 요청 - applicant_id: {applicant_id}")
-        
-        # 1. 지원자 존재 확인
-        from bson import ObjectId
-        applicant_collection = mongo_service.db.applicants
-        target_applicant = await applicant_collection.find_one({"_id": ObjectId(applicant_id)})
-        
-        if not target_applicant:
-            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
-        
-        # 2. 유사도 서비스 초기화
-        similarity_service = get_similarity_service()
-        
-        # 3. 유사 인재 추천 수행
-        result = await similarity_service.search_similar_applicants_hybrid(
-            target_applicant=target_applicant,
-            applicants_collection=applicant_collection,
-            limit=5
-        )
-        
-        return {
-            "status": "success",
-            "applicant_id": applicant_id,
-            "recommendations": result,
-            "message": "유사 인재 추천 완료"
-        }
-    
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"[ERROR] 유사 인재 추천 실패: {str(e)}")
-        raise HTTPException(
-            status_code=500, 
-            detail=f"유사 인재 추천 중 오류가 발생했습니다: {str(e)}"
         )
 
 @router.post("/{applicant_id}/cover-letter")
@@ -188,37 +172,37 @@ async def check_cover_letter_plagiarism(
     """자소서 표절체크 (호환성을 위한 별명 엔드포인트)"""
     try:
         print(f"[INFO] 자소서 표절체크 요청 - applicant_id: {applicant_id}")
-        
+
         # 1. 지원자 존재 확인
         applicant = mongo_service.get_applicant(applicant_id)
         if not applicant:
             raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
-        
+
         # 2. 자소서 존재 확인
         if not applicant.get("cover_letter"):
             raise HTTPException(status_code=404, detail="자소서가 없습니다")
-        
+
         # 3. 유사도 서비스 초기화
         similarity_service = get_similarity_service()
-        
+
         # 4. 자소서 표절체크 수행
         result = similarity_service.check_coverletter_similarity(
             applicant_id=applicant_id,
             cover_letter_text=applicant["cover_letter"]
         )
-        
+
         return {
             "status": "success",
             "applicant_id": applicant_id,
             "plagiarism_result": result,
             "message": "자소서 표절체크 완료"
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
         print(f"[ERROR] 자소서 표절체크 실패: {str(e)}")
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"자소서 표절체크 중 오류가 발생했습니다: {str(e)}"
         )

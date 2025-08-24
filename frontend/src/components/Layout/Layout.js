@@ -12,6 +12,7 @@ import {
 	FiUsers, 
 	FiUser, 
 	FiSettings,
+	FiDatabase,
 	FiMenu,
 	FiX,
 	FiBell,
@@ -186,15 +187,16 @@ const navigationItems = [
   {
     title: '시스템',
     items: [
-      { name: '설정 및 지원', path: '/settings', icon: FiSettings }
+      { name: '설정 및 지원', path: '/settings', icon: FiSettings },
+      { name: '샘플 데이터 관리', path: '/sample-data', icon: FiDatabase }
     ]
   },
-  // {
-  //   title: '개발 도구',
-  //   items: [
-  //     { name: 'GitHub 테스트', path: '/github-test', icon: FiGitBranch }
-  //   ]
-  // }
+  {
+    title: '개발 도구',
+    items: [
+      { name: 'GitHub 테스트', path: '/github-test', icon: FiGitBranch }
+    ]
+  }
 ];
 
 const Layout = ({ children }) => {

@@ -22,6 +22,7 @@ from routers.integrated_ocr import router as integrated_ocr_router
 from routers.pdf_ocr import router as pdf_ocr_router
 from routers.job_posting import router as job_posting_router
 from routers.applicants import router as applicants_router
+from routers.sample_data import router as sample_data_router
 from chatbot.chatbot.routers.chatbot_router import router as chatbot_router
 
 # 모듈화된 라우터 추가
@@ -109,6 +110,7 @@ app.include_router(integrated_ocr_router, prefix="/api/integrated-ocr", tags=["i
 app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
 app.include_router(job_posting_router, tags=["job-postings"])
 app.include_router(applicants_router, tags=["applicants"])
+app.include_router(sample_data_router, tags=["sample-data"])
 app.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
 
 # 모듈화된 라우터 등록
@@ -442,6 +444,8 @@ async def get_applicants(skip: int = 0, limit: int = 20):
             del applicant["_id"]
             if "resume_id" in applicant and applicant["resume_id"]:
                 applicant["resume_id"] = str(applicant["resume_id"])
+            if "job_posting_id" in applicant and applicant["job_posting_id"]:
+                applicant["job_posting_id"] = str(applicant["job_posting_id"])
 
         return {
             "applicants": [Resume(**applicant) for applicant in applicants],
@@ -472,6 +476,8 @@ async def get_applicant(applicant_id: str):
         del applicant["_id"]
         if "resume_id" in applicant and applicant["resume_id"]:
             applicant["resume_id"] = str(applicant["resume_id"])
+        if "job_posting_id" in applicant and applicant["job_posting_id"]:
+            applicant["job_posting_id"] = str(applicant["job_posting_id"])
         
         return Resume(**applicant)
     except HTTPException:

@@ -3,7 +3,7 @@
     "provider": "openai",
     "apiBase": "http://localhost:11434/v1",
     "apiKey": "dummy-key",
-    "model": "gpt-oss-20b"
+    "model": "gpt-oss:20b"
   },
   "fine_tuning_rules": {
     "progress_display": "모든 파인튜닝 작업에 대해 진행 과정을 실시간으로 보여줄 것",

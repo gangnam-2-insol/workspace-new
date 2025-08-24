@@ -50,9 +50,14 @@ class KeywordSearchService:
         
         # Elasticsearch 연결 초기화
         if ELASTICSEARCH_AVAILABLE:
-            self._initialize_elasticsearch()
+            try:
+                self._initialize_elasticsearch()
+                self.logger.info("Elasticsearch 연결 성공")
+            except Exception as e:
+                self.logger.warning(f"Elasticsearch 연결 실패: {str(e)}. 키워드 검색 기능이 비활성화됩니다.")
+                self.es_client = None
         else:
-            self.logger.error("Elasticsearch가 설치되지 않았습니다. pip install elasticsearch로 설치하세요.")
+            self.logger.warning("Elasticsearch가 설치되지 않았습니다. 키워드 검색 기능이 비활성화됩니다.")
         
         # Kiwi 형태소 분석기 초기화
         if KIWI_AVAILABLE:
@@ -128,7 +133,7 @@ class KeywordSearchService:
             self._create_index_mapping()
             
         except Exception as e:
-            self.logger.warning(f"Elasticsearch 연결 실패: {e}. 키워드 검색 기능이 비활성화됩니다.")
+            self.logger.warning(f"Elasticsearch 연결 실패: {e}. 키워드 검색 기능이 비활성화됩니다. 다른 검색 기능은 정상 작동합니다.")
             self.es_client = None
     
     def _create_index_mapping(self):
@@ -560,11 +565,8 @@ class KeywordSearchService:
             Dict[str, Any]: 검색 결과
         """
         if not self.es_client:
-            return {
-                "success": False,
-                "message": "Elasticsearch 연결이 없습니다.",
-                "results": []
-            }
+            self.logger.warning("Elasticsearch 연결이 없습니다. MongoDB fallback 검색을 사용합니다.")
+            return await self._fallback_search(query, collection, limit)
         
         try:
             if not query or not query.strip():
@@ -885,3 +887,62 @@ class KeywordSearchService:
         except Exception as e:
             self.logger.error(f"키워드 제안 실패: {str(e)}")
             return []
+    
+    async def _fallback_search(self, query: str, collection: Collection, limit: int = 10) -> Dict[str, Any]:
+        """
+        Elasticsearch 연결 실패 시 MongoDB fallback 검색
+        
+        Args:
+            query (str): 검색 쿼리
+            collection (Collection): MongoDB 컬렉션
+            limit (int): 반환할 최대 결과 수
+            
+        Returns:
+            Dict[str, Any]: 검색 결과
+        """
+        try:
+            if not query or not query.strip():
+                return {
+                    "success": False,
+                    "message": "검색어를 입력해주세요.",
+                    "results": []
+                }
+            
+            self.logger.info(f"MongoDB fallback 검색 시작: '{query}'")
+            
+            # MongoDB 텍스트 검색 쿼리
+            search_query = {
+                "$text": {
+                    "$search": query
+                }
+            }
+            
+            # MongoDB에서 검색 실행
+            cursor = collection.find(search_query).limit(limit)
+            results = []
+            
+            for doc in cursor:
+                results.append({
+                    "resume_id": str(doc.get("_id")),
+                    "name": doc.get("name", ""),
+                    "position": doc.get("position", ""),
+                    "department": doc.get("department", ""),
+                    "skills": doc.get("skills", []),
+                    "score": doc.get("score", 0)
+                })
+            
+            return {
+                "success": True,
+                "message": f"MongoDB fallback 검색 완료 (Elasticsearch 연결 없음)",
+                "results": results,
+                "total": len(results),
+                "search_type": "fallback"
+            }
+            
+        except Exception as e:
+            self.logger.error(f"MongoDB fallback 검색 실패: {str(e)}")
+            return {
+                "success": False,
+                "message": f"검색 중 오류가 발생했습니다: {str(e)}",
+                "results": []
+            }

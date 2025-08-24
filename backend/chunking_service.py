@@ -166,6 +166,68 @@ class ChunkingService:
             "file_metadata": document.get("file_metadata", {}),
             "source_collection": f"{doc_type}s" if doc_type != "portfolio" else "portfolios"
         }
+        chunks = []
+        resume_id = str(resume.get("_id", ""))
+        
+        print(f"[ChunkingService] === 이력서 청킹 시작 ===")
+        print(f"[ChunkingService] 이력서 ID: {resume_id}")
+        
+        # 기본 메타데이터 생성
+        base_metadata = self._create_base_metadata(resume, "resume")
+        
+        # 1. 요약/개요 청크 (summary)
+        summary_chunk = self._create_summary_chunk(resume, resume_id, base_metadata)
+        if summary_chunk:
+            chunks.append(summary_chunk)
+        
+        # 2. 키워드 청크
+        keywords_chunk = self._create_keywords_chunk(resume, resume_id, base_metadata)
+        if keywords_chunk:
+            chunks.append(keywords_chunk)
+        
+        # 3. 추출된 텍스트 청크
+        text_chunks = self._create_extracted_text_chunks(resume, resume_id, base_metadata)
+        chunks.extend(text_chunks)
+        
+        # 4. 기본 정보 청크
+        basic_info_chunk = self._create_basic_info_chunk(resume, resume_id, base_metadata)
+        if basic_info_chunk:
+            chunks.append(basic_info_chunk)
+        
+        # 5. 기술스택/스킬 청크 (skills) - 전체적으로 하나의 청크
+        skills_chunk = self._create_skills_chunk(resume, resume_id)
+        if skills_chunk:
+            chunks.append(skills_chunk)
+        
+        # 6. 경험 항목별 청크 (experience items)
+        experience_chunks = self._create_experience_chunks(resume, resume_id)
+        chunks.extend(experience_chunks)
+        
+        # 7. 교육 항목별 청크 (education items)
+        education_chunks = self._create_education_chunks(resume, resume_id)
+        chunks.extend(education_chunks)
+        
+        # 8. 성장배경 청크
+        growth_chunk = self._create_growth_background_chunk(resume, resume_id)
+        if growth_chunk:
+            chunks.append(growth_chunk)
+        
+        # 9. 지원동기 청크
+        motivation_chunk = self._create_motivation_chunk(resume, resume_id)
+        if motivation_chunk:
+            chunks.append(motivation_chunk)
+        
+        # 10. 경력사항 청크
+        career_chunk = self._create_career_history_chunk(resume, resume_id)
+        if career_chunk:
+            chunks.append(career_chunk)
+        
+        print(f"[ChunkingService] 총 {len(chunks)}개 청크 생성 완료")
+        for i, chunk in enumerate(chunks):
+            print(f"[ChunkingService] 청크 {i+1}: {chunk['chunk_type']} - {len(chunk['text'])} 문자")
+        print(f"[ChunkingService] === 이력서 청킹 완료 ===")
+        
+        return chunks
     
     def _create_summary_chunk(self, document: Dict[str, Any], document_id: str, base_metadata: Dict[str, Any] = None) -> Dict[str, Any]:
         """요약 청크 생성 - summary 필드 사용"""
@@ -443,28 +505,21 @@ class ChunkingService:
                     info_parts.append(f"{key}: {str(value)}")
                     processed_fields[key] = str(value)
             
-            # info_parts가 비어있어도 기본 청크 생성
             if info_parts:
-                text_content = " ".join(info_parts)
-            else:
-                # 빈 정보라도 기본 텍스트로 청크 생성
-                text_content = f"기본정보: {document.get('name', '이름미상')}"
-                processed_fields = {"fallback": "기본 정보 없음"}
-            
-            metadata = {
-                "section": "basic_info",
-                "original_field": "basic_info",
-                "info_fields": list(processed_fields.keys()),
-                "processed_data": processed_fields,
-                **(base_metadata or {})
-            }
-            return {
-                "document_id": document_id,
-                "chunk_id": f"{document_id}_basic_info",
-                "chunk_type": "basic_info",
-                "text": text_content,
-                "metadata": metadata
-            }
+                metadata = {
+                    "section": "basic_info",
+                    "original_field": "basic_info",
+                    "info_fields": list(processed_fields.keys()),
+                    "processed_data": processed_fields,
+                    **(base_metadata or {})
+                }
+                return {
+                    "document_id": document_id,
+                    "chunk_id": f"{document_id}_basic_info",
+                    "chunk_type": "basic_info",
+                    "text": " ".join(info_parts),
+                    "metadata": metadata
+                }
         return None
     
     def _create_cover_letter_specific_chunks(self, document: Dict[str, Any], document_id: str, base_metadata: Dict[str, Any]) -> List[Dict[str, Any]]:

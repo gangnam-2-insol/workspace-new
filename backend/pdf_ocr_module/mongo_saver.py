@@ -254,21 +254,7 @@ class MongoSaver:
                     "growthBackground": applicant_dict.get("growthBackground", "") or applicant.get("growthBackground", ""),
                     "motivation": applicant_dict.get("motivation", "") or applicant.get("motivation", ""),
                     "careerHistory": applicant_dict.get("careerHistory", "") or applicant.get("careerHistory", ""),
-                    "resume_text": ocr_result.get("extracted_text", ""),
-                    # ChunkingService에 필요한 필드들 추가
-                    "extracted_text": ocr_result.get("extracted_text", ""),
-                    "summary": ocr_result.get("summary", "") or "이력서 분석 결과",
-                    "keywords": ocr_result.get("keywords", []) or ["이력서"],
-                    "basic_info": ocr_result.get("basic_info", {}) or {
-                        "names": [applicant_dict.get("name", "")] if applicant_dict.get("name") else [],
-                        "emails": [applicant_dict.get("email", "")] if applicant_dict.get("email") else [],
-                        "phones": [applicant_dict.get("phone", "")] if applicant_dict.get("phone") else [],
-                        "name": applicant_dict.get("name", ""),
-                        "email": applicant_dict.get("email", ""),
-                        "phone": applicant_dict.get("phone", "")
-                    },
-                    "structured_data": ocr_result.get("structured_data", {}),
-                    "vision_analysis": ocr_result.get("vision_analysis", {})
+                    "resume_text": ocr_result.get("extracted_text", "")
                 }
                 
                 chunks = self.chunking_service.chunk_resume_text(resume_for_chunking)
@@ -373,16 +359,9 @@ class MongoSaver:
                     "applicant_id": applicant["id"],
                     "document_type": "cover_letter",
                     "extracted_text": ocr_result.get("extracted_text", ""),
-                    "summary": ocr_result.get("summary", "") or "자기소개서 분석 결과",
-                    "keywords": ocr_result.get("keywords", []) or ["자기소개서"],
-                    "basic_info": ocr_result.get("basic_info", {}) or {
-                        "names": [applicant.get("name", "")] if applicant.get("name") else [],
-                        "emails": [applicant.get("email", "")] if applicant.get("email") else [],
-                        "phones": [applicant.get("phone", "")] if applicant.get("phone") else [],
-                        "name": applicant.get("name", ""),
-                        "email": applicant.get("email", ""),
-                        "phone": applicant.get("phone", "")
-                    },
+                    "summary": ocr_result.get("summary", ""),
+                    "keywords": ocr_result.get("keywords", []),
+                    "basic_info": basic_info,
                     "file_metadata": file_metadata,
                     "careerHistory": cover_letter_fields["careerHistory"],
                     "growthBackground": cover_letter_fields["growthBackground"],
@@ -496,16 +475,9 @@ class MongoSaver:
                     "applicant_id": applicant["id"],
                     "document_type": "portfolio",
                     "extracted_text": ocr_result.get("extracted_text", ""),
-                    "summary": ocr_result.get("summary", "") or "포트폴리오 분석 결과",
-                    "keywords": ocr_result.get("keywords", []) or ["포트폴리오"],
-                    "basic_info": ocr_result.get("basic_info", {}) or {
-                        "names": [applicant.get("name", "")] if applicant.get("name") else [],
-                        "emails": [applicant.get("email", "")] if applicant.get("email") else [],
-                        "phones": [applicant.get("phone", "")] if applicant.get("phone") else [],
-                        "name": applicant.get("name", ""),
-                        "email": applicant.get("email", ""),
-                        "phone": applicant.get("phone", "")
-                    },
+                    "summary": ocr_result.get("summary", ""),
+                    "keywords": ocr_result.get("keywords", []),
+                    "basic_info": basic_info,
                     "file_metadata": file_metadata,
                     "items": [portfolio_item],
                     "analysis_score": 0.0,
