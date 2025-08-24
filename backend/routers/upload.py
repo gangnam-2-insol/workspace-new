@@ -1,17 +1,20 @@
-from fastapi import APIRouter, HTTPException, UploadFile, File, Form
-from fastapi.responses import JSONResponse
-from typing import Optional, Dict, List
-import os
-from dotenv import load_dotenv
-import tempfile
 import asyncio
-import aiofiles
-from datetime import datetime
+import os
 import sys
+import tempfile
+from datetime import datetime
+from typing import Dict, List, Optional
+
+import aiofiles
+from dotenv import load_dotenv
+from fastapi import APIRouter, File, Form, HTTPException, UploadFile
+from fastapi.responses import JSONResponse
+
 sys.path.append('..')  # 상위 디렉토리의 openai_service.py 사용
-from openai_service import OpenAIService
-from pydantic import BaseModel
 import re
+
+from modules.core.services.openai_service import OpenAIService
+from pydantic import BaseModel
 
 # .env 파일 로드 (현재 디렉토리에서)
 load_dotenv('.env')
@@ -207,12 +210,12 @@ def validate_file(file: UploadFile) -> bool:
     """파일 유효성 검사"""
     if not file.filename:
         return False
-    
+
     # 파일 확장자 확인
     file_ext = os.path.splitext(file.filename.lower())[1]
     if file_ext not in ALLOWED_EXTENSIONS:
         return False
-    
+
     return True
 
 async def extract_text_from_file(file_path: str, file_ext: str) -> str:
@@ -276,80 +279,80 @@ async def generate_summary_with_openai(content: str, summary_type: str = "genera
     """OpenAI API를 사용하여 요약 생성"""
     if not openai_service:
         raise HTTPException(status_code=500, detail="OpenAI API 키가 설정되지 않았습니다.")
-    
+
     start_time = datetime.now()
-    
+
     try:
         # 요약 타입에 따른 프롬프트 설정
         prompts = {
             "general": f"""
             다음 이력서/자기소개서 내용을 간결하게 요약해주세요:
-            
+
             {content}
-            
+
             요약 시 다음 사항을 포함해주세요:
             1. 주요 경력 및 경험
             2. 핵심 기술 스택
             3. 주요 성과나 프로젝트
             4. 지원 직무와의 연관성
-            
+
             요약은 200자 이내로 작성해주세요.
             """,
             "technical": f"""
             다음 내용에서 기술적 역량을 중심으로 요약해주세요:
-            
+
             {content}
-            
+
             다음 항목들을 포함해주세요:
             1. 프로그래밍 언어 및 프레임워크
             2. 개발 도구 및 플랫폼
             3. 프로젝트 경험
             4. 기술적 성과
-            
+
             요약은 150자 이내로 작성해주세요.
             """,
             "experience": f"""
             다음 내용에서 경력과 경험을 중심으로 요약해주세요:
-            
+
             {content}
-            
+
             다음 항목들을 포함해주세요:
             1. 총 경력 기간
             2. 주요 회사 및 직무
             3. 핵심 프로젝트 경험
             4. 주요 성과 및 업적
-            
+
             요약은 150자 이내로 작성해주세요.
             """
         }
-        
+
         prompt = prompts.get(summary_type, prompts["general"])
-        
+
         # OpenAI API 호출
         summary = await openai_service.generate_response(prompt)
-        
+
         # 키워드 추출을 위한 추가 요청
         keyword_prompt = f"""
         다음 요약에서 핵심 키워드 5개를 추출해주세요:
-        
+
         {summary}
-        
+
         키워드는 쉼표로 구분하여 나열해주세요.
         """
-        
+
         keyword_response = await openai_service.generate_response(keyword_prompt)
-        
+
         keywords = [kw.strip() for kw in keyword_response.split(',')]
-        
+
         processing_time = (datetime.now() - start_time).total_seconds()
-        
+
         return SummaryResponse(
             summary=summary,
             keywords=keywords[:5],  # 최대 5개 키워드
             confidence_score=0.85,  # 기본 신뢰도 점수
             processing_time=processing_time
         )
-        
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"요약 생성 실패: {str(e)}")
 
@@ -363,39 +366,39 @@ async def upload_and_summarize_file(
         # 파일 유효성 검사
         if not validate_file(file):
             raise HTTPException(
-                status_code=400, 
+                status_code=400,
                 detail="지원하지 않는 파일 형식입니다. PDF, DOC, DOCX, TXT 파일만 업로드 가능합니다."
             )
-        
+
         # 파일 크기 확인
         file_size = 0
         content = await file.read()
         file_size = len(content)
-        
+
         if file_size > MAX_FILE_SIZE:
             raise HTTPException(
                 status_code=400,
                 detail="파일 크기가 너무 큽니다. 최대 50MB까지 업로드 가능합니다."
             )
-        
+
         # 임시 파일로 저장
         file_ext = os.path.splitext(file.filename.lower())[1]
         with tempfile.NamedTemporaryFile(delete=False, suffix=file_ext) as temp_file:
             temp_file.write(content)
             temp_file_path = temp_file.name
-        
+
         try:
             # 파일에서 텍스트 추출
             extracted_text = await extract_text_from_file(temp_file_path, file_ext)
-            
+
             # 텍스트 추출 실패 시에도 더미 분석으로 계속 진행 (사용자 경험 개선)
             if not extracted_text or str(extracted_text).strip() == "":
                 print("⚠️ 텍스트 추출 실패: 빈 내용 감지 → 더미 분석으로 계속 진행합니다.")
                 extracted_text = "[EMPTY_CONTENT] 텍스트 추출 실패 (스캔 PDF/이미지 기반 문서일 수 있습니다.)"
-            
+
             # OpenAI API로 요약 생성
             summary_result = await generate_summary_with_openai(extracted_text, summary_type)
-            
+
             return {
                 "filename": file.filename,
                 "file_size": file_size,
@@ -406,12 +409,12 @@ async def upload_and_summarize_file(
                 "processing_time": summary_result.processing_time,
                 "summary_type": summary_type
             }
-            
+
         finally:
             # 임시 파일 삭제
             if os.path.exists(temp_file_path):
                 os.unlink(temp_file_path)
-                
+
     except HTTPException:
         raise
     except Exception as e:
@@ -423,14 +426,14 @@ async def summarize_text(request: SummaryRequest):
     try:
         if not request.content or len(request.content.strip()) == 0:
             raise HTTPException(status_code=400, detail="요약할 텍스트가 없습니다.")
-        
+
         summary_result = await generate_summary_with_openai(
-            request.content, 
+            request.content,
             request.summary_type
         )
-        
+
         return summary_result
-        
+
     except HTTPException:
         raise
     except Exception as e:
