@@ -6,6 +6,28 @@ const Container = styled.div`
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+
+  @keyframes fadeInScale {
+    0% {
+      opacity: 0;
+      transform: scale(0.8);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes fadeInPoint {
+    0% {
+      opacity: 0;
+      transform: scale(0);
+    }
+    100% {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
 `;
 
 const Title = styled.h2`
@@ -17,15 +39,10 @@ const Title = styled.h2`
 `;
 
 const AnalysisGrid = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
   margin-bottom: 32px;
-
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-    gap: 24px;
-  }
 `;
 
 const RadarChartSection = styled.div`
@@ -40,12 +57,13 @@ const RadarChartTitle = styled.h3`
   color: #333;
   margin-bottom: 20px;
   text-align: center;
+  animation: fadeInScale 1s ease-out forwards;
 `;
 
 const RadarChartContainer = styled.div`
   position: relative;
-  width: 350px;
-  height: 350px;
+  width: 450px;
+  height: 450px;
   margin: 0 auto;
 `;
 
@@ -165,10 +183,11 @@ const BarItem = styled.div`
 `;
 
 const BarLabel = styled.div`
-  min-width: 120px;
+  width: 200px;
   font-size: 14px;
   font-weight: 500;
   color: #333;
+  flex-shrink: 0;
 `;
 
 const BarContainer = styled.div`
@@ -200,11 +219,12 @@ const BarValue = styled.div`
 `;
 
 const BarScore = styled.div`
-  min-width: 60px;
+  width: 60px;
   text-align: right;
   font-size: 14px;
   font-weight: 600;
   color: #333;
+  flex-shrink: 0;
 `;
 
 const DetailSection = styled.div`
@@ -225,7 +245,7 @@ const DetailTitle = styled.h4`
 `;
 
 const DetailContent = styled.div`
-  font-size: 14px;
+  font-size: 16px;
   color: #666;
   line-height: 1.6;
 `;
@@ -249,23 +269,61 @@ const CoverLetterAnalysis = ({ analysisData }) => {
     { key: 'motivation_company_fit', label: '지원동기/회사 가치관 부합도', color: '#ef4444' }
   ];
 
-  // 분석 데이터가 없을 경우 기본값 설정
-  const defaultData = {
-    technical_suitability: 75,
-    job_understanding: 80,
-    growth_potential: 85,
-    teamwork_communication: 70,
-    motivation_company_fit: 90
+  // 새로운 분석 데이터 구조에서 점수 추출
+  const extractScores = (analysisData) => {
+    if (!analysisData || typeof analysisData !== 'object') {
+      return {
+        technical_suitability: 75,
+        job_understanding: 80,
+        growth_potential: 85,
+        teamwork_communication: 70,
+        motivation_company_fit: 90
+      };
+    }
+
+    // 새로운 구조: analysisData.technical_suitability.score 형태
+    if (analysisData.technical_suitability && typeof analysisData.technical_suitability.score === 'number') {
+      return {
+        technical_suitability: analysisData.technical_suitability.score,
+        job_understanding: analysisData.job_understanding?.score || 80,
+        growth_potential: analysisData.growth_potential?.score || 85,
+        teamwork_communication: analysisData.teamwork_communication?.score || 70,
+        motivation_company_fit: analysisData.motivation_company_fit?.score || 90
+      };
+    }
+
+    // 기존 구조: analysisData.technical_suitability 형태
+    return {
+      technical_suitability: analysisData.technical_suitability || 75,
+      job_understanding: analysisData.job_understanding || 80,
+      growth_potential: analysisData.growth_potential || 85,
+      teamwork_communication: analysisData.teamwork_communication || 70,
+      motivation_company_fit: analysisData.motivation_company_fit || 90
+    };
   };
 
-  // analysisData가 비어있거나 null인 경우 기본값 사용
-  const data = analysisData && Object.keys(analysisData).length > 0 ? analysisData : defaultData;
+  // 분석 데이터에서 점수 추출
+  const data = extractScores(analysisData);
+
+  // 전체 점수 계산
+  const overallScore = analysisData?.overall_score ||
+    Math.round(Object.values(data).reduce((sum, score) => sum + score, 0) / Object.values(data).length);
+
+  // 분석 요약 가져오기
+  const summary = analysisData?.summary || '자소서 분석 결과를 확인할 수 있습니다.';
+
+  // 개선 권장사항 가져오기 (최대 2개로 제한)
+  const allRecommendations = analysisData?.recommendations || ['지속적인 성장과 발전을 권장합니다.'];
+  const recommendations = allRecommendations.slice(0, 2);
+
+  // 분석 시간 가져오기
+  const analyzedAt = analysisData?.analyzed_at ? new Date(analysisData.analyzed_at).toLocaleString('ko-KR') : null;
 
   // 레이더차트 데이터 생성
   const generateRadarData = () => {
-    const centerX = 175;
-    const centerY = 175;
-    const radius = 90;  // 차트 반지름을 줄여서 공간 확보
+    const centerX = 225;
+    const centerY = 225;
+    const radius = 120;  // 차트 반지름을 키워서 더 큰 차트 생성
     const points = [];
     const labels = [];
 
@@ -273,26 +331,26 @@ const CoverLetterAnalysis = ({ analysisData }) => {
       const angle = (index * 2 * Math.PI) / categories.length;
       const score = data[category.key] || 0;
       const normalizedRadius = (score / 100) * radius;
-      
+
       const x = centerX + normalizedRadius * Math.cos(angle);
       const y = centerY + normalizedRadius * Math.sin(angle);
-      
+
       points.push(`${x},${y}`);
-      
+
       // 라벨 위치 (바깥쪽) - 직무이해도만 차트에 좀 붙여서 간격 조정
       let labelRadius;
       if (index === 2) {  // 직무이해도 (3번째 항목, 인덱스 2)
-        labelRadius = radius + 25;  // 간격을 25로 줄여서 차트에 붙임
+        labelRadius = radius + 35;  // 간격을 35로 조정
       } else {
-        labelRadius = radius + 50;  // 다른 항목들은 기존 간격 유지
+        labelRadius = radius + 70;  // 다른 항목들은 간격 조정
       }
-      
+
       const labelX = centerX + labelRadius * Math.cos(angle);
       const labelY = centerY + labelRadius * Math.sin(angle);
-      
+
       // 텍스트를 줄바꿔서 처리
       const textLines = category.label.split(' ');
-      
+
       labels.push({
         x: labelX,
         y: labelY,
@@ -310,7 +368,7 @@ const CoverLetterAnalysis = ({ analysisData }) => {
   const generateGridCircles = () => {
     const circles = [];
     for (let i = 1; i <= 5; i++) {
-      const radius = (90 / 5) * i;
+      const radius = (120 / 5) * i;
       circles.push(radius);
     }
     return circles;
@@ -321,31 +379,11 @@ const CoverLetterAnalysis = ({ analysisData }) => {
     const axes = [];
     categories.forEach((_, index) => {
       const angle = (index * 2 * Math.PI) / categories.length;
-      const x = 175 + 90 * Math.cos(angle);
-      const y = 175 + 90 * Math.sin(angle);
-      axes.push({ x1: 175, y1: 175, x2: x, y2: y });
+      const x = 225 + 120 * Math.cos(angle);
+      const y = 225 + 120 * Math.sin(angle);
+      axes.push({ x1: 225, y1: 225, x2: x, y2: y });
     });
     return axes;
-  };
-
-  // 총평 생성
-  const generateSummary = () => {
-    const scores = Object.values(data);
-    const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
-    
-    let summary = '';
-    
-    if (average >= 90) {
-      summary = '전체적으로 매우 우수한 자소서입니다. 모든 항목에서 높은 점수를 받았으며, 특히 지원동기와 회사 가치관 부합도가 뛰어납니다. 기술적 역량과 직무 이해도도 충분히 검증되었습니다.';
-    } else if (average >= 80) {
-      summary = '전반적으로 양호한 자소서입니다. 기술적 적합성과 성장 가능성이 돋보이며, 팀워크와 커뮤니케이션 능력도 인정받을 수 있습니다. 다만 일부 항목에서 개선의 여지가 있습니다.';
-    } else if (average >= 70) {
-      summary = '기본적인 요구사항은 충족하는 자소서입니다. 직무 이해도와 지원동기는 적절하나, 기술적 역량이나 구체적인 성과 제시에서 보완이 필요합니다.';
-    } else {
-      summary = '전반적으로 보완이 필요한 자소서입니다. 기본적인 내용은 포함되어 있으나, 구체적인 경험이나 성과 제시가 부족하며, 직무에 대한 이해도 향상이 필요합니다.';
-    }
-    
-    return summary;
   };
 
   // 카테고리 클릭 핸들러
@@ -357,9 +395,12 @@ const CoverLetterAnalysis = ({ analysisData }) => {
   const gridCircles = generateGridCircles();
   const axes = generateAxes();
 
-  // 분석 데이터가 없거나 모든 값이 0인 경우 체크
-  const hasValidData = analysisData && 
-    Object.values(analysisData).some(value => value > 0);
+  // 분석 데이터가 있는지 체크
+  const hasValidData = analysisData &&
+    typeof analysisData === 'object' &&
+    Object.keys(analysisData).length > 0 &&
+    analysisData.technical_suitability &&
+    analysisData.technical_suitability.score;
 
   if (!hasValidData) {
     return (
@@ -375,13 +416,13 @@ const CoverLetterAnalysis = ({ analysisData }) => {
   return (
     <Container>
       <Title>자소서 분석 결과</Title>
-      
+
       <AnalysisGrid>
         {/* 레이더차트 섹션 */}
         <RadarChartSection>
           <RadarChartTitle>종합 평가</RadarChartTitle>
           <RadarChartContainer>
-            <RadarChart viewBox="0 0 350 350">
+            <RadarChart viewBox="0 0 450 450">
               {/* 그리드 원 */}
               {gridCircles.map((radius, index) => (
                 <RadarGrid key={index}>
@@ -393,7 +434,7 @@ const CoverLetterAnalysis = ({ analysisData }) => {
                   />
                 </RadarGrid>
               ))}
-               
+
               {/* 축 */}
               {axes.map((axis, index) => (
                 <RadarAxis key={index}>
@@ -405,12 +446,17 @@ const CoverLetterAnalysis = ({ analysisData }) => {
                   />
                 </RadarAxis>
               ))}
-               
+
               {/* 데이터 영역 */}
               <RadarData>
-                <polygon points={points.join(' ')} />
+                <polygon
+                  points={points.join(' ')}
+                  style={{
+                    animation: 'fadeInScale 1.5s ease-out forwards'
+                  }}
+                />
               </RadarData>
-               
+
               {/* 데이터 포인트 */}
               <RadarData>
                 {points.map((point, index) => {
@@ -422,12 +468,16 @@ const CoverLetterAnalysis = ({ analysisData }) => {
                         cy={y}
                         r="4"
                         fill="#3b82f6"
+                        style={{
+                          animation: `fadeInPoint 0.8s ease-out ${index * 0.1}s forwards`,
+                          opacity: 0
+                        }}
                       />
                     </RadarPoint>
                   );
                 })}
               </RadarData>
-               
+
               {/* 라벨 */}
               {labels.map((label, index) => (
                 <g key={index}>
@@ -466,18 +516,99 @@ const CoverLetterAnalysis = ({ analysisData }) => {
           </RadarChartContainer>
         </RadarChartSection>
 
-        {/* 총평 섹션 */}
-        <div>
+
+      </AnalysisGrid>
+
+      {/* 하단 총평 및 개선 권장사항 섹션 */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: '1fr 1fr',
+        gap: '32px',
+        marginBottom: '32px',
+        width: '100%'
+      }}>
+        {/* 전체적인 총평 */}
+        <SummarySection>
+          <SummaryTitle>
+            📊 전체적인 총평
+          </SummaryTitle>
+          <SummaryText>
+            {summary}
+          </SummaryText>
+          {overallScore && (
+            <div style={{ marginTop: '16px', textAlign: 'center' }}>
+              <div style={{
+                fontSize: '24px',
+                fontWeight: '700',
+                color: '#3b82f6',
+                marginBottom: '8px'
+              }}>
+                종합 점수: {overallScore}점
+              </div>
+              {analyzedAt && (
+                <div style={{
+                  fontSize: '12px',
+                  color: '#666',
+                  fontStyle: 'italic'
+                }}>
+                  분석 시간: {analyzedAt}
+                </div>
+              )}
+            </div>
+          )}
+        </SummarySection>
+
+        {/* 개선 권장사항 */}
+        {recommendations && recommendations.length > 0 && (
           <SummarySection>
             <SummaryTitle>
-              📊 전체적인 총평
+              💡 개선 권장사항
             </SummaryTitle>
-            <SummaryText>
-              {generateSummary()}
-            </SummaryText>
+            <div style={{
+              padding: '16px',
+              backgroundColor: '#f8f9fa',
+              borderRadius: '12px',
+              border: '2px solid #e9ecef',
+              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+            }}>
+              <div style={{
+                display: 'flex',
+                flexDirection: 'column',
+                gap: '16px'
+              }}>
+                {recommendations.map((recommendation, index) => (
+                  <div key={index} style={{
+                    padding: '16px',
+                    backgroundColor: 'white',
+                    borderRadius: '8px',
+                    borderLeft: '4px solid #3b82f6',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                    transition: 'all 0.2s ease'
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      alignItems: 'flex-start',
+                      gap: '12px'
+                    }}>
+                      <span style={{
+                        color: '#3b82f6',
+                        fontWeight: '700',
+                        fontSize: '16px',
+                        lineHeight: '1.4'
+                      }}>•</span>
+                      <span style={{
+                        color: '#333',
+                        lineHeight: '1.6',
+                        fontSize: '14px'
+                      }}>{recommendation}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
           </SummarySection>
-        </div>
-      </AnalysisGrid>
+        )}
+      </div>
 
       {/* 막대 그래프 섹션 */}
       <BarChartSection>
@@ -492,7 +623,7 @@ const CoverLetterAnalysis = ({ analysisData }) => {
               <BarLabel>{category.label}</BarLabel>
               <BarContainer>
                 <BarFill
-                  style={{ 
+                  style={{
                     width: `${data[category.key] || 0}%`
                   }}
                   color={category.color}
@@ -514,7 +645,7 @@ const CoverLetterAnalysis = ({ analysisData }) => {
           <DetailContent>
             {selectedCategory === 'technical_suitability' && (
               <div>
-                <h5 style={{ fontWeight: '600', marginBottom: '12px', color: '#333' }}>평가 기준</h5>
+                <h5 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>평가 기준</h5>
                 <ul style={{ marginBottom: '16px', paddingLeft: '20px', lineHeight: '1.6' }}>
                   <li>지원자의 기술 스택이 직무 요구사항과 얼마나 일치하는지 평가</li>
                   <li>프로젝트에서 해당 기술을 사용한 경험과 깊이를 고려</li>
@@ -524,17 +655,28 @@ const CoverLetterAnalysis = ({ analysisData }) => {
                   <strong>현재 점수: {data[selectedCategory]}점</strong>
                 </p>
                 <p style={{ lineHeight: '1.6' }}>
-                  {data[selectedCategory] >= 80 ? 
-                    '기술적 역량이 매우 우수합니다. 직무 요구사항과 높은 일치도를 보이며, 프로젝트 경험과 기술적 창의성이 충분히 검증되었습니다.' :
-                   data[selectedCategory] >= 60 ? 
-                    '기본적인 기술 역량은 갖추고 있으나, 직무 요구사항과의 일치도나 프로젝트 경험에서 보완이 필요합니다.' :
-                    '기술적 역량 향상이 필요합니다. 직무 요구사항에 맞는 기술 스택 학습과 프로젝트 경험 축적이 필요합니다.'}
+                  {analysisData?.technical_suitability?.feedback ||
+                    (data[selectedCategory] >= 80 ?
+                      '기술적 역량이 매우 우수합니다. 직무 요구사항과 높은 일치도를 보이며, 프로젝트 경험과 기술적 창의성이 충분히 검증되었습니다.' :
+                     data[selectedCategory] >= 60 ?
+                      '기본적인 기술 역량은 갖추고 있으나, 직무 요구사항과의 일치도나 프로젝트 경험에서 보완이 필요합니다.' :
+                      '기술적 역량 향상이 필요합니다. 직무 요구사항에 맞는 기술 스택 학습과 프로젝트 경험 축적이 필요합니다.')}
                 </p>
+                {analysisData?.technical_suitability?.details && (
+                  <div style={{ marginTop: '16px', padding: '12px 0', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                    <h6 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>상세 분석</h6>
+                    <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
+                      <li>기술 스택 일치도: {analysisData.technical_suitability.details.tech_stack_alignment}점</li>
+                      <li>프로젝트 경험: {analysisData.technical_suitability.details.project_experience}점</li>
+                      <li>문제 해결 창의성: {analysisData.technical_suitability.details.problem_solving_creativity}점</li>
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
             {selectedCategory === 'job_understanding' && (
               <div>
-                <h5 style={{ fontWeight: '600', marginBottom: '12px', color: '#333' }}>평가 기준</h5>
+                <h5 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>평가 기준</h5>
                 <ul style={{ marginBottom: '16px', paddingLeft: '20px', lineHeight: '1.6' }}>
                   <li>지원자가 해당 직무의 주요 역할과 책임을 명확히 이해하고 있는지 평가</li>
                   <li>직무 관련 산업 트렌드 또는 회사 제품/서비스 이해 여부 반영</li>
@@ -543,17 +685,28 @@ const CoverLetterAnalysis = ({ analysisData }) => {
                   <strong>현재 점수: {data[selectedCategory]}점</strong>
                 </p>
                 <p style={{ lineHeight: '1.6' }}>
-                  {data[selectedCategory] >= 80 ? 
-                    '직무에 대한 이해도가 매우 높습니다. 주요 역할과 책임을 명확히 파악하고 있으며, 산업 트렌드와 회사 제품/서비스에 대한 깊은 이해를 보여줍니다.' :
-                   data[selectedCategory] >= 60 ? 
-                    '직무의 기본적인 내용은 파악하고 있으나, 세부적인 역할과 책임, 산업 트렌드에 대한 이해를 더욱 심화할 필요가 있습니다.' :
-                    '직무에 대한 기본적인 이해부터 시작해야 합니다. 주요 역할과 책임, 산업 동향에 대한 학습이 필요합니다.'}
+                  {analysisData?.job_understanding?.feedback ||
+                    (data[selectedCategory] >= 80 ?
+                      '직무에 대한 이해도가 매우 높습니다. 주요 역할과 책임을 명확히 파악하고 있으며, 산업 트렌드와 회사 제품/서비스에 대한 깊은 이해를 보여줍니다.' :
+                     data[selectedCategory] >= 60 ?
+                      '직무의 기본적인 내용은 파악하고 있으나, 세부적인 역할과 책임, 산업 트렌드에 대한 이해를 더욱 심화할 필요가 있습니다.' :
+                      '직무에 대한 기본적인 이해부터 시작해야 합니다. 주요 역할과 책임, 산업 동향에 대한 학습이 필요합니다.')}
                 </p>
+                {analysisData?.job_understanding?.details && (
+                  <div style={{ marginTop: '16px', padding: '12px 0', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                    <h6 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>상세 분석</h6>
+                    <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
+                      <li>역할 명확성: {analysisData.job_understanding.details.role_clarity}점</li>
+                      <li>산업 트렌드: {analysisData.job_understanding.details.industry_trends}점</li>
+                      <li>회사 제품 이해: {analysisData.job_understanding.details.company_products}점</li>
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
             {selectedCategory === 'growth_potential' && (
               <div>
-                <h5 style={{ fontWeight: '600', marginBottom: '12px', color: '#333' }}>평가 기준</h5>
+                <h5 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>평가 기준</h5>
                 <ul style={{ marginBottom: '16px', paddingLeft: '20px', lineHeight: '1.6' }}>
                   <li>새로운 기술을 학습한 경험</li>
                   <li>변화에 빠르게 적응한 사례</li>
@@ -563,17 +716,28 @@ const CoverLetterAnalysis = ({ analysisData }) => {
                   <strong>현재 점수: {data[selectedCategory]}점</strong>
                 </p>
                 <p style={{ lineHeight: '1.6' }}>
-                  {data[selectedCategory] >= 80 ? 
-                    '성장 가능성이 매우 높습니다. 새로운 기술 학습 경험이 풍부하고, 변화에 빠르게 적응하며, 자기 주도적 학습 태도가 뛰어납니다.' :
-                   data[selectedCategory] >= 60 ? 
-                    '기본적인 성장 가능성은 있으나, 새로운 기술 학습이나 변화 적응에서 더 적극적인 태도가 필요합니다.' :
-                    '성장을 위한 적극적인 노력이 필요합니다. 새로운 기술 학습과 변화 적응, 자기 주도적 학습 태도 개발이 필요합니다.'}
+                  {analysisData?.growth_potential?.feedback ||
+                    (data[selectedCategory] >= 80 ?
+                      '성장 가능성이 매우 높습니다. 새로운 기술 학습 경험이 풍부하고, 변화에 빠르게 적응하며, 자기 주도적 학습 태도가 뛰어납니다.' :
+                     data[selectedCategory] >= 60 ?
+                      '기본적인 성장 가능성은 있으나, 새로운 기술 학습이나 변화 적응에서 더 적극적인 태도가 필요합니다.' :
+                      '성장을 위한 적극적인 노력이 필요합니다. 새로운 기술 학습과 변화 적응, 자기 주도적 학습 태도 개발이 필요합니다.')}
                 </p>
+                {analysisData?.growth_potential?.details && (
+                  <div style={{ marginTop: '16px', padding: '12px 0', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                    <h6 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>상세 분석</h6>
+                    <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
+                      <li>새 기술 학습: {analysisData.growth_potential.details.new_tech_learning}점</li>
+                      <li>적응력: {analysisData.growth_potential.details.adaptability}점</li>
+                      <li>자기 주도 학습: {analysisData.growth_potential.details.self_driven_learning}점</li>
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
             {selectedCategory === 'teamwork_communication' && (
               <div>
-                <h5 style={{ fontWeight: '600', marginBottom: '12px', color: '#333' }}>평가 기준</h5>
+                <h5 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>평가 기준</h5>
                 <ul style={{ marginBottom: '16px', paddingLeft: '20px', lineHeight: '1.6' }}>
                   <li>협업 경험</li>
                   <li>갈등 해결 과정</li>
@@ -583,17 +747,28 @@ const CoverLetterAnalysis = ({ analysisData }) => {
                   <strong>현재 점수: {data[selectedCategory]}점</strong>
                 </p>
                 <p style={{ lineHeight: '1.6' }}>
-                  {data[selectedCategory] >= 80 ? 
-                    '팀워크와 커뮤니케이션 능력이 매우 우수합니다. 풍부한 협업 경험과 갈등 해결 능력, 명확한 의사소통 능력을 보여줍니다.' :
-                   data[selectedCategory] >= 60 ? 
-                    '기본적인 협업 능력은 갖추고 있으나, 갈등 해결이나 의사소통에서 더 나은 방법을 학습할 필요가 있습니다.' :
-                    '팀워크와 커뮤니케이션 능력 향상이 필요합니다. 협업 경험 축적과 갈등 해결, 의사소통 능력 개발이 필요합니다.'}
+                  {analysisData?.teamwork_communication?.feedback ||
+                    (data[selectedCategory] >= 80 ?
+                      '팀워크와 커뮤니케이션 능력이 매우 우수합니다. 풍부한 협업 경험과 갈등 해결 능력, 명확한 의사소통 능력을 보여줍니다.' :
+                     data[selectedCategory] >= 60 ?
+                      '기본적인 협업 능력은 갖추고 있으나, 갈등 해결이나 의사소통에서 더 나은 방법을 학습할 필요가 있습니다.' :
+                      '팀워크와 커뮤니케이션 능력 향상이 필요합니다. 협업 경험 축적과 갈등 해결, 의사소통 능력 개발이 필요합니다.')}
                 </p>
+                {analysisData?.teamwork_communication?.details && (
+                  <div style={{ marginTop: '16px', padding: '12px 0', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                    <h6 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>상세 분석</h6>
+                    <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
+                      <li>협업 경험: {analysisData.teamwork_communication.details.collaboration_experience}점</li>
+                      <li>갈등 해결: {analysisData.teamwork_communication.details.conflict_resolution}점</li>
+                      <li>의사소통 명확성: {analysisData.teamwork_communication.details.communication_clarity}점</li>
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
             {selectedCategory === 'motivation_company_fit' && (
               <div>
-                <h5 style={{ fontWeight: '600', marginBottom: '12px', color: '#333' }}>평가 기준</h5>
+                <h5 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>평가 기준</h5>
                 <ul style={{ marginBottom: '16px', paddingLeft: '20px', lineHeight: '1.6' }}>
                   <li>지원 동기의 진정성</li>
                   <li>회사의 미션/비전과의 일치성</li>
@@ -603,12 +778,23 @@ const CoverLetterAnalysis = ({ analysisData }) => {
                   <strong>현재 점수: {data[selectedCategory]}점</strong>
                 </p>
                 <p style={{ lineHeight: '1.6' }}>
-                  {data[selectedCategory] >= 80 ? 
-                    '지원 동기가 매우 진정성 있고, 회사의 미션/비전과 높은 일치성을 보입니다. 장기적으로 회사에 크게 기여할 수 있는 잠재력을 가지고 있습니다.' :
-                   data[selectedCategory] >= 60 ? 
-                    '기본적인 지원 동기는 있으나, 회사의 미션/비전과의 일치성이나 장기적 기여 가능성에서 더 구체적인 비전이 필요합니다.' :
-                    '지원 동기와 회사 가치관 부합도 향상이 필요합니다. 회사의 미션/비전에 대한 이해와 장기적 기여 방향에 대한 명확한 비전이 필요합니다.'}
+                  {analysisData?.motivation_company_fit?.feedback ||
+                    (data[selectedCategory] >= 80 ?
+                      '지원 동기가 매우 진정성 있고, 회사의 미션/비전과 높은 일치성을 보입니다. 장기적으로 회사에 크게 기여할 수 있는 잠재력을 가지고 있습니다.' :
+                     data[selectedCategory] >= 60 ?
+                      '기본적인 지원 동기는 있으나, 회사의 미션/비전과의 일치성이나 장기적 기여 가능성에서 더 구체적인 비전이 필요합니다.' :
+                      '지원 동기와 회사 가치관 부합도 향상이 필요합니다. 회사의 미션/비전에 대한 이해와 장기적 기여 방향에 대한 명확한 비전이 필요합니다.')}
                 </p>
+                {analysisData?.motivation_company_fit?.details && (
+                  <div style={{ marginTop: '16px', padding: '12px 0', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                    <h6 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>상세 분석</h6>
+                    <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
+                      <li>동기 진정성: {analysisData.motivation_company_fit.details.motivation_authenticity}점</li>
+                      <li>미션/비전 일치: {analysisData.motivation_company_fit.details.mission_vision_alignment}점</li>
+                      <li>장기적 기여: {analysisData.motivation_company_fit.details.long_term_contribution}점</li>
+                    </ul>
+                  </div>
+                )}
               </div>
             )}
           </DetailContent>

@@ -1,38 +1,42 @@
-from fastapi import APIRouter, HTTPException, Depends
-from pydantic import BaseModel
-from typing import List, Optional, Dict, Any
 import json
 import logging
+import re
 import time
+import uuid
 from collections import defaultdict
 from datetime import datetime
-import uuid
-import re
+from typing import Any, Dict, List, Optional
+
+from bson import ObjectId
+from fastapi import APIRouter, Depends, HTTPException
+from pydantic import BaseModel
 
 # 기존 서비스들 import
 try:
-    from llm_service import LLMService
-    from services.mongo_service import MongoService
+    from modules.core.services.llm_service import LLMService
+    from modules.core.services.mongo_service import MongoService
 except ImportError:
-    from ..llm_service import LLMService
-    from ..services.mongo_service import MongoService
+    from modules.core.services.llm_service import LLMService
+    from modules.core.services.mongo_service import MongoService
 
 # 웹 자동화를 위한 추가 import
 import asyncio
-from selenium import webdriver
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from selenium.webdriver.common.action_chains import ActionChains
-from selenium.webdriver.common.keys import Keys
 import time
+
+from selenium import webdriver
+from selenium.webdriver.common.action_chains import ActionChains
+from selenium.webdriver.common.by import By
+from selenium.webdriver.common.keys import Keys
+from selenium.webdriver.support import expected_conditions as EC
+from selenium.webdriver.support.ui import WebDriverWait
+
 
 # 웹 자동화 클래스
 class WebAutomation:
     def __init__(self):
         self.driver = None
         self.base_url = "http://localhost:3001"  # 프론트엔드 URL
-        
+
     def init_driver(self):
         """웹 드라이버 초기화"""
         if not self.driver:
@@ -42,7 +46,7 @@ class WebAutomation:
             options.add_argument('--disable-dev-shm-usage')
             self.driver = webdriver.Chrome(options=options)
         return self.driver
-    
+
     async def navigate_to_page(self, page_path: str):
         """특정 페이지로 이동"""
         try:
@@ -53,46 +57,46 @@ class WebAutomation:
             return {"status": "success", "url": url}
         except Exception as e:
             return {"status": "error", "message": str(e)}
-    
+
     async def click_element(self, selector: str, selector_type: str = "css"):
         """요소 클릭"""
         try:
             driver = self.init_driver()
             wait = WebDriverWait(driver, 10)
-            
+
             if selector_type == "css":
                 element = wait.until(EC.element_to_be_clickable((By.CSS_SELECTOR, selector)))
             elif selector_type == "xpath":
                 element = wait.until(EC.element_to_be_clickable((By.XPATH, selector)))
             else:
                 element = wait.until(EC.element_to_be_clickable((By.ID, selector)))
-            
+
             element.click()
             await asyncio.sleep(1)
             return {"status": "success", "clicked": selector}
         except Exception as e:
             return {"status": "error", "message": str(e)}
-    
+
     async def input_text(self, selector: str, text: str, selector_type: str = "css"):
         """텍스트 입력"""
         try:
             driver = self.init_driver()
             wait = WebDriverWait(driver, 10)
-            
+
             if selector_type == "css":
                 element = wait.until(EC.presence_of_element_located((By.CSS_SELECTOR, selector)))
             elif selector_type == "xpath":
                 element = wait.until(EC.presence_of_element_located((By.XPATH, selector)))
             else:
                 element = wait.until(EC.presence_of_element_located((By.ID, selector)))
-            
+
             element.clear()
             element.send_keys(text)
             await asyncio.sleep(0.5)
             return {"status": "success", "input": text}
         except Exception as e:
             return {"status": "error", "message": str(e)}
-    
+
     async def get_page_content(self):
         """현재 페이지 내용 가져오기"""
         try:
@@ -105,7 +109,7 @@ class WebAutomation:
             }
         except Exception as e:
             return {"status": "error", "message": str(e)}
-    
+
     def close_driver(self):
         """드라이버 종료"""
         if self.driver:
@@ -119,14 +123,17 @@ class ToolExecutor:
             "github": self.github_tool,
             "mongodb": self.mongodb_tool,
             "search": self.search_tool,
-            "web_automation": self.web_automation_tool
+            "web_automation": self.web_automation_tool,
+            "job_posting": self.job_posting_tool,
+            "applicant": self.applicant_tool,
+            "mail": self.mail_tool
         }
         self.cache = {}
         self.error_stats = {}
         self.performance_stats = {}
         self.mongo_service = MongoService()
         self.web_automation = WebAutomation()
-    
+
     async def execute_async(self, tool_name, action, **params):
         """비동기 툴 실행"""
         try:
@@ -146,7 +153,7 @@ class ToolExecutor:
                 "status": "error",
                 "message": str(e)
             }
-    
+
     async def github_tool(self, action, **params):
         """GitHub 관련 툴"""
         if action == "get_user_info":
@@ -177,43 +184,44 @@ class ToolExecutor:
             }
         else:
             raise ValueError(f"알 수 없는 GitHub 액션: {action}")
-    
+
     async def mongodb_tool(self, action, **params):
         """MongoDB 관련 툴 - 실제 데이터베이스 연결"""
         try:
             if action == "find_documents":
                 collection = params.get("collection", "applicants")
                 query = params.get("query", {})
-                
+
                 # 채용공고 조회인 경우
                 if collection == "job_postings":
                     from datetime import datetime, timedelta
+
                     from bson import ObjectId
-                    
+
                     # 실제 데이터베이스에서 조회
                     filter_query = {}
-                    
+
                     # 오늘자 필터링
                     if query.get("today_only"):
                         today = datetime.now().replace(hour=0, minute=0, second=0, microsecond=0)
                         filter_query["created_at"] = {"$gte": today}
-                    
+
                     # 상태 필터링
                     if query.get("status"):
                         filter_query["status"] = query["status"]
-                    
+
                     # 실제 MongoDB 조회
                     cursor = self.mongo_service.db.job_postings.find(filter_query).sort("created_at", -1)
                     job_postings = await cursor.to_list(100)  # 최대 100개
-                    
+
                     # 결과 포맷팅
                     documents = []
                     for job in job_postings:
                         job["_id"] = str(job["_id"])
                         documents.append(job)
-                    
+
                     return {"documents": documents}
-                
+
                 # 지원자 조회인 경우
                 elif collection == "applicants":
                     result = await self.mongo_service.get_applicants(
@@ -221,24 +229,24 @@ class ToolExecutor:
                         limit=params.get("limit", 20)
                     )
                     return {"documents": result["applicants"]}
-                
+
                 # 기타 컬렉션
                 else:
                     cursor = self.mongo_service.db[collection].find(query)
                     documents = await cursor.to_list(100)
                     return {"documents": documents}
-                    
+
             elif action == "count_documents":
                 collection = params.get("collection", "applicants")
                 count = await self.mongo_service.db[collection].count_documents({})
                 return {"count": count}
-                
+
             else:
                 raise ValueError(f"알 수 없는 MongoDB 액션: {action}")
-                
+
         except Exception as e:
             return {"status": "error", "message": f"MongoDB 조회 실패: {str(e)}"}
-    
+
     async def search_tool(self, action, **params):
         """검색 관련 툴"""
         if action == "web_search":
@@ -257,60 +265,485 @@ class ToolExecutor:
             }
         else:
             raise ValueError(f"알 수 없는 검색 액션: {action}")
-    
+
     async def web_automation_tool(self, action, **params):
         """웹 자동화 관련 툴 - 실제 클릭/입력 액션 수행"""
         try:
             if action == "navigate":
                 page_path = params.get("page_path", "/")
                 return await self.web_automation.navigate_to_page(page_path)
-            
+
             elif action == "click":
                 selector = params.get("selector", "")
                 selector_type = params.get("selector_type", "css")
                 return await self.web_automation.click_element(selector, selector_type)
-            
+
             elif action == "input":
                 selector = params.get("selector", "")
                 text = params.get("text", "")
                 selector_type = params.get("selector_type", "css")
                 return await self.web_automation.input_text(selector, text, selector_type)
-            
+
             elif action == "get_content":
                 return await self.web_automation.get_page_content()
-            
+
             else:
                 raise ValueError(f"알 수 없는 웹 자동화 액션: {action}")
-                
+
         except Exception as e:
             return {"status": "error", "message": f"웹 자동화 실패: {str(e)}"}
-    
+
+    async def job_posting_tool(self, action, **params):
+        """채용공고 CRUD 툴"""
+        try:
+            logger.info(f"📝 [채용공고툴] 액션: {action}, 파라미터: {params}")
+
+            if action == "create":
+                # 채용공고 생성
+                job_data = params.get("job_data", {})
+                job_data["created_at"] = datetime.now()
+                job_data["updated_at"] = datetime.now()
+                job_data["status"] = "draft"
+                job_data["applicants"] = 0
+                job_data["views"] = 0
+
+                result = await self.mongo_service.db.job_postings.insert_one(job_data)
+                logger.info(f"✅ [채용공고툴] 생성 완료: {result.inserted_id}")
+                return {
+                    "job_id": str(result.inserted_id),
+                    "message": "채용공고가 성공적으로 생성되었습니다."
+                }
+
+            elif action == "read":
+                # 채용공고 조회
+                job_id = params.get("job_id")
+                if job_id:
+                    job = await self.mongo_service.db.job_postings.find_one({"_id": ObjectId(job_id)})
+                    if job:
+                        job["_id"] = str(job["_id"])
+                        logger.info(f"✅ [채용공고툴] 조회 완료: {job_id}")
+                        return {"job": job}
+                    else:
+                        logger.warning(f"⚠️ [채용공고툴] 채용공고 없음: {job_id}")
+                        return {"error": "채용공고를 찾을 수 없습니다."}
+                else:
+                    # 전체 목록 조회
+                    skip = params.get("skip", 0)
+                    limit = params.get("limit", 20)
+                    status = params.get("status")
+
+                    filter_query = {}
+                    if status:
+                        filter_query["status"] = status
+
+                    cursor = self.mongo_service.db.job_postings.find(filter_query).skip(skip).limit(limit)
+                    jobs = await cursor.to_list(limit)
+
+                    for job in jobs:
+                        job["_id"] = str(job["_id"])
+
+                    logger.info(f"✅ [채용공고툴] 목록 조회 완료: {len(jobs)}개")
+                    return {"jobs": jobs, "count": len(jobs)}
+
+            elif action == "update":
+                # 채용공고 수정
+                job_id = params.get("job_id")
+                update_data = params.get("update_data", {})
+                update_data["updated_at"] = datetime.now()
+
+                result = await self.mongo_service.db.job_postings.update_one(
+                    {"_id": ObjectId(job_id)},
+                    {"$set": update_data}
+                )
+
+                if result.modified_count > 0:
+                    logger.info(f"✅ [채용공고툴] 수정 완료: {job_id}")
+                    return {"message": "채용공고가 성공적으로 수정되었습니다."}
+                else:
+                    logger.warning(f"⚠️ [채용공고툴] 수정 실패: {job_id}")
+                    return {"error": "채용공고 수정에 실패했습니다."}
+
+            elif action == "delete":
+                # 채용공고 삭제
+                job_id = params.get("job_id")
+                result = await self.mongo_service.db.job_postings.delete_one({"_id": ObjectId(job_id)})
+
+                if result.deleted_count > 0:
+                    logger.info(f"✅ [채용공고툴] 삭제 완료: {job_id}")
+                    return {"message": "채용공고가 성공적으로 삭제되었습니다."}
+                else:
+                    logger.warning(f"⚠️ [채용공고툴] 삭제 실패: {job_id}")
+                    return {"error": "채용공고 삭제에 실패했습니다."}
+
+            elif action == "publish":
+                # 채용공고 발행
+                job_id = params.get("job_id")
+                result = await self.mongo_service.db.job_postings.update_one(
+                    {"_id": ObjectId(job_id)},
+                    {"$set": {"status": "published", "updated_at": datetime.now()}}
+                )
+
+                if result.modified_count > 0:
+                    logger.info(f"✅ [채용공고툴] 발행 완료: {job_id}")
+                    return {"message": "채용공고가 성공적으로 발행되었습니다."}
+                else:
+                    logger.warning(f"⚠️ [채용공고툴] 발행 실패: {job_id}")
+                    return {"error": "채용공고 발행에 실패했습니다."}
+
+            else:
+                logger.error(f"❌ [채용공고툴] 알 수 없는 액션: {action}")
+                raise ValueError(f"알 수 없는 채용공고 액션: {action}")
+
+        except Exception as e:
+            logger.error(f"❌ [채용공고툴] 처리 실패: {str(e)}")
+            return {"error": f"채용공고 처리 실패: {str(e)}"}
+
+    async def applicant_tool(self, action, **params):
+        """지원자 CRUD 툴"""
+        try:
+            logger.info(f"👥 [지원자툴] 액션: {action}, 파라미터: {params}")
+
+            if action == "create":
+                # 지원자 생성
+                applicant_data = params.get("applicant_data", {})
+                applicant_data["created_at"] = datetime.now()
+                applicant_data["status"] = "pending"
+
+                result = await self.mongo_service.db.applicants.insert_one(applicant_data)
+                logger.info(f"✅ [지원자툴] 생성 완료: {result.inserted_id}")
+                return {
+                    "applicant_id": str(result.inserted_id),
+                    "message": "지원자가 성공적으로 생성되었습니다."
+                }
+
+            elif action == "read":
+                # 지원자 조회
+                applicant_id = params.get("applicant_id")
+                if applicant_id:
+                    applicant = await self.mongo_service.db.applicants.find_one({"_id": ObjectId(applicant_id)})
+                    if applicant:
+                        applicant["_id"] = str(applicant["_id"])
+                        logger.info(f"✅ [지원자툴] 조회 완료: {applicant_id}")
+                        return {"applicant": applicant}
+                    else:
+                        logger.warning(f"⚠️ [지원자툴] 지원자 없음: {applicant_id}")
+                        return {"error": "지원자를 찾을 수 없습니다."}
+                else:
+                    # 전체 목록 조회
+                    skip = params.get("skip", 0)
+                    limit = params.get("limit", 20)
+                    status = params.get("status")
+                    position = params.get("position")
+
+                    filter_query = {}
+                    if status:
+                        filter_query["status"] = status
+                    if position:
+                        filter_query["position"] = {"$regex": position, "$options": "i"}
+
+                    cursor = self.mongo_service.db.applicants.find(filter_query).skip(skip).limit(limit)
+                    applicants = await cursor.to_list(limit)
+
+                    for applicant in applicants:
+                        applicant["_id"] = str(applicant["_id"])
+
+                    logger.info(f"✅ [지원자툴] 목록 조회 완료: {len(applicants)}개")
+                    return {"applicants": applicants, "count": len(applicants)}
+
+            elif action == "update":
+                # 지원자 수정
+                applicant_id = params.get("applicant_id")
+                update_data = params.get("update_data", {})
+
+                result = await self.mongo_service.db.applicants.update_one(
+                    {"_id": ObjectId(applicant_id)},
+                    {"$set": update_data}
+                )
+
+                if result.modified_count > 0:
+                    logger.info(f"✅ [지원자툴] 수정 완료: {applicant_id}")
+                    return {"message": "지원자 정보가 성공적으로 수정되었습니다."}
+                else:
+                    logger.warning(f"⚠️ [지원자툴] 수정 실패: {applicant_id}")
+                    return {"error": "지원자 수정에 실패했습니다."}
+
+            elif action == "delete":
+                # 지원자 삭제
+                applicant_id = params.get("applicant_id")
+                result = await self.mongo_service.db.applicants.delete_one({"_id": ObjectId(applicant_id)})
+
+                if result.deleted_count > 0:
+                    logger.info(f"✅ [지원자툴] 삭제 완료: {applicant_id}")
+                    return {"message": "지원자가 성공적으로 삭제되었습니다."}
+                else:
+                    logger.warning(f"⚠️ [지원자툴] 삭제 실패: {applicant_id}")
+                    return {"error": "지원자 삭제에 실패했습니다."}
+
+            elif action == "update_status":
+                # 지원자 상태 업데이트
+                applicant_id = params.get("applicant_id")
+                new_status = params.get("status")
+
+                result = await self.mongo_service.db.applicants.update_one(
+                    {"_id": ObjectId(applicant_id)},
+                    {"$set": {"status": new_status}}
+                )
+
+                if result.modified_count > 0:
+                    logger.info(f"✅ [지원자툴] 상태 변경 완료: {applicant_id} -> {new_status}")
+                    return {"message": f"지원자 상태가 {new_status}로 변경되었습니다."}
+                else:
+                    logger.warning(f"⚠️ [지원자툴] 상태 변경 실패: {applicant_id}")
+                    return {"error": "지원자 상태 변경에 실패했습니다."}
+
+            elif action == "get_stats":
+                # 지원자 통계 조회
+                pipeline = [
+                    {
+                        "$group": {
+                            "_id": "$status",
+                            "count": {"$sum": 1}
+                        }
+                    }
+                ]
+
+                stats = await self.mongo_service.db.applicants.aggregate(pipeline).to_list(None)
+                total = await self.mongo_service.db.applicants.count_documents({})
+
+                return {
+                    "total": total,
+                    "by_status": stats
+                }
+
+            else:
+                raise ValueError(f"알 수 없는 지원자 액션: {action}")
+
+        except Exception as e:
+            return {"error": f"지원자 처리 실패: {str(e)}"}
+
+    async def mail_tool(self, action, **params):
+        """메일 발송 툴"""
+        try:
+            logger.info(f"📧 [메일툴] 액션: {action}, 파라미터: {params}")
+
+            import os
+            import smtplib
+            from email.mime.multipart import MIMEMultipart
+            from email.mime.text import MIMEText
+
+            if action == "send_test":
+                # 테스트 메일 발송
+                test_email = params.get("test_email")
+                mail_settings = params.get("mail_settings", {})
+
+                if not test_email or not mail_settings:
+                    return {"error": "테스트 이메일과 메일 설정이 필요합니다."}
+
+                # 메일 내용 생성
+                subject = "테스트 메일"
+                content = "안녕하세요! 이것은 테스트 메일입니다."
+
+                # 메일 객체 생성
+                msg = MIMEMultipart()
+                msg['From'] = f"{mail_settings.get('senderName', '')} <{mail_settings.get('senderEmail')}>"
+                msg['To'] = test_email
+                msg['Subject'] = f"[테스트] {subject}"
+                msg.attach(MIMEText(content, 'plain', 'utf-8'))
+
+                # SMTP 서버 연결 및 메일 발송
+                smtp_port = mail_settings.get('smtpPort', 587)
+                smtp_server = mail_settings.get('smtpServer', 'smtp.gmail.com')
+
+                if smtp_port == 465:
+                    with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+                        server.login(mail_settings.get('senderEmail'), mail_settings.get('senderPassword'))
+                        server.send_message(msg)
+                else:
+                    with smtplib.SMTP(smtp_server, smtp_port) as server:
+                        server.starttls()
+                        server.login(mail_settings.get('senderEmail'), mail_settings.get('senderPassword'))
+                        server.send_message(msg)
+
+                return {
+                    "message": "테스트 메일이 성공적으로 발송되었습니다.",
+                    "to": test_email,
+                    "subject": f"[테스트] {subject}"
+                }
+
+            elif action == "send_bulk":
+                # 대량 메일 발송
+                status_type = params.get("status_type")  # passed, rejected, etc.
+                mail_settings = params.get("mail_settings", {})
+
+                if not status_type or not mail_settings:
+                    return {"error": "상태 타입과 메일 설정이 필요합니다."}
+
+                # 해당 상태의 지원자들 조회
+                filter_query = {"status": status_type}
+                cursor = self.mongo_service.db.applicants.find(filter_query)
+                applicants = await cursor.to_list(None)
+
+                if not applicants:
+                    return {"message": f"{status_type} 상태의 지원자가 없습니다."}
+
+                # 메일 템플릿 조회
+                template = await self.mongo_service.db.mail_templates.find_one({"type": status_type})
+                if not template:
+                    return {"error": f"{status_type} 상태에 대한 메일 템플릿이 없습니다."}
+
+                success_count = 0
+                failed_count = 0
+                failed_emails = []
+
+                for applicant in applicants:
+                    email = applicant.get('email')
+                    if not email:
+                        failed_count += 1
+                        continue
+
+                    # 메일 내용 포맷팅
+                    content = template['content'].format(
+                        applicant_name=applicant.get('name', '지원자'),
+                        job_posting_title=applicant.get('job_posting_title', '채용공고'),
+                        company_name=applicant.get('company_name', '회사명'),
+                        position=applicant.get('position', '지원 직무')
+                    )
+
+                    # 메일 발송
+                    try:
+                        msg = MIMEMultipart()
+                        msg['From'] = f"{mail_settings.get('senderName', '')} <{mail_settings.get('senderEmail')}>"
+                        msg['To'] = email
+                        msg['Subject'] = template['subject']
+                        msg.attach(MIMEText(content, 'plain', 'utf-8'))
+
+                        smtp_port = mail_settings.get('smtpPort', 587)
+                        smtp_server = mail_settings.get('smtpServer', 'smtp.gmail.com')
+
+                        if smtp_port == 465:
+                            with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+                                server.login(mail_settings.get('senderEmail'), mail_settings.get('senderPassword'))
+                                server.send_message(msg)
+                        else:
+                            with smtplib.SMTP(smtp_server, smtp_port) as server:
+                                server.starttls()
+                                server.login(mail_settings.get('senderEmail'), mail_settings.get('senderPassword'))
+                                server.send_message(msg)
+
+                        success_count += 1
+                    except Exception as e:
+                        failed_count += 1
+                        failed_emails.append(email)
+
+                return {
+                    "message": f"메일 발송 완료: {success_count}건 성공, {failed_count}건 실패",
+                    "total": len(applicants),
+                    "success_count": success_count,
+                    "failed_count": failed_count,
+                    "failed_emails": failed_emails
+                }
+
+            elif action == "send_individual":
+                # 개별 메일 발송
+                applicant_id = params.get("applicant_id")
+                mail_settings = params.get("mail_settings", {})
+                custom_subject = params.get("subject", "안녕하세요")
+                custom_content = params.get("content", "메일 내용을 입력해주세요.")
+
+                if not applicant_id or not mail_settings:
+                    return {"error": "지원자 ID와 메일 설정이 필요합니다."}
+
+                # 지원자 정보 조회
+                applicant = await self.mongo_service.db.applicants.find_one({"_id": ObjectId(applicant_id)})
+                if not applicant:
+                    return {"error": "지원자를 찾을 수 없습니다."}
+
+                email = applicant.get('email')
+                if not email:
+                    return {"error": "지원자의 이메일이 없습니다."}
+
+                # 메일 발송
+                try:
+                    msg = MIMEMultipart()
+                    msg['From'] = f"{mail_settings.get('senderName', '')} <{mail_settings.get('senderEmail')}>"
+                    msg['To'] = email
+                    msg['Subject'] = custom_subject
+                    msg.attach(MIMEText(custom_content, 'plain', 'utf-8'))
+
+                    smtp_port = mail_settings.get('smtpPort', 587)
+                    smtp_server = mail_settings.get('smtpServer', 'smtp.gmail.com')
+
+                    if smtp_port == 465:
+                        with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+                            server.login(mail_settings.get('senderEmail'), mail_settings.get('senderPassword'))
+                            server.send_message(msg)
+                    else:
+                        with smtplib.SMTP(smtp_server, smtp_port) as server:
+                            server.starttls()
+                            server.login(mail_settings.get('senderEmail'), mail_settings.get('senderPassword'))
+                            server.send_message(msg)
+
+                    return {
+                        "message": "메일이 성공적으로 발송되었습니다.",
+                        "to": email,
+                        "subject": custom_subject
+                    }
+                except Exception as e:
+                    return {"error": f"메일 발송 실패: {str(e)}"}
+
+            elif action == "get_templates":
+                # 메일 템플릿 조회
+                cursor = self.mongo_service.db.mail_templates.find({})
+                templates = await cursor.to_list(None)
+
+                for template in templates:
+                    template["_id"] = str(template["_id"])
+
+                return {"templates": templates}
+
+            elif action == "create_template":
+                # 메일 템플릿 생성
+                template_data = params.get("template_data", {})
+                template_data["created_at"] = datetime.now()
+
+                result = await self.mongo_service.db.mail_templates.insert_one(template_data)
+                return {
+                    "template_id": str(result.inserted_id),
+                    "message": "메일 템플릿이 성공적으로 생성되었습니다."
+                }
+
+            else:
+                raise ValueError(f"알 수 없는 메일 액션: {action}")
+
+        except Exception as e:
+            return {"error": f"메일 처리 실패: {str(e)}"}
+
     def get_tool_status(self):
         return {"status": "healthy", "available_tools": list(self.tools.keys())}
-    
+
     def get_available_tools(self):
         return list(self.tools.keys())
-    
+
     def execute(self, tool_name, action, **params):
         """동기 툴 실행 (호환성용)"""
         import asyncio
         return asyncio.run(self.execute_async(tool_name, action, **params))
-    
+
     def get_error_statistics(self):
         return self.error_stats
-    
+
     def get_performance_stats(self):
         return self.performance_stats
-    
+
     def clear_cache(self, tool_name=None):
         if tool_name:
             self.cache.pop(tool_name, None)
         else:
             self.cache.clear()
-    
+
     def reset_performance_stats(self):
         self.performance_stats = {}
-    
+
     def cleanup(self):
         """리소스 정리"""
         try:
@@ -323,20 +756,29 @@ class ToolExecutor:
 class AgentSystem:
     def __init__(self):
         self.tool_executor = ToolExecutor()
-    
+
     async def process_request(self, user_input, conversation_history=None, session_id=None, mode="chat"):
         """사용자 요청을 처리하고 결과를 반환합니다."""
         try:
+            # 로깅 추가
+            logger.info(f"🔍 [의도분류] 사용자 입력: {user_input}")
+
             # 간단한 의도 분류
             intent = self.classify_intent(user_input)
-            
+            logger.info(f"🎯 [의도분류] 결과: {intent}")
+
             # 툴 사용이 필요한지 확인
             if intent.get("needs_tool"):
+                logger.info(f"🛠️ [툴실행] 툴: {intent['tool']}, 액션: {intent['action']}")
+
                 tool_result = await self.tool_executor.execute_async(
-                    intent["tool"], 
-                    intent["action"], 
+                    intent["tool"],
+                    intent["action"],
                     **intent.get("params", {})
                 )
+
+                logger.info(f"✅ [툴실행] 결과: {tool_result}")
+
                 return {
                     "success": True,
                     "message": f"툴 실행 결과: {tool_result}",
@@ -347,6 +789,7 @@ class AgentSystem:
                 }
             # AI 채용공고 등록 액션 처리
             elif intent.get("action") == "openAIJobRegistration":
+                logger.info("📝 [액션] AI 채용공고 등록 페이지 이동")
                 return {
                     "success": True,
                     "message": "AI 채용공고 등록 페이지로 이동합니다.",
@@ -356,6 +799,7 @@ class AgentSystem:
                     "session_id": session_id
                 }
             else:
+                logger.info("💬 [대화] 일반 대화 응답")
                 return {
                     "success": True,
                     "message": "일반 대화 응답입니다.",
@@ -365,6 +809,7 @@ class AgentSystem:
                     "session_id": session_id
                 }
         except Exception as e:
+            logger.error(f"❌ [오류] 처리 중 오류 발생: {str(e)}")
             return {
                 "success": False,
                 "message": f"오류 발생: {str(e)}",
@@ -373,11 +818,11 @@ class AgentSystem:
                 "confidence": 0.0,
                 "session_id": session_id
             }
-    
+
     def classify_intent(self, user_input):
         """간단한 의도 분류"""
         input_lower = user_input.lower()
-        
+
         # GitHub 관련
         if any(word in input_lower for word in ["github", "깃허브", "레포", "커밋"]):
             if "사용자" in input_lower or "프로필" in input_lower:
@@ -386,34 +831,62 @@ class AgentSystem:
                 return {"needs_tool": True, "tool": "github", "action": "get_repos", "params": {"username": "octocat"}}
             elif "커밋" in input_lower:
                 return {"needs_tool": True, "tool": "github", "action": "get_commits", "params": {"username": "octocat"}}
-        
+
         # MongoDB 관련
         elif any(word in input_lower for word in ["데이터베이스", "db", "문서", "조회"]):
             return {"needs_tool": True, "tool": "mongodb", "action": "find_documents", "params": {"collection": "applicants"}}
-        
-        # 채용공고 조회 관련
-        elif any(word in input_lower for word in ["채용공고", "채용", "공고"]) and any(word in input_lower for word in ["보여", "조회", "목록", "리스트"]):
-            # 오늘자 필터링 확인
-            today_filter = any(word in input_lower for word in ["오늘", "오늘자", "today", "금일"])
-            return {
-                "needs_tool": True, 
-                "tool": "mongodb", 
-                "action": "find_documents", 
-                "params": {
-                    "collection": "job_postings",
-                    "query": {"today_only": today_filter}
-                }
-            }
-        
+
+        # 채용공고 CRUD 관련
+        elif any(word in input_lower for word in ["채용공고", "채용", "공고"]):
+            if any(word in input_lower for word in ["등록", "작성", "만들기", "생성"]):
+                return {"needs_tool": True, "tool": "job_posting", "action": "create", "params": {}}
+            elif any(word in input_lower for word in ["수정", "편집", "변경", "업데이트"]):
+                return {"needs_tool": True, "tool": "job_posting", "action": "update", "params": {}}
+            elif any(word in input_lower for word in ["삭제", "제거"]):
+                return {"needs_tool": True, "tool": "job_posting", "action": "delete", "params": {}}
+            elif any(word in input_lower for word in ["발행", "공개", "게시"]):
+                return {"needs_tool": True, "tool": "job_posting", "action": "publish", "params": {}}
+            elif any(word in input_lower for word in ["보여", "조회", "목록", "리스트", "확인"]):
+                return {"needs_tool": True, "tool": "job_posting", "action": "read", "params": {}}
+
+        # 지원자 CRUD 관련
+        elif any(word in input_lower for word in ["지원자", "지원", "이력서", "자소서", "applicant"]):
+            if any(word in input_lower for word in ["등록", "작성", "만들기", "생성"]):
+                return {"needs_tool": True, "tool": "applicant", "action": "create", "params": {}}
+            elif any(word in input_lower for word in ["수정", "편집", "변경", "업데이트"]):
+                return {"needs_tool": True, "tool": "applicant", "action": "update", "params": {}}
+            elif any(word in input_lower for word in ["삭제", "제거"]):
+                return {"needs_tool": True, "tool": "applicant", "action": "delete", "params": {}}
+            elif any(word in input_lower for word in ["상태", "진행상황", "status"]):
+                return {"needs_tool": True, "tool": "applicant", "action": "update_status", "params": {}}
+            elif any(word in input_lower for word in ["통계", "통계정보", "stats"]):
+                return {"needs_tool": True, "tool": "applicant", "action": "get_stats", "params": {}}
+            elif any(word in input_lower for word in ["보여", "조회", "목록", "리스트", "확인"]):
+                return {"needs_tool": True, "tool": "applicant", "action": "read", "params": {}}
+
+        # 메일 관련
+        elif any(word in input_lower for word in ["메일", "이메일", "email", "발송", "보내기"]):
+            if any(word in input_lower for word in ["테스트", "test"]):
+                return {"needs_tool": True, "tool": "mail", "action": "send_test", "params": {}}
+            elif any(word in input_lower for word in ["일괄", "bulk", "대량"]):
+                return {"needs_tool": True, "tool": "mail", "action": "send_bulk", "params": {}}
+            elif any(word in input_lower for word in ["개별", "individual"]):
+                return {"needs_tool": True, "tool": "mail", "action": "send_individual", "params": {}}
+            elif any(word in input_lower for word in ["템플릿", "template"]):
+                if any(word in input_lower for word in ["만들기", "생성", "create"]):
+                    return {"needs_tool": True, "tool": "mail", "action": "create_template", "params": {}}
+                else:
+                    return {"needs_tool": True, "tool": "mail", "action": "get_templates", "params": {}}
+
         # 검색 관련
         elif any(word in input_lower for word in ["검색", "찾기", "정보"]):
             return {"needs_tool": True, "tool": "search", "action": "web_search", "params": {"query": user_input}}
-        
+
         # AI 채용공고 등록 관련
         elif any(word in input_lower for word in ["채용공고", "채용", "공고", "등록", "작성", "만들기"]):
             if any(word in input_lower for word in ["ai", "도우미", "어시스턴트"]):
                 return {"needs_tool": False, "action": "openAIJobRegistration"}
-        
+
         # 웹 자동화 관련 (실제 클릭/입력 액션)
         elif any(word in input_lower for word in ["클릭", "버튼", "이동", "페이지", "열기"]):
             if any(word in input_lower for word in ["채용공고", "공고"]):
@@ -437,19 +910,19 @@ class AgentSystem:
                     "action": "navigate",
                     "params": {"page_path": "/dashboard"}
                 }
-        
+
         return {"needs_tool": False}
 
 # 모니터링 시스템 (간단한 버전)
 class MonitoringSystem:
     def __init__(self):
         self.metrics = {}
-    
+
     def log_event(self, event_type, data):
         if event_type not in self.metrics:
             self.metrics[event_type] = []
         self.metrics[event_type].append({"timestamp": time.time(), "data": data})
-    
+
     def get_metrics(self):
         return self.metrics
 
@@ -541,7 +1014,7 @@ class SessionManager:
                 logger.info(f"세션 {session_id} 컨텍스트 업데이트: {context_update}")
             except (ValueError, OSError):
                 pass
-    
+
     def get_context(self, session_id: str) -> Dict[str, Any]:
         """세션 컨텍스트 조회"""
         if session_id in self.sessions:
@@ -620,11 +1093,11 @@ def get_or_create_session(session_id: Optional[str] = None) -> str:
     """세션 ID를 가져오거나 새로 생성"""
     if not session_id:
         session_id = create_session_id()
-    
+
     # 세션이 없으면 생성
     if session_id not in session_manager.sessions:
         session_manager.create_session(session_id)
-    
+
     return session_id
 
 def update_session(session_id: str, message: str, is_user: bool = True):
@@ -642,16 +1115,16 @@ def get_conversation_context(session_id: str) -> Dict[str, Any]:
             "recent_messages": [],
             "session_info": session_manager.get_session_info(session_id)
         }
-    
+
     # 컨텍스트 텍스트 생성
     context_text = ""
     for msg in history:
         role = "사용자" if msg["role"] == "user" else "에이전트"
         context_text += f"{role}: {msg['content']}\n"
-    
+
     # 최근 메시지 (최대 3개)
     recent_messages = history[-3:] if len(history) > 3 else history
-    
+
     # 컨텍스트 요약 생성
     context_summary = []
     for msg in recent_messages:
@@ -668,7 +1141,7 @@ def get_conversation_context(session_id: str) -> Dict[str, Any]:
             if any(word in content for word in ["채용", "공고", "지원자"]):
                 keywords.append("recruitment")
             context_summary.extend(keywords)
-    
+
     return {
         "context_text": context_text,
         "context_summary": list(set(context_summary)),  # 중복 제거
@@ -685,11 +1158,11 @@ def extract_job_posting_info(user_input: str) -> Dict[str, Any]:
     """사용자 입력에서 채용공고 정보 추출"""
     input_lower = user_input.lower()
     extracted_data = {}
-    
+
     # 직무 추출
     job_titles = {
         "프론트엔드": "프론트엔드 개발자",
-        "백엔드": "백엔드 개발자", 
+        "백엔드": "백엔드 개발자",
         "풀스택": "풀스택 개발자",
         "데이터": "데이터 엔지니어",
         "ai": "AI 엔지니어",
@@ -708,26 +1181,26 @@ def extract_job_posting_info(user_input: str) -> Dict[str, Any]:
         "인사": "인사 담당자",
         "회계": "회계 담당자"
     }
-    
+
     for keyword, title in job_titles.items():
         if keyword in input_lower:
             extracted_data["position"] = title
             break
-    
+
     # 고용형태 추출
     employment_types = {
         "정규직": "fulltime",
-        "계약직": "contract", 
+        "계약직": "contract",
         "인턴": "intern",
         "신입": "entry",
         "경력": "experienced"
     }
-    
+
     for keyword, emp_type in employment_types.items():
         if keyword in input_lower:
             extracted_data["employment_type"] = emp_type
             break
-    
+
     # 근무지 추출 (기본값)
     if "원격" in input_lower or "재택" in input_lower:
         extracted_data["location"] = "원격근무"
@@ -737,7 +1210,7 @@ def extract_job_posting_info(user_input: str) -> Dict[str, Any]:
         extracted_data["location"] = "부산"
     else:
         extracted_data["location"] = "서울"  # 기본값
-    
+
     # 모집인원 추출
     import re
     headcount_match = re.search(r'(\d+)명', input_lower)
@@ -745,59 +1218,59 @@ def extract_job_posting_info(user_input: str) -> Dict[str, Any]:
         extracted_data["headcount"] = int(headcount_match.group(1))
     else:
         extracted_data["headcount"] = 1  # 기본값
-    
+
     # 급여 추출
     salary_match = re.search(r'(\d+)만원', input_lower)
     if salary_match:
         extracted_data["salary"] = int(salary_match.group(1))
-    
+
     # 회사명 (기본값)
     extracted_data["company"] = "우리 회사"
-    
+
     # 제목 생성
     if "position" in extracted_data:
         extracted_data["title"] = f"{extracted_data['position']} 채용"
-    
+
     # 모집기간 (기본값: 30일)
     extracted_data["recruitment_period"] = 30
-    
+
     return extracted_data
 
 def extract_context_keywords(message: str) -> List[str]:
     """메시지에서 컨텍스트 키워드 추출"""
     keywords = []
     message_lower = message.lower()
-    
+
     # GitHub 관련 키워드
     if any(word in message_lower for word in ["github", "깃허브", "레포", "repo", "커밋", "commit"]):
         keywords.append("GitHub")
-    
+
     # 데이터베이스 관련 키워드
     if any(word in message_lower for word in ["데이터베이스", "db", "mongodb", "컬렉션", "collection"]):
         keywords.append("데이터베이스")
-    
+
     # 검색 관련 키워드
     if any(word in message_lower for word in ["검색", "search", "찾기", "find"]):
         keywords.append("검색")
-    
+
     # 채용 관련 키워드
     if any(word in message_lower for word in ["채용", "지원자", "면접", "공고", "포트폴리오", "자기소개서"]):
         keywords.append("채용관리")
-    
+
     return keywords
 
 async def generate_search_based_response(
-    user_message: str, 
-    openai_service, 
+    user_message: str,
+    openai_service,
     tool_executor
 ) -> Optional[str]:
     """검색 결과를 바탕으로 LLM이 자연스러운 응답 생성"""
-    
+
     # 검색 키워드 추출
     search_keywords = extract_search_keywords(user_message)
     if not search_keywords:
         return None
-    
+
     try:
         # 웹 검색 실행
         search_result = await tool_executor.execute_async(
@@ -806,18 +1279,18 @@ async def generate_search_based_response(
             query=search_keywords,
             num_results=5
         )
-        
+
         if search_result.get("status") == "success":
             search_data = search_result.get("data", {})
             results = search_data.get("results", [])
-            
+
             if results:
                 # 검색 결과를 요약하여 LLM에게 제공
                 search_summary = "\n".join([
                     f"- {result['title']}: {result['snippet']}"
                     for result in results[:3]  # 상위 3개 결과만 사용
                 ])
-                
+
                 # LLM에게 검색 결과를 바탕으로 답변 생성 요청
                 response_prompt = f"""
 사용자가 "{user_message}"라고 질문했습니다.
@@ -829,38 +1302,38 @@ async def generate_search_based_response(
 답변은 다음과 같은 형식으로 구성해주세요:
 
 1. 핵심 정보 요약
-2. 상세 설명 
+2. 상세 설명
 3. 추가 도움이 될 만한 제안
 
 답변은 친근하고 전문적인 톤으로 작성해주세요.
 """
-                
+
                 llm_response = await openai_service.chat_completion([
                     {"role": "system", "content": "당신은 웹 검색 결과를 바탕으로 정확하고 도움이 되는 답변을 제공하는 AI입니다."},
                     {"role": "user", "content": response_prompt}
                 ])
-                
+
                 return llm_response
-                
+
     except Exception as e:
         print(f"🔍 [DEBUG] 검색 기반 응답 생성 오류: {str(e)}")
         return None
-    
+
     return None
 
 
 async def detect_tool_usage_with_ai(
-    user_message: str, 
-    openai_service, 
+    user_message: str,
+    openai_service,
     context_keywords: List[str] = None,
     recent_messages: List[Dict[str, Any]] = None,
     session_context: Dict[str, Any] = None
 ) -> Optional[Dict[str, Any]]:
     """AI를 사용하여 사용자 메시지에서 툴 사용 의도 감지 (순수 AI 기반)"""
-    
+
     # 컨텍스트 정보 구성
     context_info = ""
-    
+
     # 세션 컨텍스트 활용
     if session_context:
         if session_context.get("last_mentioned_user"):
@@ -869,7 +1342,7 @@ async def detect_tool_usage_with_ai(
             context_info += f"\n현재 페이지: {session_context['current_page']}"
         if session_context.get("last_tool_used"):
             context_info += f"\n마지막 사용 툴: {session_context['last_tool_used']}"
-    
+
     # 이전 대화 컨텍스트
     if recent_messages:
         recent_context = "\n".join([
@@ -877,7 +1350,7 @@ async def detect_tool_usage_with_ai(
             for msg in recent_messages[-3:]  # 최근 3개 메시지
         ])
         context_info += f"\n최근 대화:\n{recent_context}"
-    
+
     # 순수 AI 기반 툴 선택 프롬프트
     tool_detection_prompt = f"""
 당신은 채용 관리 시스템의 지능형 어시스턴트입니다. 사용자의 요청을 이해하고 적절한 도구를 선택해주세요.
@@ -890,7 +1363,7 @@ async def detect_tool_usage_with_ai(
 사용 가능한 도구들:
 1. github: GitHub 관련 정보 조회 및 분석
    - get_user_info: 사용자 프로필 정보
-   - get_repos: 레포지토리 목록  
+   - get_repos: 레포지토리 목록
    - get_commits: 커밋 내역
    - search_repos: 레포지토리 검색
 
@@ -900,7 +1373,7 @@ async def detect_tool_usage_with_ai(
 
 3. search: 웹 검색
    - web_search: 일반 웹 검색
-   - news_search: 뉴스 검색  
+   - news_search: 뉴스 검색
    - image_search: 이미지 검색
 
 {context_info}
@@ -928,48 +1401,48 @@ JSON 형식으로만 응답:
             {"role": "system", "content": "당신은 사용자 메시지를 분석하여 적절한 툴을 선택하는 AI입니다. JSON 형식으로만 응답해주세요."},
             {"role": "user", "content": tool_detection_prompt}
         ])
-        
+
         print(f"🔍 [DEBUG] AI 툴 감지 응답: {response}")
-        
+
         # JSON 파싱 시도
         import json
         import re
-        
+
         # JSON 부분만 추출
         json_match = re.search(r'\{.*\}', response, re.DOTALL)
         if json_match:
             tool_usage = json.loads(json_match.group())
-            
+
             # 사용자명 추출이 필요한 경우 (AI 기반)
             if tool_usage and tool_usage.get("tool") == "github":
                 if "username" not in tool_usage.get("params", {}) or not tool_usage["params"]["username"] or tool_usage["params"]["username"] == "사용자명":
                     username = await extract_username_with_ai(user_message, openai_service, session_context)
                     tool_usage["params"]["username"] = username
-            
+
             return tool_usage
         else:
             print(f"🔍 [DEBUG] AI 응답에서 JSON을 찾을 수 없음: {response}")
             # AI가 JSON을 반환하지 않았을 때 재시도
             return await retry_tool_detection_with_simpler_prompt(user_message, openai_service, context_info)
-            
+
     except Exception as e:
         print(f"🔍 [DEBUG] AI 툴 감지 오류: {str(e)}")
         # AI 실패 시 간단한 프롬프트로 재시도
         return await retry_tool_detection_with_simpler_prompt(user_message, openai_service, context_info)
 
 async def retry_tool_detection_with_simpler_prompt(
-    user_message: str, 
-    openai_service, 
+    user_message: str,
+    openai_service,
     context_info: str
 ) -> Optional[Dict[str, Any]]:
     """AI 툴 감지 실패 시 더 간단한 프롬프트로 재시도"""
-    
+
     simple_prompt = f"""
 사용자 요청을 분석하여 필요한 도구를 선택해주세요.
 
 도구 목록:
 - github: GitHub/포트폴리오 관련
-- mongodb: 데이터베이스 관련  
+- mongodb: 데이터베이스 관련
 - search: 웹검색 관련
 - null: 도구 불필요
 
@@ -979,15 +1452,15 @@ async def retry_tool_detection_with_simpler_prompt(
 
 JSON만 응답: {{"tool": "도구명", "action": "액션명", "params": {{"key": "value"}}}} 또는 null
 """
-    
+
     try:
         response = await openai_service.chat_completion([
             {"role": "user", "content": simple_prompt}
         ])
-        
+
         import json
         import re
-        
+
         # JSON 추출 시도
         json_match = re.search(r'\{.*\}|null', response, re.DOTALL)
         if json_match:
@@ -995,24 +1468,24 @@ JSON만 응답: {{"tool": "도구명", "action": "액션명", "params": {{"key":
             if result == "null":
                 return None
             return json.loads(result)
-        
+
         return None
-        
+
     except Exception as e:
         print(f"🔍 [DEBUG] 간단한 프롬프트로도 실패: {str(e)}")
         return None
 
 async def extract_username_with_ai(
-    message: str, 
-    openai_service, 
+    message: str,
+    openai_service,
     session_context: Dict[str, Any] = None
 ) -> str:
     """AI를 사용하여 메시지에서 사용자명 추출"""
-    
+
     context_info = ""
     if session_context and session_context.get("last_mentioned_user"):
         context_info = f"이전에 언급된 사용자: {session_context['last_mentioned_user']}"
-    
+
     prompt = f"""
 다음 메시지에서 GitHub 사용자명을 추출해주세요.
 
@@ -1020,26 +1493,26 @@ async def extract_username_with_ai(
 
 메시지: "{message}"
 
-GitHub 사용자명만 추출하여 응답해주세요. 
+GitHub 사용자명만 추출하여 응답해주세요.
 - 사용자명이 명시되어 있으면 그것을 반환
 - 명시되지 않았지만 이전 컨텍스트에 있으면 그것을 사용
 - 둘 다 없으면 "UNKNOWN" 반환
 
 사용자명만 응답:
 """
-    
+
     try:
         response = await openai_service.chat_completion([
             {"role": "user", "content": prompt}
         ])
-        
+
         username = response.strip()
         if username and username != "UNKNOWN":
             return username
-        
+
     except Exception as e:
         print(f"🔍 [DEBUG] AI 사용자명 추출 실패: {str(e)}")
-    
+
     # AI 실패 시 간단한 정규식으로 폴백
     import re
     patterns = [
@@ -1047,16 +1520,16 @@ GitHub 사용자명만 추출하여 응답해주세요.
         r'(?:사용자|user|아이디|id)\s*([a-zA-Z0-9_-]+)',
         r'([a-zA-Z0-9_-]{3,})'  # 3자 이상의 영숫자 조합
     ]
-    
+
     for pattern in patterns:
         match = re.search(pattern, message, re.IGNORECASE)
         if match:
             return match.group(1)
-    
+
     # 세션 컨텍스트에서 마지막 사용자명 사용
     if session_context and session_context.get("last_mentioned_user"):
         return session_context["last_mentioned_user"]
-    
+
     return "UNKNOWN"
 
 async def determine_target_page_with_ai(
@@ -1068,7 +1541,7 @@ async def determine_target_page_with_ai(
     session_context: Dict[str, Any] = None
 ) -> Optional[Dict[str, Any]]:
     """AI를 사용하여 사용자 요청에 가장 적합한 페이지를 동적으로 결정"""
-    
+
     # 사용 가능한 페이지들과 각각의 용도
     available_pages = {
         "/dashboard": "전체 시스템 개요, 통계, 뉴스 및 일반 정보 확인",
@@ -1080,14 +1553,14 @@ async def determine_target_page_with_ai(
         "/portfolio": "포트폴리오 종합 분석",
         "/settings": "시스템 설정 및 환경 구성"
     }
-    
+
     context_info = ""
     if session_context:
         if session_context.get("current_page"):
             context_info += f"\n현재 페이지: {session_context['current_page']}"
         if session_context.get("last_mentioned_user"):
             context_info += f"\n언급된 사용자: {session_context['last_mentioned_user']}"
-    
+
     prompt = f"""
 사용자의 요청과 도구 실행 결과를 바탕으로 가장 적합한 페이지를 선택해주세요.
 
@@ -1102,7 +1575,7 @@ async def determine_target_page_with_ai(
 
 다음 기준으로 페이지를 선택해주세요:
 1. 사용자의 의도와 가장 관련성이 높은 페이지
-2. 실행된 도구의 결과를 가장 잘 활용할 수 있는 페이지  
+2. 실행된 도구의 결과를 가장 잘 활용할 수 있는 페이지
 3. 사용자가 다음에 할 가능성이 높은 작업을 지원하는 페이지
 
 JSON 형식으로 응답:
@@ -1110,21 +1583,21 @@ JSON 형식으로 응답:
 
 페이지가 필요하지 않으면: null
 """
-    
+
     try:
         response = await openai_service.chat_completion([
             {"role": "user", "content": prompt}
         ])
-        
+
         import json
         import re
-        
+
         json_match = re.search(r'\{.*\}|null', response, re.DOTALL)
         if json_match:
             result = json_match.group()
             if result == "null":
                 return None
-            
+
             page_info = json.loads(result)
             return {
                 "action": "navigate",
@@ -1132,9 +1605,9 @@ JSON 형식으로 응답:
                 "message": f"🎯 {page_info['message']}",
                 "auto_action": page_info.get("auto_action")
             }
-        
+
         return None
-        
+
     except Exception as e:
         print(f"🔍 [DEBUG] AI 페이지 결정 실패: {str(e)}")
         # 폴백: 도구 기반 기본 페이지 선택
@@ -1146,17 +1619,17 @@ JSON 형식으로 응답:
             }
         elif tool_name == "mongodb":
             return {
-                "action": "navigate", 
+                "action": "navigate",
                 "target": "/applicants",
                 "message": "🎯 데이터베이스 정보를 확인할 수 있는 페이지로 이동합니다."
             }
         elif tool_name == "search":
             return {
                 "action": "navigate",
-                "target": "/dashboard", 
+                "target": "/dashboard",
                 "message": "🎯 검색 결과를 확인할 수 있는 페이지로 이동합니다."
             }
-        
+
         return None
 
 async def update_conversation_context_with_ai(
@@ -1168,9 +1641,9 @@ async def update_conversation_context_with_ai(
     session_manager
 ):
     """AI를 사용하여 대화 컨텍스트를 지능적으로 업데이트"""
-    
+
     current_context = session_manager.get_context(session_id)
-    
+
     prompt = f"""
 다음 대화를 분석하여 중요한 컨텍스트 정보를 추출해주세요.
 
@@ -1191,27 +1664,27 @@ JSON 형식으로 응답:
   "extracted_entities": ["개체1", "개체2"]
 }}
 """
-    
+
     try:
         response = await openai_service.chat_completion([
             {"role": "user", "content": prompt}
         ])
-        
+
         import json
         import re
-        
+
         json_match = re.search(r'\{.*\}', response, re.DOTALL)
         if json_match:
             context_update = json.loads(json_match.group())
-            
+
             # 도구 사용 정보 추가
             if tool_usage:
                 context_update["last_tool_used"] = tool_usage["tool"]
-            
+
             # 컨텍스트 업데이트
             session_manager.update_context(session_id, context_update)
             print(f"🔍 [DEBUG] AI 기반 컨텍스트 업데이트: {context_update}")
-            
+
     except Exception as e:
         print(f"🔍 [DEBUG] AI 컨텍스트 업데이트 실패: {str(e)}")
         # 폴백: 기본 컨텍스트 업데이트
@@ -1221,52 +1694,52 @@ JSON 형식으로 응답:
 def create_error_aware_response(tool_results: Dict[str, Any], user_message: str) -> str:
     """
     에러 정보를 포함한 사용자 친화적 응답 생성
-    
+
     Args:
         tool_results: 툴 실행 결과
         user_message: 사용자 메시지
-        
+
     Returns:
         사용자 친화적 응답 메시지
     """
     if not tool_results:
         return "죄송합니다. 요청을 처리하는 중 문제가 발생했습니다."
-    
+
     result = tool_results.get("result", {})
     status = result.get("status")
-    
+
     if status == "success":
         # 성공한 경우
         data = result.get("data", {})
-        
+
         # 대체 툴을 사용한 경우
         if result.get("fallback_used"):
             original_error = result.get("original_error", {})
             return f"원래 요청한 방법으로는 정보를 가져올 수 없어서 다른 방법으로 찾아보았습니다. {format_tool_data(data)}"
-        
+
         # 정상적으로 성공한 경우
         return f"요청하신 정보를 찾았습니다! {format_tool_data(data)}"
-    
+
     elif status == "error":
         # 에러가 발생한 경우
         error_message = result.get("message", "알 수 없는 오류가 발생했습니다.")
         fallback_suggestion = result.get("fallback_suggestion")
-        
+
         response = f"죄송합니다. {error_message}"
-        
+
         if fallback_suggestion:
             suggestion = fallback_suggestion.get("suggestion", "")
             response += f" {suggestion}"
-        
+
         return response
-    
+
     return "요청을 처리하는 중 문제가 발생했습니다."
 
 def format_tool_data(data: Dict[str, Any]) -> str:
     """툴 데이터를 사용자 친화적으로 포맷팅"""
     if not data:
         return "죄송합니다. 요청하신 정보를 찾을 수 없습니다."
-    
+
     # GitHub 사용자 정보
     if "username" in data and "public_repos" in data:
         username = data.get("username", "알 수 없음")
@@ -1274,24 +1747,24 @@ def format_tool_data(data: Dict[str, Any]) -> str:
         followers = data.get("followers", 0)
         following = data.get("following", 0)
         bio = data.get("bio", "")
-        
+
         result = f"🎯 **{username}님의 GitHub 프로필**\n\n"
         result += f"📊 **활동 현황**\n"
         result += f"• 공개 레포지토리: {public_repos}개\n"
         result += f"• 팔로워: {followers}명\n"
         result += f"• 팔로잉: {following}명\n"
-        
+
         if bio:
             result += f"\n💬 **자기소개**\n{bio}"
-        
+
         return result
-    
+
     # GitHub 레포지토리 목록
     if "repos" in data:
         repos = data["repos"]
         if repos:
             result = f"📁 **{len(repos)}개의 레포지토리 발견!**\n\n"
-            
+
             # 주요 레포지토리 정보 추가
             top_repos = repos[:5]  # 상위 5개
             result += f"🌟 **주요 프로젝트**\n\n"
@@ -1300,7 +1773,7 @@ def format_tool_data(data: Dict[str, Any]) -> str:
                 language = repo.get("language", "")
                 description = repo.get("description", "")
                 stars = repo.get("stargazers_count", 0)
-                
+
                 result += f"{i}. **{name}**"
                 # 언어 정보 제거
                 # if language:
@@ -1308,20 +1781,20 @@ def format_tool_data(data: Dict[str, Any]) -> str:
                 if stars > 0:
                     result += f" ⭐ {stars}"
                 result += "\n"
-                
+
                 if description:
                     result += f"   └ {description[:80]}{'...' if len(description) > 80 else ''}\n"
-                
+
                 # 각 프로젝트 사이에 줄바꿈 추가
                 result += "\n"
-            
+
             # 기술 스택 요약 제거 (중복 방지)
             # languages = {}
             # for repo in repos:
             #     lang = repo.get("language")
             #     if lang:
             #         languages[lang] = languages.get(lang, 0) + 1
-            
+
             # if languages:
             #     top_languages = sorted(languages.items(), key=lambda x: x[1], reverse=True)[:3]
             #     result += f"\n💻 **기술 스택 요약**\n"
@@ -1329,27 +1802,27 @@ def format_tool_data(data: Dict[str, Any]) -> str:
             #     for lang, count in top_languages:
             #         lang_summary.append(f"{lang}({count}개)" if count > 1 else f"{lang}({count}개)")
             #     result += f"• {', '.join(lang_summary)}"
-            
+
             return result
         else:
             return "😔 아직 레포지토리가 없네요. 첫 프로젝트를 시작해보세요!"
-    
+
     # GitHub 커밋 정보
     if "commits" in data:
         commits = data["commits"]
         if commits:
             result = f"📝 **최근 {len(commits)}개의 커밋 활동**\n\n"
-            
+
             # 최근 커밋 정보
             latest_commit = commits[0]
             commit_message = latest_commit.get("commit", {}).get("message", "제목 없음")
             author = latest_commit.get("commit", {}).get("author", {}).get("name", "알 수 없음")
             date = latest_commit.get("commit", {}).get("author", {}).get("date", "")
-            
+
             result += f"🔥 **최신 커밋**\n"
             result += f"• 메시지: {commit_message}\n"
             result += f"• 작성자: {author}\n"
-            
+
             if date:
                 from datetime import datetime
                 try:
@@ -1357,18 +1830,18 @@ def format_tool_data(data: Dict[str, Any]) -> str:
                     result += f"• 날짜: {commit_date.strftime('%Y년 %m월 %d일')}\n"
                 except:
                     pass
-            
+
             return result
         else:
             return "📅 아직 커밋 내역이 없습니다. 첫 커밋을 작성해보세요!"
-    
+
     # MongoDB 문서
     if "documents" in data:
         documents = data["documents"]
         count = len(documents)
         if count > 0:
             result = f"📋 데이터베이스에서 {count}개의 문서를 찾았습니다.\n\n"
-            
+
             # 채용공고인 경우 상세 정보 표시
             if documents and "title" in documents[0]:
                 result += "📋 **채용공고 목록**\n\n"
@@ -1378,7 +1851,7 @@ def format_tool_data(data: Dict[str, Any]) -> str:
                     position = job.get("position", "직무 없음")
                     status = job.get("status", "상태 없음")
                     created_at = job.get("created_at", "")
-                    
+
                     result += f"{i}. **{title}**\n"
                     result += f"   • 회사: {company}\n"
                     result += f"   • 직무: {position}\n"
@@ -1390,47 +1863,47 @@ def format_tool_data(data: Dict[str, Any]) -> str:
                 result += "📋 **문서 목록**\n\n"
                 for i, doc in enumerate(documents[:5], 1):
                     result += f"{i}. {str(doc)[:100]}...\n\n"
-            
+
             return result
         else:
             return "📋 데이터베이스에 해당하는 문서가 없습니다."
-    
+
     # 검색 결과
     if "results" in data:
         results = data["results"]
         if results:
             result = f"🔍 **검색 결과 {len(results)}개 발견!**\n\n"
-            
+
             # 첫 번째 결과 정보 추가
             first_result = results[0]
             title = first_result.get("title", "제목 없음")
             snippet = first_result.get("snippet", "")[:120]  # 120자로 제한
             url = first_result.get("link", "")
-            
+
             result += f"📌 **주요 결과**\n"
             result += f"• 제목: {title}\n"
             if snippet:
                 result += f"• 요약: {snippet}...\n"
             if url:
                 result += f"• 링크: {url}\n"
-            
+
             return result
         else:
             return "🔍 검색 결과를 찾을 수 없습니다. 다른 키워드로 검색해보세요."
-    
+
     # 웹 자동화 결과
     if "url" in data:
         return f"🌐 페이지 이동 완료: {data['url']}"
-    
+
     if "clicked" in data:
         return f"🖱️ 클릭 완료: {data['clicked']}"
-    
+
     if "input" in data:
         return f"⌨️ 입력 완료: {data['input']}"
-    
+
     if "title" in data and "url" in data:
         return f"📄 페이지 정보: {data['title']} ({data['url']})"
-    
+
     # 기타 데이터
     return "✅ 요청하신 작업이 성공적으로 완료되었습니다!"
 
@@ -1444,45 +1917,45 @@ async def chat_with_help_bot(
     에이전트과 대화
     """
     print(f"🔍 [DEBUG] 에이전트 호출됨 - 세션: {chat_message.session_id}, 메시지: {chat_message.message}")
-    
+
     try:
         # 세션 정리 (만료된 세션 삭제)
         session_manager.cleanup_sessions()
         print(f"🔍 [DEBUG] 세션 정리 완료")
-        
+
         # 세션 관리
         session_id = get_or_create_session(chat_message.session_id)
         print(f"🔍 [DEBUG] 세션 ID: {session_id}")
-        
+
         # 사용자 메시지 저장
         update_session(session_id, chat_message.message, is_user=True)
         print(f"🔍 [DEBUG] 사용자 메시지 저장 완료")
-        
+
         # 대화 컨텍스트 가져오기 (개선된 버전)
         conversation_context = get_conversation_context(session_id)
         print(f"🔍 [DEBUG] 대화 컨텍스트 정보: {conversation_context.get('context_summary', [])}")
-        
+
         # 컨텍스트 기반 툴 감지 개선
         context_keywords = conversation_context.get('context_summary', [])
         recent_messages = conversation_context.get('recent_messages', [])
-        
+
         # 세션 컨텍스트 가져오기
         session_context = session_manager.get_context(session_id)
-        
+
         # AI 기반 툴 사용 의도 감지 (순수 AI 기반)
         tool_usage = await detect_tool_usage_with_ai(
-            chat_message.message, 
-            openai_service, 
+            chat_message.message,
+            openai_service,
             context_keywords=context_keywords,
             recent_messages=recent_messages,
             session_context=session_context
         )
         print(f"🔍 [DEBUG] AI 기반 툴 사용 감지 결과: {tool_usage}")
-        
+
         # 툴 실행 결과 초기화
         tool_results = None
         error_info = None
-        
+
         if tool_usage:
             print(f"🔍 [DEBUG] 툴 사용 감지됨: {tool_usage}")
             try:
@@ -1491,7 +1964,7 @@ async def chat_with_help_bot(
                 pass  # detached buffer 오류 무시
             try:
                 print(f"🔍 [DEBUG] 툴 실행 시작 - 툴: {tool_usage['tool']}, 액션: {tool_usage['action']}, 파라미터: {tool_usage['params']}")
-                
+
                 # 비동기 툴 실행 (성능 최적화)
                 result = await tool_executor.execute_async(
                     tool_usage["tool"],
@@ -1499,15 +1972,15 @@ async def chat_with_help_bot(
                     session_id=session_id,  # 세션 ID 추가
                     **tool_usage["params"]
                 )
-                
+
                 print(f"🔍 [DEBUG] 툴 실행 결과: {result}")
-                
+
                 tool_results = {
                     "tool": tool_usage["tool"],
                     "action": tool_usage["action"],
                     "result": result
                 }
-                
+
                 # 에러 정보 추출
                 if result.get("status") == "error":
                     print(f"🔍 [DEBUG] 툴 실행 에러: {result.get('message')}")
@@ -1520,20 +1993,20 @@ async def chat_with_help_bot(
                     }
                 else:
                     print(f"🔍 [DEBUG] 툴 실행 성공: {result.get('status')}")
-                    
+
                     # 성공적인 툴 실행 후 컨텍스트 업데이트
                     context_update = {
                         "last_tool_used": tool_usage["tool"]
                     }
-                    
+
                     # GitHub 툴 사용 시 사용자명 컨텍스트 업데이트
                     if tool_usage["tool"] == "github" and "username" in tool_usage["params"]:
                         username = tool_usage["params"]["username"]
                         if username != "UNKNOWN":
                             context_update["last_mentioned_user"] = username
-                    
+
                     session_manager.update_context(session_id, context_update)
-                
+
                 try:
                     logger.info(f"툴 실행 완료: {result['status']}")
                 except (ValueError, OSError):
@@ -1552,13 +2025,13 @@ async def chat_with_help_bot(
                     "error_message": str(e),
                     "retryable": True
                 }
-        
+
         # 시스템 프롬프트 정의
-        system_prompt = """당신은 AI 채용 관리 시스템의 에이전트입니다. 
+        system_prompt = """당신은 AI 채용 관리 시스템의 에이전트입니다.
 
 주요 기능:
 1. 채용공고 등록 및 관리
-2. 지원자 관리 및 평가  
+2. 지원자 관리 및 평가
 3. 면접 일정 관리
 4. 포트폴리오 분석
 5. 자기소개서 검증
@@ -1576,7 +2049,7 @@ async def chat_with_help_bot(
 툴 실행 결과가 있다면 그 결과를 바탕으로 답변해주세요.
 에러가 발생한 경우에도 사용자에게 친절하게 설명해주세요.
 
-중요: GitHub 레포지토리 분석 시 기술 스택 정보나 언어 정보를 추가로 언급하지 마세요. 
+중요: GitHub 레포지토리 분석 시 기술 스택 정보나 언어 정보를 추가로 언급하지 마세요.
 제공된 정보만 그대로 사용하세요.
 
 절대 금지사항:
@@ -1590,14 +2063,14 @@ async def chat_with_help_bot(
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"대화 기록:\n{conversation_context}\n\n현재 질문: {chat_message.message}"}
         ]
-        
+
         # 툴 결과가 있으면 프롬프트에 추가
         if tool_results:
             if tool_results.get("result", {}).get("status") == "success":
                 # 툴 결과를 자연어로 변환
                 natural_language_result = format_tool_data(tool_results["result"]["data"])
                 messages.append({
-                    "role": "assistant", 
+                    "role": "assistant",
                     "content": f"툴 실행 결과: {natural_language_result}"
                 })
             else:
@@ -1607,14 +2080,14 @@ async def chat_with_help_bot(
                     "role": "assistant",
                     "content": f"툴 실행 중 오류 발생: {error_message}"
                 })
-        
+
         print(f"🔍 [DEBUG] AI 응답 생성 시작 - 메시지 수: {len(messages)}")
         response = await openai_service.chat_completion(messages)
         print(f"🔍 [DEBUG] AI 응답 생성 완료: {response[:100]}...")
-        
+
         # 툴 사용 시 관련 페이지로 이동하는 액션 추가
         page_action = None
-        
+
         # AI 채용공고 등록 액션 처리
         if tool_results and tool_results.get("mode") == "action" and tool_results.get("action") == "openAIJobRegistration":
             # 사용자 메시지에서 채용공고 정보 추출
@@ -1628,7 +2101,7 @@ async def chat_with_help_bot(
         elif tool_results and tool_results.get("tool"):
             tool_name = tool_results["tool"]
             action_type = tool_results.get("action", "")
-            
+
             # AI 기반 동적 페이지 결정
             page_action = await determine_target_page_with_ai(
                 user_message=chat_message.message,
@@ -1638,29 +2111,29 @@ async def chat_with_help_bot(
                 openai_service=openai_service,
                 session_context=session_context
             )
-        
+
         # AI 응답 저장
         update_session(session_id, response, is_user=False)
         print(f"🔍 [DEBUG] AI 응답 저장 완료")
-        
+
         # AI 기반 추천 질문 생성
         suggestions = await generate_suggestions_with_ai(
-            chat_message.message, 
-            response, 
+            chat_message.message,
+            response,
             openai_service,
             session_context
         )
         print(f"🔍 [DEBUG] AI 추천 질문 생성: {suggestions}")
-        
+
         # AI 기반 빠른 액션 생성
         quick_actions = await generate_quick_actions_with_ai(
-            chat_message.message, 
-            response, 
+            chat_message.message,
+            response,
             openai_service,
             session_context
         )
         print(f"🔍 [DEBUG] AI 빠른 액션 생성: {quick_actions}")
-        
+
         # AI 기반 컨텍스트 업데이트
         await update_conversation_context_with_ai(
             session_id=session_id,
@@ -1670,7 +2143,7 @@ async def chat_with_help_bot(
             openai_service=openai_service,
             session_manager=session_manager
         )
-        
+
         final_response = ChatResponse(
             response=response,
             session_id=session_id,
@@ -1682,30 +2155,30 @@ async def chat_with_help_bot(
             error_info=error_info,
             page_action=page_action
         )
-        
+
         print(f"🔍 [DEBUG] 최종 응답 생성 완료 - 세션: {session_id}")
         return final_response
-        
+
     except Exception as e:
         print(f"🔍 [DEBUG] 에이전트 예외 발생: {str(e)}")
         logger.error(f"에이전트 오류: {str(e)}")
         raise HTTPException(status_code=500, detail=f"챗봇 처리 중 오류가 발생했습니다: {str(e)}")
 
 async def generate_suggestions_with_ai(
-    user_message: str, 
-    ai_response: str, 
+    user_message: str,
+    ai_response: str,
     openai_service,
     session_context: Dict[str, Any] = None
 ) -> List[str]:
     """AI 기반 동적 추천 질문 생성"""
-    
+
     context_info = ""
     if session_context:
         if session_context.get("conversation_topic"):
             context_info += f"\n대화 주제: {session_context['conversation_topic']}"
         if session_context.get("last_tool_used"):
             context_info += f"\n마지막 사용 도구: {session_context['last_tool_used']}"
-    
+
     prompt = f"""
 사용자와의 대화 흐름을 바탕으로 다음에 물어볼 만한 자연스러운 질문 3개를 생성해주세요.
 
@@ -1716,7 +2189,7 @@ AI 응답: "{ai_response[:200]}..."
 
 시스템 기능:
 - 채용공고 관리
-- 지원자 관리  
+- 지원자 관리
 - 면접 일정 관리
 - 포트폴리오 분석
 - 자기소개서 검증
@@ -1729,24 +2202,24 @@ AI 응답: "{ai_response[:200]}..."
 
 JSON 배열로 응답: ["질문1", "질문2", "질문3"]
 """
-    
+
     try:
         response = await openai_service.chat_completion([
             {"role": "user", "content": prompt}
         ])
-        
+
         import json
         import re
-        
+
         # JSON 배열 추출
         json_match = re.search(r'\[.*\]', response, re.DOTALL)
         if json_match:
             suggestions = json.loads(json_match.group())
             return suggestions[:3]  # 최대 3개
-        
+
     except Exception as e:
         print(f"🔍 [DEBUG] AI 추천 질문 생성 실패: {str(e)}")
-    
+
     # 폴백: 기본 추천 질문
     return [
         "다른 기능은 어떤 것들이 있나요?",
@@ -1755,6 +2228,7 @@ JSON 배열로 응답: ["질문1", "질문2", "질문3"]
     ]
 
 import re
+
 
 def format_response_text(text: str) -> str:
     """
@@ -1765,16 +2239,16 @@ def format_response_text(text: str) -> str:
     - 이모지 앞에 두 줄 빈 줄 삽입
     - 불릿(•) 앞에 한 줄 빈 줄 삽입
     """
-    
+
     if not text:
         return text
 
     # 1️⃣ 이모지 리스트 (섹션 구분용)
     EMOJIS = ["📋", "💡", "🎯", "🔍", "📊", "🤝", "💼", "📝", "🚀", "💻"]
-    
+
     # 2️⃣ 숫자 항목 정규식 (숫자. 뒤에 한 칸만 남김)
     NUM_LIST_RE = re.compile(r'\b(\d+)\.\s+')
-    
+
     # 3️⃣ 이모지 찾기
     EMOJI_RE = re.compile(r'(' + '|'.join(map(re.escape, EMOJIS)) + r')')
 
@@ -1804,13 +2278,13 @@ def format_response_text(text: str) -> str:
     return text
 
 async def generate_quick_actions_with_ai(
-    user_message: str, 
-    ai_response: str, 
+    user_message: str,
+    ai_response: str,
     openai_service,
     session_context: Dict[str, Any] = None
 ) -> List[Dict[str, Any]]:
     """AI 기반 동적 빠른 액션 생성"""
-    
+
     available_pages = {
         "/dashboard": {"title": "대시보드", "icon": "📊"},
         "/applicants": {"title": "지원자 관리", "icon": "👥"},
@@ -1821,12 +2295,12 @@ async def generate_quick_actions_with_ai(
         "/portfolio": {"title": "포트폴리오", "icon": "🎨"},
         "/settings": {"title": "설정", "icon": "⚙️"}
     }
-    
+
     context_info = ""
     if session_context:
         if session_context.get("last_tool_used"):
             context_info += f"\n마지막 사용 도구: {session_context['last_tool_used']}"
-    
+
     prompt = f"""
 사용자의 요청과 AI 응답을 바탕으로 사용자가 다음에 할 가능성이 높은 액션 2개를 선택해주세요.
 
@@ -1843,7 +2317,7 @@ AI 응답: "{ai_response[:200]}..."
 2. 사용자가 실제로 필요로 할 가능성이 높은 기능
 3. 현재 응답과 관련된 추가 작업
 
-JSON 배열로 응답: 
+JSON 배열로 응답:
 [
   {{"target": "/페이지경로", "title": "액션명"}},
   {{"target": "/페이지경로", "title": "액션명"}}
@@ -1851,39 +2325,39 @@ JSON 배열로 응답:
 
 액션이 필요하지 않으면: []
 """
-    
+
     try:
         response = await openai_service.chat_completion([
             {"role": "user", "content": prompt}
         ])
-        
+
         import json
         import re
-        
+
         # JSON 배열 추출
         json_match = re.search(r'\[.*\]', response, re.DOTALL)
         if json_match:
             actions_data = json.loads(json_match.group())
-            
+
             # 액션 정보 구성
             actions = []
             for action_data in actions_data[:2]:  # 최대 2개
                 target = action_data["target"]
                 title = action_data["title"]
                 icon = available_pages.get(target, {}).get("icon", "🔗")
-                
+
                 actions.append({
                     "title": title,
                     "action": "navigate",
                     "target": target,
                     "icon": icon
                 })
-            
+
             return actions
-        
+
     except Exception as e:
         print(f"🔍 [DEBUG] AI 빠른 액션 생성 실패: {str(e)}")
-    
+
     # 폴백: 현재 대화와 관련된 기본 액션
     if "포트폴리오" in user_message or "github" in user_message.lower():
         return [{
@@ -1892,7 +2366,7 @@ JSON 배열로 응답:
             "target": "/github-test",
             "icon": "💻"
         }]
-    
+
     return []
 
 @router.get("/session/{session_id}", response_model=ChatSession)
@@ -1901,9 +2375,9 @@ async def get_session(session_id: str):
     session_info = session_manager.get_session_info(session_id)
     if not session_info:
         raise HTTPException(status_code=404, detail="세션을 찾을 수 없습니다")
-    
+
     history = session_manager.get_history(session_id)
-    
+
     return ChatSession(
         session_id=session_id,
         messages=history,
@@ -1925,7 +2399,7 @@ async def list_sessions():
     # 세션 정리 후 목록 반환
     session_manager.cleanup_sessions()
     sessions = session_manager.list_all_sessions()
-    
+
     return {
         "sessions": sessions,
         "total_count": len(sessions)
@@ -1937,7 +2411,7 @@ async def cleanup_all_sessions():
     before_count = len(session_manager.sessions)
     session_manager.cleanup_sessions()
     after_count = len(session_manager.sessions)
-    
+
     return {
         "message": f"세션 정리 완료: {before_count - after_count}개 세션 삭제됨",
         "before_count": before_count,
@@ -2051,11 +2525,11 @@ async def generate_title_recommendations(
     """채용공고 제목 추천 생성"""
     try:
         print(f"[API] 제목 추천 요청 받음 - 폼 데이터: {len(request.form_data)}개 필드")
-        
+
         # 폼 데이터에서 주요 정보 추출
         form_data = request.form_data
         content = request.content
-        
+
         # 주요 키워드 추출
         keywords = []
         if form_data.get('department'):
@@ -2066,7 +2540,7 @@ async def generate_title_recommendations(
             keywords.append(form_data['experience'])
         if form_data.get('mainDuties'):
             keywords.append(form_data['mainDuties'])
-        
+
         # 제목 생성 프롬프트 구성
         prompt = f"""
 다음 채용공고 정보를 바탕으로 4가지 컨셉의 제목을 생성해주세요:
@@ -2078,7 +2552,7 @@ async def generate_title_recommendations(
 
 다음 4가지 컨셉으로 제목을 생성해주세요:
 1. 신입친화형: 신입 지원자들이 매력적으로 느낄 수 있는 제목
-2. 전문가형: 경력자들이 전문성을 발휘할 수 있다고 느끼는 제목  
+2. 전문가형: 경력자들이 전문성을 발휘할 수 있다고 느끼는 제목
 3. 일반형: 일반적인 채용공고 제목
 4. 창의형: 독특하고 눈에 띄는 제목
 
@@ -2094,21 +2568,21 @@ JSON 형태로 응답해주세요:
     ]
 }}
 """
-        
+
         # LLM 서비스를 통한 제목 생성
         response = await openai_service.chat_completion([{"role": "user", "content": prompt}])
-        
+
         try:
             # JSON 응답 파싱
             import json
             import re
-            
+
             # JSON 부분 추출
             json_match = re.search(r'\{.*\}', response, re.DOTALL)
             if json_match:
                 json_str = json_match.group()
                 result = json.loads(json_str)
-                
+
                 if 'titles' in result and isinstance(result['titles'], list):
                     titles = []
                     for title_data in result['titles']:
@@ -2118,19 +2592,19 @@ JSON 형태로 응답해주세요:
                                 title=title_data['title'],
                                 description=title_data.get('description', '')
                             ))
-                    
+
                     if titles:
                         return TitleRecommendationResponse(
                             titles=titles,
                             message="AI가 생성한 제목 추천입니다."
                         )
-            
+
             # JSON 파싱 실패 시 기본 제목 생성
             print(f"[API] JSON 파싱 실패, 기본 제목 생성")
-            
+
         except Exception as parse_error:
             print(f"[API] JSON 파싱 오류: {parse_error}")
-        
+
         # 기본 제목 생성 (LLM 응답이 실패하거나 파싱이 실패한 경우)
         default_titles = [
             TitleRecommendation(
@@ -2139,7 +2613,7 @@ JSON 형태로 응답해주세요:
                 description="신입 지원자들이 매력적으로 느낄 수 있는 제목"
             ),
             TitleRecommendation(
-                concept="전문가형", 
+                concept="전문가형",
                 title=f"전문성을 발휘할 {keywords[0] if keywords else '직무'} 인재 모집",
                 description="경력자들이 전문성을 발휘할 수 있다고 느끼는 제목"
             ),
@@ -2154,16 +2628,16 @@ JSON 형태로 응답해주세요:
                 description="독특하고 눈에 띄는 제목"
             )
         ]
-        
+
         return TitleRecommendationResponse(
             titles=default_titles,
             message="기본 제목 추천입니다."
         )
-        
+
     except Exception as e:
         print(f"[API] 제목 추천 생성 실패: {str(e)}")
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"제목 추천 생성에 실패했습니다: {str(e)}"
         )
 
@@ -2173,11 +2647,11 @@ async def get_agent_status():
     try:
         # 모니터링 시스템에서 메트릭 가져오기
         metrics = monitoring_system.get_metrics()
-        
+
         # 세션 매니저에서 세션 정보 가져오기
         session_manager = SessionManager()
         active_sessions = session_manager.list_all_sessions()
-        
+
         return {
             "status": "active",
             "timestamp": datetime.now().isoformat(),
@@ -2205,7 +2679,7 @@ async def get_agent_status():
             "error": str(e),
             "services": {
                 "llm_service": "unknown",
-                "tool_executor": "unknown", 
+                "tool_executor": "unknown",
                 "monitoring": "error"
             }
         }
@@ -2225,9 +2699,9 @@ async def generate_title(request: TitleGenerationRequest):
     try:
         form_data = request.form_data
         content = request.content or ""
-        
+
         print(f"[API] 제목 생성 요청: {form_data}")
-        
+
         # 폼 데이터에서 키워드 추출
         keywords = []
         if form_data.get('department'):
@@ -2241,11 +2715,11 @@ async def generate_title(request: TitleGenerationRequest):
             words = duties.split()
             if words:
                 keywords.append(words[0])
-        
+
         # 기본 키워드가 없으면 기본값 사용
         if not keywords:
             keywords = ['직무', '인재']
-        
+
         # AI 제목 생성 (실제로는 LLM 서비스 호출)
         # 현재는 기본 제목 생성
         generated_titles = [
@@ -2270,12 +2744,12 @@ async def generate_title(request: TitleGenerationRequest):
                 "description": "독특하고 눈에 띄는 제목"
             }
         ]
-        
+
         return TitleGenerationResponse(
             titles=generated_titles,
             message="AI가 생성한 제목 추천입니다."
         )
-        
+
     except Exception as e:
         print(f"[API] 제목 생성 실패: {str(e)}")
         raise HTTPException(

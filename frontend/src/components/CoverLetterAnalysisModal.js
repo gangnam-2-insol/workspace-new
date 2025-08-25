@@ -1,7 +1,7 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiX, FiEye, FiFileText, FiStar, FiTrendingUp, FiTrendingDown } from 'react-icons/fi';
+import { FiX, FiEye, FiFileText, FiStar, FiTrendingUp, FiTrendingDown, FiCheck, FiAlertCircle, FiXCircle, FiBarChart2 } from 'react-icons/fi';
 import {
   Chart as ChartJS,
   RadialLinearScale,
@@ -39,7 +39,7 @@ const ModalOverlay = styled(motion.div)`
 const ModalContent = styled(motion.div)`
   background: white;
   border-radius: 16px;
-  max-width: 1000px;
+  max-width: 1200px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
@@ -84,7 +84,7 @@ const HeaderBackground = styled.div`
   height: 200%;
   background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 70%);
   animation: rotate 20s linear infinite;
-  
+
   @keyframes rotate {
     from { transform: rotate(0deg); }
     to { transform: rotate(360deg); }
@@ -111,23 +111,29 @@ const Content = styled.div`
   padding: 32px;
 `;
 
-const OverallScore = styled(motion.div)`
+const OverallScore = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 20px;
+  gap: 24px;
   margin: 24px 0 32px 0;
   padding: 32px;
   background: linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%);
   border-radius: 16px;
-  border: 2px solid #e9ecef;
+  border: 2px solid #dee2e6;
 `;
 
-const ScoreCircle = styled(motion.div)`
+const ScoreCircle = styled.div`
   width: 100px;
   height: 100px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: ${props => {
+    const score = props.score;
+    if (score >= 8) return 'linear-gradient(135deg, #28a745 0%, #20c997 100%)';
+    if (score >= 6) return 'linear-gradient(135deg, #17a2b8 0%, #6f42c1 100%)';
+    if (score >= 4) return 'linear-gradient(135deg, #ffc107 0%, #fd7e14 100%)';
+    return 'linear-gradient(135deg, #dc3545 0%, #e83e8c 100%)';
+  }};
   display: flex;
   align-items: center;
   justify-content: center;
@@ -135,7 +141,7 @@ const ScoreCircle = styled(motion.div)`
   font-weight: 700;
   color: white;
   border: 4px solid rgba(255, 255, 255, 0.3);
-  box-shadow: 0 8px 32px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 8px 16px rgba(0, 0, 0, 0.1);
 `;
 
 const ScoreInfo = styled.div`
@@ -145,44 +151,48 @@ const ScoreInfo = styled.div`
 const ScoreLabel = styled.div`
   font-size: 18px;
   font-weight: 600;
-  color: #2c3e50;
+  color: #495057;
   margin-bottom: 8px;
 `;
 
 const ScoreValue = styled.div`
   font-size: 24px;
   font-weight: 700;
-  color: #667eea;
+  color: #212529;
 `;
 
-const RadarChartSection = styled(motion.div)`
-  margin: 32px 0;
-`;
-
-const SectionTitle = styled.h3`
-  font-size: 22px;
-  font-weight: 600;
-  color: #2c3e50;
-  margin: 0 0 20px 0;
-  padding-bottom: 12px;
-  border-bottom: 3px solid #667eea;
-  display: flex;
-  align-items: center;
-  gap: 12px;
+const ScoreDescription = styled.div`
+  font-size: 14px;
+  color: #6c757d;
+  margin-top: 4px;
 `;
 
 const ChartContainer = styled.div`
-  background: #f8f9fa;
-  border-radius: 16px;
+  background: white;
+  border-radius: 12px;
   padding: 24px;
+  margin: 24px 0;
   border: 1px solid #e9ecef;
-  margin-bottom: 24px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
+`;
+
+const ChartTitle = styled.h3`
+  font-size: 20px;
+  font-weight: 600;
+  color: #2c3e50;
+  margin: 0 0 16px 0;
+  text-align: center;
 `;
 
 const ChartWrapper = styled.div`
-  height: 500px;
   position: relative;
-  margin: 20px 0;
+  max-width: 600px;
+  margin: 0 auto;
+
+  canvas {
+    display: block !important;
+    margin: 0 auto !important;
+  }
 `;
 
 const ChartDescription = styled.p`
@@ -194,7 +204,7 @@ const ChartDescription = styled.p`
 
 const AnalysisGrid = styled(motion.div)`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
   gap: 20px;
   margin-top: 32px;
 `;
@@ -206,27 +216,17 @@ const AnalysisItem = styled(motion.div)`
   border: 1px solid #e9ecef;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.05);
   transition: all 0.3s ease;
-  border-left: 4px solid #667eea;
+  border-left: 4px solid ${props => {
+    const score = props.score;
+    if (score >= 8) return '#28a745';
+    if (score >= 6) return '#17a2b8';
+    if (score >= 4) return '#ffc107';
+    return '#dc3545';
+  }};
 
   &:hover {
     transform: translateY(-4px);
     box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
-  }
-
-  &.excellent {
-    border-left-color: #28a745;
-  }
-
-  &.good {
-    border-left-color: #17a2b8;
-  }
-
-  &.average {
-    border-left-color: #ffc107;
-  }
-
-  &.poor {
-    border-left-color: #dc3545;
   }
 `;
 
@@ -256,7 +256,13 @@ const ItemScore = styled.div`
 
 const ScoreNumber = styled.span`
   font-size: 20px;
-  color: #28a745;
+  color: ${props => {
+    const score = props.score;
+    if (score >= 8) return '#28a745';
+    if (score >= 6) return '#17a2b8';
+    if (score >= 4) return '#ffc107';
+    return '#dc3545';
+  }};
 `;
 
 const ScoreMax = styled.span`
@@ -280,111 +286,178 @@ const StatusIcon = styled.div`
   justify-content: center;
   font-size: 12px;
   color: white;
-  background: #28a745;
+  background: ${props => {
+    const score = props.score;
+    if (score >= 8) return '#28a745';
+    if (score >= 6) return '#17a2b8';
+    if (score >= 4) return '#ffc107';
+    return '#dc3545';
+  }};
+`;
 
-  &.excellent {
-    background: #28a745;
-  }
+const JsonViewer = styled.div`
+  background: #f8f9fa;
+  border: 1px solid #e9ecef;
+  border-radius: 8px;
+  padding: 16px;
+  margin-top: 16px;
+  font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+  font-size: 12px;
+  overflow-x: auto;
+  max-height: 300px;
+  overflow-y: auto;
+`;
 
-  &.good {
-    background: #17a2b8;
-  }
+const ToggleButton = styled.button`
+  background: #6c757d;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 16px;
 
-  &.average {
-    background: #ffc107;
-    color: #212529;
-  }
-
-  &.poor {
-    background: #dc3545;
+  &:hover {
+    background: #5a6268;
   }
 `;
 
-const CoverLetterAnalysisModal = ({ isOpen, onClose, coverLetterData, analysisData }) => {
-  const [chartData, setChartData] = useState(null);
-  const [isChartReady, setIsChartReady] = useState(false);
+const AnalyzeButton = styled.button`
+  background: #667eea;
+  color: white;
+  border: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin-top: 16px;
 
-  useEffect(() => {
-    if (isOpen && analysisData) {
-      // 차트 데이터 준비
-      prepareChartData();
-      // 차트 애니메이션을 위한 지연
-      setTimeout(() => setIsChartReady(true), 500);
+  &:hover:not(:disabled) {
+    background: #5a67d8;
+  }
+
+  &:disabled {
+    background: #a0aec0;
+    cursor: not-allowed;
+  }
+`;
+
+// 자소서 분석 항목 라벨 함수
+const getCoverLetterAnalysisLabel = (key) => {
+  const labels = {
+    motivation_relevance: '지원 동기',
+    problem_solving_STAR: 'STAR 기법',
+    quantitative_impact: '정량적 성과',
+    job_understanding: '직무 이해도',
+    unique_experience: '차별화 경험',
+    logical_flow: '논리적 흐름',
+    keyword_diversity: '키워드 다양성',
+    sentence_readability: '문장 가독성',
+    typos_and_errors: '오탈자'
+  };
+  return labels[key] || key;
+};
+
+// 점수별 등급 및 설명
+const getScoreGrade = (score) => {
+  if (score >= 8) return { grade: '우수', color: '#28a745', icon: <FiCheck /> };
+  if (score >= 6) return { grade: '양호', color: '#17a2b8', icon: <FiTrendingUp /> };
+  if (score >= 4) return { grade: '보통', color: '#ffc107', icon: <FiAlertCircle /> };
+  return { grade: '개선필요', color: '#dc3545', icon: <FiXCircle /> };
+};
+
+const CoverLetterAnalysisModal = ({
+  isOpen,
+  onClose,
+  analysisData,
+  applicantName = '지원자',
+  onPerformAnalysis,
+  applicantId
+}) => {
+  const [showJson, setShowJson] = useState(false);
+  const [isAnalyzing, setIsAnalyzing] = useState(false);
+
+  // 분석 데이터 처리
+  const processedData = useMemo(() => {
+    if (!analysisData) return null;
+
+    let analysisResult = null;
+
+    // 다양한 데이터 구조 지원
+    if (analysisData.analysis_result) {
+      analysisResult = analysisData.analysis_result;
+    } else if (analysisData.analysis) {
+      analysisResult = analysisData.analysis;
+    } else if (analysisData.cover_letter_analysis) {
+      analysisResult = analysisData.cover_letter_analysis;
     } else {
-      setIsChartReady(false);
+      analysisResult = analysisData;
     }
-  }, [isOpen, analysisData]);
 
-  const prepareChartData = () => {
-    if (!analysisData) return;
+    return analysisResult;
+  }, [analysisData]);
 
-    const coverLetterAnalysis = analysisData.cover_letter_analysis || {};
-    
-    // 9개 평가 항목 데이터 구성
-    const chartData = {
-      labels: [
-        '직무 적합성 (Job Fit)',
-        '기술 스택 일치 여부',
-        '경험한 프로젝트 관련성',
-        '핵심 기술 역량 (Tech Competency)',
-        '경력 및 성과 (Experience & Impact)',
-        '문제 해결 능력 (Problem-Solving)',
-        '커뮤니케이션/협업 (Collaboration)',
-        '성장 가능성/학습 능력 (Growth Potential)',
-        '자소서 표현력/논리성 (Clarity & Grammar)'
-      ],
+  // 전체 점수 계산
+  const overallScore = useMemo(() => {
+    if (!processedData) return 0;
+
+    const scores = Object.values(processedData)
+      .filter(item => item && typeof item === 'object' && 'score' in item)
+      .map(item => item.score);
+
+    if (scores.length === 0) return 8; // 기본값
+
+    const total = scores.reduce((sum, score) => sum + score, 0);
+    return Math.round((total / scores.length) * 10) / 10;
+  }, [processedData]);
+
+  // 차트 데이터 생성
+  const chartData = useMemo(() => {
+    if (!processedData) return null;
+
+    const labels = [];
+    const scores = [];
+    const colors = [];
+
+    Object.entries(processedData).forEach(([key, value]) => {
+      if (value && typeof value === 'object' && 'score' in value) {
+        labels.push(getCoverLetterAnalysisLabel(key));
+        scores.push(value.score);
+
+        // 점수별 색상
+        if (value.score >= 8) colors.push('rgba(40, 167, 69, 0.8)');
+        else if (value.score >= 6) colors.push('rgba(23, 162, 184, 0.8)');
+        else if (value.score >= 4) colors.push('rgba(255, 193, 7, 0.8)');
+        else colors.push('rgba(220, 53, 69, 0.8)');
+      }
+    });
+
+    return {
+      labels,
       datasets: [
         {
           label: '자소서 분석 점수',
-          data: [
-            coverLetterAnalysis.motivation_relevance?.score || 75,
-            coverLetterAnalysis.job_understanding?.score || 75,
-            coverLetterAnalysis.unique_experience?.score || 75,
-            coverLetterAnalysis.quantitative_impact?.score || 75,
-            coverLetterAnalysis.problem_solving_STAR?.score || 75,
-            coverLetterAnalysis.logical_flow?.score || 75,
-            coverLetterAnalysis.keyword_diversity?.score || 75,
-            coverLetterAnalysis.sentence_readability?.score || 75,
-            coverLetterAnalysis.typos_and_errors?.score || 75
-          ],
-          backgroundColor: 'rgba(102, 126, 234, 0.2)',
-          borderColor: 'rgba(102, 126, 234, 1)',
-          borderWidth: 3,
-          pointBackgroundColor: 'rgba(102, 126, 234, 1)',
+          data: scores,
+          backgroundColor: colors.map(color => color.replace('0.8', '0.2')),
+          borderColor: colors,
+          borderWidth: 2,
+          pointBackgroundColor: colors,
           pointBorderColor: '#fff',
-          pointHoverBackgroundColor: '#fff',
-          pointHoverBorderColor: 'rgba(102, 126, 234, 1)',
+          pointBorderWidth: 2,
           pointRadius: 6,
-          pointHoverRadius: 8,
-          fill: true,
         },
       ],
     };
-
-    setChartData(chartData);
-  };
-
-  const getScoreStatus = (score) => {
-    if (score >= 85) return { status: 'excellent', icon: '⭐' };
-    if (score >= 70) return { status: 'good', icon: '✓' };
-    if (score >= 55) return { status: 'average', icon: '⚠️' };
-    return { status: 'poor', icon: '❌' };
-  };
-
-  const getOverallScore = () => {
-    if (!analysisData?.cover_letter_analysis) return 75;
-    
-    const scores = Object.values(analysisData.cover_letter_analysis)
-      .filter(item => item && typeof item === 'object' && 'score' in item)
-      .map(item => item.score);
-    
-    if (scores.length === 0) return 75;
-    
-    const average = scores.reduce((sum, score) => sum + score, 0) / scores.length;
-    return Math.round(average);
-  };
-
-  const overallScore = getOverallScore();
+  }, [processedData]);
 
   const chartOptions = {
     responsive: true,
@@ -392,40 +465,20 @@ const CoverLetterAnalysisModal = ({ isOpen, onClose, coverLetterData, analysisDa
     scales: {
       r: {
         beginAtZero: true,
-        max: 100,
-        min: 0,
+        max: 10,
         ticks: {
-          stepSize: 20,
+          stepSize: 2,
           color: '#666',
-          font: {
-            size: 12,
-          },
-          callback: function(value) {
-            return value + '점';
-          }
         },
         grid: {
-          color: 'rgba(0, 0, 0, 0.1)',
-        },
-        angleLines: {
-          color: 'rgba(0, 0, 0, 0.1)',
+          color: '#e9ecef',
         },
         pointLabels: {
-          color: '#333',
+          color: '#495057',
           font: {
-            size: 11,
-            weight: 'bold',
+            size: 12,
+            weight: '600',
           },
-          callback: function(value, index) {
-            const words = value.split(' ');
-            if (words.length > 4) {
-              return words.slice(0, 3).join(' ') + '\n' + words.slice(3).join(' ');
-            } else if (words.length > 2) {
-              const mid = Math.ceil(words.length / 2);
-              return words.slice(0, mid).join(' ') + '\n' + words.slice(mid).join(' ');
-            }
-            return value;
-          }
         },
       },
     },
@@ -434,42 +487,37 @@ const CoverLetterAnalysisModal = ({ isOpen, onClose, coverLetterData, analysisDa
         display: false,
       },
       tooltip: {
-        backgroundColor: 'rgba(0, 0, 0, 0.9)',
+        backgroundColor: 'rgba(0, 0, 0, 0.8)',
         titleColor: '#fff',
         bodyColor: '#fff',
-        borderColor: 'rgba(102, 126, 234, 1)',
-        borderWidth: 2,
+        borderColor: '#fff',
+        borderWidth: 1,
         cornerRadius: 8,
         displayColors: false,
         callbacks: {
-          title: function(context) {
-            return context[0].label;
-          },
           label: function(context) {
-            return `점수: ${context.parsed.r}점`;
+            return `점수: ${context.parsed.r}/10`;
           },
-          afterLabel: function(context) {
-            const descriptions = [
-              '지원 직무와의 연관성 및 적합성',
-              'JD에 명시된 기술과 이력서 기술 스택 일치도',
-              '경험한 프로젝트가 지원 포지션과의 관련성',
-              '프로그래밍 언어, 프레임워크, DB 등 기술 역량',
-              '단순 참여 vs 주도적 역할, 수치화된 성과',
-              '문제 상황 → 해결 과정 → 성과 구조',
-              '팀 프로젝트 경험, 협업 도구 사용 경험',
-              '새로운 기술 학습/적용, 꾸준한 학습 습관',
-              '글의 흐름, 논리적 전개, 맞춤법/문법'
-            ];
-            return descriptions[context.dataIndex] || '';
-          }
-        }
+        },
       },
     },
-    interaction: {
-      mode: 'nearest',
-      axis: 'r',
-      intersect: false
-    },
+  };
+
+  const scoreGrade = getScoreGrade(overallScore);
+
+  // 분석 수행 함수
+  const handlePerformAnalysis = async () => {
+    if (!onPerformAnalysis || !applicantId) return;
+
+    setIsAnalyzing(true);
+    try {
+      await onPerformAnalysis(applicantId);
+    } catch (error) {
+      console.error('자소서 분석 오류:', error);
+      alert('자소서 분석에 실패했습니다: ' + error.message);
+    } finally {
+      setIsAnalyzing(false);
+    }
   };
 
   if (!isOpen) return null;
@@ -483,11 +531,10 @@ const CoverLetterAnalysisModal = ({ isOpen, onClose, coverLetterData, analysisDa
         onClick={onClose}
       >
         <ModalContent
+          initial={{ scale: 0.9, opacity: 0 }}
+          animate={{ scale: 1, opacity: 1 }}
+          exit={{ scale: 0.9, opacity: 0 }}
           onClick={(e) => e.stopPropagation()}
-          initial={{ scale: 0.9, opacity: 0, y: 50 }}
-          animate={{ scale: 1, opacity: 1, y: 0 }}
-          exit={{ scale: 0.9, opacity: 0, y: 50 }}
-          transition={{ duration: 0.3, ease: "easeOut" }}
         >
           <CloseButton onClick={onClose}>
             <FiX />
@@ -495,123 +542,119 @@ const CoverLetterAnalysisModal = ({ isOpen, onClose, coverLetterData, analysisDa
 
           <Header>
             <HeaderBackground />
-            <Title>자기소개서 상세 분석</Title>
-            <Subtitle>
-              AI 기반 종합 평가 • {coverLetterData?.filename || '자기소개서'} 분석 결과
-            </Subtitle>
+            <Title>자소서 상세 분석</Title>
+            <Subtitle>{applicantName}님의 자소서 분석 결과</Subtitle>
           </Header>
 
           <Content>
-            {/* 전체 점수 */}
-            <OverallScore
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2, duration: 0.5 }}
-            >
-              <ScoreCircle
-                initial={{ scale: 0, rotate: -180 }}
-                animate={{ scale: 1, rotate: 0 }}
-                transition={{ delay: 0.4, duration: 0.6, type: "spring", stiffness: 200 }}
-              >
+            {/* 전체 점수 섹션 */}
+            <OverallScore>
+              <ScoreCircle score={overallScore}>
                 {overallScore}
               </ScoreCircle>
               <ScoreInfo>
-                <ScoreLabel>자기소개서 종합 점수</ScoreLabel>
-                <ScoreValue>{overallScore}/100점</ScoreValue>
+                <ScoreLabel>전체 평가 점수</ScoreLabel>
+                <ScoreValue>{overallScore}/10점</ScoreValue>
+                <ScoreDescription>
+                  {scoreGrade.grade} 등급 - {scoreGrade.grade === '우수' ? '매우 우수한 자소서입니다' :
+                    scoreGrade.grade === '양호' ? '양호한 자소서입니다' :
+                    scoreGrade.grade === '보통' ? '개선이 필요한 부분이 있습니다' :
+                    '전반적인 개선이 필요합니다'}
+                </ScoreDescription>
               </ScoreInfo>
             </OverallScore>
 
-            {/* 레이더 차트 */}
-            <RadarChartSection
-              initial={{ opacity: 0, y: 30 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.6, duration: 0.5 }}
-            >
-              <SectionTitle>
-                <FiStar />
-                9개 평가 항목 레이더 차트
-              </SectionTitle>
-              
+            {/* 레이더 차트 섹션 */}
+            {chartData && (
               <ChartContainer>
+                <ChartTitle>9개 평가 항목 분석</ChartTitle>
                 <ChartDescription>
-                  각 항목을 클릭하면 상세 설명을 확인할 수 있습니다
+                  지원 동기부터 문장 가독성까지 9개 항목을 종합적으로 분석한 결과입니다.
                 </ChartDescription>
-                
                 <ChartWrapper>
-                  {chartData && isChartReady && (
-                    <motion.div
-                      initial={{ opacity: 0, scale: 0.8 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ delay: 0.8, duration: 0.6 }}
-                    >
-                      <Radar data={chartData} options={chartOptions} />
-                    </motion.div>
-                  )}
+                  <Radar data={chartData} options={chartOptions} height={400} />
                 </ChartWrapper>
               </ChartContainer>
-            </RadarChartSection>
+            )}
 
-            {/* 상세 분석 항목들 */}
-            <AnalysisGrid
-              initial={{ opacity: 0 }}
-              animate={{ opacity: 1 }}
-              transition={{ delay: 1.0, duration: 0.5 }}
-            >
-              {chartData?.labels.map((label, index) => {
-                const score = chartData.datasets[0].data[index];
-                const { status, icon } = getScoreStatus(score);
-                
-                return (
-                  <AnalysisItem
-                    key={index}
-                    className={status}
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 1.2 + index * 0.1, duration: 0.4 }}
-                  >
-                    <ItemHeader>
-                      <ItemTitle>
-                        {icon} {label}
-                      </ItemTitle>
-                      <ItemScore>
-                        <ScoreNumber>{score}</ScoreNumber>
-                        <ScoreMax>/100</ScoreMax>
-                        <StatusIcon className={status}>
-                          {status === 'excellent' ? '⭐' : 
-                           status === 'good' ? '✓' : 
-                           status === 'average' ? '⚠️' : '❌'}
-                        </StatusIcon>
-                      </ItemScore>
-                    </ItemHeader>
-                    <ItemDescription>
-                      {getScoreDescription(label, score)}
-                    </ItemDescription>
-                  </AnalysisItem>
-                );
-              })}
-            </AnalysisGrid>
+            {/* 상세 분석 항목 */}
+            {processedData && (
+              <AnalysisGrid
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5 }}
+              >
+                {Object.entries(processedData).map(([key, value], index) => {
+                  if (!value || typeof value !== 'object' || !('score' in value)) return null;
+
+                  const score = value.score;
+                  const grade = getScoreGrade(score);
+
+                  return (
+                    <AnalysisItem
+                      key={key}
+                      score={score}
+                      initial={{ opacity: 0, y: 20 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      transition={{ duration: 0.5, delay: index * 0.1 }}
+                    >
+                      <ItemHeader>
+                        <ItemTitle>
+                          {getCoverLetterAnalysisLabel(key)}
+                        </ItemTitle>
+                        <ItemScore>
+                          <ScoreNumber score={score}>{score}</ScoreNumber>
+                          <ScoreMax>/10</ScoreMax>
+                          <StatusIcon score={score}>
+                            {grade.icon}
+                          </StatusIcon>
+                        </ItemScore>
+                      </ItemHeader>
+                      <ItemDescription>
+                        {value.description || value.reason || '분석 결과가 없습니다.'}
+                      </ItemDescription>
+                    </AnalysisItem>
+                  );
+                })}
+              </AnalysisGrid>
+            )}
+
+            {/* 분석 수행 버튼 */}
+            {onPerformAnalysis && applicantId && (
+              <AnalyzeButton
+                onClick={handlePerformAnalysis}
+                disabled={isAnalyzing}
+              >
+                {isAnalyzing ? (
+                  <>
+                    <FiTrendingUp />
+                    분석 중...
+                  </>
+                ) : (
+                  <>
+                    <FiBarChart2 />
+                    자소서 분석 수행
+                  </>
+                )}
+              </AnalyzeButton>
+            )}
+
+            {/* JSON 원본 데이터 보기 */}
+            <ToggleButton onClick={() => setShowJson(!showJson)}>
+              <FiEye />
+              {showJson ? 'JSON 숨기기' : 'JSON 원본 데이터 보기'}
+            </ToggleButton>
+
+            {showJson && (
+              <JsonViewer>
+                <pre>{JSON.stringify(analysisData, null, 2)}</pre>
+              </JsonViewer>
+            )}
           </Content>
         </ModalContent>
       </ModalOverlay>
     </AnimatePresence>
   );
-};
-
-// 점수별 설명 함수
-const getScoreDescription = (label, score) => {
-  const descriptions = {
-    '직무 적합성 (Job Fit)': '지원 직무와의 연관성 및 적합성을 평가합니다.',
-    '기술 스택 일치 여부': 'JD에 명시된 기술과 이력서 기술 스택의 일치도를 분석합니다.',
-    '경험한 프로젝트 관련성': '경험한 프로젝트가 지원 포지션과 얼마나 관련 있는지 평가합니다.',
-    '핵심 기술 역량 (Tech Competency)': '프로그래밍 언어, 프레임워크, DB 등 기술 역량을 분석합니다.',
-    '경력 및 성과 (Experience & Impact)': '주도적 역할과 수치화된 성과 제시 여부를 평가합니다.',
-    '문제 해결 능력 (Problem-Solving)': '문제 상황 → 해결 과정 → 성과 구조를 분석합니다.',
-    '커뮤니케이션/협업 (Collaboration)': '팀 프로젝트 경험과 협업 도구 사용 경험을 평가합니다.',
-    '성장 가능성/학습 능력 (Growth Potential)': '새로운 기술 학습과 적응력을 분석합니다.',
-    '자소서 표현력/논리성 (Clarity & Grammar)': '글의 품질과 논리적 구성을 평가합니다.'
-  };
-  
-  return descriptions[label] || `${label}에 대한 상세 분석 결과입니다.`;
 };
 
 export default CoverLetterAnalysisModal;

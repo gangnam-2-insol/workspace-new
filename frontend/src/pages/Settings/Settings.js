@@ -45,11 +45,11 @@ const TabButton = styled.button`
   display: flex;
   align-items: center;
   gap: 10px;
-  
+
   &:hover {
     background: ${props => props.active ? '#3182ce' : '#f7fafc'};
   }
-  
+
   &:not(:last-child) {
     margin-right: 4px;
   }
@@ -58,7 +58,7 @@ const TabButton = styled.button`
 const TabContent = styled.div`
   display: ${props => props.active ? 'block' : 'none'};
   animation: ${props => props.active ? 'fadeIn 0.3s ease-in' : 'none'};
-  
+
   @keyframes fadeIn {
     from {
       opacity: 0;
@@ -116,7 +116,7 @@ const ActionButton = styled.button`
   align-items: center;
   gap: 6px;
   transition: all 0.2s ease;
-  
+
   &:hover {
     background: #edf2f7;
     border-color: #a0aec0;
@@ -134,13 +134,13 @@ const TextArea = styled.textarea`
   resize: vertical;
   transition: border-color 0.2s ease;
   line-height: 1.5;
-  
+
   &:focus {
     outline: none;
     border-color: #4299e1;
     box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
   }
-  
+
   &:disabled {
     background: #f7fafc;
     color: #a0aec0;
@@ -161,12 +161,12 @@ const SaveButton = styled.button`
   align-items: center;
   gap: 6px;
   transition: all 0.2s ease;
-  
+
   &:hover {
     background: #38a169;
     transform: translateY(-1px);
   }
-  
+
   &:disabled {
     background: #cbd5e0;
     cursor: not-allowed;
@@ -182,13 +182,13 @@ const InputField = styled.input`
   font-size: 14px;
   transition: border-color 0.2s ease;
   margin-bottom: 16px;
-  
+
   &:focus {
     outline: none;
     border-color: #4299e1;
     box-shadow: 0 0 0 3px rgba(66, 153, 225, 0.1);
   }
-  
+
   &:disabled {
     background: #f7fafc;
     color: #a0aec0;
@@ -212,18 +212,18 @@ const VariableInfo = styled.div`
   border-radius: 6px;
   font-size: 12px;
   color: #4a5568;
-  
+
   h4 {
     margin: 0 0 8px 0;
     font-size: 13px;
     font-weight: 600;
   }
-  
+
   ul {
     margin: 0;
     padding-left: 16px;
   }
-  
+
   li {
     margin-bottom: 4px;
   }
@@ -245,7 +245,7 @@ const HelpIcon = styled.div`
   display: flex;
   align-items: center;
   justify-content: center;
-  
+
   &:hover {
     color: #4299e1;
   }
@@ -267,7 +267,7 @@ const Tooltip = styled.div`
   opacity: 0;
   visibility: hidden;
   transition: all 0.2s ease;
-  
+
   &::before {
     content: '';
     position: absolute;
@@ -277,7 +277,7 @@ const Tooltip = styled.div`
     border: 4px solid transparent;
     border-bottom-color: #2d3748;
   }
-  
+
   ${props => props.show && `
     opacity: 1;
     visibility: visible;
@@ -349,7 +349,7 @@ function Settings() {
 
     setIsSendingTest(true);
     try {
-      const response = await fetch('http://localhost:8000/api/send-test-mail', {
+              const response = await fetch('http://localhost:8000/api/send-test-mail', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -386,7 +386,7 @@ function Settings() {
           const templates = await templatesResponse.json();
           setMailTemplates(templates);
         }
-        
+
         // 메일 설정 조회
         const settingsResponse = await fetch('http://localhost:8000/api/mail-settings');
         if (settingsResponse.ok) {
@@ -400,14 +400,14 @@ function Settings() {
         if (savedTemplates) {
           setMailTemplates(JSON.parse(savedTemplates));
         }
-        
+
         const savedMailSettings = localStorage.getItem('mailSettings');
         if (savedMailSettings) {
           setMailSettings(JSON.parse(savedMailSettings));
         }
       }
     };
-    
+
     fetchData();
   }, []);
 
@@ -421,14 +421,14 @@ function Settings() {
     setIsSaving(true);
     try {
       // DB에 저장
-      const response = await fetch('http://localhost:8000/api/mail-templates', {
+              const response = await fetch('http://localhost:8000/api/mail-templates', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(mailTemplates)
       });
-      
+
       if (response.ok) {
         const result = await response.json();
         setEditingTemplate(null);
@@ -466,14 +466,14 @@ function Settings() {
     setIsSaving(true);
     try {
       // DB에 저장
-      const response = await fetch('http://localhost:8000/api/mail-settings', {
+              const response = await fetch('http://localhost:8000/api/mail-settings', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(mailSettings)
       });
-      
+
       if (response.ok) {
         const result = await response.json();
         alert(result.message || '메일 설정이 저장되었습니다.');
@@ -499,29 +499,29 @@ function Settings() {
   return (
     <Container>
       <Title>설정 및 지원</Title>
-      
+
       <Card>
         <h2><FiMail /> 메일 양식 관리</h2>
         <p>지원자들에게 자동으로 발송되는 메일의 양식을 관리할 수 있습니다.</p>
-        
+
         <TabContainer>
           <TabList>
-            <TabButton 
-              active={activeTab === 'passed'} 
+            <TabButton
+              active={activeTab === 'passed'}
               onClick={() => handleTabChange('passed')}
             >
               <FiMail size={16} />
               합격 안내 메일
             </TabButton>
-            <TabButton 
-              active={activeTab === 'rejected'} 
+            <TabButton
+              active={activeTab === 'rejected'}
               onClick={() => handleTabChange('rejected')}
             >
               <FiMail size={16} />
               불합격 안내 메일
             </TabButton>
-            <TabButton 
-              active={activeTab === 'settings'} 
+            <TabButton
+              active={activeTab === 'settings'}
               onClick={() => handleTabChange('settings')}
             >
               <FiSettings size={16} />
@@ -539,7 +539,7 @@ function Settings() {
                 </TemplateTitle>
                 <TemplateActions>
                   {editingTemplate === 'passed' ? (
-                    <SaveButton 
+                    <SaveButton
                       onClick={() => handleSaveTemplate('passed')}
                       disabled={isSaving}
                     >
@@ -554,7 +554,7 @@ function Settings() {
                   )}
                 </TemplateActions>
               </TemplateHeader>
-              
+
                              <div>
                  <LabelContainer>
                    <Label>제목:</Label>
@@ -575,7 +575,7 @@ function Settings() {
                    disabled={editingTemplate !== 'passed'}
                    placeholder="메일 제목을 입력하세요..."
                  />
-                 
+
                  <LabelContainer>
                    <Label>내용:</Label>
                    <HelpIcon
@@ -595,7 +595,7 @@ function Settings() {
                    placeholder="메일 내용을 입력하세요..."
                  />
                </div>
-              
+
               <VariableInfo>
                 <h4>사용 가능한 변수:</h4>
                 <ul>
@@ -618,7 +618,7 @@ function Settings() {
                 </TemplateTitle>
                 <TemplateActions>
                   {editingTemplate === 'rejected' ? (
-                    <SaveButton 
+                    <SaveButton
                       onClick={() => handleSaveTemplate('rejected')}
                       disabled={isSaving}
                     >
@@ -633,7 +633,7 @@ function Settings() {
                   )}
                 </TemplateActions>
               </TemplateHeader>
-              
+
                              <div>
                  <LabelContainer>
                    <Label>제목:</Label>
@@ -654,7 +654,7 @@ function Settings() {
                    disabled={editingTemplate !== 'rejected'}
                    placeholder="메일 제목을 입력하세요..."
                  />
-                 
+
                  <LabelContainer>
                    <Label>내용:</Label>
                    <HelpIcon
@@ -674,7 +674,7 @@ function Settings() {
                    placeholder="메일 내용을 입력하세요..."
                  />
                </div>
-              
+
               <VariableInfo>
                 <h4>사용 가능한 변수:</h4>
                 <ul>
@@ -696,7 +696,7 @@ function Settings() {
                   메일 서버 설정
                 </TemplateTitle>
                 <TemplateActions>
-                  <SaveButton 
+                  <SaveButton
                     onClick={handleSaveMailSettings}
                     disabled={isSaving}
                   >
@@ -705,7 +705,7 @@ function Settings() {
                   </SaveButton>
                 </TemplateActions>
               </TemplateHeader>
-              
+
                              <div>
                  <LabelContainer>
                    <Label>발송자 이메일 주소:</Label>
@@ -725,7 +725,7 @@ function Settings() {
                    onChange={(e) => handleMailSettingsChange('senderEmail', e.target.value)}
                    placeholder="your-email@gmail.com"
                  />
-                 
+
                  <LabelContainer>
                    <Label>발송자 이름:</Label>
                    <HelpIcon
@@ -744,26 +744,26 @@ function Settings() {
                    onChange={(e) => handleMailSettingsChange('senderName', e.target.value)}
                    placeholder="회사명 채용팀"
                  />
-                 
-                 <ActionButton 
+
+                 <ActionButton
                    onClick={() => setShowAdvancedSettings(!showAdvancedSettings)}
                    style={{ marginBottom: '16px' }}
                  >
-                   <FiChevronRight 
-                     size={14} 
-                     style={{ 
+                   <FiChevronRight
+                     size={14}
+                     style={{
                        transform: showAdvancedSettings ? 'rotate(90deg)' : 'rotate(0deg)',
                        transition: 'transform 0.2s ease'
-                     }} 
+                     }}
                    />
                    {showAdvancedSettings ? '고급 설정 숨기기' : '고급 설정 보기'}
                  </ActionButton>
-                 
+
                                    {showAdvancedSettings && (
-                    <div style={{ 
-                      padding: '16px', 
-                      background: '#f8f9fa', 
-                      border: '1px solid #e9ecef', 
+                    <div style={{
+                      padding: '16px',
+                      background: '#f8f9fa',
+                      border: '1px solid #e9ecef',
                       borderRadius: '8px',
                       marginBottom: '16px'
                     }}>
@@ -785,7 +785,7 @@ function Settings() {
                         onChange={(e) => handleMailSettingsChange('senderPassword', e.target.value)}
                         placeholder="Gmail 앱 비밀번호를 입력하세요"
                       />
-                      
+
                       <LabelContainer>
                         <Label>SMTP 서버:</Label>
                         <HelpIcon
@@ -804,7 +804,7 @@ function Settings() {
                         onChange={(e) => handleMailSettingsChange('smtpServer', e.target.value)}
                         placeholder="smtp.gmail.com"
                       />
-                      
+
                       <LabelContainer>
                         <Label>SMTP 포트:</Label>
                         <HelpIcon
@@ -826,7 +826,7 @@ function Settings() {
                     </div>
                   )}
                </div>
-              
+
               <VariableInfo>
                 <h4>🔒 보안 안내:</h4>
                 <ul>
@@ -841,7 +841,7 @@ function Settings() {
                 <h4>📧 메일 발송 테스트:</h4>
                 <p>설정을 저장한 후 아래에서 테스트 메일을 발송해보세요.</p>
                 <p><strong>현재 상태:</strong> {mailSettings.senderEmail ? '✅ 발송자 이메일 설정됨' : '❌ 발송자 이메일 미설정'}</p>
-                
+
                 <div style={{ marginTop: '16px', padding: '16px', background: 'white', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
                   <LabelContainer>
                     <Label>테스트 이메일 주소:</Label>
@@ -863,11 +863,11 @@ function Settings() {
                       placeholder="test@example.com"
                       style={{ marginBottom: 0, flex: 1 }}
                     />
-                    <SaveButton 
+                    <SaveButton
                       onClick={handleSendTestMail}
                       disabled={isSendingTest || !testEmail.trim()}
-                      style={{ 
-                        background: '#3b82f6', 
+                      style={{
+                        background: '#3b82f6',
                         minWidth: '120px',
                         height: '44px'
                       }}
@@ -900,4 +900,4 @@ function Settings() {
     </Container>
   );
 }
-export default Settings; 
+export default Settings;

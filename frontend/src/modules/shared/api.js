@@ -19,11 +19,11 @@ class ApiService {
 
         try {
             const response = await fetch(url, config);
-            
+
             if (!response.ok) {
                 throw new Error(`HTTP error! status: ${response.status}`);
             }
-            
+
             return await response.json();
         } catch (error) {
             console.error('API 요청 실패:', error);
@@ -35,7 +35,7 @@ class ApiService {
     async get(endpoint, params = {}) {
         const queryString = new URLSearchParams(params).toString();
         const url = queryString ? `${endpoint}?${queryString}` : endpoint;
-        
+
         return this.request(url, {
             method: 'GET',
         });
@@ -68,7 +68,7 @@ class ApiService {
     async uploadFile(endpoint, file, additionalData = {}) {
         const formData = new FormData();
         formData.append('file', file);
-        
+
         // 추가 데이터 추가
         Object.keys(additionalData).forEach(key => {
             formData.append(key, additionalData[key]);
@@ -86,12 +86,12 @@ class ApiService {
     // 다중 파일 업로드
     async uploadMultipleFiles(endpoint, files, additionalData = {}) {
         const formData = new FormData();
-        
+
         // 파일들 추가
         files.forEach((file, index) => {
             formData.append(`file_${index}`, file);
         });
-        
+
         // 추가 데이터 추가
         Object.keys(additionalData).forEach(key => {
             formData.append(key, additionalData[key]);

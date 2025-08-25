@@ -1,0 +1,493 @@
+/* ApplicantManagement.css */
+
+/* 기본 레이아웃 스타일 */
+.container {
+  padding: 24px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.header {
+  margin-bottom: 32px;
+}
+
+.header-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.header-left {
+  flex: 1;
+}
+
+.header-right {
+  display: flex;
+  align-items: center;
+}
+
+.title {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.subtitle {
+  color: var(--text-secondary);
+  font-size: 16px;
+}
+
+/* 버튼 스타일 */
+.new-resume-button {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 20px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.new-resume-button:hover {
+  background: var(--primary-dark);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+}
+
+.new-resume-button:active {
+  transform: translateY(0);
+}
+
+/* 로딩 인디케이터 */
+.loading-indicator {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--primary-color);
+  font-size: 14px;
+  font-weight: 500;
+  margin-top: 8px;
+}
+
+/* 통계 카드 스타일 */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 24px;
+  margin-bottom: 32px;
+}
+
+.stat-card {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border-color);
+}
+
+.stat-value {
+  font-size: 32px;
+  font-weight: 700;
+  color: var(--primary-color);
+  margin-bottom: 8px;
+}
+
+.stat-label {
+  color: var(--text-secondary);
+  font-size: 14px;
+}
+
+/* 검색바 스타일 */
+.search-bar {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 24px;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.search-section {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+  flex: 1;
+}
+
+.search-input {
+  flex: 1;
+  padding: 12px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 8px;
+  font-size: 14px;
+  outline: none;
+}
+
+.search-input:focus {
+  border-color: var(--primary-color);
+}
+
+/* 뷰 모드 스타일 */
+.view-mode-section {
+  display: flex;
+  gap: 8px;
+}
+
+.view-mode-button {
+  padding: 8px 12px;
+  background: white;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  transition: all 0.2s;
+}
+
+.view-mode-button.active {
+  background: var(--primary-color);
+  color: white;
+}
+
+.view-mode-button:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.view-mode-button.active:hover {
+  color: white;
+}
+
+/* 헤더 행 스타일 */
+.header-row {
+  display: flex;
+  align-items: center;
+  padding: 12px 16px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  margin-bottom: 16px;
+  font-weight: 600;
+  font-size: 14px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+}
+
+.header-row-board {
+  display: flex;
+  align-items: center;
+  padding: 8px 16px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  height: 36px;
+  gap: 16px;
+}
+
+/* 헤더 컬럼 스타일 */
+.header-avatar {
+  width: 28px;
+  flex-shrink: 0;
+}
+
+.header-name {
+  min-width: 90px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.header-position {
+  min-width: 110px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.header-date {
+  min-width: 80px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 12px;
+}
+
+.header-email {
+  min-width: 160px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.header-phone {
+  min-width: 110px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.header-skills {
+  min-width: 140px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.header-actions {
+  min-width: 100px;
+  flex-shrink: 0;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+}
+
+.header-ranks {
+  min-width: 120px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 12px;
+}
+
+/* 체크박스 스타일 */
+.header-checkbox {
+  min-width: 32px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.applicant-checkbox {
+  min-width: 40px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.checkbox-input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary-color);
+  cursor: pointer;
+}
+
+/* 액션 바 스타일 */
+.fixed-action-bar {
+  position: sticky;
+  top: 0;
+  background: var(--background-secondary);
+  padding: 12px 24px;
+  margin: 0 -24px 16px -24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  z-index: 100;
+}
+
+.action-buttons-group {
+  display: flex;
+  gap: 8px;
+}
+
+.fixed-action-button {
+  padding: 8px 16px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: white;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s;
+}
+
+.fixed-action-button:hover {
+  border-color: var(--primary-color);
+  color: var(--primary-color);
+}
+
+.fixed-pass-button {
+  background: white;
+  color: #28a745;
+  border-color: #28a745;
+}
+
+.fixed-pass-button.active {
+  background: #28a745;
+  color: white;
+}
+
+.fixed-pass-button:hover {
+  background: #28a745;
+  border-color: #28a745;
+  color: white;
+}
+
+.fixed-pass-button.active:hover {
+  background: #218838;
+  border-color: #1e7e34;
+  color: white;
+}
+
+.fixed-pending-button {
+  background: white;
+  color: #ffc107;
+  border-color: #ffc107;
+}
+
+.fixed-pending-button.active {
+  background: #ffc107;
+  color: #212529;
+}
+
+.fixed-pending-button:hover {
+  background: #ffc107;
+  border-color: #ffc107;
+  color: #212529;
+}
+
+.fixed-pending-button.active:hover {
+  background: #e0a800;
+  border-color: #d39e00;
+  color: #212529;
+}
+
+.fixed-reject-button {
+  background: white;
+  color: #dc3545;
+  border-color: #dc3545;
+}
+
+.fixed-reject-button.active {
+  background: #dc3545;
+  color: white;
+}
+
+.fixed-reject-button:hover {
+  background: #dc3545;
+  border-color: #dc3545;
+  color: white;
+}
+
+.fixed-reject-button.active:hover {
+  background: #c82333;
+  border-color: #bd2130;
+  color: white;
+}
+
+.selection-info {
+  font-size: 12px;
+  color: var(--text-secondary);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* 로딩 관련 스타일 */
+.loading-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.loading-spinner {
+  background: white;
+  padding: 24px;
+  border-radius: 12px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.loading-spinner .spinner {
+  width: 32px;
+  height: 32px;
+  border: 3px solid #f3f3f3;
+  border-top: 3px solid var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  0% { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+/* 추가 버튼 스타일 */
+.load-more-button {
+  width: 100%;
+  padding: 16px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 24px;
+  transition: all 0.2s;
+}
+
+.load-more-button:hover {
+  background: var(--primary-dark);
+  transform: translateY(-1px);
+}
+
+.end-message {
+  text-align: center;
+  padding: 24px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-top: 24px;
+}
+
+/* 디버깅 메시지 스타일 */
+.debug-message {
+  background: #f0f9ff;
+  border: 1px solid #0ea5e9;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 16px;
+  font-size: 14px;
+  color: #0369a1;
+}

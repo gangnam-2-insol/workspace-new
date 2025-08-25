@@ -1,13 +1,12 @@
-from typing import Optional, List, Dict, Any
-from fastapi import HTTPException
-import motor.motor_asyncio
-from datetime import datetime
 import logging
+from datetime import datetime
+from typing import Any, Dict, List, Optional
 
-from ..shared.services import BaseService
-from .models import (
-    CoverLetter, CoverLetterCreate, CoverLetterUpdate, CoverLetterStatus
-)
+import motor.motor_asyncio
+from fastapi import HTTPException
+from modules.shared.services import BaseService
+
+from .models import CoverLetter, CoverLetterCreate, CoverLetterStatus, CoverLetterUpdate
 
 logger = logging.getLogger(__name__)
 
@@ -41,7 +40,7 @@ class CoverLetterService(BaseService):
             logger.error(f"자기소개서 조회 실패: {str(e)}")
             raise HTTPException(status_code=500, detail="자기소개서 조회에 실패했습니다.")
 
-    async def get_cover_letters(self, skip: int = 0, limit: int = 10, 
+    async def get_cover_letters(self, skip: int = 0, limit: int = 10,
                                status: Optional[CoverLetterStatus] = None,
                                applicant_id: Optional[str] = None) -> List[CoverLetter]:
         """자기소개서 목록 조회"""
@@ -65,7 +64,7 @@ class CoverLetterService(BaseService):
         """자기소개서 수정"""
         try:
             update_dict = {k: v for k, v in update_data.dict().items() if v is not None}
-            
+
             result = await self.db[self.collection].update_one(
                 {"_id": self._get_object_id(cover_letter_id)},
                 {"$set": update_dict}

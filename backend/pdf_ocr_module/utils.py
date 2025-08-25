@@ -5,13 +5,8 @@ import os
 import re
 from datetime import datetime, date
 from pathlib import Path
-from typing import Any, Dict
+from typing import Any
 import hashlib
-
-import pytesseract
-from PIL import Image
-import numpy as np
-import cv2
 
 from pdf_ocr_module.config import Settings
 
@@ -105,75 +100,5 @@ def file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
-def encode_image_to_base64(image_path: Path) -> str:
-    """이미지를 base64로 인코딩합니다."""
-    import base64
-    try:
-        with open(image_path, "rb") as image_file:
-            encoded_image = base64.b64encode(image_file.read()).decode('utf-8')
-            return encoded_image
-    except Exception as e:
-        print(f"이미지 인코딩 실패: {e}")
-        return ""
 
 
-def validate_image_path(image_path: Path) -> bool:
-    """이미지 파일 경로가 유효한지 확인합니다."""
-    if not image_path.exists():
-        return False
-    
-    # 지원하는 이미지 형식 확인
-    supported_formats = {'.jpg', '.jpeg', '.png', '.bmp', '.tiff', '.tif'}
-    return image_path.suffix.lower() in supported_formats
-
-
-def get_image_info(image_path: Path) -> Dict[str, Any]:
-    """이미지 파일의 기본 정보를 반환합니다."""
-    try:
-        from PIL import Image
-        with Image.open(image_path) as img:
-            return {
-                "width": img.width,
-                "height": img.height,
-                "format": img.format,
-                "mode": img.mode,
-                "size_bytes": image_path.stat().st_size
-            }
-    except Exception as e:
-        print(f"이미지 정보 추출 실패: {e}")
-        return {}
-
-
-def validate_vision_data(vision_data: Dict[str, Any]) -> bool:
-    """Vision API 응답 데이터의 유효성을 검증합니다."""
-    required_fields = ["name", "email", "phone", "position", "company", "education", "skills", "address"]
-    
-    if not isinstance(vision_data, dict):
-        return False
-    
-    # 필수 필드가 모두 있는지 확인
-    for field in required_fields:
-        if field not in vision_data:
-            return False
-    
-    return True
-
-
-def correct_orientation_with_osd(image: Image.Image) -> Image.Image:
-    """Tesseract OSD(Page Segmentation Mode 0)를 사용하여 이미지 방향을 자동으로 교정합니다."""
-    try:
-        # Tesseract OSD를 사용하여 페이지 방향 감지
-        osd_data = pytesseract.image_to_osd(image, output_type=pytesseract.Output.DICT)
-        rotation_angle = osd_data['rotate']
-        
-        # 회전이 필요한 경우에만 회전
-        if rotation_angle != 0:
-            # PIL의 rotate 메서드는 반시계 방향이 양수이므로 부호를 반대로
-            rotated_image = image.rotate(-rotation_angle, expand=True, resample=Image.BICUBIC)
-            return rotated_image
-        
-        return image
-    except Exception as e:
-        print(f"OSD 방향 교정 실패: {e}")
-        # OSD 실패 시 원본 이미지 반환
-        return image
