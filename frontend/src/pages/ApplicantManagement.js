@@ -2801,6 +2801,7 @@ const ApplicantManagement = () => {
   const [selectedResumeApplicant, setSelectedResumeApplicant] = useState(null);
   const [resumeFile, setResumeFile] = useState(null);
   const [coverLetterFile, setCoverLetterFile] = useState(null);
+  const [portfolioFile, setPortfolioFile] = useState(null);
   const [githubUrl, setGithubUrl] = useState('');
   const [documentType, setDocumentType] = useState('이력서');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -4121,6 +4122,10 @@ const handleCoverFileChange = (event) => {
       setPortfolioFile(file);
       console.log('포트폴리오 파일이 선택되었습니다:', file.name);
     }
+  };
+
+  const handleGithubUrlChange = (event) => {
+    setGithubUrl(event.target.value);
   };
 
   const handleResumeDataChange = (field, value) => {
@@ -7365,6 +7370,136 @@ const GithubInputDescription = styled.small`
   font-size: 12px;
   color: var(--text-secondary);
   line-height: 1.4;
+`;
+
+// SimilarCandidates 관련 styled-components
+const SimilarCandidatesSection = styled.div`
+  margin-top: 24px;
+  padding: 20px;
+  background: var(--background-secondary);
+  border-radius: 12px;
+  border: 1px solid var(--border-color);
+`;
+
+const SimilarCandidatesTitle = styled.h3`
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const SimilarCandidatesLoading = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 14px;
+`;
+
+const SimilarCandidatesSpinner = styled.div`
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--border-color);
+  border-top: 2px solid var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+
+const SimilarCandidatesList = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+`;
+
+const SimilarCandidateItem = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid var(--border-color);
+  transition: all 0.2s ease;
+  
+  &:hover {
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  }
+`;
+
+const SimilarCandidateInfo = styled.div`
+  flex: 1;
+`;
+
+const SimilarCandidateName = styled.div`
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+`;
+
+const SimilarCandidateDetails = styled.div`
+  font-size: 14px;
+  color: var(--text-secondary);
+  margin-bottom: 4px;
+`;
+
+const SimilarCandidateScore = styled.div`
+  font-size: 14px;
+  color: var(--primary-color);
+  font-weight: 500;
+  margin-bottom: 4px;
+`;
+
+const SimilarCandidateScoreDetail = styled.div`
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 2px;
+`;
+
+const SimilarCandidateMethod = styled.div`
+  font-size: 12px;
+  color: var(--text-secondary);
+`;
+
+const SimilarCandidateActions = styled.div`
+  display: flex;
+  gap: 8px;
+`;
+
+const SimilarCandidateButton = styled.button`
+  padding: 8px 16px;
+  background: var(--primary-color);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  
+  &:hover {
+    background: var(--primary-dark);
+  }
+`;
+
+const SimilarCandidatesError = styled.div`
+  color: var(--error-color);
+  font-size: 14px;
+  text-align: center;
+  padding: 16px;
+`;
+
+const SimilarCandidatesEmpty = styled.div`
+  color: var(--text-secondary);
+  font-size: 14px;
+  text-align: center;
+  padding: 16px;
 `;
 
 export default ApplicantManagement; 

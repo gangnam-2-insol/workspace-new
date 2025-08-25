@@ -117,10 +117,12 @@ class KeywordSearchService:
                 verify_certs=False,
                 ssl_show_warn=False,
                 basic_auth=auth,
-                request_timeout=30
+                request_timeout=3,  # 타임아웃을 3초로 단축
+                max_retries=0,      # 재시도 비활성화
+                retry_on_timeout=False  # 타임아웃 시 재시도 비활성화
             )
             
-            # 연결 테스트
+            # 연결 테스트 (빠른 테스트)
             info = self.es_client.info()
             self.logger.info(f"Elasticsearch 연결 성공: {self.es_host}, 버전: {info['version']['number']}")
             

@@ -207,11 +207,32 @@ def extract_basic_info(text: str) -> Dict[str, Any]:
             
             # JSON 파싱 시도
             try:
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                result = loop.run_until_complete(run_ai_analysis())
-                if result:
-                    return result
+                # JSON 부분만 추출
+                json_start = ai_response.find('{')
+                json_end = ai_response.rfind('}') + 1
+                if json_start != -1 and json_end != 0:
+                    json_str = ai_response[json_start:json_end]
+                    ai_data = json.loads(json_str)
+                    
+                    # AI 결과를 info 형식으로 변환
+                    if ai_data.get("name"):
+                        info["names"] = [ai_data["name"]]
+                    if ai_data.get("email"):
+                        info["emails"] = [ai_data["email"]]
+                    if ai_data.get("phone"):
+                        info["phones"] = [ai_data["phone"]]
+                    if ai_data.get("position"):
+                        info["positions"] = [ai_data["position"]]
+                    if ai_data.get("company"):
+                        info["companies"] = [ai_data["company"]]
+                    if ai_data.get("education"):
+                        info["education"] = [ai_data["education"]]
+                    if ai_data.get("skills"):
+                        info["skills"] = [ai_data["skills"]]
+                    if ai_data.get("address"):
+                        info["addresses"] = [ai_data["address"]]
+                    
+                    return info
             except Exception as e:
                 print(f"AI JSON 파싱 실패: {e}")
                 
@@ -223,6 +244,9 @@ def extract_basic_info(text: str) -> Dict[str, Any]:
         print(f"AI 분석 실패, 규칙 기반으로 폴백: {e}")
     
     # AI 분석이 실패한 경우 규칙 기반 분석으로 폴백
+    
+    # 텍스트 정리
+    cleaned_text = clean_text_content(text)
     
     # 이메일 추출
     email_pattern = r'\b[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Z|a-z]{2,}\b'

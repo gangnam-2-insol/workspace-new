@@ -157,3 +157,23 @@ def validate_vision_data(vision_data: Dict[str, Any]) -> bool:
             return False
     
     return True
+
+
+def correct_orientation_with_osd(image: Image.Image) -> Image.Image:
+    """Tesseract OSD(Page Segmentation Mode 0)를 사용하여 이미지 방향을 자동으로 교정합니다."""
+    try:
+        # Tesseract OSD를 사용하여 페이지 방향 감지
+        osd_data = pytesseract.image_to_osd(image, output_type=pytesseract.Output.DICT)
+        rotation_angle = osd_data['rotate']
+        
+        # 회전이 필요한 경우에만 회전
+        if rotation_angle != 0:
+            # PIL의 rotate 메서드는 반시계 방향이 양수이므로 부호를 반대로
+            rotated_image = image.rotate(-rotation_angle, expand=True, resample=Image.BICUBIC)
+            return rotated_image
+        
+        return image
+    except Exception as e:
+        print(f"OSD 방향 교정 실패: {e}")
+        # OSD 실패 시 원본 이미지 반환
+        return image

@@ -29,11 +29,11 @@ def _ensure_index(settings: Settings):
         _pc = Pinecone(api_key=settings.pinecone_api_key)
         _index = _pc.Index(settings.pinecone_index_name)
     except Exception:
-        # 인덱스가 없으면 생성 (MiniLM-L6-v2 = 384차원)
+        # 인덱스가 없으면 생성 (text-embedding-3-small = 1536차원)
         if ServerlessSpec is not None:
             _pc.create_index(
                 name=settings.pinecone_index_name,
-                dimension=384,
+                dimension=1536,
                 metric="cosine",
                 spec=ServerlessSpec(cloud=settings.pinecone_cloud, region=settings.pinecone_region),
             )

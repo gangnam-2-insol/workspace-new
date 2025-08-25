@@ -51,7 +51,7 @@ class Settings(BaseSettings):
     chroma_collection: str = Field(default="pdf_embeddings")
 
     # 임베딩 모델
-    embedding_model_name: str = Field(default="sentence-transformers/all-MiniLM-L6-v2")
+    embedding_model_name: str = Field(default="text-embedding-3-small")
     l2_normalize_embeddings: bool = Field(default=True)
 
     # 청크 설정

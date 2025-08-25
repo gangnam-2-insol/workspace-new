@@ -180,6 +180,104 @@ async def get_talent_recommendations(
             detail=f"유사 인재 추천 중 오류가 발생했습니다: {str(e)}"
         )
 
+@router.get("/{applicant_id}/cover-letter")
+async def get_cover_letter(
+    applicant_id: str,
+    mongo_service: MongoService = Depends(get_mongo_service)
+):
+    """자소서 조회"""
+    try:
+        print(f"[INFO] 자소서 조회 요청 - applicant_id: {applicant_id}")
+        
+        # 1. 지원자 존재 확인
+        applicant = mongo_service.get_applicant(applicant_id)
+        if not applicant:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
+        
+        # 2. 자소서 존재 확인
+        if not applicant.get("cover_letter"):
+            raise HTTPException(status_code=404, detail="자소서가 없습니다")
+        
+        return {
+            "status": "success",
+            "applicant_id": applicant_id,
+            "cover_letter": applicant["cover_letter"],
+            "message": "자소서 조회 완료"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 자소서 조회 실패: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"자소서 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@router.get("/{applicant_id}/resume")
+async def get_resume(
+    applicant_id: str,
+    mongo_service: MongoService = Depends(get_mongo_service)
+):
+    """이력서 조회"""
+    try:
+        print(f"[INFO] 이력서 조회 요청 - applicant_id: {applicant_id}")
+        
+        # 1. 지원자 존재 확인
+        applicant = mongo_service.get_applicant(applicant_id)
+        if not applicant:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
+        
+        return {
+            "status": "success",
+            "applicant_id": applicant_id,
+            "resume": applicant,
+            "message": "이력서 조회 완료"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 이력서 조회 실패: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"이력서 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@router.get("/{applicant_id}/portfolio")
+async def get_portfolio(
+    applicant_id: str,
+    mongo_service: MongoService = Depends(get_mongo_service)
+):
+    """포트폴리오 조회"""
+    try:
+        print(f"[INFO] 포트폴리오 조회 요청 - applicant_id: {applicant_id}")
+        
+        # 1. 지원자 존재 확인
+        applicant = mongo_service.get_applicant(applicant_id)
+        if not applicant:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
+        
+        # 2. 포트폴리오 존재 확인
+        if not applicant.get("portfolio"):
+            raise HTTPException(status_code=404, detail="포트폴리오가 없습니다")
+        
+        return {
+            "status": "success",
+            "applicant_id": applicant_id,
+            "portfolio": applicant["portfolio"],
+            "message": "포트폴리오 조회 완료"
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 포트폴리오 조회 실패: {str(e)}")
+        raise HTTPException(
+            status_code=500, 
+            detail=f"포트폴리오 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
 @router.post("/{applicant_id}/cover-letter")
 async def check_cover_letter_plagiarism(
     applicant_id: str,
