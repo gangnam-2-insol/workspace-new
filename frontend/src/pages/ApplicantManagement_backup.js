@@ -37,172 +37,172 @@ import GithubSummaryPanel from './PortfolioSummary/GithubSummaryPanel';
 import PortfolioSummaryPanel from './PortfolioSummary/PortfolioSummaryPanel';
 import jobPostingApi from '../services/jobPostingApi';
 import CoverLetterAnalysisApi from '../services/coverLetterAnalysisApi';
+import MemoizedApplicantCard from '../components/ApplicantManagement/ApplicantCard';
+import FilterModal from '../components/ApplicantManagement/FilterModal';
+import ResumeUploadModal from '../components/ApplicantManagement/ResumeUploadModal';
+import {
+  calculateAverageScore,
+  getResumeAnalysisLabel,
+  getCoverLetterAnalysisLabel,
+  getPortfolioAnalysisLabel,
+  getStatusText,
+  extractSkillsFromAnalysis,
+  extractExperienceFromAnalysis,
+  extractEducationFromAnalysis,
+  extractRecommendationsFromAnalysis
+} from '../utils/analysisHelpers';
+import {
+  applicantApi,
+  documentApi,
+  similarityApi,
+  ocrApi,
+  mailApi
+} from '../services/applicantApi';
 
-// 평균 점수 계산 함수
-const calculateAverageScore = (analysisData) => {
-  if (!analysisData || typeof analysisData !== 'object') return 0;
+// 커스텀 훅들 import
+import {
+  useApplicantList,
+  useSearchAndFilter,
+  useSelectedApplicants,
+  useModals,
+  useDocumentModal,
+  usePortfolio,
+  useResumeUpload,
+  useStats,
+  useRanking,
+  useJobPostings,
+  useOtherStates
+} from '../hooks/useApplicantManagement';
 
-  const scores = Object.values(analysisData)
-    .filter(item => item && typeof item === 'object' && 'score' in item)
-    .map(item => item.score);
+// 필터링 유틸리티 import
+import {
+  filterAndScoreApplicants,
+  paginateApplicants,
+  sortApplicants
+} from '../utils/filterHelpers';
 
-  if (scores.length === 0) return 0;
+// 스타일 컴포넌트들 import
+import {
+  Container,
+  Header,
+  HeaderContent,
+  HeaderLeft,
+  HeaderRight,
+  Title,
+  Subtitle,
+  NewResumeButton,
+  FilterButton,
+  ViewModeButton,
+  ActionButton,
+  SearchBar,
+  SearchSection,
+  SearchInputContainer,
+  SearchInput,
+  ClearButton,
+  ViewModeSection,
+  JobPostingSelect,
+  StatsGrid,
+  StatCard,
+  StatValue,
+  StatLabel,
+  LoadingIndicator,
+  LoadingOverlay,
+  LoadingSpinner,
+  ApplicantsGrid,
+  ApplicantsBoard,
+  Wrapper,
+  HeaderRow,
+  HeaderRowBoard,
+  ApplicantCheckbox,
+  CheckboxInput,
+  FixedActionBar,
+  ActionButtonsGroup,
+  FixedActionButton,
+  SelectionInfo,
+  FilterBadge,
+  NoResultsMessage,
+  EmptyState,
+  ModalHeader,
+  ModalTitle,
+  CloseButton,
+  DocumentModalHeader,
+  DocumentModalTitle,
+  DocumentCloseButton,
+  DocumentHeaderActions,
+  DocumentOriginalButton,
+  DocumentContent,
+  DocumentSection,
+  SelectionGrid,
+  SelectionCard,
+  SelectionIcon,
+  SelectionTitle,
+  SelectionDesc,
+  ProfileSection,
+  SectionTitle,
+  ProfileGrid,
+  ProfileItem,
+  ProfileLabel,
+  ProfileValue,
+  SummarySection,
+  SummaryTitle,
+  SummaryText,
+  DocumentButtons,
+  DocumentButton,
+  StatusSelect,
+  StatusColumnWrapper,
+  HeaderAvatar,
+  HeaderName,
+  HeaderPosition,
+  HeaderDate,
+  HeaderEmail,
+  HeaderPhone,
+  HeaderSkills,
+  HeaderActions,
+  HeaderScore,
+  HeaderCheckbox,
+  CardHeader,
+  CardContent,
+  InfoRow,
+  CardActions,
+  ApplicantHeader,
+  ApplicantHeaderBoard,
+  ApplicantInfo,
+  ApplicantInfoBoard,
+  Avatar,
+  AvatarBoard,
+  AiSuitabilityAvatarBoard,
+  ApplicantDetails,
+  ApplicantDetailsBoard,
+  ApplicantName,
+  ApplicantNameBoard,
+  ApplicantPosition,
+  ApplicantPositionBoard,
+  ApplicantDate,
+  ApplicantDateBoard,
+  ApplicantEmailBoard,
+  ApplicantPhoneBoard,
+  ContactItem,
+  ApplicantSkillsBoard,
+  SkillTagBoard,
+  ApplicantActions,
+  ApplicantActionsBoard
+} from '../styles/ApplicantManagementStyles';
 
-  const total = scores.reduce((sum, score) => sum + score, 0);
-  return Math.round((total / scores.length) * 10) / 10; // 소수점 첫째자리까지
-};
-
-// 이력서 분석 항목 라벨 함수
-const getResumeAnalysisLabel = (key) => {
-  const labels = {
-    basic_info_completeness: '기본정보 완성도',
-    job_relevance: '직무 적합성',
-    experience_clarity: '경력 명확성',
-    tech_stack_clarity: '기술스택 명확성',
-    project_recency: '프로젝트 최신성',
-    achievement_metrics: '성과 지표',
-    readability: '가독성',
-    typos_and_errors: '오탈자',
-    update_freshness: '최신성'
-  };
-  return labels[key] || key;
-};
-
-// 자기소개서 분석 항목 라벨 함수
-const getCoverLetterAnalysisLabel = (key) => {
-  const labels = {
-    motivation_relevance: '지원 동기',
-    problem_solving_STAR: 'STAR 기법',
-    quantitative_impact: '정량적 성과',
-    job_understanding: '직무 이해도',
-    unique_experience: '차별화 경험',
-    logical_flow: '논리적 흐름',
-    keyword_diversity: '키워드 다양성',
-    sentence_readability: '문장 가독성',
-    typos_and_errors: '오탈자'
-  };
-  return labels[key] || key;
-};
-
-// 포트폴리오 분석 항목 라벨 함수
-const getPortfolioAnalysisLabel = (key) => {
-  const labels = {
-    project_overview: '프로젝트 개요',
-    tech_stack: '기술 스택',
-    personal_contribution: '개인 기여도',
-    achievement_metrics: '성과 지표',
-    visual_quality: '시각적 품질',
-    documentation_quality: '문서화 품질',
-    job_relevance: '직무 관련성',
-    unique_features: '독창적 기능',
-    maintainability: '유지보수성'
-  };
-  return labels[key] || key;
-};
-
-// API 서비스 추가
-const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
-
-const api = {
-  // 모든 지원자 조회 (페이지네이션 지원)
-  getAllApplicants: async (skip = 0, limit = 50, status = null, position = null) => {
-    try {
-      const params = new URLSearchParams({
-        skip: skip.toString(),
-        limit: limit.toString()
-      });
-
-      if (status) params.append('status', status);
-      if (position) params.append('position', position);
-
-      const response = await fetch(`${API_BASE_URL}/api/applicants?${params}`);
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('❌ API 응답 오류:', errorText);
-        throw new Error(`지원자 데이터 조회 실패: ${response.status} ${response.statusText}`);
-      }
-
-      const data = await response.json();
-
-      // 디버깅: API 응답 확인
-      console.log('🔍 API 응답 전체:', data);
-      if (data.applicants && data.applicants.length > 0) {
-        const firstApplicant = data.applicants[0];
-        console.log('🔍 첫 번째 지원자 필드들:', Object.keys(firstApplicant));
-        console.log('🔍 email 존재:', 'email' in firstApplicant);
-        console.log('🔍 phone 존재:', 'phone' in firstApplicant);
-        if ('email' in firstApplicant) {
-          console.log('🔍 email 값:', firstApplicant.email);
-        }
-        if ('phone' in firstApplicant) {
-          console.log('🔍 phone 값:', firstApplicant.phone);
-        }
-      }
-
-      return data.applicants || [];
-    } catch (error) {
-      console.error('❌ 지원자 데이터 조회 오류:', error);
-      throw error;
-    }
-  },
-
-  // 지원자 상태 업데이트
-  updateApplicantStatus: async (applicantId, newStatus) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/status`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ status: newStatus })
-      });
-      if (!response.ok) {
-        throw new Error('지원자 상태 업데이트 실패');
-      }
-      return await response.json();
-    } catch (error) {
-      console.error('지원자 상태 업데이트 오류:', error);
-      throw error;
-    }
-  },
-
-  // 지원자 통계 조회
-  getApplicantStats: async () => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/applicants/stats/overview`);
-      if (!response.ok) {
-        throw new Error('지원자 통계 조회 실패');
-      }
-      return await response.json();
-    } catch (error) {
-      console.error('지원자 통계 조회 오류:', error);
-      throw error;
-    }
-  },
-
-  // 포트폴리오 데이터 조회
-  getPortfolioByApplicantId: async (applicantId) => {
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/portfolios/applicant/${applicantId}`);
-      if (!response.ok) {
-        throw new Error('포트폴리오 데이터 조회 실패');
-      }
-      return await response.json();
-    } catch (error) {
-      console.error('포트폴리오 데이터 조회 오류:', error);
-      throw error;
-    }
+// 디버깅을 위한 로그 함수
+const DEBUG = process.env.NODE_ENV === 'development';
+const log = (message, data = null) => {
+  if (DEBUG) {
+    console.log(`🔍 [ApplicantManagement] ${message}`, data || '');
   }
 };
 
-const Container = styled.div.attrs({
-  id: 'applicant-management-container'
-})`
-  padding: 24px;
-  max-width: 1200px;
-  margin: 0 auto;
-`;
+const logError = (message, error = null) => {
+  if (DEBUG) {
+    console.error(`❌ [ApplicantManagement] ${message}`, error || '');
+  }
+};
+
+// styled-components는 ApplicantManagementStyles.js에서 import됨
 
 const Header = styled.div.attrs({
   id: 'applicant-management-header'
@@ -824,493 +824,7 @@ const LoadingSpinner = styled.div.attrs({
 
 
 
-// 새 이력서 등록 모달 스타일 컴포넌트들
-const ResumeModalOverlay = styled(motion.div).attrs({
-  id: 'applicant-management-resume-modal-overlay'
-})`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-`;
-
-const ResumeModalContent = styled(motion.div)`
-  background: white;
-  border-radius: 12px;
-  width: 90%;
-  max-width: 600px;
-  max-height: 90vh;
-  overflow-y: auto;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
-`;
-
-const ResumeModalHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 24px 24px 0 24px;
-  border-bottom: 1px solid var(--border-color);
-`;
-
-const ResumeModalTitle = styled.h2`
-  font-size: 20px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin: 0;
-`;
-
-const ResumeModalCloseButton = styled.button`
-  background: none;
-  border: none;
-  font-size: 24px;
-  color: var(--text-secondary);
-  cursor: pointer;
-  padding: 0;
-  width: 32px;
-  height: 32px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 50%;
-  transition: all 0.2s;
-
-  &:hover {
-    background: var(--background-secondary);
-    color: var(--text-primary);
-  }
-`;
-
-const ResumeModalBody = styled.div`
-  padding: 24px;
-`;
-
-const ResumeFormSection = styled.div`
-  margin-bottom: 24px;
-`;
-
-const ResumeFormTitle = styled.h3`
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 12px;
-`;
-
-const ResumeFormDescription = styled.p`
-  font-size: 14px;
-  color: var(--text-secondary);
-  margin-bottom: 16px;
-  line-height: 1.5;
-`;
-
-const FileUploadArea = styled.div`
-  border: 2px dashed ${props => props.isDragOver ? 'var(--primary-color)' : 'var(--border-color)'};
-  border-radius: 8px;
-  padding: 24px;
-  text-align: center;
-  transition: all 0.2s;
-  background: ${props => props.isDragOver ? 'rgba(0, 200, 81, 0.1)' : 'transparent'};
-
-  &:hover {
-    border-color: var(--primary-color);
-    background: var(--background-secondary);
-  }
-`;
-
-const FileUploadInput = styled.input`
-  display: none;
-`;
-
-const FileUploadLabel = styled.label`
-  cursor: pointer;
-  display: block;
-`;
-
-const FileUploadPlaceholder = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  color: var(--text-secondary);
-
-  span {
-    font-size: 16px;
-    font-weight: 500;
-  }
-
-  small {
-    font-size: 12px;
-    color: var(--text-light);
-  }
-`;
-
-const FileSelected = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--primary-color);
-  font-weight: 500;
-`;
-
-const ExistingApplicantInfo = styled.div`
-  background: linear-gradient(135deg, #e3f2fd, #bbdefb);
-  border: 1px solid #2196f3;
-  border-radius: 12px;
-  padding: 20px;
-  margin: 20px 0;
-`;
-
-const ExistingApplicantTitle = styled.h4`
-  font-size: 16px;
-  font-weight: 600;
-  color: #1976d2;
-  margin: 0 0 16px 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-`;
-
-const ExistingApplicantDetails = styled.div`
-  font-size: 14px;
-  color: #333;
-  line-height: 1.6;
-
-  ul {
-    margin: 8px 0;
-    padding-left: 20px;
-  }
-
-  li {
-    margin: 4px 0;
-  }
-`;
-
-
-
-const ReplaceOptionSection = styled.div`
-  margin-top: 16px;
-  padding: 16px;
-  background: rgba(255, 255, 255, 0.7);
-  border-radius: 8px;
-  border: 1px solid #e0e0e0;
-`;
-
-const ReplaceOptionLabel = styled.label`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  color: #1976d2;
-  cursor: pointer;
-
-  input[type="checkbox"] {
-    width: 18px;
-    height: 18px;
-    accent-color: #1976d2;
-  }
-
-  span {
-    font-size: 15px;
-  }
-`;
-
-const ReplaceOptionDescription = styled.div`
-  margin-top: 8px;
-  font-size: 13px;
-  color: #666;
-  line-height: 1.4;
-`;
-
-const ResumeFormGrid = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 16px;
-`;
-
-const ResumeFormField = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-`;
-
-const ResumeFormLabel = styled.label`
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-`;
-
-const ResumeFormInput = styled.input`
-  padding: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  font-size: 14px;
-  outline: none;
-  transition: all 0.2s;
-
-  &:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-
-  &::placeholder {
-    color: var(--text-light);
-  }
-`;
-
-// 문서 업로드 관련 스타일 컴포넌트들
-const DocumentUploadContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-`;
-
-const DocumentTypeSection = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-`;
-
-const DocumentTypeLabel = styled.label`
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-`;
-
-const DocumentTypeSelect = styled.select`
-  padding: 12px;
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  font-size: 14px;
-  outline: none;
-  background: white;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:focus {
-    border-color: var(--primary-color);
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-
-  option {
-    padding: 8px;
-  }
-`;
-
-const ResumeModalFooter = styled.div`
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding: 24px;
-  border-top: 1px solid var(--border-color);
-`;
-
-const ResumeModalButton = styled.button`
-  padding: 12px 24px;
-  background: white;
-  color: var(--text-primary);
-  border: 1px solid var(--border-color);
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background: var(--background-secondary);
-    border-color: var(--text-secondary);
-  }
-`;
-
-const ResumeModalSubmitButton = styled.button`
-  padding: 12px 24px;
-  background: var(--primary-color);
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background: var(--primary-dark);
-  }
-
-  &:disabled {
-    background: var(--text-light);
-    cursor: not-allowed;
-  }
-`;
-
-// 분석 결과 스타일 컴포넌트들
-const ResumeAnalysisSection = styled.div`
-  margin-top: 24px;
-  padding: 20px;
-  background: var(--background-secondary);
-  border-radius: 8px;
-  border: 1px solid var(--border-color);
-`;
-
-const ResumeAnalysisTitle = styled.h3`
-  font-size: 16px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 16px;
-`;
-
-const ResumeAnalysisSpinner = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 20px;
-
-  .spinner {
-    width: 32px;
-    height: 32px;
-    border: 3px solid #f3f3f3;
-    border-top: 3px solid var(--primary-color);
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-
-  span {
-    color: var(--text-secondary);
-    font-size: 14px;
-  }
-`;
-
-const ResumeAnalysisContent = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-`;
-
-const ResumeAnalysisItem = styled.div`
-  display: flex;
-  align-items: flex-start;
-  gap: 12px;
-`;
-
-const ResumeAnalysisLabel = styled.span`
-  font-size: 14px;
-  font-weight: 500;
-  color: var(--text-primary);
-  min-width: 80px;
-`;
-
-const ResumeAnalysisValue = styled.span`
-  font-size: 14px;
-  color: var(--text-secondary);
-  flex: 1;
-`;
-
-const ResumeAnalysisScore = styled.span`
-  font-size: 16px;
-  font-weight: 600;
-  color: ${props => {
-    if (props.score >= 90) return '#28a745';
-    if (props.score >= 80) return '#ffc107';
-    return '#dc3545';
-  }};
-`;
-
-const AnalysisScoreDisplay = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin: 16px 0;
-  padding: 16px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  border-radius: 8px;
-  color: white;
-`;
-
-const AnalysisScoreCircle = styled.div`
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: rgba(255, 255, 255, 0.2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 18px;
-  font-weight: 700;
-`;
-
-const AnalysisScoreInfo = styled.div`
-  flex: 1;
-`;
-
-const AnalysisScoreLabel = styled.div`
-  font-size: 14px;
-  opacity: 0.9;
-  margin-bottom: 4px;
-`;
-
-const AnalysisScoreValue = styled.div`
-  font-size: 20px;
-  font-weight: 700;
-`;
-
-const ResumeAnalysisSkills = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-  flex: 1;
-`;
-
-const ResumeSkillTag = styled.span`
-  padding: 4px 8px;
-  background: var(--primary-color);
-  color: white;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 500;
-`;
-
-const ResumeAnalysisRecommendations = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  flex: 1;
-`;
-
-const ResumeRecommendationItem = styled.div`
-  font-size: 14px;
-  color: var(--text-secondary);
-  line-height: 1.4;
-`;
-
-const DetailedAnalysisButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-  border: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  font-size: 13px;
-  font-weight: 600;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
-  }
-`;
+// 이력서 등록 모달 스타일은 ResumeUploadModal.js로 분리됨
 
 const FilterButton = styled.button.attrs({
   id: 'applicant-management-filter-button'
@@ -1354,149 +868,7 @@ const FilterBadge = styled.span`
   font-weight: 600;
 `;
 
-// 필터 모달 스타일
-const FilterModalOverlay = styled(motion.div)`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1500;
-  padding: 20px;
-`;
-
-const FilterModalContent = styled(motion.div)`
-  background: white;
-  border-radius: 16px;
-  padding: 32px;
-  max-width: 600px;
-  width: 100%;
-  position: relative;
-`;
-
-const FilterModalHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 24px;
-  padding-bottom: 16px;
-  border-bottom: 1px solid var(--border-color);
-`;
-
-const FilterModalTitle = styled.h2`
-  font-size: 24px;
-  font-weight: 700;
-  color: var(--text-primary);
-`;
-
-const FilterCloseButton = styled.button`
-  background: none;
-  border: none;
-  font-size: 24px;
-  cursor: pointer;
-  color: var(--text-secondary);
-  padding: 4px;
-  border-radius: 4px;
-  transition: all 0.2s;
-
-  &:hover {
-    background: var(--background-secondary);
-    color: var(--text-primary);
-  }
-`;
-
-const FilterSection = styled.div`
-  margin-bottom: 24px;
-`;
-
-const FilterSectionTitle = styled.h3`
-  font-size: 18px;
-  font-weight: 600;
-  color: var(--text-primary);
-  margin-bottom: 16px;
-`;
-
-const FilterGrid = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 24px;
-`;
-
-const FilterColumn = styled.div``;
-
-const CheckboxGroup = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-`;
-
-const CheckboxItem = styled.label`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  cursor: pointer;
-  font-size: 14px;
-  color: var(--text-primary);
-
-  &:hover {
-    color: var(--primary-color);
-  }
-`;
-
-const Checkbox = styled.input`
-  width: 16px;
-  height: 16px;
-  accent-color: var(--primary-color);
-`;
-
-const ApplyButton = styled.button`
-  background: linear-gradient(135deg, var(--primary-color), #00a844);
-  color: white;
-  border: none;
-  border-radius: 8px;
-  padding: 12px 24px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-  }
-`;
-
-const ResetButton = styled.button`
-  background: #f3f4f6;
-  color: #374151;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 12px 24px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background: #e5e7eb;
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  }
-`;
-
-const FilterButtonGroup = styled.div`
-  display: flex;
-  gap: 12px;
-  margin-top: 24px;
-
-  ${ApplyButton}, ${ResetButton} {
-    flex: 1;
-  }
-`;
+// 필터 모달 스타일은 FilterModal.js로 분리됨
 
 const NoResultsMessage = styled.div.attrs({
   id: 'applicant-management-no-results-message'
@@ -2681,220 +2053,135 @@ const BoardRankBadge = styled.span`
 
 // 샘플 데이터 제거됨 - 이제 MongoDB에서만 데이터를 가져옵니다
 
-// 메모이제이션된 지원자 카드 컴포넌트
-const MemoizedApplicantCard = React.memo(({ applicant, onCardClick, onStatusUpdate, getStatusText, rank, selectedJobPostingId, onStatusChange }) => {
-  // 디버깅을 위한 로깅
-  console.log('🎯 MemoizedApplicantCard 렌더링:', {
-    name: applicant?.name,
-    email: applicant?.email,
-    phone: applicant?.phone,
-    id: applicant?.id,
-    allFields: Object.keys(applicant || {}),
-    fullData: applicant
-  });
-
-  const handleStatusUpdate = useCallback(async (newStatus) => {
-    try {
-      await onStatusUpdate(applicant.id, newStatus);
-      // 상태 변경 후 상위 컴포넌트에 알림
-      if (onStatusChange) {
-        onStatusChange(applicant.id, newStatus);
-      }
-    } catch (error) {
-      console.error('상태 업데이트 실패:', error);
-    }
-  }, [applicant.id, onStatusUpdate, onStatusChange]);
-
-  return (
-    <ApplicantCard
-      onClick={() => onCardClick(applicant)}
-      whileHover={{ scale: 1.02 }}
-      whileTap={{ scale: 0.98 }}
-    >
-      {/* 상위 3명에게만 메달 표시 (채용공고가 선택된 경우에만) */}
-      {rank && rank <= 3 && selectedJobPostingId && (
-        <TopRankBadge rank={rank} />
-      )}
-
-      <CardHeader>
-        <ApplicantInfo>
-          <ApplicantName>{applicant.name}</ApplicantName>
-          <ApplicantPosition>{applicant.position}</ApplicantPosition>
-        </ApplicantInfo>
-        <StatusBadge status={applicant.status}>
-          {getStatusText(applicant.status)}
-        </StatusBadge>
-      </CardHeader>
-
-      <CardContent>
-        <InfoRow>
-          <FiMail />
-          <span>{applicant.email || '이메일 정보 없음'}</span>
-        </InfoRow>
-        <InfoRow>
-          <FiPhone />
-          <span>{applicant.phone || '전화번호 정보 없음'}</span>
-        </InfoRow>
-        <InfoRow>
-          <FiCalendar />
-          <span>
-            {applicant.appliedDate || applicant.created_at
-              ? new Date(applicant.appliedDate || applicant.created_at).toLocaleDateString('ko-KR', {
-                  year: 'numeric',
-                  month: '2-digit',
-                  day: '2-digit'
-                }).replace(/\. /g, '.').replace(' ', '')
-              : '지원일 정보 없음'
-            }
-          </span>
-        </InfoRow>
-        <InfoRow>
-          <FiCode />
-          <span>
-            {Array.isArray(applicant.skills)
-              ? applicant.skills.join(', ')
-              : applicant.skills || '기술 정보 없음'
-            }
-          </span>
-        </InfoRow>
-
-        {/* 자소서 요약 섹션 */}
-        {applicant.cover_letter_analysis && (
-          <CoverLetterSummary
-            coverLetterData={applicant.cover_letter}
-            analysisData={applicant.cover_letter_analysis}
-          />
-        )}
-      </CardContent>
-
-      <CardActions>
-                 <PassButton
-           active={applicant.status === '서류합격' || applicant.status === '최종합격'}
-           onClick={(e) => {
-             e.stopPropagation();
-             handleStatusUpdate('서류합격');
-           }}
-         >
-           <FiCheck />
-           합격
-         </PassButton>
-         <PendingButton
-           active={applicant.status === '보류'}
-           onClick={(e) => {
-             e.stopPropagation();
-             handleStatusUpdate('보류');
-           }}
-         >
-           <FiClock />
-           보류
-         </PendingButton>
-         <RejectButton
-           active={applicant.status === '서류불합격'}
-           onClick={(e) => {
-             e.stopPropagation();
-             handleStatusUpdate('서류불합격');
-           }}
-         >
-           <FiX />
-           불합격
-         </RejectButton>
-
-      </CardActions>
-    </ApplicantCard>
-  );
-});
-
-MemoizedApplicantCard.displayName = 'MemoizedApplicantCard';
+// ApplicantCard 컴포넌트는 별도 파일로 분리됨
 
 const ApplicantManagement = () => {
-  // Status 매핑 함수
-  const getStatusText = (status) => {
-    const statusMap = {
-      'pending': '보류',
-      'approved': '최종합격',
-      'rejected': '서류불합격',
-      'reviewed': '서류합격',
-      'reviewing': '보류',
-      'passed': '서류합격',
-      'interview_scheduled': '최종합격',
-      '서류합격': '서류합격',
-      '최종합격': '최종합격',
-      '서류불합격': '서류불합격',
-      '보류': '보류'
-    };
-    return statusMap[status] || '보류';
-  };
+  log('컴포넌트 초기화 시작');
 
-  const [applicants, setApplicants] = useState([]);
-  const [searchTerm, setSearchTerm] = useState('');
-  const [filterStatus, setFilterStatus] = useState('전체');
-  const [selectedApplicant, setSelectedApplicant] = useState(null);
-  const [isModalOpen, setIsModalOpen] = useState(false);
-  const [documentModal, setDocumentModal] = useState({ isOpen: false, type: '', applicant: null, isOriginal: false, similarityData: null, isLoadingSimilarity: false, documentData: null });
-  // 포트폴리오 모달 내 뷰 선택 상태: 'select' | 'github' | 'portfolio'
-  const [portfolioView, setPortfolioView] = useState('select');
-  // 포트폴리오 데이터 상태
-  const [portfolioData, setPortfolioData] = useState(null);
-  const [isLoadingPortfolio, setIsLoadingPortfolio] = useState(false);
-  const [filterModal, setFilterModal] = useState(false);
-  const [selectedJobs, setSelectedJobs] = useState([]);
-  const [selectedExperience, setSelectedExperience] = useState([]);
-  const [selectedStatus, setSelectedStatus] = useState([]);
-  const [viewMode, setViewMode] = useState('grid');
-  const [hoveredApplicant, setHoveredApplicant] = useState(null);
-  const [isLoading, setIsLoading] = useState(false);
-  const [selectedApplicants, setSelectedApplicants] = useState([]);
-  const [selectAll, setSelectAll] = useState(false);
-  const [stats, setStats] = useState({
-    total: 0,
-    passed: 0,
-    waiting: 0,
-    rejected: 0
-  });
+  // 커스텀 훅들을 사용하여 상태 관리
+  const {
+    applicants,
+    setApplicants,
+    isLoading,
+    setIsLoading,
+    currentPage,
+    setCurrentPage,
+    itemsPerPage,
+    hasMore,
+    setHasMore
+  } = useApplicantList();
 
-  // 페이지네이션 상태
-  const [currentPage, setCurrentPage] = useState(1);
-  const [itemsPerPage] = useState(12); // 한 페이지당 12개 (3x4)
-  const [hasMore, setHasMore] = useState(true);
+  const {
+    searchTerm,
+    setSearchTerm,
+    filterStatus,
+    setFilterStatus,
+    selectedJobs,
+    setSelectedJobs,
+    selectedExperience,
+    setSelectedExperience,
+    selectedStatus,
+    setSelectedStatus,
+    viewMode,
+    setViewMode
+  } = useSearchAndFilter();
 
-  // 새 이력서 등록 모달 상태
-  const [isResumeModalOpen, setIsResumeModalOpen] = useState(false);
-  const [selectedResumeApplicant, setSelectedResumeApplicant] = useState(null);
-  const [resumeFile, setResumeFile] = useState(null);
-  const [coverLetterFile, setCoverLetterFile] = useState(null);
-  const [githubUrl, setGithubUrl] = useState('');
-  const [documentType, setDocumentType] = useState('이력서');
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [analysisResult, setAnalysisResult] = useState(null);
-  const [existingApplicant, setExistingApplicant] = useState(null);
-  const [isCheckingDuplicate, setIsCheckingDuplicate] = useState(false);
-  const [replaceExisting, setReplaceExisting] = useState(false);
-  const [isDragOver, setIsDragOver] = useState(false);
-  const [showDetailedAnalysis, setShowDetailedAnalysis] = useState(false);
-  const [resumeData, setResumeData] = useState({
-    name: '',
-    email: '',
-    phone: '',
-    position: '',
-    experience: '',
-    skills: []
-  });
-  const [previewDocument, setPreviewDocument] = useState(null);
-  const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+  const {
+    selectedApplicant,
+    setSelectedApplicant,
+    selectedApplicants,
+    setSelectedApplicants,
+    selectAll,
+    setSelectAll,
+    hoveredApplicant,
+    setHoveredApplicant
+  } = useSelectedApplicants();
 
-  // 자소서 분석 모달 상태
-  const [isCoverLetterAnalysisModalOpen, setIsCoverLetterAnalysisModalOpen] = useState(false);
-  const [selectedCoverLetterData, setSelectedCoverLetterData] = useState(null);
-  const [selectedApplicantForCoverLetter, setSelectedApplicantForCoverLetter] = useState(null);
+  const {
+    isModalOpen,
+    setIsModalOpen,
+    filterModal,
+    setFilterModal,
+    isResumeModalOpen,
+    setIsResumeModalOpen,
+    isPreviewModalOpen,
+    setIsPreviewModalOpen,
+    isCoverLetterAnalysisModalOpen,
+    setIsCoverLetterAnalysisModalOpen
+  } = useModals();
 
-  // 키워드 랭킹 관련 상태 추가
-  const [isCalculatingRanking, setIsCalculatingRanking] = useState(false);
-  const [rankingResults, setRankingResults] = useState(null);
+  const {
+    documentModal,
+    setDocumentModal
+  } = useDocumentModal();
 
-  // 채용공고 관련 상태 추가
-  const [jobPostings, setJobPostings] = useState([]);
-  const [selectedJobPostingId, setSelectedJobPostingId] = useState('');
-  const [visibleJobPostingsCount, setVisibleJobPostingsCount] = useState(5);
+  const {
+    portfolioView,
+    setPortfolioView,
+    portfolioData,
+    setPortfolioData,
+    isLoadingPortfolio,
+    setIsLoadingPortfolio
+  } = usePortfolio();
+
+  const {
+    resumeFile,
+    setResumeFile,
+    coverLetterFile,
+    setCoverLetterFile,
+    githubUrl,
+    setGithubUrl,
+    documentType,
+    setDocumentType,
+    isAnalyzing,
+    setIsAnalyzing,
+    analysisResult,
+    setAnalysisResult,
+    existingApplicant,
+    setExistingApplicant,
+    isCheckingDuplicate,
+    setIsCheckingDuplicate,
+    replaceExisting,
+    setReplaceExisting,
+    isDragOver,
+    setIsDragOver
+  } = useResumeUpload();
+
+  const {
+    stats,
+    setStats
+  } = useStats();
+
+  const {
+    isCalculatingRanking,
+    setIsCalculatingRanking,
+    rankingResults,
+    setRankingResults
+  } = useRanking();
+
+  const {
+    jobPostings,
+    setJobPostings,
+    selectedJobPostingId,
+    setSelectedJobPostingId,
+    visibleJobPostingsCount,
+    setVisibleJobPostingsCount
+  } = useJobPostings();
+
+  const {
+    selectedResumeApplicant,
+    setSelectedResumeApplicant,
+    showDetailedAnalysis,
+    setShowDetailedAnalysis,
+    resumeData,
+    setResumeData,
+    previewDocument,
+    setPreviewDocument,
+    selectedCoverLetterData,
+    setSelectedCoverLetterData,
+    selectedApplicantForCoverLetter,
+    setSelectedApplicantForCoverLetter
+  } = useOtherStates();
 
   // 디버깅을 위한 상태 추적
   console.log('🔍 ApplicantManagement 상태 추적:', {
@@ -2955,21 +2242,7 @@ const ApplicantManagement = () => {
         console.log(`📧 ${statusText}자들에게 메일 발송 시작:`, targetApplicants.length, '명');
 
         // 메일 발송 API 호출
-        const response = await fetch('http://localhost:8000/api/send-bulk-mail', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
-          },
-          body: JSON.stringify({
-            status_type: statusType
-          })
-        });
-
-        if (!response.ok) {
-          throw new Error('메일 발송 API 호출 실패');
-        }
-
-        const result = await response.json();
+        const result = await mailApi.sendBulkMail(statusType);
 
         if (result.success) {
           alert(`✅ ${result.success_count}명의 ${statusText}자들에게 메일이 성공적으로 발송되었습니다.\n\n실패: ${result.failed_count}건`);
@@ -3163,104 +2436,18 @@ const ApplicantManagement = () => {
 
   // 메모이제이션된 필터링된 지원자 목록 (순위 포함)
   const filteredApplicants = useMemo(() => {
-    const filtered = (applicants || []).filter(applicant => {
-      const searchLower = searchTerm.toLowerCase();
-
-      // 검색 필터링 (null/undefined 체크 추가)
-      const skillsText = Array.isArray(applicant.skills)
-        ? applicant.skills.join(', ')
-        : applicant.skills || '';
-
-      const matchesSearch = (applicant.name || '').toLowerCase().includes(searchLower) ||
-                          (applicant.position || '').toLowerCase().includes(searchLower) ||
-                          (applicant.email || '').toLowerCase().includes(searchLower) ||
-                          skillsText.toLowerCase().includes(searchLower);
-
-      // 상태 필터링 (한국어 필터를 영어 상태와 매칭)
-      const matchesStatus = filterStatus === '전체' ||
-                           getStatusText(applicant.status) === filterStatus ||
-                           applicant.status === filterStatus;
-
-      // 새로운 상태 필터링 (서류합격, 최종합격, 보류, 서류불합격)
-      const matchesSelectedStatus = selectedStatus.length === 0 ||
-                                   selectedStatus.includes(applicant.status);
-
-      // 직무 필터링
-      const matchesJob = selectedJobs.length === 0 ||
-                        selectedJobs.some(job => applicant.position.includes(job));
-
-      // 경력 필터링
-      const matchesExperience = selectedExperience.length === 0 ||
-                              selectedExperience.some(exp => {
-                                if (exp === '신입') return applicant.experience.includes('신입') || applicant.experience.includes('0년');
-                                if (exp === '1-3년') return applicant.experience.includes('1년') || applicant.experience.includes('2년') || applicant.experience.includes('3년');
-                                if (exp === '3-5년') return applicant.experience.includes('4년') || applicant.experience.includes('5년');
-                                if (exp === '5년이상') return applicant.experience.includes('6년') || applicant.experience.includes('7년') || applicant.experience.includes('8년') || applicant.experience.includes('9년') || applicant.experience.includes('10년');
-                                return false;
-                              });
-
-      // 채용공고 ID 필터링 (개선된 로직)
-      const matchesJobPosting = !selectedJobPostingId || (() => {
-        const applicantJobId = applicant.job_posting_id;
-        const selectedJobId = selectedJobPostingId;
-
-        const matches = String(applicantJobId) === String(selectedJobId);
-        if (selectedJobPostingId) {
-          console.log('🔍 filteredApplicants 필터링:', {
-            name: applicant.name,
-            applicantJobId,
-            applicantJobIdType: typeof applicantJobId,
-            selectedJobId,
-            selectedJobIdType: typeof selectedJobId,
-            matches
-          });
-        }
-        return matches;
-      })();
-
-      return matchesSearch && matchesStatus && matchesSelectedStatus && matchesJob && matchesExperience && matchesJobPosting;
-    });
-
-    // 필터링 결과 로그
-    if (selectedJobPostingId) {
-      console.log(`📊 채용공고 ${selectedJobPostingId} 필터링 결과:`, {
-        전체지원자: applicants.length,
-        필터링된지원자: filtered.length,
-        필터링된지원자목록: filtered.map(app => ({ name: app.name, job_posting_id: app.job_posting_id }))
-      });
-    } else {
-      console.log('📊 전체 지원자 필터링 결과:', {
-        전체지원자: applicants.length,
-        필터링된지원자: filtered.length
-      });
-    }
-
-    // 점수 계산 및 순위 매기기
-    const applicantsWithScores = filtered.map(applicant => {
-      let totalScore = 0;
-
-      // 프로젝트 마에스트로 점수 (analysisScore) - 100점 만점
-      if (applicant.analysisScore !== undefined && applicant.analysisScore !== null) {
-        totalScore = applicant.analysisScore;
-      } else {
-        // 기본 점수 (분석 데이터가 없는 경우)
-        totalScore = 50; // 기본 중간 점수
-      }
-
-      return {
-        ...applicant,
-        calculatedScore: totalScore
-      };
-    });
-
-    // 점수별로 정렬 (내림차순)
-    const sortedApplicants = applicantsWithScores.sort((a, b) => b.calculatedScore - a.calculatedScore);
-
-    // 순위 추가
-    return sortedApplicants.map((applicant, index) => ({
-      ...applicant,
-      rank: index + 1
-    }));
+    log('useMemo: filteredApplicants 계산 시작');
+    const filters = {
+      searchTerm,
+      filterStatus,
+      selectedJobs,
+      selectedExperience,
+      selectedStatus,
+      selectedJobPostingId
+    };
+    const result = filterAndScoreApplicants(applicants, filters);
+    log('useMemo: filteredApplicants 계산 완료', { count: result.length, filters });
+    return result;
   }, [applicants, searchTerm, filterStatus, selectedJobs, selectedExperience, selectedStatus, selectedJobPostingId]);
 
   // selectedJobPostingId 변경 시 랭킹 결과 관리
@@ -3688,7 +2875,7 @@ const ApplicantManagement = () => {
       setIsLoading(true);
 
       // 모든 지원자 데이터를 한 번에 가져오기 (페이지네이션은 클라이언트에서 처리)
-      const apiApplicants = await api.getAllApplicants(0, 1000); // 최대 1000명까지 가져오기
+      const apiApplicants = await applicantApi.getAllApplicants(0, 1000); // 최대 1000명까지 가져오기
 
       if (apiApplicants && apiApplicants.length > 0) {
         console.log(`✅ ${apiApplicants.length}명의 지원자 데이터 로드 완료`);
@@ -3731,7 +2918,7 @@ const ApplicantManagement = () => {
   // 통계 데이터 로드
   const loadStats = useCallback(async () => {
     try {
-      const apiStats = await api.getApplicantStats();
+      const apiStats = await applicantApi.getApplicantStats();
 
       // 백엔드 통계 데이터를 프론트엔드 형식으로 변환
       const convertedStats = {
@@ -3773,7 +2960,7 @@ const ApplicantManagement = () => {
 
       // API 호출 시도 (실패해도 로컬 상태는 업데이트)
       try {
-        await api.updateApplicantStatus(applicantId, newStatus);
+        await applicantApi.updateApplicantStatus(applicantId, newStatus);
         console.log(`✅ API 호출 성공`);
       } catch (apiError) {
         console.log(`⚠️ API 호출 실패, 로컬 상태만 업데이트:`, apiError.message);
@@ -3935,50 +3122,38 @@ const ApplicantManagement = () => {
 
       switch (type) {
         case 'resume':
-          const resumeResponse = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/resume`);
-          if (resumeResponse.ok) {
-            documentData = await resumeResponse.json();
+          try {
+            documentData = await documentApi.getResume(applicantId);
             console.log('✅ 이력서 데이터 로드 완료:', documentData);
-          } else {
-            console.error('❌ 이력서 데이터 로드 실패:', resumeResponse.status);
+          } catch (error) {
+            console.error('❌ 이력서 데이터 로드 실패:', error);
           }
           break;
 
         case 'coverLetter':
-          const coverLetterResponse = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/cover-letter`);
-          if (coverLetterResponse.ok) {
-            documentData = await coverLetterResponse.json();
+          try {
+            documentData = await documentApi.getCoverLetter(applicantId);
             console.log('✅ 자소서 데이터 로드 완료:', documentData);
 
             // 자소서 분석 수행
             try {
-              const analysisResponse = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/cover-letter/analysis`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' }
-              });
-
-              if (analysisResponse.ok) {
-                const analysisData = await analysisResponse.json();
+              const analysisData = await documentApi.getCoverLetterAnalysis(applicantId);
                 documentData.analysis = analysisData.analysis || analysisData;
                 console.log('✅ 자소서 분석 완료:', analysisData);
-              } else {
-                console.error('❌ 자소서 분석 실패:', analysisResponse.status);
-              }
             } catch (analysisError) {
               console.error('❌ 자소서 분석 오류:', analysisError);
             }
-          } else {
-            console.error('❌ 자소서 데이터 로드 실패:', coverLetterResponse.status);
+          } catch (error) {
+            console.error('❌ 자소서 데이터 로드 실패:', error);
           }
           break;
 
         case 'portfolio':
-          const portfolioResponse = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/portfolio`);
-          if (portfolioResponse.ok) {
-            documentData = await portfolioResponse.json();
+          try {
+            documentData = await documentApi.getPortfolio(applicantId);
             console.log('✅ 포트폴리오 데이터 로드 완료:', documentData);
-          } else {
-            console.error('❌ 포트폴리오 데이터 로드 실패:', portfolioResponse.status);
+          } catch (error) {
+            console.error('❌ 포트폴리오 데이터 로드 실패:', error);
           }
           break;
       }
@@ -4003,15 +3178,8 @@ const ApplicantManagement = () => {
 
       try {
         const endpoint = 'coverletter';
-        const response = await fetch(`${API_BASE_URL}/api/${endpoint}/similarity-check/${applicantWithId._id}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (response.ok) {
-          const similarityData = await response.json();
+        try {
+          const similarityData = await similarityApi.checkSimilarity(endpoint, applicantWithId._id);
           console.log('✅ 유사도 체크 완료:', similarityData);
 
           setDocumentModal(prev => ({
@@ -4019,8 +3187,8 @@ const ApplicantManagement = () => {
             similarityData,
             isLoadingSimilarity: false
           }));
-        } else {
-          console.error('❌ 유사도 체크 실패:', response.status);
+        } catch (error) {
+          console.error('❌ 유사도 체크 실패:', error);
           setDocumentModal(prev => ({ ...prev, isLoadingSimilarity: false }));
         }
       } catch (error) {
@@ -4052,7 +3220,7 @@ const ApplicantManagement = () => {
         return;
       }
 
-      const portfolio = await api.getPortfolioByApplicantId(applicantId);
+      const portfolio = await applicantApi.getPortfolioByApplicantId(applicantId);
       console.log('포트폴리오 데이터:', portfolio);
 
       setPortfolioData(portfolio);
@@ -4067,9 +3235,7 @@ const ApplicantManagement = () => {
   const handleSimilarApplicantClick = async (similarData) => {
     try {
       // 유사한 지원자의 ID를 사용해서 전체 지원자 정보를 가져옴
-      const response = await fetch(`${API_BASE_URL}/api/applicants/${similarData.resume_id}`);
-      if (response.ok) {
-        const applicantData = await response.json();
+      const applicantData = await applicantApi.getApplicantById(similarData.resume_id);
 
         // 현재 모달의 타입을 기억해둠 (자소서에서 클릭했으면 자소서를, 이력서에서 클릭했으면 이력서를)
         const currentModalType = documentModal.type;
@@ -4088,9 +3254,6 @@ const ApplicantManagement = () => {
             isLoadingSimilarity: false
           });
         }, 100);
-      } else {
-        console.error('지원자 정보를 가져오는 데 실패했습니다.');
-      }
     } catch (error) {
       console.error('지원자 정보 요청 중 오류:', error);
     }
@@ -4151,14 +3314,7 @@ const ApplicantManagement = () => {
     }
 
     try {
-      const response = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}`, {
-        method: 'DELETE',
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (response.ok) {
+      await applicantApi.deleteApplicant(applicantId);
         console.log('✅ 지원자 삭제 성공');
 
         // 모달 닫기
@@ -4172,11 +3328,6 @@ const ApplicantManagement = () => {
         loadStats();
 
         alert('지원자가 성공적으로 삭제되었습니다.');
-      } else {
-        const errorData = await response.json();
-        console.error('❌ 지원자 삭제 실패:', errorData);
-        alert(`지원자 삭제 실패: ${errorData.detail || '알 수 없는 오류'}`);
-      }
     } catch (error) {
       console.error('❌ 지원자 삭제 오류:', error);
       alert('지원자 삭제 중 오류가 발생했습니다.');
@@ -4379,17 +3530,10 @@ const ApplicantManagement = () => {
         const formData = new FormData();
         formData.append('resume_file', resumeFile);
 
-        console.log('🌐 API 요청 전송:', `${API_BASE_URL}/api/integrated-ocr/check-duplicate`);
+        console.log('🌐 API 요청 전송: 중복 확인');
 
-        const response = await fetch(`${API_BASE_URL}/api/integrated-ocr/check-duplicate`, {
-          method: 'POST',
-          body: formData
-        });
-
-        console.log('📡 API 응답 상태:', response.status, response.statusText);
-
-        if (response.ok) {
-          const result = await response.json();
+        try {
+          const result = await ocrApi.checkDuplicate([resumeFile]);
           console.log('📋 API 응답 결과:', result);
 
           if (result.existing_applicant) {
@@ -4399,10 +3543,8 @@ const ApplicantManagement = () => {
           } else {
             console.log('✅ 새로운 지원자 - 중복 없음');
           }
-        } else {
-          console.error('❌ API 요청 실패:', response.status, response.statusText);
-          const errorText = await response.text();
-          console.error('❌ 에러 상세:', errorText);
+        } catch (error) {
+          console.error('❌ API 요청 실패:', error);
         }
       } else {
         console.log('⚠️ 이력서 파일이 없어서 중복 체크 건너뜀');
@@ -4570,34 +3712,11 @@ const ApplicantManagement = () => {
         formData.append('github_url', githubUrl.trim());
       }
 
-      const response = await fetch(`${API_BASE_URL}/api/integrated-ocr/upload-multiple-documents`, {
-        method: 'POST',
-        body: formData,
-        signal: AbortSignal.timeout(600000) // 10분 타임아웃으로 증가
-      });
+      const files = [];
+      if (resumeFile) files.push(resumeFile);
+      if (coverLetterFile) files.push(coverLetterFile);
 
-      if (!response.ok) {
-        console.log('❌ 서버 응답 에러:', {
-          status: response.status,
-          statusText: response.statusText,
-          url: response.url
-        });
-
-        let errorData;
-        try {
-          errorData = await response.json();
-          console.log('📋 에러 응답 데이터:', errorData);
-        } catch (parseError) {
-          console.log('📋 에러 응답 파싱 실패:', parseError);
-          const errorText = await response.text();
-          console.log('📋 원본 에러 텍스트:', errorText);
-          errorData = { detail: errorText || '알 수 없는 오류' };
-        }
-
-        throw new Error(`통합 업로드 실패: ${errorData.detail || errorData.message || '알 수 없는 오류'}`);
-      }
-
-      const result = await response.json();
+      const result = await ocrApi.uploadMultipleDocuments(files, githubUrl.trim());
       console.log('✅ 통합 업로드 성공:', result);
 
       // 분석 결과 생성
@@ -4657,83 +3776,7 @@ const ApplicantManagement = () => {
     }
   };
 
-  // 상세 분석 결과에서 정보 추출하는 헬퍼 함수들
-  const extractSkillsFromAnalysis = (analysisData, documentType) => {
-    const skills = [];
-
-    // 백엔드에서 이미 필터링된 결과만 전달되므로, 해당하는 섹션만 확인
-    if (documentType === '이력서' && analysisData.resume_analysis) {
-      if (analysisData.resume_analysis.tech_stack_clarity?.feedback) {
-        skills.push(analysisData.resume_analysis.tech_stack_clarity.feedback);
-      }
-    } else if (documentType === '자기소개서' && analysisData.cover_letter_analysis) {
-      // 자기소개서 관련 기술 스택 정보가 있다면 추가
-      if (analysisData.cover_letter_analysis.keyword_diversity?.feedback) {
-        skills.push(analysisData.cover_letter_analysis.keyword_diversity.feedback);
-      }
-    } else if (documentType === '깃허브' && analysisData.github_analysis) {
-      if (analysisData.github_analysis.tech_stack?.feedback) {
-        skills.push(analysisData.github_analysis.tech_stack.feedback);
-      }
-    }
-
-    return skills.length > 0 ? skills : ['기술 스택 정보를 추출할 수 없습니다.'];
-  };
-
-  const extractExperienceFromAnalysis = (analysisData, documentType) => {
-      const experiences = [];
-
-    // 백엔드에서 이미 필터링된 결과만 전달되므로, 해당하는 섹션만 확인
-    if (documentType === '이력서' && analysisData.resume_analysis) {
-      if (analysisData.resume_analysis.experience_clarity?.feedback) {
-        experiences.push(analysisData.resume_analysis.experience_clarity.feedback);
-      }
-      if (analysisData.resume_analysis.achievement_metrics?.feedback) {
-        experiences.push(analysisData.resume_analysis.achievement_metrics.feedback);
-      }
-    } else if (documentType === '자기소개서' && analysisData.cover_letter_analysis) {
-      if (analysisData.cover_letter_analysis.unique_experience?.feedback) {
-        experiences.push(analysisData.cover_letter_analysis.unique_experience.feedback);
-      }
-    } else if (documentType === '깃허브' && analysisData.github_analysis) {
-      if (analysisData.github_analysis.personal_contribution?.feedback) {
-        experiences.push(analysisData.github_analysis.personal_contribution.feedback);
-      }
-    }
-
-    return experiences.length > 0 ? experiences.join(' ') : '경력 정보를 추출할 수 없습니다.';
-  };
-
-  const extractEducationFromAnalysis = (analysisData, documentType) => {
-    // 백엔드에서 이미 필터링된 결과만 전달되므로, 해당하는 섹션만 확인
-    if (documentType === '이력서' && analysisData.resume_analysis?.basic_info_completeness?.feedback) {
-        return analysisData.resume_analysis.basic_info_completeness.feedback;
-    } else if (documentType === '자기소개서' && analysisData.cover_letter_analysis?.job_understanding?.feedback) {
-      return analysisData.cover_letter_analysis.job_understanding.feedback;
-    } else if (documentType === '깃허브' && analysisData.github_analysis?.project_overview?.feedback) {
-      return analysisData.github_analysis.project_overview.feedback;
-      }
-      return '학력 정보를 추출할 수 없습니다.';
-  };
-
-  const extractRecommendationsFromAnalysis = (analysisData, documentType) => {
-    // 선택한 항목에 대한 요약 정보 반환
-    if (documentType === '이력서' && analysisData.resume_analysis) {
-        const itemCount = Object.keys(analysisData.resume_analysis).length;
-      const totalScore = analysisData.overall_summary.total_score;
-        return [`이력서 분석 완료: 총 ${itemCount}개 항목 분석, 평균 점수 ${totalScore}/10점`];
-    } else if (documentType === '자기소개서' && analysisData.cover_letter_analysis) {
-      const itemCount = Object.keys(analysisData.cover_letter_analysis).length;
-      const totalScore = analysisData.overall_summary.total_score;
-      return [`자기소개서 분석 완료: 총 ${itemCount}개 항목 분석, 평균 점수 ${totalScore}/10점`];
-    } else if (documentType === '포트폴리오' && analysisData.portfolio_analysis) {
-      const itemCount = Object.keys(analysisData.portfolio_analysis).length;
-      const totalScore = analysisData.overall_summary.total_score;
-      return [`포트폴리오 분석 완료: 총 ${itemCount}개 항목 분석, 평균 점수 ${totalScore}/10점`];
-    }
-
-    return ['문서 분석이 완료되었습니다.'];
-  };
+  // 분석 데이터 추출 함수들은 analysisHelpers.js에서 import
 
 
 
@@ -4750,9 +3793,10 @@ const ApplicantManagement = () => {
           if (existingApplicant.resume) {
             documentId = existingApplicant.resume;
             // 이력서 데이터 가져오기
-            const resumeResponse = await fetch(`${API_BASE_URL}/api/applicants/${existingApplicant._id}/resume`);
-            if (resumeResponse.ok) {
-              documentData = await resumeResponse.json();
+            try {
+              documentData = await documentApi.getResume(existingApplicant._id);
+            } catch (error) {
+              console.error('이력서 데이터 가져오기 실패:', error);
             }
           }
           break;
@@ -4760,9 +3804,10 @@ const ApplicantManagement = () => {
           if (existingApplicant.cover_letter) {
             documentId = existingApplicant.cover_letter;
             // 자기소개서 데이터 가져오기
-            const coverLetterResponse = await fetch(`${API_BASE_URL}/api/applicants/${existingApplicant._id}/cover-letter`);
-            if (coverLetterResponse.ok) {
-              documentData = await coverLetterResponse.json();
+            try {
+              documentData = await documentApi.getCoverLetter(existingApplicant._id);
+            } catch (error) {
+              console.error('자기소개서 데이터 가져오기 실패:', error);
             }
           }
           break;
@@ -4770,9 +3815,10 @@ const ApplicantManagement = () => {
           if (existingApplicant.portfolio) {
             documentId = existingApplicant.portfolio;
             // 포트폴리오 데이터 가져오기
-            const portfolioResponse = await fetch(`${API_BASE_URL}/api/applicants/${existingApplicant._id}/portfolio`);
-            if (portfolioResponse.ok) {
-              documentData = await portfolioResponse.json();
+            try {
+              documentData = await documentApi.getPortfolio(existingApplicant._id);
+            } catch (error) {
+              console.error('포트폴리오 데이터 가져오기 실패:', error);
             }
           }
           break;
@@ -6285,474 +5331,41 @@ const ApplicantManagement = () => {
       </AnimatePresence>
 
       {/* 필터 모달 */}
-      <AnimatePresence>
-        {filterModal && (
-          <FilterModalOverlay
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={handleCloseFilterModal}
-          >
-            <FilterModalContent
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <FilterModalHeader>
-                <FilterModalTitle>필터</FilterModalTitle>
-                <FilterCloseButton onClick={handleCloseFilterModal}>&times;</FilterCloseButton>
-              </FilterModalHeader>
+      <FilterModal
+        isOpen={filterModal}
+        onClose={handleCloseFilterModal}
+        selectedJobs={selectedJobs}
+        selectedExperience={selectedExperience}
+        selectedStatus={selectedStatus}
+        onJobChange={handleJobChange}
+        onExperienceChange={handleExperienceChange}
+        onStatusChange={handleStatusChange}
+        onApplyFilter={handleApplyFilter}
+        onResetFilter={handleResetFilter}
+      />
 
-              <FilterGrid>
-                <FilterColumn>
-                  <FilterSection>
-                    <FilterSectionTitle>직무</FilterSectionTitle>
-                    <CheckboxGroup>
-                      <CheckboxItem>
-                        <Checkbox
-                          type="checkbox"
-                          checked={selectedJobs.includes('프론트엔드')}
-                          onChange={() => handleJobChange('프론트엔드')}
-                        />
-                        프론트엔드
-                      </CheckboxItem>
-                      <CheckboxItem>
-                        <Checkbox
-                          type="checkbox"
-                          checked={selectedJobs.includes('풀스택')}
-                          onChange={() => handleJobChange('풀스택')}
-                        />
-                        풀스택
-                      </CheckboxItem>
-                      <CheckboxItem>
-                        <Checkbox
-                          type="checkbox"
-                          checked={selectedJobs.includes('PM')}
-                          onChange={() => handleJobChange('PM')}
-                        />
-                        PM
-                      </CheckboxItem>
-                      <CheckboxItem>
-                        <Checkbox
-                          type="checkbox"
-                          checked={selectedJobs.includes('DevOps')}
-                          onChange={() => handleJobChange('DevOps')}
-                        />
-                        DevOps
-                      </CheckboxItem>
-                      <CheckboxItem>
-                        <Checkbox
-                          type="checkbox"
-                          checked={selectedJobs.includes('백엔드')}
-                          onChange={() => handleJobChange('백엔드')}
-                        />
-                        백엔드
-                      </CheckboxItem>
-                      <CheckboxItem>
-                        <Checkbox
-                          type="checkbox"
-                          checked={selectedJobs.includes('데이터 분석')}
-                          onChange={() => handleJobChange('데이터 분석')}
-                        />
-                        데이터 분석
-                      </CheckboxItem>
-                      <CheckboxItem>
-                        <Checkbox
-                          type="checkbox"
-                          checked={selectedJobs.includes('UI/UX')}
-                          onChange={() => handleJobChange('UI/UX')}
-                        />
-                        UI/UX
-                      </CheckboxItem>
-                      <CheckboxItem>
-                        <Checkbox
-                          type="checkbox"
-                          checked={selectedJobs.includes('QA')}
-                          onChange={() => handleJobChange('QA')}
-                        />
-                        QA
-                      </CheckboxItem>
-                    </CheckboxGroup>
-                  </FilterSection>
-                </FilterColumn>
-
-                <FilterColumn>
-                  <FilterSection>
-                    <FilterSectionTitle>경력</FilterSectionTitle>
-                    <CheckboxGroup>
-                      <CheckboxItem>
-                        <Checkbox
-                          type="checkbox"
-                          checked={selectedExperience.includes('신입')}
-                          onChange={() => handleExperienceChange('신입')}
-                        />
-                        신입
-                      </CheckboxItem>
-                      <CheckboxItem>
-                        <Checkbox
-                          type="checkbox"
-                          checked={selectedExperience.includes('1-3년')}
-                          onChange={() => handleExperienceChange('1-3년')}
-                        />
-                        1-3년
-                      </CheckboxItem>
-                      <CheckboxItem>
-                        <Checkbox
-                          type="checkbox"
-                          checked={selectedExperience.includes('3-5년')}
-                          onChange={() => handleExperienceChange('3-5년')}
-                        />
-                        3-5년
-                      </CheckboxItem>
-                      <CheckboxItem>
-                        <Checkbox
-                          type="checkbox"
-                          checked={selectedExperience.includes('5년이상')}
-                          onChange={() => handleExperienceChange('5년이상')}
-                        />
-                        5년이상
-                      </CheckboxItem>
-                    </CheckboxGroup>
-                  </FilterSection>
-
-                  <FilterSection>
-                    <FilterSectionTitle>상태</FilterSectionTitle>
-                    <CheckboxGroup>
-                      <CheckboxItem>
-                        <Checkbox
-                          type="checkbox"
-                          checked={selectedStatus.includes('서류합격')}
-                          onChange={() => handleStatusChange('서류합격')}
-                        />
-                        서류합격
-                      </CheckboxItem>
-                      <CheckboxItem>
-                        <Checkbox
-                          type="checkbox"
-                          checked={selectedStatus.includes('최종합격')}
-                          onChange={() => handleStatusChange('최종합격')}
-                        />
-                        최종합격
-                      </CheckboxItem>
-                      <CheckboxItem>
-                        <Checkbox
-                          type="checkbox"
-                          checked={selectedStatus.includes('보류')}
-                          onChange={() => handleStatusChange('보류')}
-                        />
-                        보류
-                      </CheckboxItem>
-                      <CheckboxItem>
-                        <Checkbox
-                          type="checkbox"
-                          checked={selectedStatus.includes('서류불합격')}
-                          onChange={() => handleStatusChange('서류불합격')}
-                        />
-                        서류불합격
-                      </CheckboxItem>
-                    </CheckboxGroup>
-                  </FilterSection>
-                </FilterColumn>
-              </FilterGrid>
-
-              <FilterButtonGroup>
-                <ResetButton onClick={handleResetFilter}>
-                  초기화
-                </ResetButton>
-                <ApplyButton onClick={handleApplyFilter}>
-                  적용
-                </ApplyButton>
-              </FilterButtonGroup>
-            </FilterModalContent>
-          </FilterModalOverlay>
-        )}
-      </AnimatePresence>
-
-      {/* 새 이력서 등록 모달 */}
-      <AnimatePresence>
-        {isResumeModalOpen && (
-          <ResumeModalOverlay
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={handleResumeModalClose}
-          >
-            <ResumeModalContent
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <ResumeModalHeader>
-                <ResumeModalTitle>새 지원자 등록</ResumeModalTitle>
-                <ResumeModalCloseButton onClick={handleResumeModalClose}>&times;</ResumeModalCloseButton>
-              </ResumeModalHeader>
-
-              <ResumeModalBody>
-                <ResumeFormSection>
-                  <ResumeFormTitle>이력서 업로드</ResumeFormTitle>
-                  <DocumentUploadContainer>
-                    <FileUploadArea
+      <ResumeUploadModal
+        isOpen={isResumeModalOpen}
+        onClose={handleResumeModalClose}
+        resumeFile={resumeFile}
+        coverLetterFile={coverLetterFile}
+        githubUrl={githubUrl}
                       isDragOver={isDragOver}
+        existingApplicant={existingApplicant}
+        replaceExisting={replaceExisting}
+        isAnalyzing={isAnalyzing}
+        isCheckingDuplicate={isCheckingDuplicate}
+        analysisResult={analysisResult}
+        onFileChange={handleFileChange}
+        onCoverFileChange={handleCoverFileChange}
+        onGithubUrlChange={handleGithubUrlChange}
                       onDragOver={handleDragOver}
                       onDragLeave={handleDragLeave}
                       onDrop={handleDrop}
-                    >
-                      <FileUploadInput
-                        type="file"
-              accept=".pdf,.doc,.docx,.txt"
-                        onChange={handleFileChange}
-                        id="resume-file"
-                      />
-                      <FileUploadLabel htmlFor="resume-file">
-                        {resumeFile ? (
-                          <FileSelected>
-                            <FiFile size={20} />
-                            <span>{resumeFile.name}</span>
-                          </FileSelected>
-                        ) : (
-                          <FileUploadPlaceholder>
-                            {isDragOver ? (
-                              <FiFile size={32} style={{ color: 'var(--primary-color)' }} />
-                            ) : (
-                              <FiFileText size={24} />
-                            )}
-                            <span>
-                              {isDragOver
-                                ? '파일을 여기에 놓으세요'
-                                : '이력서 파일을 선택하거나 드래그하세요'
-                              }
-                            </span>
-                            <small>PDF, DOC, DOCX, TXT 파일 지원</small>
-                          </FileUploadPlaceholder>
-                        )}
-                      </FileUploadLabel>
-                    </FileUploadArea>
-                  </DocumentUploadContainer>
-                </ResumeFormSection>
-
-                <ResumeFormSection>
-                  <ResumeFormTitle>자기소개서 업로드</ResumeFormTitle>
-                  <DocumentUploadContainer>
-                    <FileUploadArea
-                      isDragOver={isDragOver}
-                      onDragOver={handleDragOver}
-                      onDragLeave={handleDragLeave}
-                      onDrop={handleDrop}
-                    >
-                      <FileUploadInput
-                        type="file"
-                        accept=".pdf,.doc,.docx,.txt"
-                        onChange={handleCoverFileChange}
-                        id="cover-file"
-                      />
-                      <FileUploadLabel htmlFor="cover-file">
-                        {coverLetterFile ? (
-                          <FileSelected>
-                            <FiFile size={20} />
-                            <span>{coverLetterFile.name}</span>
-                          </FileSelected>
-                        ) : (
-                          <FileUploadPlaceholder>
-                            {isDragOver ? (
-                              <FiFile size={32} style={{ color: 'var(--primary-color)' }} />
-                            ) : (
-                              <FiFileText size={24} />
-                            )}
-                            <span>
-                              {isDragOver
-                                ? '파일을 여기에 놓으세요'
-                                : '자기소개서 파일을 선택하거나 드래그하세요'
-                              }
-                            </span>
-                            <small>PDF, DOC, DOCX, TXT 파일 지원</small>
-                          </FileUploadPlaceholder>
-                        )}
-                      </FileUploadLabel>
-                    </FileUploadArea>
-                  </DocumentUploadContainer>
-                </ResumeFormSection>
-
-                <ResumeFormSection>
-                  <ResumeFormTitle>깃허브 주소</ResumeFormTitle>
-                  <DocumentUploadContainer>
-                    <GithubInputContainer>
-                      <GithubInput
-                        type="text"
-                        placeholder="https://github.com/username/repository"
-                        value={githubUrl}
-                        onChange={handleGithubUrlChange}
-                      />
-                      <GithubInputDescription>
-                        지원자의 깃허브 저장소 주소를 입력하세요
-                      </GithubInputDescription>
-                    </GithubInputContainer>
-                  </DocumentUploadContainer>
-                </ResumeFormSection>
-
-                {/* 기존 지원자 정보 표시 */}
-                {existingApplicant && (
-                  <ExistingApplicantInfo>
-                    <ExistingApplicantTitle>🔄 기존 지원자 발견</ExistingApplicantTitle>
-                    <ExistingApplicantDetails>
-                      <div><strong>이름:</strong> {existingApplicant.name}</div>
-                      <div><strong>이메일:</strong> {existingApplicant.email || 'N/A'}</div>
-                      <div><strong>현재 서류:</strong></div>
-                      <ul>
-                        <li>
-                          이력서: {existingApplicant.resume ? '✅ 있음' : '❌ 없음'}
-                          {existingApplicant.resume && (
-                            <PreviewButton onClick={() => handlePreviewDocument('resume')}>
-                              👁️ 미리보기
-                            </PreviewButton>
-                          )}
-                        </li>
-                        <li>
-                          자기소개서: {existingApplicant.cover_letter ? '✅ 있음' : '❌ 없음'}
-                          {existingApplicant.cover_letter && (
-                            <PreviewButton onClick={() => handlePreviewDocument('cover_letter')}>
-                              👁️ 미리보기
-                            </PreviewButton>
-                          )}
-                        </li>
-                        <li>
-                          깃허브: {existingApplicant.github_url ? '✅ 있음' : '❌ 없음'}
-                          {existingApplicant.github_url && (
-                            <a href={existingApplicant.github_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--primary-color)', textDecoration: 'none', marginLeft: '8px' }}>
-                              🔗 링크 열기
-                            </a>
-                          )}
-                        </li>
-                      </ul>
-
-                      {/* 교체 옵션 체크박스 */}
-                      <ReplaceOptionSection>
-                        <ReplaceOptionLabel>
-                          <input
-                            type="checkbox"
-                            checked={replaceExisting}
-                            onChange={(e) => setReplaceExisting(e.target.checked)}
-                          />
-                          <span>기존 서류를 새 서류로 교체</span>
-                        </ReplaceOptionLabel>
-                        <ReplaceOptionDescription>
-                          체크하면 기존에 있는 서류를 새로 업로드한 서류로 교체합니다.
-                          체크하지 않으면 중복 서류는 업로드되지 않습니다.
-                        </ReplaceOptionDescription>
-                      </ReplaceOptionSection>
-                    </ExistingApplicantDetails>
-                  </ExistingApplicantInfo>
-                )}
-
-                <ResumeFormActions>
-                  <ResumeSubmitButton
-                    onClick={handleResumeSubmit}
-                    disabled={(!resumeFile && !coverLetterFile && !githubUrl.trim()) || isAnalyzing || isCheckingDuplicate}
-                  >
-                    {isAnalyzing ? '처리 중...' : isCheckingDuplicate ? '중복 체크 중...' : '업로드 및 저장'}
-                  </ResumeSubmitButton>
-                </ResumeFormActions>
-              </ResumeModalBody>
-
-              {isAnalyzing && (
-                <ResumeAnalysisSection>
-                  <ResumeAnalysisTitle>문서 업로드 및 분석 중입니다...</ResumeAnalysisTitle>
-                  <ResumeAnalysisSpinner>
-                    <div className="spinner"></div>
-                    <span>AI가 문서를 분석하고 있습니다 (최대 5분 소요)</span>
-                    <small style={{ marginTop: '8px', color: 'var(--text-secondary)' }}>
-                      대용량 파일이나 여러 파일을 동시에 처리할 때 시간이 오래 걸릴 수 있습니다.
-                    </small>
-                  </ResumeAnalysisSpinner>
-                </ResumeAnalysisSection>
-              )}
-
-              {analysisResult && (
-                <ResumeAnalysisSection>
-                  <ResumeAnalysisTitle>업로드 결과</ResumeAnalysisTitle>
-                  <ResumeAnalysisContent>
-                    <ResumeAnalysisItem>
-                      <ResumeAnalysisLabel>문서 유형:</ResumeAnalysisLabel>
-                      <ResumeAnalysisValue>{analysisResult.documentType}</ResumeAnalysisValue>
-                    </ResumeAnalysisItem>
-                    <ResumeAnalysisItem>
-                      <ResumeAnalysisLabel>파일명:</ResumeAnalysisLabel>
-                      <ResumeAnalysisValue>{analysisResult.fileName}</ResumeAnalysisValue>
-                    </ResumeAnalysisItem>
-                    <ResumeAnalysisItem>
-                      <ResumeAnalysisLabel>업로드 일시:</ResumeAnalysisLabel>
-                      <ResumeAnalysisValue>{analysisResult.analysisDate}</ResumeAnalysisValue>
-                    </ResumeAnalysisItem>
-                    {analysisResult.applicant && (
-                      <>
-                        <ResumeAnalysisItem>
-                          <ResumeAnalysisLabel>지원자 이름:</ResumeAnalysisLabel>
-                          <ResumeAnalysisValue>{analysisResult.applicant.name || 'N/A'}</ResumeAnalysisValue>
-                        </ResumeAnalysisItem>
-                        <ResumeAnalysisItem>
-                          <ResumeAnalysisLabel>지원자 이메일:</ResumeAnalysisLabel>
-                          <ResumeAnalysisValue>{analysisResult.applicant.email || 'N/A'}</ResumeAnalysisValue>
-                        </ResumeAnalysisItem>
-                        <ResumeAnalysisItem>
-                          <ResumeAnalysisLabel>지원자 전화번호:</ResumeAnalysisLabel>
-                          <ResumeAnalysisValue>{analysisResult.applicant.phone || 'N/A'}</ResumeAnalysisValue>
-                        </ResumeAnalysisItem>
-                        <ResumeAnalysisItem>
-                          <ResumeAnalysisLabel>지원 직무:</ResumeAnalysisLabel>
-                          <ResumeAnalysisValue>{analysisResult.applicant.position || 'N/A'}</ResumeAnalysisValue>
-                        </ResumeAnalysisItem>
-                        <ResumeAnalysisItem>
-                          <ResumeAnalysisLabel>기술 스택:</ResumeAnalysisLabel>
-                          <ResumeAnalysisSkills>
-                            {Array.isArray(analysisResult.applicant.skills)
-                              ? analysisResult.applicant.skills.map((skill, index) => (
-                                  <ResumeSkillTag key={index}>{skill}</ResumeSkillTag>
-                                ))
-                              : typeof analysisResult.applicant.skills === 'string'
-                              ? analysisResult.applicant.skills.split(',').map((skill, index) => (
-                                  <ResumeSkillTag key={index}>{skill.trim()}</ResumeSkillTag>
-                                ))
-                              : null
-                            }
-                          </ResumeAnalysisSkills>
-                        </ResumeAnalysisItem>
-                      </>
-                    )}
-                    <ResumeAnalysisItem>
-                      <ResumeAnalysisLabel>업로드 결과:</ResumeAnalysisLabel>
-                      <ResumeAnalysisRecommendations>
-                        {analysisResult.uploadResults?.map((result, index) => (
-                          <ResumeRecommendationItem key={index}>
-                            ✅ {result.type === 'resume' ? '이력서' : result.type === 'cover_letter' ? '자기소개서' : '포트폴리오'} 업로드 성공
-                          </ResumeRecommendationItem>
-                        ))}
-                        {analysisResult.analysisResult && Object.keys(analysisResult.analysisResult).map((docType, index) => (
-                          <ResumeRecommendationItem key={`doc-${index}`}>
-                            ✅ {docType === 'resume' ? '이력서' : docType === 'cover_letter' ? '자기소개서' : '포트폴리오'} OCR 처리 완료
-                          </ResumeRecommendationItem>
-                        ))}
-                      </ResumeAnalysisRecommendations>
-                    </ResumeAnalysisItem>
-                    <ResumeAnalysisItem>
-                      <ResumeAnalysisLabel>상태:</ResumeAnalysisLabel>
-                      <ResumeAnalysisValue style={{ color: '#28a745', fontWeight: 'bold' }}>
-                        ✅ 성공적으로 DB에 저장되었습니다
-                      </ResumeAnalysisValue>
-                    </ResumeAnalysisItem>
-                  </ResumeAnalysisContent>
-                </ResumeAnalysisSection>
-              )}
-
-              <ResumeModalFooter>
-                <ResumeModalButton onClick={handleResumeModalClose}>
-                  {analysisResult ? '닫기' : '취소'}
-                </ResumeModalButton>
-              </ResumeModalFooter>
-            </ResumeModalContent>
-          </ResumeModalOverlay>
-        )}
-      </AnimatePresence>
+        onReplaceExistingChange={(checked) => setReplaceExisting(checked)}
+        onSubmit={handleResumeSubmit}
+        onPreviewDocument={handlePreviewDocument}
+      />
 
       {/* 상세 분석 모달 */}
       <DetailedAnalysisModal
