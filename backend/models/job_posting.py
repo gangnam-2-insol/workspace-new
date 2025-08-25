@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import Optional, List, Dict
+from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
 
@@ -37,7 +37,7 @@ class JobPostingBase(BaseModel):
     work_type: Optional[str] = Field(None, description="업무 내용")
     work_hours: Optional[str] = Field(None, description="근무 시간")
     contact_email: Optional[str] = Field(None, description="연락처 이메일")
-    
+
     # 유사성 분석을 위한 추가 필드들
     position: Optional[str] = Field(None, description="채용 직무")
     experience_min_years: Optional[int] = Field(None, description="최소 경력 연차")
@@ -47,55 +47,65 @@ class JobPostingBase(BaseModel):
     job_keywords: List[str] = Field(default=[], description="직무 관련 키워드")
     industry: Optional[str] = Field(None, description="산업 분야")
     job_category: Optional[str] = Field(None, description="직무 카테고리")
-    
+
     # 지원자 요구 항목 (MongoDB 컬렉션 구조 기반)
     required_documents: List[RequiredDocumentType] = Field(
-        default=[RequiredDocumentType.RESUME], 
+        default=[RequiredDocumentType.RESUME],
         description="필수 제출 서류"
     )
     required_skills: List[str] = Field(
-        default=[], 
+        default=[],
         description="필수 기술 스택"
     )
     preferred_skills: List[str] = Field(
-        default=[], 
+        default=[],
         description="우선 기술 스택"
     )
     skill_weights: Dict[str, float] = Field(
-        default={}, 
+        default={},
         description="기술별 가중치"
     )
     required_experience_years: Optional[int] = Field(
-        None, 
+        None,
         description="필수 경력 연차"
     )
     require_portfolio_pdf: bool = Field(
-        default=False, 
+        default=False,
         description="포트폴리오 PDF 제출 필수 여부"
     )
     require_github_url: bool = Field(
-        default=False, 
+        default=False,
         description="GitHub URL 제출 필수 여부"
     )
     require_growth_background: bool = Field(
-        default=False, 
+        default=False,
         description="성장 배경 작성 필수 여부"
     )
     require_motivation: bool = Field(
-        default=False, 
+        default=False,
         description="지원 동기 작성 필수 여부"
     )
     require_career_history: bool = Field(
-        default=False, 
+        default=False,
         description="경력 사항 작성 필수 여부"
     )
     max_file_size_mb: int = Field(
-        default=50, 
+        default=50,
         description="최대 파일 크기 (MB)"
     )
     allowed_file_types: List[str] = Field(
-        default=["pdf", "doc", "docx"], 
+        default=["pdf", "doc", "docx"],
         description="허용된 파일 형식"
+    )
+
+    # 회사 인재상 관련 필드
+    culture_requirements: List[Dict[str, Any]] = Field(
+        default=[],
+        description="요구되는 회사 인재상 목록"
+    )
+    selected_culture_id: Optional[str] = Field(
+        None,
+        description="선택된 회사 인재상 ID"
     )
 
 class JobPostingCreate(JobPostingBase):
@@ -138,7 +148,7 @@ class JobPosting(JobPostingBase):
     shares: int = Field(default=0, description="공유 수")
     created_at: Optional[datetime] = Field(default_factory=datetime.now)
     updated_at: Optional[datetime] = Field(default_factory=datetime.now)
-    
+
     class Config:
         allow_population_by_field_name = True
         schema_extra = {

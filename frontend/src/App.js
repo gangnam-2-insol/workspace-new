@@ -1,7 +1,7 @@
 import React, { Suspense } from 'react';
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Layout from './components/Layout/Layout';
-import AITooltip from './components/AITooltip';
+
 import NewPickChatbot from './components/NewPickChatbot';
 
 // 코드 스플리팅으로 지연 로딩
@@ -19,6 +19,7 @@ const Settings = React.lazy(() => import('./pages/Settings/Settings'));
 const SampleDataManagement = React.lazy(() => import('./pages/SampleDataManagement/SampleDataManagement'));
 const TestGithubSummary = React.lazy(() => import('./pages/TestGithubSummary'));
 const PDFOCRPage = React.lazy(() => import('./pages/PDFOCRPage/PDFOCRPage'));
+const CompanyCultureManagement = React.lazy(() => import('./pages/CompanyCultureManagement/CompanyCultureManagement'));
 
 
 
@@ -27,11 +28,12 @@ function App() {
   const navigate = useNavigate();
   const currentPage = location.pathname.replace('/', '') || 'dashboard';
   // 에이전트 챗봇 상태 제거됨
-  
+
   // 픽톡 챗봇 상태 관리
   const [pickChatbotState, setPickChatbotState] = React.useState(() => {
     const savedState = sessionStorage.getItem('pickChatbotIsOpen');
-    return savedState === 'true' ? true : (savedState === 'floating' ? 'floating' : false);
+    // 항상 플로팅 상태로 시작하거나, 저장된 상태가 true인 경우에만 true로 설정
+    return savedState === 'true' ? true : 'floating';
   });
 
   // 전역 이벤트 리스너 추가 (디버깅용)
@@ -175,6 +177,7 @@ function App() {
             <Route path="/users" element={<UserManagement />} />
             <Route path="/settings" element={<Settings />} />
             <Route path="/sample-data" element={<SampleDataManagement />} />
+            <Route path="/company-culture" element={<CompanyCultureManagement />} />
             <Route path="/github-test" element={<TestGithubSummary />} />
             <Route path="/pdf-ocr" element={<PDFOCRPage />} />
             <Route path="*" element={<div style={{ padding: '20px', textAlign: 'center' }}>페이지를 찾을 수 없습니다.</div>} />
@@ -182,21 +185,20 @@ function App() {
         </Suspense>
       </Layout>
 
-      {/* AI 말풍선 컴포넌트 */}
-      <AITooltip />
+
 
       {/* 챗봇 컴포넌트 제거됨 */}
 
       {/* 픽톡 챗봇 */}
-      <NewPickChatbot 
-        isOpen={pickChatbotState} 
+      <NewPickChatbot
+        isOpen={pickChatbotState}
         onOpenChange={(newState) => {
           setPickChatbotState(newState);
           sessionStorage.setItem('pickChatbotIsOpen', newState ? 'true' : (newState === 'floating' ? 'floating' : 'false'));
-        }} 
+        }}
       />
     </>
   );
 }
 
-export default App; 
+export default App;

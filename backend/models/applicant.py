@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Optional
+from typing import Optional, Dict, Any
 from pydantic import BaseModel, Field
 from bson import ObjectId
 
@@ -20,7 +20,7 @@ class ApplicantCreate(ApplicantBase):
     analysisScore: Optional[int] = Field(None, description="분석 점수")
     analysisResult: Optional[str] = Field(None, description="분석 결과")
     status: Optional[str] = Field(default="pending", description="상태")
-    
+
     # 직접 연결 필드들
     job_posting_id: Optional[str] = Field(None, description="채용공고 ID")
     resume_id: Optional[str] = Field(None, description="이력서 ID")
@@ -39,14 +39,21 @@ class Applicant(ApplicantBase):
     analysisScore: Optional[int] = Field(None, description="분석 점수")
     analysisResult: Optional[str] = Field(None, description="분석 결과")
     status: Optional[str] = Field(default="pending", description="상태")
-    
+
     # 직접 연결 필드들
     job_posting_id: Optional[str] = Field(None, description="채용공고 ID")
     resume_id: Optional[str] = Field(None, description="이력서 ID")
     cover_letter_id: Optional[str] = Field(None, description="자기소개서 ID")
     portfolio_id: Optional[str] = Field(None, description="포트폴리오 ID")
+
+    # 회사 인재상 점수 필드
+    culture_scores: Optional[Dict[str, Any]] = Field(
+        default={},
+        description="회사 인재상별 평가 점수"
+    )
+
     created_at: datetime = Field(default_factory=datetime.utcnow, description="생성일시")
-    
+
     class Config:
         populate_by_name = True
         json_schema_extra = {
