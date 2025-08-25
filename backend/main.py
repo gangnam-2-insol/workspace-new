@@ -19,15 +19,12 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 
 # chatbot 라우터 추가
-<<<<<<< HEAD
-=======
 try:
     from github import router as github_router
     print("✅ GitHub 라우터 import 성공")
 except ImportError as e:
     print(f"⚠️ GitHub 모듈 import 오류: {e}")
     github_router = None
->>>>>>> d2fe75e (250825 15:08 인재상관리 추가)
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel
 from routers.applicants import get_mongo_service, get_similarity_service
@@ -126,14 +123,11 @@ async def add_charset_header(request, call_next):
     return response
 
 # 라우터 등록
-<<<<<<< HEAD
-=======
 if github_router:
     app.include_router(github_router, prefix="/api", tags=["github"])
     print("✅ GitHub 라우터 등록 완료")
 else:
     print("❌ GitHub 라우터 등록 실패")
->>>>>>> d2fe75e (250825 15:08 인재상관리 추가)
 app.include_router(upload_router, tags=["upload"])
 app.include_router(pick_chatbot_router, prefix="/api/pick-chatbot", tags=["pick-chatbot"])
 app.include_router(integrated_ocr_router, prefix="/api/integrated-ocr", tags=["integrated-ocr"])

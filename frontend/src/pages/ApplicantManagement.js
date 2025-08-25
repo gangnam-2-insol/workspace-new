@@ -28,7 +28,7 @@ import {
   FiArrowLeft,
   FiTrendingUp
 } from 'react-icons/fi';
-import DetailedAnalysisModal from '../components/DetailedAnalysisModal';
+
 import ResumeModal from '../components/ResumeModal';
 import CoverLetterSummary from '../components/CoverLetterSummary';
 import CoverLetterAnalysis from '../components/CoverLetterAnalysis';
@@ -53,37 +53,8 @@ const calculateAverageScore = (analysisData) => {
   return Math.round((total / scores.length) * 10) / 10; // 소수점 첫째자리까지
 };
 
-// 이력서 분석 항목 라벨 함수
-const getResumeAnalysisLabel = (key) => {
-  const labels = {
-    basic_info_completeness: '기본정보 완성도',
-    job_relevance: '직무 적합성',
-    experience_clarity: '경력 명확성',
-    tech_stack_clarity: '기술스택 명확성',
-    project_recency: '프로젝트 최신성',
-    achievement_metrics: '성과 지표',
-    readability: '가독성',
-    typos_and_errors: '오탈자',
-    update_freshness: '최신성'
-  };
-  return labels[key] || key;
-};
-
-// 자기소개서 분석 항목 라벨 함수
-const getCoverLetterAnalysisLabel = (key) => {
-  const labels = {
-    motivation_relevance: '지원 동기',
-    problem_solving_STAR: 'STAR 기법',
-    quantitative_impact: '정량적 성과',
-    job_understanding: '직무 이해도',
-    unique_experience: '차별화 경험',
-    logical_flow: '논리적 흐름',
-    keyword_diversity: '키워드 다양성',
-    sentence_readability: '문장 가독성',
-    typos_and_errors: '오탈자'
-  };
-  return labels[key] || key;
-};
+// 이력서 분석 항목 라벨 함수 (컴포넌트 내부에서 재정의됨)
+// 자기소개서 분석 항목 라벨 함수 (컴포넌트 내부에서 재정의됨)
 
 // 포트폴리오 분석 항목 라벨 함수
 const getPortfolioAnalysisLabel = (key) => {
@@ -2895,6 +2866,45 @@ const ApplicantManagement = () => {
     return statusMap[status] || '보류';
   };
 
+  // 이력서 분석 라벨 매핑 함수
+  const getResumeAnalysisLabel = (key) => {
+    const labelMap = {
+      'basic_info_completeness': '기본정보 완성도',
+      'job_fit': '직무 적합성',
+      'career_clarity': '경력 명확성',
+      'tech_stack_clarity': '기술스택 명확성',
+      'project_recency': '프로젝트 최신성',
+      'performance_metrics': '성과 지표',
+      'readability': '가독성',
+      'typos_and_errors': '오탈자',
+      'recency': '최신성'
+    };
+    return labelMap[key] || key;
+  };
+
+  // 자소서 분석 라벨 매핑 함수
+  const getCoverLetterAnalysisLabel = (key) => {
+    const labelMap = {
+      'motivation_relevance': '지원 동기',
+      'star_technique': 'STAR 기법',
+      'quantitative_performance': '정량적 성과',
+      'job_understanding': '직무 이해도',
+      'differentiation_experience': '차별화 경험',
+      'logical_flow': '논리적 흐름',
+      'keyword_diversity': '키워드 다양성',
+      'sentence_readability': '문장 가독성',
+      'typos_and_errors': '오탈자'
+    };
+    return labelMap[key] || key;
+  };
+
+  // 점수별 아이콘 반환 함수
+  const getScoreIcon = (score) => {
+    if (score >= 8) return '✅';
+    if (score >= 6) return '⚠️';
+    return '❌';
+  };
+
   const [applicants, setApplicants] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
   const [filterStatus, setFilterStatus] = useState('전체');
@@ -2958,10 +2968,9 @@ const ApplicantManagement = () => {
   const [previewDocument, setPreviewDocument] = useState(null);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
 
-  // 자소서 분석 모달 상태
-  const [isCoverLetterAnalysisModalOpen, setIsCoverLetterAnalysisModalOpen] = useState(false);
-  const [selectedCoverLetterData, setSelectedCoverLetterData] = useState(null);
-  const [selectedApplicantForCoverLetter, setSelectedApplicantForCoverLetter] = useState(null);
+
+
+
 
 
 
@@ -3148,15 +3157,15 @@ const ApplicantManagement = () => {
 
         return {
           applicant,
-          totalScore: Math.round(totalScore * 10) / 10,
-          resumeScore: applicant.analysisScore || 0, // 프로젝트 마에스트로 점수 사용
+          totalScore: Math.round((totalScore / 100) * 10 * 10) / 10, // 10점 만점으로 변환
+          resumeScore: Math.round(((applicant.analysisScore || 0) / 100) * 10), // 10점 만점으로 변환
           coverLetterScore: 0, // 현재 데이터에는 없음
           portfolioScore: 0, // 현재 데이터에는 없음
           keywordScore: 5, // 기본값
           rank: 0, // 순위는 나중에 설정
           rankText: '', // 순위 텍스트는 나중에 설정
           breakdown: {
-            resume: applicant.analysisScore || 0,
+            resume: Math.round(((applicant.analysisScore || 0) / 100) * 10), // 10점 만점으로 변환
             coverLetter: 0,
             portfolio: 0,
             keywordMatching: 5
@@ -3955,11 +3964,8 @@ const ApplicantManagement = () => {
     setSelectedResumeApplicant(null);
   };
 
-  // 자소서 분석 모달 관련 함수들
-  const handleCoverLetterAnalysisModalOpen = async (applicant) => {
-    setSelectedApplicantForCoverLetter(applicant);
-    setIsCoverLetterAnalysisModalOpen(true);
 
+  const handleOpenCoverLetterAnalysis = async (applicant) => {
     // 먼저 기존 분석 데이터가 있는지 확인
     const existingAnalysis = applicant.cover_letter_analysis || applicant.analysis_result?.cover_letter_analysis;
     
@@ -5998,10 +6004,7 @@ const ApplicantManagement = () => {
                     <ProfileLabel>경력</ProfileLabel>
                     <ProfileValue>{selectedApplicant.experience}</ProfileValue>
                   </ProfileItem>
-                  <ProfileItem>
-                    <ProfileLabel>희망부서</ProfileLabel>
-                    <ProfileValue>{selectedApplicant.department}</ProfileValue>
-                  </ProfileItem>
+
                   <ProfileItem>
                     <ProfileLabel>희망직책</ProfileLabel>
                     <ProfileValue>{selectedApplicant.position}</ProfileValue>
@@ -6038,17 +6041,21 @@ const ApplicantManagement = () => {
                   AI 분석 요약
                 </SummaryTitle>
 
+                {/* 통합 분석 결과의 보라색 박스 스타일 적용 */}
                 {selectedApplicant.analysisScore && (
-                  <AnalysisScoreDisplay>
-                    <AnalysisScoreCircle>
-                      {selectedApplicant.analysisScore}
-                    </AnalysisScoreCircle>
-                    <AnalysisScoreInfo>
-                      <AnalysisScoreLabel>AI 분석 점수</AnalysisScoreLabel>
-                      <AnalysisScoreValue>{selectedApplicant.analysisScore}점</AnalysisScoreValue>
-                    </AnalysisScoreInfo>
-                  </AnalysisScoreDisplay>
+                  <OverallScoreDisplay>
+                    <OverallScoreCircle>
+                      {Math.round((selectedApplicant.analysisScore / 100) * 10)}
+                    </OverallScoreCircle>
+                    <OverallScoreInfo>
+                      <OverallScoreLabel>전체 평가 점수</OverallScoreLabel>
+                      <OverallScoreValue>{Math.round((selectedApplicant.analysisScore / 100) * 10)}/10점</OverallScoreValue>
+                    </OverallScoreInfo>
+                  </OverallScoreDisplay>
                 )}
+
+                {/* 이력서 분석 결과 */}
+
 
                 <SummaryText>
                   {selectedApplicant.summary}
@@ -6064,20 +6071,7 @@ const ApplicantManagement = () => {
                   <FiMessageSquare size={16} />
                   자소서
                 </DocumentButton>
-                <DocumentButton
-                  onClick={() => handleCoverLetterAnalysisModalOpen(selectedApplicant)}
-                  style={{ backgroundColor: '#667eea' }}
-                >
-                  <FiBarChart2 size={16} />
-                  자소서 분석
-                </DocumentButton>
-                <DocumentButton
-                  onClick={() => setShowDetailedAnalysis(true)}
-                  style={{ backgroundColor: '#764ba2' }}
-                >
-                  <FiStar size={16} />
-                  통합 분석
-                </DocumentButton>
+
                 <DocumentButton onClick={() => handleDocumentClick('portfolio', selectedApplicant)}>
                   <FiCode size={16} />
                   포트폴리오
@@ -6547,10 +6541,7 @@ const ApplicantManagement = () => {
                           <DocumentCardTitle>지원 직무</DocumentCardTitle>
                           <DocumentCardText>{documentModal.applicant.position || 'N/A'}</DocumentCardText>
                         </DocumentCard>
-                        <DocumentCard>
-                          <DocumentCardTitle>부서</DocumentCardTitle>
-                          <DocumentCardText>{documentModal.applicant.department || 'N/A'}</DocumentCardText>
-                        </DocumentCard>
+
                         <DocumentCard>
                           <DocumentCardTitle>경력</DocumentCardTitle>
                           <DocumentCardText>{documentModal.applicant.experience || 'N/A'}</DocumentCardText>
@@ -6583,7 +6574,7 @@ const ApplicantManagement = () => {
                         </DocumentCard>
                         <DocumentCard>
                           <DocumentCardTitle>종합 점수</DocumentCardTitle>
-                          <DocumentCardText>{documentModal.applicant.analysisScore || 0}점</DocumentCardText>
+                          <DocumentCardText>{Math.round(((documentModal.applicant.analysisScore || 0) / 100) * 10)}/10점</DocumentCardText>
                         </DocumentCard>
                         <DocumentCard>
                           <DocumentCardTitle>분석 결과</DocumentCardTitle>
@@ -6616,10 +6607,7 @@ const ApplicantManagement = () => {
                           <DocumentCardTitle>지원 직무</DocumentCardTitle>
                           <DocumentCardText>{documentModal.documentData.basic_info?.position || documentModal.applicant.position || 'N/A'}</DocumentCardText>
                         </DocumentCard>
-                        <DocumentCard>
-                          <DocumentCardTitle>부서</DocumentCardTitle>
-                          <DocumentCardText>{documentModal.documentData.basic_info?.department || documentModal.applicant.department || 'N/A'}</DocumentCardText>
-                        </DocumentCard>
+
                         <DocumentCard>
                           <DocumentCardTitle>경력</DocumentCardTitle>
                           <DocumentCardText>{documentModal.documentData.basic_info?.experience || documentModal.applicant.experience || 'N/A'}</DocumentCardText>
@@ -6652,7 +6640,7 @@ const ApplicantManagement = () => {
                         </DocumentCard>
                         <DocumentCard>
                           <DocumentCardTitle>종합 점수</DocumentCardTitle>
-                          <DocumentCardText>{documentModal.documentData.basic_info?.analysisScore || documentModal.applicant.analysisScore || 0}점</DocumentCardText>
+                          <DocumentCardText>{Math.round(((documentModal.documentData.basic_info?.analysisScore || documentModal.applicant.analysisScore || 0) / 100) * 10)}/10점</DocumentCardText>
                         </DocumentCard>
                         <DocumentCard>
                           <DocumentCardTitle>분석 결과</DocumentCardTitle>
@@ -7316,17 +7304,7 @@ const ApplicantManagement = () => {
         )}
       </AnimatePresence>
 
-      {/* 상세 분석 모달 */}
-      <DetailedAnalysisModal
-        isOpen={showDetailedAnalysis}
-        onClose={() => setShowDetailedAnalysis(false)}
-        analysisData={{
-          ...selectedApplicant,
-          analysis_result: analysisResult,
-          analysisScore: selectedApplicant?.analysisScore
-        }}
-        applicantName={selectedApplicant?.name || '지원자'}
-      />
+
 
       {/* 새로운 이력서 모달 */}
       <ResumeModal
@@ -7339,15 +7317,7 @@ const ApplicantManagement = () => {
         }}
       />
 
-      {/* 자소서 분석 모달 */}
-      <CoverLetterAnalysisModal
-        isOpen={isCoverLetterAnalysisModalOpen}
-        onClose={handleCoverLetterAnalysisModalClose}
-        analysisData={selectedCoverLetterData}
-        applicantName={selectedApplicantForCoverLetter?.name || '지원자'}
-        onPerformAnalysis={handlePerformCoverLetterAnalysis}
-        applicantId={selectedApplicantForCoverLetter?._id || selectedApplicantForCoverLetter?.id}
-      />
+
 
 
 
@@ -7997,6 +7967,164 @@ const GithubInputDescription = styled.small`
   line-height: 1.4;
 `;
 
+// AI 분석 요약을 위한 새로운 스타일 컴포넌트들
+const OverallScoreDisplay = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  margin: 24px 0;
+  padding: 32px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 16px;
+  color: white;
+  text-align: center;
+`;
+
+const OverallScoreCircle = styled.div`
+  width: 80px;
+  height: 80px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 32px;
+  font-weight: 700;
+  border: 3px solid rgba(255, 255, 255, 0.3);
+`;
+
+const OverallScoreInfo = styled.div`
+  text-align: left;
+`;
+
+const OverallScoreLabel = styled.div`
+  font-size: 16px;
+  opacity: 0.9;
+  margin-bottom: 4px;
+`;
+
+const OverallScoreValue = styled.div`
+  font-size: 20px;
+  font-weight: 600;
+  opacity: 0.8;
+`;
+
+const DocumentAnalysisSection = styled.div`
+  margin: 24px 0;
+  background: #f8f9fa;
+  border-radius: 12px;
+  padding: 20px;
+  border-left: 4px solid #28a745;
+`;
+
+const DocumentAnalysisHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 16px;
+`;
+
+const DocumentAnalysisTitle = styled.h3`
+  font-size: 16px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+`;
+
+const AnalysisGrid = styled.div`
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+  margin-top: 20px;
+`;
+
+const AnalysisItem = styled.div`
+  background: white;
+  border-radius: 8px;
+  padding: 16px;
+  border: 1px solid #e9ecef;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s ease;
+  border-left: 4px solid ${props => {
+    const score = props.score;
+    if (score >= 8) return '#28a745';
+    if (score >= 6) return '#17a2b8';
+    if (score >= 4) return '#ffc107';
+    return '#dc3545';
+  }};
+
+  &:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+  }
+`;
+
+const AnalysisItemHeader = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 12px;
+`;
+
+const AnalysisItemTitle = styled.h4`
+  font-size: 14px;
+  font-weight: 600;
+  color: #333;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+`;
+
+const AnalysisItemScore = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-weight: 600;
+`;
+
+const ScoreNumber = styled.span`
+  font-size: 16px;
+  color: ${props => {
+    const score = props.score;
+    if (score >= 8) return '#28a745';
+    if (score >= 6) return '#17a2b8';
+    if (score >= 4) return '#ffc107';
+    return '#dc3545';
+  }};
+`;
+
+const ScoreMax = styled.span`
+  font-size: 12px;
+  color: #666;
+`;
+
+const StatusIcon = styled.div`
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  color: white;
+  background: ${props => {
+    const score = props.score;
+    if (score >= 8) return '#28a745';
+    if (score >= 6) return '#17a2b8';
+    if (score >= 4) return '#ffc107';
+    return '#dc3545';
+  }};
+`;
+
+const AnalysisItemDescription = styled.p`
+  font-size: 12px;
+  color: #666;
+  line-height: 1.4;
+  margin: 0;
+`;
+
 // 지원자 리스트 관련 스타일 컴포넌트들
 const ApplicantRow = styled.div`
   display: flex;
@@ -8033,11 +8161,7 @@ const PositionBadge = styled.span`
   font-weight: 500;
 `;
 
-const DepartmentText = styled.div`
-  font-size: 11px;
-  color: var(--text-secondary);
-  margin-top: 2px;
-`;
+
 
 const ContactInfo = styled.div`
   display: flex;
@@ -8182,11 +8306,7 @@ const CardPosition = styled.div`
   margin-bottom: 4px;
 `;
 
-const CardDepartment = styled.div`
-  font-size: 12px;
-  color: var(--text-secondary);
-  margin-bottom: 12px;
-`;
+
 
 const CardContact = styled.div`
   display: flex;
