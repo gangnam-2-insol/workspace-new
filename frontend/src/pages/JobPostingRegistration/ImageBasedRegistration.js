@@ -4,9 +4,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 import TemplateModal from './TemplateModal';
 import TitleRecommendationModal from '../../components/TitleRecommendationModal';
 // import TestAutoFillButton from '../../components/TestAutoFillButton';
-import { 
-  FiX, 
-  FiArrowLeft, 
+import {
+  FiX,
+  FiArrowLeft,
   FiArrowRight,
   FiCheck,
   FiImage,
@@ -21,6 +21,7 @@ import {
   FiMail,
   FiFolder
 } from 'react-icons/fi';
+import companyCultureApi from '../../services/companyCultureApi';
 
 const Overlay = styled(motion.div)`
   position: fixed;
@@ -110,16 +111,16 @@ const StepNumber = styled.div`
   font-size: 16px;
   font-weight: 600;
   color: white;
-  background: ${props => 
-    props.active ? 'linear-gradient(135deg, #f093fb, #f5576c)' : 
+  background: ${props =>
+    props.active ? 'linear-gradient(135deg, #f093fb, #f5576c)' :
     props.completed ? 'var(--primary-color)' : 'var(--border-color)'
   };
 `;
 
 const StepLabel = styled.span`
   font-size: 14px;
-  color: ${props => 
-    props.active ? 'var(--primary-color)' : 
+  color: ${props =>
+    props.active ? 'var(--primary-color)' :
     props.completed ? 'var(--text-primary)' : 'var(--text-secondary)'
   };
   font-weight: ${props => props.active || props.completed ? '600' : '400'};
@@ -432,9 +433,9 @@ const LoadingSubtext = styled.div`
 
 
 
-const ImageBasedRegistration = ({ 
-  isOpen, 
-  onClose, 
+const ImageBasedRegistration = ({
+  isOpen,
+  onClose,
   onComplete,
   organizationData = { departments: [] }
 }) => {
@@ -444,12 +445,12 @@ const ImageBasedRegistration = ({
   const [isSendingEmail, setIsSendingEmail] = useState(false);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
   const [templates, setTemplates] = useState([]);
-  
+
   const [titleRecommendationModal, setTitleRecommendationModal] = useState({
     isOpen: false,
     finalFormData: null
   });
-  
+
   // AI 자동 플로우 시작 이벤트 리스너
   React.useEffect(() => {
     const handleStartImageBasedAIFlow = () => {
@@ -462,7 +463,7 @@ const ImageBasedRegistration = ({
     };
 
     window.addEventListener('startImageBasedAIFlow', handleStartImageBasedAIFlow);
-    
+
     return () => {
       window.removeEventListener('startImageBasedAIFlow', handleStartImageBasedAIFlow);
     };
@@ -472,25 +473,80 @@ const ImageBasedRegistration = ({
     department: '',
     experience: '',
     experienceYears: '',
-    
+
     // Step 2: 구인 정보
     headcount: '',
     mainDuties: '',
-    
+
     // Step 3: 근무 조건
     workHours: '',
     workDays: '',
     locationCity: '',
     locationDistrict: '',
     salary: '',
-    
+
     // Step 4: 전형 절차
     process: ['서류', '실무면접', '최종면접', '입사'],
-    
+
     // Step 5: 지원 방법
     contactEmail: '',
-    deadline: ''
+    deadline: '',
+    // 인재상 선택 필드 추가
+    selected_culture_id: null
   });
+
+  // 인재상 관련 상태
+  const [cultures, setCultures] = useState([]);
+  const [defaultCulture, setDefaultCulture] = useState(null);
+  const [loadingCultures, setLoadingCultures] = useState(false);
+
+  // 인재상 데이터 로드
+  useEffect(() => {
+    loadCultures();
+  }, []);
+
+  const loadCultures = async () => {
+    try {
+      setLoadingCultures(true);
+
+      // 모든 인재상 데이터 로드
+      const culturesData = await companyCultureApi.getAllCultures(true);
+      setCultures(culturesData);
+
+      // 기본 인재상 데이터 로드 (에러 처리 포함)
+      let defaultCultureData = null;
+      try {
+        defaultCultureData = await companyCultureApi.getDefaultCulture();
+        setDefaultCulture(defaultCultureData);
+      } catch (error) {
+        console.log('기본 인재상이 설정되지 않았습니다:', error.message);
+        setDefaultCulture(null);
+      }
+
+      // 기본 인재상이 있으면 formData에 설정
+      if (defaultCultureData) {
+        setFormData(prev => ({
+          ...prev,
+          selected_culture_id: defaultCultureData.id
+        }));
+        console.log('기본 인재상이 formData에 설정됨:', defaultCultureData.id);
+      } else {
+        // 기본 인재상이 없으면 첫 번째 활성 인재상을 기본값으로 설정
+        if (culturesData && culturesData.length > 0) {
+          const firstCulture = culturesData[0];
+          setFormData(prev => ({
+            ...prev,
+            selected_culture_id: firstCulture.id
+          }));
+          console.log('첫 번째 인재상이 formData에 설정됨:', firstCulture.id);
+        }
+      }
+    } catch (error) {
+      console.error('인재상 로드 실패:', error);
+    } finally {
+      setLoadingCultures(false);
+    }
+  };
 
   // 모달이 열릴 때 챗봇 닫기
   useEffect(() => {
@@ -515,7 +571,7 @@ const ImageBasedRegistration = ({
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    
+
     // 급여 필드에 대한 특별 처리
     if (name === 'salary') {
       // 입력값에서 숫자만 추출 (콤마, 하이픈, 틸드 포함)
@@ -531,27 +587,27 @@ const ImageBasedRegistration = ({
       }));
     }
   };
-  
+
   // 급여를 표시용으로 포맷하는 함수
   const formatSalaryDisplay = (salaryValue) => {
     if (!salaryValue) return '';
-    
+
     // 이미 "만원"이 포함되어 있으면 그대로 반환
     if (salaryValue.includes('만원') || salaryValue.includes('협의') || salaryValue.includes('면접')) {
       return salaryValue;
     }
-    
+
     // 숫자만 있는 경우 "만원" 추가
     if (/^\d+([,\d~\-]*)?$/.test(salaryValue.trim())) {
       return `${salaryValue}만원`;
     }
-    
+
     return salaryValue;
   };
 
   const handleGenerateImages = async () => {
     setIsGenerating(true);
-    
+
     // AI 이미지 생성 시뮬레이션 (실제로는 API 호출)
     setTimeout(() => {
       const mockImages = [
@@ -586,22 +642,22 @@ const ImageBasedRegistration = ({
 
   const sendNotificationEmail = async (jobData) => {
     setIsSendingEmail(true);
-    
+
     try {
       // 이메일 전송 시뮬레이션 (실제로는 API 호출)
       console.log('📧 이메일 전송 중...');
       console.log('받는 사람:', jobData.contactEmail);
       console.log('제목: 채용공고 등록 완료 알림');
-      
+
       // 실제 구현 시 사용할 이메일 템플릿
       const emailTemplate = {
         to: jobData.contactEmail,
         subject: '[채용공고 등록 완료] 새로운 채용공고가 등록되었습니다',
         body: `
           안녕하세요, 인사담당자님!
-          
+
           새로운 채용공고가 성공적으로 등록되었습니다.
-          
+
           📋 채용공고 정보
           - 공고 제목: ${jobData.title || 'AI 생성 제목'}
           - 구인 부서: ${jobData.department}
@@ -609,29 +665,29 @@ const ImageBasedRegistration = ({
           - 근무지: ${jobData.location}
           - 연봉: ${jobData.salary}
           - 마감일: ${jobData.deadline}
-          
+
           🎯 주요 업무
           ${jobData.mainDuties}
-          
+
           📞 지원 문의
           - 이메일: ${jobData.contactEmail}
-          
+
           🖼️ AI 생성 이미지
           선택된 이미지가 채용공고에 적용되었습니다.
-          
+
           채용공고 관리 시스템에서 언제든지 수정하거나 관리할 수 있습니다.
-          
+
           감사합니다.
           채용관리팀
         `
       };
-      
+
       // 시뮬레이션: 1초 후 완료
       await new Promise(resolve => setTimeout(resolve, 1000));
-      
+
       console.log('✅ 이메일 전송 완료');
       alert(`📧 인사담당자(${jobData.contactEmail})에게 등록 완료 알림 이메일이 전송되었습니다.`);
-      
+
     } catch (error) {
       console.error('❌ 이메일 전송 실패:', error);
       alert('이메일 전송 중 오류가 발생했습니다. 채용공고는 정상적으로 등록되었습니다.');
@@ -656,7 +712,7 @@ const ImageBasedRegistration = ({
     if (selectedImage) {
       console.log('이미지 기반 등록 완료 - 제목 추천 모달 열기');
       const completeData = { ...formData, selectedImage };
-      
+
       // 제목 추천 모달 열기
       setTitleRecommendationModal({
         isOpen: true,
@@ -672,16 +728,16 @@ const ImageBasedRegistration = ({
       ...titleRecommendationModal.finalFormData,
       title: selectedTitle
     };
-    
+
     // 제목 추천 모달 닫기
     setTitleRecommendationModal({
       isOpen: false,
       finalFormData: null
     });
-    
+
     // 최종 등록 완료
     onComplete(finalData);
-    
+
     // 인사담당자에게 알림 이메일 전송
     if (finalData.contactEmail) {
       await sendNotificationEmail(finalData);
@@ -695,16 +751,16 @@ const ImageBasedRegistration = ({
       ...titleRecommendationModal.finalFormData,
       title: customTitle
     };
-    
+
     // 제목 추천 모달 닫기
     setTitleRecommendationModal({
       isOpen: false,
       finalFormData: null
     });
-    
+
     // 최종 등록 완료
     onComplete(finalData);
-    
+
     // 인사담당자에게 알림 이메일 전송
     if (finalData.contactEmail) {
       await sendNotificationEmail(finalData);
@@ -722,7 +778,7 @@ const ImageBasedRegistration = ({
   // 모달 완전 초기화 함수
   const resetModalState = () => {
     console.log('=== ImageBasedRegistration 상태 초기화 ===');
-    
+
     // 폼 데이터 초기화
     setFormData({
       department: '',
@@ -738,7 +794,9 @@ const ImageBasedRegistration = ({
       process: ['서류', '실무면접', '최종면접', '입사'],
       deadline: '',
       contactEmail: '',
-      notes: ''
+      notes: '',
+      // 인재상 선택 필드 초기화
+      selected_culture_id: null
     });
 
     // 단계 초기화
@@ -768,7 +826,7 @@ const ImageBasedRegistration = ({
   // 테스트 자동입력 처리
   const handleTestAutoFill = (sampleData) => {
     console.log('테스트 자동입력 시작:', sampleData);
-    
+
     // 하드코딩된 테스트 값들 (모든 필드 포함)
     const testData = {
       department: '개발팀',
@@ -787,9 +845,9 @@ const ImageBasedRegistration = ({
 
     // 폼 데이터 일괄 업데이트
     setFormData(prev => ({ ...prev, ...testData }));
-    
+
     console.log('테스트 자동입력 완료:', testData);
-    
+
     // 사용자에게 알림
     alert('🧪 테스트 데이터가 자동으로 입력되었습니다!\n\n📋 입력된 정보:\n• 부서: 개발팀\n• 경력: 경력 (3년)\n• 모집인원: 2명\n• 주요업무: 웹개발, 프론트엔드 개발\n• 근무시간: 09:00-18:00\n• 근무일: 주중 (월-금)\n• 근무위치: 서울 강남구\n• 연봉: 4,000만원-6,000만원\n• 연락처: hr@company.com\n• 마감일: 2024년 9월 30일\n• 복리후생: 점심식대, 야근식대, 경조사 지원 등');
   };
@@ -862,9 +920,9 @@ const ImageBasedRegistration = ({
           {formData.experience === '경력' && (
             <div style={{ marginTop: '12px' }}>
               <Label>경력 연도</Label>
-              <Select 
-                name="experienceYears" 
-                value={formData.experienceYears || ''} 
+              <Select
+                name="experienceYears"
+                value={formData.experienceYears || ''}
                 onChange={handleInputChange}
                 style={{ marginTop: '8px' }}
               >
@@ -944,9 +1002,9 @@ const ImageBasedRegistration = ({
               type="text"
               name="workHoursCustom"
               value={formData.workHoursCustom || ''}
-              onChange={(e) => setFormData(prev => ({ 
-                ...prev, 
-                workHours: e.target.value 
+              onChange={(e) => setFormData(prev => ({
+                ...prev,
+                workHours: e.target.value
               }))}
               placeholder="예: 09:00 ~ 18:00"
               style={{ marginTop: '8px' }}
@@ -956,12 +1014,12 @@ const ImageBasedRegistration = ({
         <FormGroup>
           <Label>근무지</Label>
           <div style={{ display: 'flex', gap: '8px' }}>
-            <Select 
-              name="locationCity" 
-              value={formData.locationCity || ''} 
+            <Select
+              name="locationCity"
+              value={formData.locationCity || ''}
               onChange={(e) => {
-                setFormData(prev => ({ 
-                  ...prev, 
+                setFormData(prev => ({
+                  ...prev,
                   locationCity: e.target.value,
                   locationDistrict: '' // 시가 변경되면 구 초기화
                 }));
@@ -987,9 +1045,9 @@ const ImageBasedRegistration = ({
               <option value="경상남도">경상남도</option>
               <option value="제주특별자치도">제주특별자치도</option>
             </Select>
-            <Select 
-              name="locationDistrict" 
-              value={formData.locationDistrict || ''} 
+            <Select
+              name="locationDistrict"
+              value={formData.locationDistrict || ''}
               onChange={(e) => setFormData(prev => ({ ...prev, locationDistrict: e.target.value }))}
               style={{ flex: 1 }}
               disabled={!formData.locationCity}
@@ -1161,9 +1219,9 @@ const ImageBasedRegistration = ({
             )}
           </div>
           {formData.salary && (
-            <div style={{ 
-              fontSize: '0.8em', 
-              color: '#667eea', 
+            <div style={{
+              fontSize: '0.8em',
+              color: '#667eea',
               marginTop: '4px',
               fontWeight: 'bold'
             }}>
@@ -1217,6 +1275,41 @@ const ImageBasedRegistration = ({
             placeholder="인사담당자 이메일"
             required
           />
+        </FormGroup>
+        <FormGroup>
+          <Label>회사 인재상</Label>
+          <Select
+            name="selected_culture_id"
+            value={formData.selected_culture_id || ''}
+            onChange={handleInputChange}
+          >
+            <option value="">기본 인재상 사용</option>
+            {cultures.map(culture => (
+              <option key={culture.id} value={culture.id}>
+                {culture.name} {culture.is_default ? '(기본)' : ''}
+              </option>
+            ))}
+          </Select>
+          {formData.selected_culture_id && (
+            <div style={{
+              fontSize: '0.8em',
+              color: '#667eea',
+              marginTop: '4px',
+              fontWeight: 'bold'
+            }}>
+              ✅ 선택됨: {cultures.find(c => c.id === formData.selected_culture_id)?.name}
+            </div>
+          )}
+          {!formData.selected_culture_id && defaultCulture && (
+            <div style={{
+              fontSize: '0.8em',
+              color: '#28a745',
+              marginTop: '4px',
+              fontWeight: 'bold'
+            }}>
+              ✅ 기본 인재상: {defaultCulture.name}
+            </div>
+          )}
         </FormGroup>
         <FormGroup>
           <Label>마감일</Label>
@@ -1359,13 +1452,13 @@ const ImageBasedRegistration = ({
                 <StepIndicator>
                   {steps.map((step) => (
                     <Step key={step.number}>
-                      <StepNumber 
+                      <StepNumber
                         active={currentStep === step.number}
                         completed={currentStep > step.number}
                       >
                         {currentStep > step.number ? <FiCheck size={16} /> : step.number}
                       </StepNumber>
-                      <StepLabel 
+                      <StepLabel
                         active={currentStep === step.number}
                         completed={currentStep > step.number}
                       >
@@ -1378,24 +1471,24 @@ const ImageBasedRegistration = ({
                 {renderCurrentStep()}
 
                 <ButtonGroup>
-                  <Button 
-                    className="secondary" 
+                  <Button
+                    className="secondary"
                     onClick={currentStep === 1 ? onClose : () => setCurrentStep(currentStep - 1)}
                   >
                     <FiArrowLeft size={16} />
                     {currentStep === 1 ? '취소' : '이전'}
                   </Button>
                   {currentStep === 1 && (
-                    <Button 
-                      className="secondary" 
+                    <Button
+                      className="secondary"
                       onClick={() => setShowTemplateModal(true)}
                     >
                       <FiFolder size={16} />
                       템플릿
                     </Button>
                   )}
-                  <Button 
-                    className="primary" 
+                  <Button
+                    className="primary"
                     onClick={currentStep === steps.length ? handleComplete : () => setCurrentStep(currentStep + 1)}
                     disabled={(currentStep === steps.length && !selectedImage) || (currentStep === steps.length && isSendingEmail)}
                   >
@@ -1447,4 +1540,4 @@ const ImageBasedRegistration = ({
   );
 };
 
-export default ImageBasedRegistration; 
+export default ImageBasedRegistration;

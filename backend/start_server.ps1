@@ -2,6 +2,10 @@
 Write-Host "Starting AI Recruitment Management Server..." -ForegroundColor Green
 Write-Host ""
 
+# Activate conda environment
+Write-Host "Activating conda environment..." -ForegroundColor Yellow
+conda activate hireme
+
 # Check if Python is available
 try {
     $pythonVersion = python --version 2>&1

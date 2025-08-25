@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Optional, Dict, Any
 from typing import Optional, List, Union
 from pydantic import BaseModel, Field
 from bson import ObjectId
@@ -42,6 +43,15 @@ class Applicant(ApplicantBase):
     resume_id: Optional[str] = Field(None, description="이력서 ID")
     cover_letter_id: Optional[str] = Field(None, description="자기소개서 ID")
     portfolio_id: Optional[str] = Field(None, description="포트폴리오 ID")
+
+    # 회사 인재상 점수 필드
+    culture_scores: Optional[Dict[str, Any]] = Field(
+        default={},
+        description="회사 인재상별 평가 점수"
+    )
+
+    created_at: datetime = Field(default_factory=datetime.utcnow, description="생성일시")
+
     
     # 랭킹 정보
     ranks: Optional[dict] = Field(None, description="랭킹 정보")

@@ -63,7 +63,7 @@ const Header = styled.header`
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border-color);
   padding: 16px 24px;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: space-between;
   position: sticky;
@@ -188,7 +188,8 @@ const navigationItems = [
     title: '시스템',
     items: [
       { name: '설정 및 지원', path: '/settings', icon: FiSettings },
-      { name: '샘플 데이터 관리', path: '/sample-data', icon: FiDatabase }
+      { name: '샘플 데이터 관리', path: '/sample-data', icon: FiDatabase },
+      { name: '인재상 관리', path: '/company-culture', icon: FiUsers }
     ]
   },
   {

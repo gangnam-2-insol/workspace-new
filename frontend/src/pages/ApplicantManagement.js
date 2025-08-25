@@ -38,6 +38,7 @@ import PortfolioSummaryPanel from './PortfolioSummary/PortfolioSummaryPanel';
 import jobPostingApi from '../services/jobPostingApi';
 import CoverLetterAnalysisApi from '../services/coverLetterAnalysisApi';
 
+
 // 평균 점수 계산 함수
 const calculateAverageScore = (analysisData) => {
   if (!analysisData || typeof analysisData !== 'object') return 0;
@@ -1901,6 +1902,20 @@ const RejectButton = styled(ActionButton).attrs({
   }
 `;
 
+const CultureButton = styled(ActionButton).attrs({
+  id: 'applicant-management-culture-button'
+})`
+  background: #9c27b0;
+  color: white;
+  border-color: #9c27b0;
+
+  &:hover {
+    background: #7b1fa2;
+    border-color: #7b1fa2;
+    color: white;
+  }
+`;
+
 const ResumeViewButton = styled(ActionButton).attrs({
   id: 'applicant-management-resume-view-button'
 })`
@@ -2770,6 +2785,8 @@ const MemoizedApplicantCard = React.memo(({ applicant, onCardClick, onStatusUpda
            불합격
          </RejectButton>
 
+
+
       </CardActions>
     </ApplicantCard>
   );
@@ -2891,6 +2908,9 @@ const ApplicantManagement = () => {
   });
   const [previewDocument, setPreviewDocument] = useState(null);
   const [isPreviewModalOpen, setIsPreviewModalOpen] = useState(false);
+
+
+
 
 
 
@@ -3314,6 +3334,9 @@ const ApplicantManagement = () => {
   useEffect(() => {
     loadJobPostings();
   }, []);
+
+  // 인재상 평가 모달 이벤트 리스너
+
 
   // 키워드 매칭 점수 계산 함수
   const calculateKeywordMatchingScore = useCallback((applicant, keyword) => {
@@ -6718,6 +6741,8 @@ const ApplicantManagement = () => {
           // 요약보기 로직 추가
         }}
       />
+
+
 
 
 

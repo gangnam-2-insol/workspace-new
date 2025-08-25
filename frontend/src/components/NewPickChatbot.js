@@ -27,6 +27,18 @@ const ChatbotContainer = styled(motion.div)`
   align-items: flex-end;
 `;
 
+// 배경 오버레이 추가
+const BackgroundOverlay = styled(motion.div)`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.1);
+  z-index: 999;
+  cursor: pointer;
+`;
+
 const ChatWindow = styled(motion.div)`
   width: 400px;
   height: 100%;
@@ -776,36 +788,50 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
     // 챗창 상태는 그대로 유지
   };
 
+  // 배경 클릭 핸들러 추가
+  const handleBackgroundClick = (e) => {
+    // 배경 오버레이 클릭 시에만 최소화
+    if (e.target === e.currentTarget) {
+      onOpenChange('floating');
+      sessionStorage.setItem('pickChatbotIsOpen', 'floating');
+    }
+  };
+
   return (
     <>
-      {/* 플로팅 버튼 상태 */}
-      <AnimatePresence>
-        {isOpen === 'floating' && (
-          <FloatingButton
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-            onClick={() => {
-              onOpenChange(true);
-              sessionStorage.setItem('helpChatbotIsOpen', 'true');
-            }}
-            title="픽톡 열기"
-          >
-            💬
-          </FloatingButton>
-        )}
-      </AnimatePresence>
+      {/* 플로팅 버튼 - 항상 표시 */}
+      <FloatingButton
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        onClick={() => {
+          onOpenChange(true);
+          sessionStorage.setItem('pickChatbotIsOpen', 'true');
+        }}
+        title="픽톡 열기"
+        style={{ display: isOpen === true ? 'none' : 'flex' }}
+      >
+        💬
+      </FloatingButton>
 
       {/* 채팅창 상태 */}
       <AnimatePresence>
         {isOpen === true && (
-          <ChatbotContainer
-            initial={{ opacity: 0, scale: 0.8, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 20 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-          >
+          <>
+            {/* 배경 오버레이 */}
+            <BackgroundOverlay
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={handleBackgroundClick}
+            />
+            <ChatbotContainer
+              initial={{ opacity: 0, scale: 0.8, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8, y: 20 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+            >
           <ChatWindow>
             <ChatHeader>
               <HeaderInfo>
@@ -918,6 +944,7 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
             </ChatInput>
           </ChatWindow>
         </ChatbotContainer>
+            </>
         )}
       </AnimatePresence>
     </>
