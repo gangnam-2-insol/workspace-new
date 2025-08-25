@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSuspicion } from '../contexts/SuspicionContext';
 import {
   FiUser,
   FiMail,
@@ -51,7 +52,6 @@ import {
 import {
   applicantApi,
   documentApi,
-  similarityApi,
   ocrApi,
   mailApi
 } from '../services/applicantApi';
@@ -289,6 +289,9 @@ const logError = (message, error = null) => {
 
 const ApplicantManagement = () => {
   log('컴포넌트 초기화 시작');
+  
+  // 전역 표절 의심도 상태
+  const { updateSuspicionData, setLoadingState, getSuspicionData, getLoadingState } = useSuspicion();
 
   // 커스텀 훅들을 사용하여 상태 관리
   const {
@@ -1266,9 +1269,18 @@ const ApplicantManagement = () => {
 
 
 
-  const handleCardClick = (applicant) => {
+  const handleCardClick = async (applicant) => {
     setSelectedApplicant(applicant);
     setIsModalOpen(true);
+    
+    // 유사인재 추천 API 호출
+    try {
+      console.log('🚀 [ApplicantManagement] 유사인재 추천 API 호출 시작', applicant.id);
+      const recommendationData = await applicantApi.getTalentRecommendations(applicant.id);
+      console.log('✅ [ApplicantManagement] 유사인재 추천 완료:', recommendationData);
+    } catch (error) {
+      console.error('❌ [ApplicantManagement] 유사인재 추천 오류:', error);
+    }
   };
 
   const handleResumeModalOpen = (applicant) => {
@@ -1342,7 +1354,7 @@ const ApplicantManagement = () => {
     };
 
     // 모달 먼저 열기
-    setDocumentModal({ isOpen: true, type, applicant: applicantWithId, isOriginal: false, similarityData: null, isLoadingSimilarity: false });
+    setDocumentModal({ isOpen: true, type, applicant: applicantWithId, isOriginal: false, documentData: null, suspicionData: null, isLoadingSuspicion: type === 'coverLetter' });
     if (type === 'portfolio') {
       setPortfolioView('select');
     }
@@ -1394,38 +1406,48 @@ const ApplicantManagement = () => {
       if (documentData) {
         setDocumentModal(prev => ({
           ...prev,
-          documentData,
-          isLoadingSimilarity: false
+          documentData
         }));
       }
 
     } catch (error) {
       console.error('❌ 문서 데이터 로드 오류:', error);
-      setDocumentModal(prev => ({ ...prev, isLoadingSimilarity: false }));
     }
 
-    // 자소서 타입일 때만 유사도 체크 실행
+    // 자소서 타입일 때만 표절 의심도 검사 자동 실행 (전역 상태에 저장)
     if (type === 'coverLetter') {
-      setDocumentModal(prev => ({ ...prev, isLoadingSimilarity: true }));
-
+      console.log('🚀 [ApplicantManagement] 자소서 모달 열림 - 표절 의심도 검사 시작');
+      console.log('- applicantId:', applicantWithId._id);
+      console.log('- applicantName:', applicantWithId.name);
+      
+      setLoadingState(applicantWithId._id, true);
+      
       try {
-        const endpoint = 'coverletter';
-        try {
-          const similarityData = await similarityApi.checkSimilarity(endpoint, applicantWithId._id);
-          console.log('✅ 유사도 체크 완료:', similarityData);
-
-          setDocumentModal(prev => ({
-            ...prev,
-            similarityData,
-            isLoadingSimilarity: false
-          }));
-        } catch (error) {
-          console.error('❌ 유사도 체크 실패:', error);
-          setDocumentModal(prev => ({ ...prev, isLoadingSimilarity: false }));
-        }
+        console.log('🔍 자소서 표절 의심도 검사 시작...');
+        console.log('- API 요청 URL:', `http://localhost:8000/api/coverletter/similarity-check/${applicantWithId._id}`);
+        
+        const suspicionResult = await applicantApi.checkCoverLetterSuspicion(applicantWithId._id);
+        console.log('✅ 자소서 표절 의심도 검사 완료:', suspicionResult);
+        console.log('- 응답 데이터 구조:', JSON.stringify(suspicionResult, null, 2));
+        
+        updateSuspicionData(applicantWithId._id, suspicionResult);
+        console.log('💾 전역 상태에 표절 의심도 결과 저장 완료');
+        
+        // 저장된 데이터 검증
+        const storedData = getSuspicionData(applicantWithId._id);
+        console.log('📋 저장된 데이터 확인:', storedData);
       } catch (error) {
-        console.error('❌ 유사도 체크 오류:', error);
-        setDocumentModal(prev => ({ ...prev, isLoadingSimilarity: false }));
+        console.error('❌ 자소서 표절 의심도 검사 실패:', error);
+        console.error('- 에러 상세:', error.stack);
+        updateSuspicionData(applicantWithId._id, {
+          status: 'error',
+          message: '표절 의심도 검사 중 오류가 발생했습니다: ' + error.message,
+          error: error.message,
+          fullError: error.stack
+        });
+      } finally {
+        setLoadingState(applicantWithId._id, false);
+        console.log('🏁 표절 의심도 검사 완료 - 로딩 상태 해제');
       }
     }
   };
@@ -1435,7 +1457,7 @@ const ApplicantManagement = () => {
   };
 
   const handleCloseDocumentModal = () => {
-    setDocumentModal({ isOpen: false, type: '', applicant: null, isOriginal: false, similarityData: null, isLoadingSimilarity: false, documentData: null });
+    setDocumentModal({ isOpen: false, type: '', applicant: null, isOriginal: false, documentData: null, suspicionData: null, isLoadingSuspicion: false });
     setPortfolioView('select');
     setPortfolioData(null);
   };
@@ -1473,7 +1495,7 @@ const ApplicantManagement = () => {
         const currentModalType = documentModal.type;
 
         // 현재 모달을 닫고 새로운 모달을 열기
-    setDocumentModal({ isOpen: false, type: '', applicant: null, isOriginal: false, similarityData: null, isLoadingSimilarity: false });
+    setDocumentModal({ isOpen: false, type: '', applicant: null, isOriginal: false, documentData: null, suspicionData: null, isLoadingSuspicion: false });
 
         // 약간의 딜레이 후에 새로운 모달 열기 (부드러운 전환을 위해)
         setTimeout(() => {
@@ -1482,8 +1504,9 @@ const ApplicantManagement = () => {
             type: currentModalType, // 현재 모달의 타입을 유지
             applicant: applicantData,
             isOriginal: true,
-            similarityData: null,
-            isLoadingSimilarity: false
+            documentData: null,
+            suspicionData: null,
+            isLoadingSuspicion: false
           });
         }, 100);
     } catch (error) {
@@ -3001,164 +3024,7 @@ const ApplicantManagement = () => {
                       />
                     </DocumentSection>
 
-                    {/* 유사도 체크 결과 섹션 */}
-                    <DocumentSection>
-                      <DocumentSectionTitle>🔍 유사도 체크 결과</DocumentSectionTitle>
-
-                      {documentModal.isLoadingSimilarity && (
-                        <DocumentCard>
-                          <DocumentCardText>
-                            📊 다른 {documentModal.type === 'resume' ? '이력서' : '자소서'}들과의 유사도를 분석 중입니다...
-                          </DocumentCardText>
-                        </DocumentCard>
-                      )}
-
-                      {!documentModal.isLoadingSimilarity && documentModal.similarityData && (
-                        <>
-                          {/* 통계 정보 */}
-                          <DocumentCard>
-                            <DocumentCardTitle>📈 유사도 분석 통계</DocumentCardTitle>
-                            <DocumentGrid style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px'}}>
-                              <div>
-                                <strong>비교 대상:</strong> {documentModal.similarityData.statistics.total_compared}명
-                              </div>
-                              <div>
-                                <strong>평균 유사도:</strong> {(documentModal.similarityData.statistics.average_similarity * 100).toFixed(1)}%
-                              </div>
-                              <div>
-                                <strong>높은 유사도:</strong> {documentModal.similarityData.statistics.high_similarity_count}명 (70% 이상)
-                              </div>
-                              <div>
-                                <strong>중간 유사도:</strong> {documentModal.similarityData.statistics.moderate_similarity_count}명 (40-70%)
-                              </div>
-                            </DocumentGrid>
-                          </DocumentCard>
-
-                          {/* 표절 위험도 분석 */}
-                          {documentModal.similarityData.plagiarism_analysis && documentModal.similarityData.plagiarism_analysis.success && (
-                            <DocumentCard>
-                              <DocumentCardTitle>⚠️ 표절 위험도 분석</DocumentCardTitle>
-                              <div style={{
-                                padding: '12px',
-                                borderRadius: '8px',
-                                backgroundColor: documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#fff5f5' :
-                                                documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#fffbf0' : '#f0fff4',
-                                border: `2px solid ${documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#ff4757' :
-                                                   documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#ffa502' : '#2ed573'}`
-                              }}>
-                                <div style={{
-                                  fontWeight: 'bold',
-                                  marginBottom: '8px',
-                                  color: documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#ff4757' :
-                                        documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#ffa502' : '#2ed573'
-                                }}>
-                                  위험도: {documentModal.similarityData.plagiarism_analysis.risk_level}
-                                  ({(documentModal.similarityData.plagiarism_analysis.risk_score * 100).toFixed(1)}%)
-                                </div>
-                                <div style={{fontSize: '14px', color: '#333', marginBottom: '8px', whiteSpace: 'pre-line'}}>
-                                  {documentModal.similarityData.plagiarism_analysis.analysis}
-                                </div>
-
-                                {documentModal.similarityData.plagiarism_analysis.recommendations &&
-                                 documentModal.similarityData.plagiarism_analysis.recommendations.length > 0 && (
-                                  <div>
-                                    <div style={{fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '4px'}}>
-                                      권장사항:
-                                    </div>
-                                    <ul style={{margin: '0', paddingLeft: '16px'}}>
-                                      {documentModal.similarityData.plagiarism_analysis.recommendations.map((rec, idx) => (
-                                        <li key={idx} style={{fontSize: '12px', color: '#666', marginBottom: '2px'}}>
-                                          {rec}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                              </div>
-                            </DocumentCard>
-                          )}
-
-                          {/* 상위 유사 이력서들 */}
-                          {documentModal.similarityData.top_similar.length > 0 && (
-                            <DocumentCard>
-                              <DocumentCardTitle>🎯 가장 유사한 자소서 TOP 5</DocumentCardTitle>
-                              {documentModal.similarityData.top_similar.map((similar, index) => (
-                                <div key={similar.resume_id} style={{
-                                  padding: '12px',
-                                  margin: '8px 0',
-                                  border: `2px solid ${similar.is_high_similarity ? '#ff4757' : similar.is_moderate_similarity ? '#ffa502' : '#2ed573'}`,
-                                  borderRadius: '8px',
-                                  backgroundColor: similar.is_high_similarity ? '#fff5f5' : similar.is_moderate_similarity ? '#fffbf0' : '#f0fff4',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.2s ease'
-                                }}
-                                onClick={() => handleSimilarApplicantClick(similar)}
-                                onMouseEnter={(e) => {
-                                  e.target.style.transform = 'translateY(-2px)';
-                                  e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.target.style.transform = 'translateY(0)';
-                                  e.target.style.boxShadow = 'none';
-                                }}>
-                                  <div style={{fontWeight: 'bold', marginBottom: '4px'}}>
-                                    #{index + 1}. {similar.applicant_name} ({similar.position})
-                                  </div>
-                                  <div style={{fontSize: '14px', color: '#666'}}>
-                                    전체 유사도: <strong style={{color: similar.is_high_similarity ? '#ff4757' : similar.is_moderate_similarity ? '#ffa502' : '#2ed573'}}>
-                                      {(similar.overall_similarity * 100).toFixed(1)}%
-                                    </strong>
-                                  </div>
-                                  <div style={{fontSize: '12px', color: '#888', marginTop: '4px'}}>
-                                    전체 유사도: {(similar.overall_similarity * 100).toFixed(1)}%
-                                  </div>
-
-                                  {/* LLM 분석 결과 추가 */}
-                                  {similar.llm_analysis && similar.llm_analysis.success && (
-                                    <div style={{
-                                      marginTop: '8px',
-                                      padding: '8px',
-                                      backgroundColor: '#f0f8ff',
-                                      borderLeft: '4px solid #4a90e2',
-                                      borderRadius: '4px'
-                                    }}>
-                                      <div style={{fontSize: '11px', fontWeight: 'bold', color: '#4a90e2', marginBottom: '4px'}}>
-                                        🤖 AI 분석
-                                      </div>
-                                      <div style={{fontSize: '12px', color: '#333', lineHeight: '1.4', whiteSpace: 'pre-line'}}>
-                                        {similar.llm_analysis.analysis}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {similar.llm_analysis && !similar.llm_analysis.success && (
-                                    <div style={{
-                                      marginTop: '8px',
-                                      padding: '8px',
-                                      backgroundColor: '#fff0f0',
-                                      borderLeft: '4px solid #e74c3c',
-                                      borderRadius: '4px'
-                                    }}>
-                                      <div style={{fontSize: '11px', color: '#e74c3c'}}>
-                                        AI 분석 실패: {similar.llm_analysis.error || 'Unknown error'}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </DocumentCard>
-                          )}
-                        </>
-                      )}
-
-                      {!documentModal.isLoadingSimilarity && !documentModal.similarityData && (
-                        <DocumentCard>
-                          <DocumentCardText>
-                            유사도 체크 중 오류가 발생했습니다. 다시 시도해주세요.
-                          </DocumentCardText>
-                        </DocumentCard>
-                      )}
-                    </DocumentSection>
+                    {/* 표절 의심도 검사는 백그라운드에서 실행됨 - CoverLetterValidation.js에서 결과 확인 */}
                   </>
                 )}
               </DocumentContent>
