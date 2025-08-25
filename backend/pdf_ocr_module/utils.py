@@ -100,5 +100,22 @@ def file_sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+def correct_orientation_with_osd(image):
+    """Tesseract OSD를 사용하여 이미지 방향을 자동으로 교정합니다."""
+    try:
+        import pytesseract
+        from PIL import Image
+        # Tesseract OSD를 사용하여 방향 감지 및 교정
+        osd_data = pytesseract.image_to_osd(image)
+        # OSD 결과에서 회전 각도 추출
+        angle = int(re.search(r'Rotate: (\d+)', osd_data).group(1))
+        if angle != 0:
+            image = image.rotate(angle, expand=True)
+        return image
+    except Exception:
+        # OSD 실패 시 원본 이미지 반환
+        return image
+
+
 
 

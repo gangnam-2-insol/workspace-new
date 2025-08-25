@@ -52,6 +52,7 @@ async def get_applicant(
     return applicant
 
 @router.get("/")
+@router.get("")
 async def get_all_applicants(
     skip: int = Query(0, ge=0, description="건너뛸 개수"),
     limit: int = Query(50, ge=1, le=1000, description="가져올 개수"),

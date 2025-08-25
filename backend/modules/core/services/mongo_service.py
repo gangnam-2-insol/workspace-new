@@ -120,13 +120,28 @@ class MongoService:
                 filter_query["position"] = position
 
             total_count = await self.db.applicants.count_documents(filter_query)
+            
+            # 일반 find 사용 후 수동으로 ObjectId 변환
             applicants = await self.db.applicants.find(filter_query).skip(skip).limit(limit).to_list(limit)
 
-            # MongoDB의 _id를 문자열로 변환 (id 필드 추가)
+            # ObjectId를 문자열로 변환
             for applicant in applicants:
-                applicant["id"] = str(applicant["_id"])
-                # _id도 문자열로 변환하여 유지
-                applicant["_id"] = str(applicant["_id"])
+                # _id를 문자열로 변환
+                if "_id" in applicant:
+                    applicant["id"] = str(applicant["_id"])
+                    applicant["_id"] = str(applicant["_id"])
+                
+                # 다른 ObjectId 필드들도 문자열로 변환
+                for key in ["job_posting_id", "resume_id", "cover_letter_id", "portfolio_id"]:
+                    if key in applicant and applicant[key] is not None:
+                        if isinstance(applicant[key], ObjectId):
+                            applicant[key] = str(applicant[key])
+                
+                # ranks 필드 내부의 ObjectId도 문자열로 변환
+                if "ranks" in applicant and isinstance(applicant["ranks"], dict):
+                    for rank_key, rank_value in applicant["ranks"].items():
+                        if isinstance(rank_value, ObjectId):
+                            applicant["ranks"][rank_key] = str(rank_value)
 
                 # 이메일과 전화번호 필드가 없으면 기본값 설정
                 if "email" not in applicant:
@@ -135,7 +150,7 @@ class MongoService:
                     applicant["phone"] = "전화번호 없음"
 
                 # 채용공고 정보 가져오기 (job_posting_id가 있는 경우)
-                if applicant.get("job_posting_id"):
+                if applicant.get("job_posting_id") and applicant["job_posting_id"] != "null":
                     try:
                         job_posting = await self.db.job_postings.find_one({"_id": ObjectId(applicant["job_posting_id"])})
                         if job_posting:
@@ -150,7 +165,7 @@ class MongoService:
                         print(f"채용공고 정보 가져오기 실패 (ID: {applicant['job_posting_id']}): {e}")
 
                 # 자소서 내용 가져오기 (cover_letter_id가 있는 경우)
-                if applicant.get("cover_letter_id"):
+                if applicant.get("cover_letter_id") and applicant["cover_letter_id"] != "null":
                     try:
                         cover_letter = await self.db.cover_letters.find_one({"_id": ObjectId(applicant["cover_letter_id"])})
                         if cover_letter:
@@ -159,7 +174,7 @@ class MongoService:
                         print(f"자소서 내용 가져오기 실패 (ID: {applicant['cover_letter_id']}): {e}")
 
                 # 이력서 내용 가져오기 (resume_id가 있는 경우)
-                if applicant.get("resume_id"):
+                if applicant.get("resume_id") and applicant["resume_id"] != "null":
                     try:
                         resume = await self.db.resumes.find_one({"_id": ObjectId(applicant["resume_id"])})
                         if resume:

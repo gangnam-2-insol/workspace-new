@@ -4612,7 +4612,7 @@ const ApplicantManagement = () => {
           type: type === 'resume' ? 'resume' : type === 'cover_letter' ? 'cover_letter' : 'github',
           result: data
         })),
-        applicant: result.data.results.resume?.applicant || result.data.results.cover_letter?.applicant || result.data.results.github?.applicant || null
+        applicant: result.data.applicant_info || result.data.results.resume?.applicant || result.data.results.cover_letter?.applicant || result.data.results.github?.applicant || null
       };
 
       setAnalysisResult(analysisResult);

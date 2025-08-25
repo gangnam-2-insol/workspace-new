@@ -289,8 +289,13 @@ class MongoSaver:
             except Exception as e:
                 print(f"⚠️ resume_id 업데이트 실패: {e}")
 
+            # applicant에 id 필드 추가 (MongoDB _id를 id로 복사)
+            applicant_with_id = self._dict_with_serialized_datetime(applicant)
+            if "_id" in applicant_with_id and "id" not in applicant_with_id:
+                applicant_with_id["id"] = applicant_with_id["_id"]
+            
             return {
-                "applicant": self._dict_with_serialized_datetime(applicant),
+                "applicant": applicant_with_id,
                 "resume": self._dict_with_serialized_datetime(resume),
                 "message": "이력서 저장 완료"
             }
@@ -400,8 +405,13 @@ class MongoSaver:
             except Exception as e:
                 print(f"⚠️ cover_letter_id 업데이트 실패: {e}")
 
+            # applicant에 id 필드 추가 (MongoDB _id를 id로 복사)
+            applicant_with_id = self._dict_with_serialized_datetime(applicant)
+            if "_id" in applicant_with_id and "id" not in applicant_with_id:
+                applicant_with_id["id"] = applicant_with_id["_id"]
+            
             return {
-                "applicant": self._dict_with_serialized_datetime(applicant),
+                "applicant": applicant_with_id,
                 "cover_letter": self._dict_with_serialized_datetime(cover_letter),
                 "message": "자기소개서 저장 완료"
             }
@@ -516,8 +526,13 @@ class MongoSaver:
             except Exception as e:
                 print(f"⚠️ portfolio_id 업데이트 실패: {e}")
 
+            # applicant에 id 필드 추가 (MongoDB _id를 id로 복사)
+            applicant_with_id = self._dict_with_serialized_datetime(applicant)
+            if "_id" in applicant_with_id and "id" not in applicant_with_id:
+                applicant_with_id["id"] = applicant_with_id["_id"]
+            
             return {
-                "applicant": self._dict_with_serialized_datetime(applicant),
+                "applicant": applicant_with_id,
                 "portfolio": self._dict_with_serialized_datetime(portfolio),
                 "message": "포트폴리오 저장 완료"
             }

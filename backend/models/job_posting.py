@@ -140,8 +140,8 @@ class JobPosting(JobPostingBase):
     updated_at: Optional[datetime] = Field(default_factory=datetime.now)
     
     class Config:
-        allow_population_by_field_name = True
-        schema_extra = {
+        populate_by_name = True
+        json_schema_extra = {
             "example": {
                 "title": "프론트엔드 개발자",
                 "company": "테크스타트업",

@@ -39,6 +39,7 @@ async def create_job_posting(
         raise HTTPException(status_code=500, detail=f"채용공고 생성 실패: {str(e)}")
 
 @router.get("/", response_model=List[JobPosting])
+@router.get("", response_model=List[JobPosting])
 async def get_job_postings(
     skip: int = Query(0, ge=0),
     limit: int = Query(20, ge=1, le=100),

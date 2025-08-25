@@ -8,6 +8,7 @@ from typing import Any, Dict, List, Optional
 
 import uvicorn
 from bson import ObjectId
+import json
 from chatbot.routers.chatbot_router import router as chatbot_router
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -15,7 +16,7 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 
 # chatbot 라우터 추가
-from modules.data.services.github import router as github_router
+# from modules.data.services.github import router as github_router
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel
 from routers.applicants import get_mongo_service, get_similarity_service
@@ -71,6 +72,15 @@ if sys.platform.startswith('win'):
     sys.stdout = codecs.getwriter('utf-8')(sys.stdout.detach())
     sys.stderr = codecs.getwriter('utf-8')(sys.stderr.detach())
 
+# JSON 직렬화를 위한 커스텀 인코더
+class MongoJSONEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, ObjectId):
+            return str(obj)
+        if isinstance(obj, datetime):
+            return obj.isoformat()
+        return super().default(obj)
+
 # FastAPI 앱 생성
 app = FastAPI(
     title="AI 채용 관리 시스템 API",
@@ -79,14 +89,54 @@ app = FastAPI(
     redoc_url="/redoc"
 )
 
-# CORS 설정
+# CORS 설정 - 더 강화된 설정
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=["*"],  # 모든 origin 허용 (개발 환경)
+    allow_credentials=False,  # credentials를 False로 설정
+    allow_methods=["*"],  # 모든 HTTP 메서드 허용
+    allow_headers=["*"],  # 모든 헤더 허용
+    expose_headers=["*"]  # 모든 헤더 노출
 )
+
+# CORS 디버깅을 위한 미들웨어
+@app.middleware("http")
+async def cors_debug_middleware(request, call_next):
+    # CORS 요청 디버깅
+    origin = request.headers.get("origin")
+    method = request.method
+    path = request.url.path
+    
+    print(f"[CORS Debug] {method} {path} - Origin: {origin}")
+    
+    try:
+        response = await call_next(request)
+        
+        # CORS 헤더 확인
+        cors_headers = {k: v for k, v in response.headers.items() if 'access-control' in k.lower()}
+        if cors_headers:
+            print(f"[CORS Debug] 응답 CORS 헤더: {cors_headers}")
+        
+        # 명시적으로 CORS 헤더 추가
+        if origin:
+            response.headers["Access-Control-Allow-Origin"] = "*"
+            response.headers["Access-Control-Allow-Methods"] = "*"
+            response.headers["Access-Control-Allow-Headers"] = "*"
+        
+        return response
+    except Exception as e:
+        print(f"[CORS Debug] 오류 발생: {e}")
+        # 오류 발생 시에도 CORS 헤더 추가
+        error_response = JSONResponse(
+            status_code=500,
+            content={"error": str(e)},
+            headers={
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "*",
+                "Access-Control-Allow-Headers": "*"
+            }
+        )
+        return error_response
 
 # 한글 인코딩을 위한 미들웨어
 @app.middleware("http")
@@ -106,7 +156,7 @@ async def add_charset_header(request, call_next):
     return response
 
 # 라우터 등록
-app.include_router(github_router, prefix="/api", tags=["github"])
+# app.include_router(github_router, prefix="/api", tags=["github"])
 app.include_router(upload_router, tags=["upload"])
 app.include_router(pick_chatbot_router, prefix="/api/pick-chatbot", tags=["pick-chatbot"])
 app.include_router(integrated_ocr_router, prefix="/api/integrated-ocr", tags=["integrated-ocr"])
@@ -353,6 +403,21 @@ def load_applicants_from_csv() -> List[Dict[str, Any]]:
         return applicants
     except Exception:
         return []
+
+# CORS OPTIONS 요청 처리
+@app.options("/{full_path:path}")
+async def options_handler(full_path: str):
+    """모든 OPTIONS 요청에 대한 CORS 응답"""
+    return JSONResponse(
+        status_code=200,
+        content={},
+        headers={
+            "Access-Control-Allow-Origin": "*",
+            "Access-Control-Allow-Methods": "*",
+            "Access-Control-Allow-Headers": "*",
+            "Access-Control-Max-Age": "86400"
+        }
+    )
 
 # API 라우트들
 @app.get("/")

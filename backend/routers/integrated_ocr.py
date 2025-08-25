@@ -664,7 +664,7 @@ async def upload_multiple_documents(
                 applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
 
                 # MongoDB에 저장
-                result = mongo_saver.save_resume_with_ocr(
+                result = await mongo_saver.save_resume_with_ocr(
                     ocr_result=enhanced_ocr_result,
                     applicant_data=applicant_data,
                     job_posting_id=job_posting_id,
@@ -672,7 +672,7 @@ async def upload_multiple_documents(
                 )
 
                 results["resume"] = result
-                applicant_id = result.get("applicant", {}).get("id")
+                applicant_id = result.get("applicant", {}).get("_id") or result.get("applicant", {}).get("id")
 
                 print(f"✅ 이력서 처리 완료: {applicant_id}")
                 print(f"📊 이력서 결과: {result.get('message', 'N/A')}")
@@ -762,7 +762,7 @@ async def upload_multiple_documents(
                     applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
 
                 # MongoDB에 저장
-                result = mongo_saver.save_cover_letter_with_ocr(
+                result = await mongo_saver.save_cover_letter_with_ocr(
                     ocr_result=enhanced_ocr_result,
                     applicant_data=applicant_data,
                     job_posting_id=job_posting_id,
@@ -771,7 +771,7 @@ async def upload_multiple_documents(
 
                 results["cover_letter"] = result
                 if not applicant_id:
-                    applicant_id = result.get("applicant", {}).get("id")
+                    applicant_id = result.get("applicant", {}).get("_id") or result.get("applicant", {}).get("id")
 
                 print(f"✅ 자기소개서 처리 완료: {applicant_id}")
                 print(f"📊 자기소개서 결과: {result.get('message', 'N/A')}")
@@ -848,7 +848,7 @@ async def upload_multiple_documents(
                     applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
 
                 # MongoDB에 저장
-                result = mongo_saver.save_portfolio_with_ocr(
+                result = await mongo_saver.save_portfolio_with_ocr(
                     ocr_result=enhanced_ocr_result,
                     applicant_data=applicant_data,
                     job_posting_id=job_posting_id,
@@ -857,7 +857,7 @@ async def upload_multiple_documents(
 
                 results["portfolio"] = result
                 if not applicant_id:
-                    applicant_id = result.get("applicant", {}).get("id")
+                    applicant_id = result.get("applicant", {}).get("_id") or result.get("applicant", {}).get("id")
 
                 print(f"✅ 포트폴리오 처리 완료: {applicant_id}")
                 print(f"📊 포트폴리오 결과: {result.get('message', 'N/A')}")

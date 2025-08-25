@@ -73,6 +73,14 @@ httpx==0.27.0
 websockets==15.0.1
 aiohttp>=3.9.5
 urllib3>=2.5.0
+pandas>=2.0.0
+faker>=37.0.0
+pytesseract>=0.3.10
+pdf2image>=1.17.0
+Pillow>=10.1.0
+opencv-python>=4.8.0
+numpy>=1.26.0
+scipy>=1.11.4
 
 # 웹 자동화
 selenium==4.15.2

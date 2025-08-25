@@ -14,14 +14,7 @@ from .llm_service import LLMService
 from .vector_service import VectorService
 
 try:
-    from modules.ai.services.langchain_hybrid_service import LangChainHybridService
-    LANGCHAIN_HYBRID_AVAILABLE = True
-except ImportError:
-    LANGCHAIN_HYBRID_AVAILABLE = False
-    print("LangChain 하이브리드 서비스를 사용할 수 없습니다.")
-
-try:
-    from langchain_hybrid_service import LangChainHybridService
+    from ...ai.services.langchain_hybrid_service import LangChainHybridService
     LANGCHAIN_HYBRID_AVAILABLE = True
 except ImportError:
     LANGCHAIN_HYBRID_AVAILABLE = False
