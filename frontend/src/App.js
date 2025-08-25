@@ -1,6 +1,7 @@
 import React, { Suspense } from 'react';
 import { Routes, Route, useLocation, useNavigate, Navigate } from 'react-router-dom';
 import Layout from './components/Layout/Layout';
+import { SuspicionProvider } from './contexts/SuspicionContext';
 
 import NewPickChatbot from './components/NewPickChatbot';
 
@@ -160,7 +161,7 @@ function App() {
   };
 
   return (
-    <>
+    <SuspicionProvider>
       <Layout>
         <Suspense fallback={<div style={{ padding: '20px', textAlign: 'center' }}>로딩 중...</div>}>
           <Routes>
@@ -197,7 +198,7 @@ function App() {
           sessionStorage.setItem('pickChatbotIsOpen', newState ? 'true' : (newState === 'floating' ? 'floating' : 'false'));
         }}
       />
-    </>
+    </SuspicionProvider>
   );
 }
 
