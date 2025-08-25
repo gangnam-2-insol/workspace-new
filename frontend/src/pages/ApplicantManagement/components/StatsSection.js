@@ -51,12 +51,7 @@ const StatsSection = ({ stats, onSendMail }) => {
       {statCards.map((card, index) => (
         <S.StatCard
           key={`${card.variant}-${card.value}`}
-          initial={{ opacity: 0, y: 20, scale: 0.9 }}
-          animate={{ opacity: 1, y: 0, scale: 1 }}
-          transition={{ delay: 0.05 * index, duration: 0.3, ease: "easeOut" }}
           $variant={card.variant}
-          whileHover={{ scale: 1.02 }}
-          whileTap={{ scale: 0.98 }}
         >
           {card.mailType && (
             <S.MailButton
@@ -72,12 +67,7 @@ const StatsSection = ({ stats, onSendMail }) => {
             {card.icon}
           </S.StatIcon>
           <S.StatContent>
-            <S.StatValue
-              key={card.value}
-              initial={{ scale: 1 }}
-              animate={{ scale: [1, 1.02, 1] }}
-              transition={{ duration: 0.1 }}
-            >
+            <S.StatValue>
               {card.value}
             </S.StatValue>
             <S.StatLabel>{card.label}</S.StatLabel>

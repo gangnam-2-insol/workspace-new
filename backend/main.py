@@ -73,6 +73,14 @@ except ImportError as e:
     print(f"⚠️ 하이브리드 모듈 import 오류: {e}")
     hybrid_router = None
 
+# AI 유사도 분석 모듈화된 라우터 추가
+try:
+    from modules.api.routers.similarity_router import router as similarity_router
+    print("✅ 유사도 분석 라우터 import 성공")
+except ImportError as e:
+    print(f"⚠️ 유사도 분석 모듈 import 오류: {e}")
+    similarity_router = None
+
 
 from modules.core.services.embedding_service import EmbeddingService
 from modules.core.services.mongo_service import MongoService
@@ -170,6 +178,13 @@ if hybrid_router:
     print("✅ 하이브리드 라우터 등록 완료")
 else:
     print("❌ 하이브리드 라우터 등록 실패")
+
+# AI 유사도 분석 모듈화된 라우터 등록
+if similarity_router:
+    app.include_router(similarity_router, prefix="/api", tags=["similarity"])
+    print("✅ 유사도 분석 라우터 등록 완료")
+else:
+    print("❌ 유사도 분석 라우터 등록 실패")
 
 print("🔧 모듈화된 라우터 등록 완료\n")
 
@@ -1198,7 +1213,7 @@ async def check_coverletter_similarity(
                     },
                     "message": "자소서 내용이 없습니다"
                 }
-            
+
             print(f"[INFO] 자소서 내용 발견 - 길이: {len(cover_letter_text)}자")
 
         except HTTPException:

@@ -200,15 +200,144 @@ export const NoSkills = styled.span`
 `;
 
 export const AvgScore = styled.div`
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 12px;
   font-weight: 600;
-  color: var(--primary-color);
+  font-size: 12px;
   text-align: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+  }
+
+  /* 기본 스타일 */
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+
+  /* 고유 ID 기반 스타일링 */
+  &[id*="ranking-badge-"] {
+    /* 메달 아이콘 */
+    &::before {
+      content: "🏆";
+      font-size: 14px;
+    }
+  }
+
+  /* 특정 지원자 ID에 따른 개별 스타일링 */
+  &[id="ranking-badge-1"] {
+    background: linear-gradient(135deg, #ffd700, #ffed4e);
+    color: #333;
+    &::before {
+      content: "🥇";
+    }
+  }
+
+  &[id="ranking-badge-2"] {
+    background: linear-gradient(135deg, #c0c0c0, #e5e5e5);
+    color: #333;
+    &::before {
+      content: "🥈";
+    }
+  }
+
+  &[id="ranking-badge-3"] {
+    background: linear-gradient(135deg, #cd7f32, #daa520);
+    color: white;
+    &::before {
+      content: "🥉";
+    }
+  }
+
+  /* 점수별 스타일링을 위한 클래스 기반 접근 */
+  &.high-score {
+    background: linear-gradient(135deg, #10b981, #059669) !important;
+    color: white !important;
+    &::before {
+      content: "⭐" !important;
+    }
+  }
+
+  &.medium-score {
+    background: linear-gradient(135deg, #f59e0b, #d97706) !important;
+    color: white !important;
+    &::before {
+      content: "📊" !important;
+    }
+  }
+
+  &.low-score {
+    background: linear-gradient(135deg, #6b7280, #4b5563) !important;
+    color: white !important;
+    &::before {
+      content: "📝" !important;
+    }
+  }
+
+  &.no-score {
+    background: linear-gradient(135deg, #9ca3af, #6b7280) !important;
+    color: white !important;
+    &::before {
+      content: "❓" !important;
+    }
+  }
 `;
 
 export const ActionButtonGroup = styled.div`
   display: flex;
   gap: 8px;
   justify-content: center;
+`;
+
+export const StatusActionButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 12px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  background: white;
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: var(--background-secondary);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+    transform: translateY(-1px);
+  }
+
+  &.pending {
+    &:hover {
+      background: #fef3c7;
+      border-color: #f59e0b;
+      color: #d97706;
+    }
+  }
+
+  &.rejected {
+    &:hover {
+      background: #fee2e2;
+      border-color: #ef4444;
+      color: #dc2626;
+    }
+  }
+
+  &.passed {
+    &:hover {
+      background: #dcfce7;
+      border-color: #10b981;
+      color: #059669;
+    }
+  }
 `;
 
 export const CornerBadge = styled.div`

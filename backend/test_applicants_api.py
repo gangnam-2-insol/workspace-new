@@ -1,9 +1,43 @@
 #!/usr/bin/env python3
-import requests
-import json
+import asyncio
 
-def test_applicants_api():
+from bson import ObjectId
+from motor.motor_asyncio import AsyncIOMotorClient
+
+
+async def test_applicants():
     """지원자 API 테스트"""
+    try:
+        client = AsyncIOMotorClient("mongodb://localhost:27017/hireme")
+        db = client.hireme
+
+        print("=== 지원자 API 테스트 ===")
+
+        # 지원자 수 확인
+        count = await db.applicants.count_documents({})
+        print(f"총 지원자 수: {count}")
+
+        # 첫 3명만 조회
+        applicants = await db.applicants.find({}).limit(3).to_list(3)
+
+        for i, applicant in enumerate(applicants):
+            print(f"\n--- 지원자 {i+1} ---")
+            print(f"ID: {applicant['_id']}")
+            print(f"personal_info: {applicant.get('personal_info', 'N/A')}")
+            print(f"desired_position: {applicant.get('desired_position', 'N/A')}")
+            print(f"application_status: {applicant.get('application_status', 'N/A')}")
+            print(f"필드들: {list(applicant.keys())}")
+
+        client.close()
+        return True
+
+    except Exception as e:
+        print(f"오류 발생: {e}")
+        return False
+
+if __name__ == "__main__":
+    asyncio.run(test_applicants())
+
     
     base_url = "http://localhost:8000"
     
