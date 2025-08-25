@@ -17,7 +17,7 @@ import asyncio
 from modules.core.services.cover_letter_analysis.analyzer import CoverLetterAnalyzer
 from modules.core.services.llm_providers.openai_provider import OpenAIProvider
 
-router = APIRouter(prefix="/api/cover-letters", tags=["자기소개서"])
+router = APIRouter(prefix="/api/cover-letter", tags=["자기소개서"])
 
 def get_cover_letter_service(db: motor.motor_asyncio.AsyncIOMotorDatabase = Depends()) -> CoverLetterService:
     return CoverLetterService(db)
@@ -56,6 +56,57 @@ async def analyze_cover_letter(
         analysis_result = await analyzer.analyze_cover_letter(
             file_bytes=file_content,
             filename=file.filename,
+            job_description=job_description,
+            analysis_type=analysis_type
+        )
+
+        if analysis_result.status == "error":
+            return BaseResponse(
+                success=False,
+                message="자소서 분석 중 오류가 발생했습니다."
+            )
+
+        return BaseResponse(
+            success=True,
+            message="자소서 분석이 완료되었습니다.",
+            data=analysis_result.dict()
+        )
+
+    except Exception as e:
+        return BaseResponse(
+            success=False,
+            message=f"자소서 분석에 실패했습니다: {str(e)}"
+        )
+
+@router.post("/analyze-existing", response_model=BaseResponse)
+async def analyze_existing_cover_letter(
+    cover_letter_id: str = Form(...),
+    job_description: Optional[str] = Form(""),
+    analysis_type: Optional[str] = Form("comprehensive")
+):
+    """기존 자소서 분석 API"""
+    try:
+        # 자소서 서비스에서 자소서 데이터 가져오기
+        cover_letter_service = get_cover_letter_service()
+        cover_letter = await cover_letter_service.get_cover_letter(cover_letter_id)
+        
+        if not cover_letter:
+            return BaseResponse(
+                success=False,
+                message="자소서를 찾을 수 없습니다."
+            )
+
+        # 자소서 분석기 초기화
+        analyzer = CoverLetterAnalyzer(LLM_CONFIG)
+
+        # 자소서 내용을 바이트로 변환 (텍스트 기반)
+        content_text = cover_letter.content or cover_letter.extracted_text or ""
+        file_bytes = content_text.encode('utf-8')
+
+        # 자소서 분석 실행
+        analysis_result = await analyzer.analyze_cover_letter(
+            file_bytes=file_bytes,
+            filename=f"cover_letter_{cover_letter_id}.txt",
             job_description=job_description,
             analysis_type=analysis_type
         )

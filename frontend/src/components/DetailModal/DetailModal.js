@@ -19,7 +19,7 @@ const ModalContent = styled.div`
   background: white;
   border-radius: 12px;
   padding: 24px;
-  max-width: 800px;
+  max-width: 1200px;
   width: 90%;
   max-height: 90vh;
   overflow-y: auto;

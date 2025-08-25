@@ -3,6 +3,7 @@ from fastapi import HTTPException
 import motor.motor_asyncio
 from datetime import datetime
 import logging
+from bson import ObjectId
 
 logger = logging.getLogger(__name__)
 
@@ -11,6 +12,13 @@ class BaseService:
     
     def __init__(self, db: motor.motor_asyncio.AsyncIOMotorDatabase):
         self.db = db
+    
+    def _get_object_id(self, id_str: str):
+        """문자열 ID를 ObjectId로 변환"""
+        try:
+            return ObjectId(id_str)
+        except Exception:
+            return id_str
     
     async def get_by_id(self, collection: str, document_id: str) -> Optional[Dict[str, Any]]:
         """ID로 문서 조회"""

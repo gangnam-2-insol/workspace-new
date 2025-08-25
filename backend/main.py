@@ -28,8 +28,18 @@ except ImportError as e:
     github_router = None
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel
-from routers.applicants import get_mongo_service, get_similarity_service
-from routers.applicants import router as applicants_router
+# applicants 라우터를 조건부로 import
+try:
+    from routers.applicants import get_mongo_service, get_similarity_service
+    from routers.applicants import router as applicants_router
+    APPLICANTS_ROUTER_AVAILABLE = True
+    print("✅ 지원자 라우터 import 성공")
+except ImportError as e:
+    print(f"⚠️ 지원자 라우터 import 실패: {e}")
+    APPLICANTS_ROUTER_AVAILABLE = False
+    applicants_router = None
+    get_mongo_service = None
+    get_similarity_service = None
 from routers.integrated_ocr import router as integrated_ocr_router
 from routers.job_posting import router as job_posting_router
 from routers.pdf_ocr import router as pdf_ocr_router

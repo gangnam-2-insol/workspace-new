@@ -9,7 +9,7 @@ const PageContainer = styled.div`
 `;
 
 const ContentWrapper = styled.div`
-  max-width: 1200px;
+  max-width: 1600px;
   margin: 0 auto;
   background: white;
   border-radius: 16px;

@@ -7,7 +7,7 @@ from .models import (
 from .services import PortfolioService
 from ..shared.models import BaseResponse
 
-router = APIRouter(prefix="/api/portfolios", tags=["포트폴리오"])
+router = APIRouter(prefix="/api/portfolio-module", tags=["포트폴리오"])
 
 def get_portfolio_service(db: motor.motor_asyncio.AsyncIOMotorDatabase = Depends()) -> PortfolioService:
     return PortfolioService(db)

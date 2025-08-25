@@ -39,7 +39,7 @@ const ModalOverlay = styled(motion.div)`
 const ModalContent = styled(motion.div)`
   background: white;
   border-radius: 16px;
-  max-width: 1200px;
+  max-width: 1800px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
@@ -186,7 +186,7 @@ const ChartTitle = styled.h3`
 
 const ChartWrapper = styled.div`
   position: relative;
-  max-width: 600px;
+  max-width: 1000px;
   margin: 0 auto;
 
   canvas {
@@ -204,7 +204,7 @@ const ChartDescription = styled.p`
 
 const AnalysisGrid = styled(motion.div)`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(600px, 1fr));
   gap: 20px;
   margin-top: 32px;
 `;

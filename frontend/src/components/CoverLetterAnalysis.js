@@ -6,6 +6,8 @@ const Container = styled.div`
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  max-width: 1200px;
+  width: 100%;
 
   @keyframes fadeInScale {
     0% {
@@ -421,118 +423,119 @@ const CoverLetterAnalysis = ({ analysisData }) => {
 
   return (
     <Container>
-      <Title>자소서 분석 결과</Title>
+             <Title>자소서 분석 결과</Title>
 
-      <AnalysisGrid>
-        {/* 레이더차트 섹션 */}
-        <RadarChartSection>
-          <RadarChartTitle>종합 평가</RadarChartTitle>
-          <RadarChartContainer>
-            <RadarChart viewBox="0 0 450 450">
-              {/* 그리드 원 */}
-              {gridCircles.map((radius, index) => (
-                <RadarGrid key={index}>
-                  <circle
-                    cx="175"
-                    cy="175"
-                    r={radius}
-                    fill="none"
-                  />
-                </RadarGrid>
-              ))}
+       {/* 새로운 레이아웃: 그래프(왼쪽) + 총평/권장사항(오른쪽) */}
+       <div style={{
+         display: 'grid',
+         gridTemplateColumns: '1fr 1fr',
+         gap: '32px',
+         marginBottom: '32px',
+         width: '100%',
+         maxWidth: '1200px',
+         margin: '0 auto 32px auto'
+       }}>
+         {/* 왼쪽: 레이더차트 */}
+         <div>
+           <RadarChartTitle>종합 평가</RadarChartTitle>
+           <RadarChartContainer>
+             <RadarChart viewBox="0 0 450 450">
+                               {/* 그리드 원 */}
+                {gridCircles.map((radius, index) => (
+                  <RadarGrid key={index}>
+                    <circle
+                      cx="225"
+                      cy="225"
+                      r={radius}
+                      fill="none"
+                    />
+                  </RadarGrid>
+                ))}
 
-              {/* 축 */}
-              {axes.map((axis, index) => (
-                <RadarAxis key={index}>
-                  <line
-                    x1={axis.x1}
-                    y1={axis.y1}
-                    x2={axis.x2}
-                    y2={axis.y2}
-                  />
-                </RadarAxis>
-              ))}
+                {/* 축 */}
+                {axes.map((axis, index) => (
+                  <RadarAxis key={index}>
+                    <line
+                      x1={axis.x1}
+                      y1={axis.y1}
+                      x2={axis.x2}
+                      y2={axis.y2}
+                    />
+                  </RadarAxis>
+                ))}
 
-              {/* 데이터 영역 */}
-              <RadarData>
-                <polygon
-                  points={points.join(' ')}
-                  style={{
-                    animation: 'fadeInScale 1.5s ease-out forwards'
-                  }}
-                />
-              </RadarData>
+               {/* 데이터 영역 */}
+               <RadarData>
+                 <polygon
+                   points={points.join(' ')}
+                   style={{
+                     animation: 'fadeInScale 1.5s ease-out forwards'
+                   }}
+                 />
+               </RadarData>
 
-              {/* 데이터 포인트 */}
-              <RadarData>
-                {points.map((point, index) => {
-                  const [x, y] = point.split(',').map(Number);
-                  return (
-                    <RadarPoint key={index}>
-                      <circle
-                        cx={x}
-                        cy={y}
-                        r="4"
-                        fill="#3b82f6"
-                        style={{
-                          animation: `fadeInPoint 0.8s ease-out ${index * 0.1}s forwards`,
-                          opacity: 0
-                        }}
-                      />
-                    </RadarPoint>
-                  );
-                })}
-              </RadarData>
+               {/* 데이터 포인트 */}
+               <RadarData>
+                 {points.map((point, index) => {
+                   const [x, y] = point.split(',').map(Number);
+                   return (
+                     <RadarPoint key={index}>
+                       <circle
+                         cx={x}
+                         cy={y}
+                         r="4"
+                         fill="#3b82f6"
+                         style={{
+                           animation: `fadeInPoint 0.8s ease-out ${index * 0.1}s forwards`,
+                           opacity: 0
+                         }}
+                       />
+                     </RadarPoint>
+                   );
+                 })}
+               </RadarData>
 
-              {/* 라벨 */}
-              {labels.map((label, index) => (
-                <g key={index}>
-                  {/* 메인 텍스트 - 배경 없이 직접 표시 */}
-                  <text
-                    x={label.x}
-                    y={label.y}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fontSize="13"
-                    fontWeight="600"
-                    fill="#333"
-                    cursor="pointer"
-                    onClick={() => handleCategoryClick(label.category)}
-                    style={{ userSelect: 'none' }}
-                  >
-                    {label.textLines.length > 1 ? (
-                      // 긴 텍스트는 줄바꿔서 표시 - 간격을 더 넓게
-                      label.textLines.map((line, lineIndex) => (
-                        <tspan
-                          key={lineIndex}
-                          x={label.x}
-                          dy={lineIndex === 0 ? "-1.0em" : "1.6em"}
-                        >
-                          {line}
-                        </tspan>
-                      ))
-                    ) : (
-                      // 짧은 텍스트는 한 줄로 표시
-                      label.text
-                    )}
-                  </text>
-                </g>
-              ))}
-            </RadarChart>
-          </RadarChartContainer>
-        </RadarChartSection>
+               {/* 라벨 */}
+               {labels.map((label, index) => (
+                 <g key={index}>
+                   <text
+                     x={label.x}
+                     y={label.y}
+                     textAnchor="middle"
+                     dominantBaseline="middle"
+                     fontSize="13"
+                     fontWeight="600"
+                     fill="#333"
+                     cursor="pointer"
+                     onClick={() => handleCategoryClick(label.category)}
+                     style={{ userSelect: 'none' }}
+                   >
+                     {label.textLines.length > 1 ? (
+                       label.textLines.map((line, lineIndex) => (
+                         <tspan
+                           key={lineIndex}
+                           x={label.x}
+                           dy={lineIndex === 0 ? "-1.0em" : "1.6em"}
+                         >
+                           {line}
+                         </tspan>
+                       ))
+                     ) : (
+                       label.text
+                     )}
+                   </text>
+                 </g>
+               ))}
+             </RadarChart>
+           </RadarChartContainer>
+         </div>
 
-
-      </AnalysisGrid>
-
-      {/* 하단 총평 및 개선 권장사항 섹션 */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '32px',
-        marginBottom: '32px',
-        width: '100%'
-      }}>
+         {/* 오른쪽: 총평 및 권장사항 */}
+         <div style={{
+           display: 'flex',
+           flexDirection: 'column',
+           gap: '24px'
+         }}>
         {/* 전체적인 총평 */}
         <SummarySection>
           <SummaryTitle>
@@ -564,57 +567,58 @@ const CoverLetterAnalysis = ({ analysisData }) => {
           )}
         </SummarySection>
 
-        {/* 개선 권장사항 (항상 최대 2개 표시) */}
-        {recommendations && recommendations.length > 0 && (
-          <SummarySection>
-            <SummaryTitle>
-              💡 개선 권장사항
-            </SummaryTitle>
-            <div style={{
-              padding: '16px',
-              backgroundColor: '#f8f9fa',
-              borderRadius: '12px',
-              border: '2px solid #e9ecef',
-              boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
-            }}>
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: '16px'
-              }}>
-                {recommendations.map((recommendation, index) => (
-                  <div key={index} style={{
-                    padding: '16px',
-                    backgroundColor: 'white',
-                    borderRadius: '8px',
-                    borderLeft: '4px solid #3b82f6',
-                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
-                    transition: 'all 0.2s ease'
-                  }}>
-                    <div style={{
-                      display: 'flex',
-                      alignItems: 'flex-start',
-                      gap: '12px'
-                    }}>
-                      <span style={{
-                        color: '#3b82f6',
-                        fontWeight: '700',
-                        fontSize: '16px',
-                        lineHeight: '1.4'
-                      }}>•</span>
-                      <span style={{
-                        color: '#333',
-                        lineHeight: '1.6',
-                        fontSize: '14px'
-                      }}>{recommendation}</span>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </SummarySection>
-        )}
-      </div>
+                 {/* 개선 권장사항 (항상 최대 2개 표시) */}
+         {recommendations && recommendations.length > 0 && (
+           <SummarySection>
+             <SummaryTitle>
+               💡 개선 권장사항
+             </SummaryTitle>
+             <div style={{
+               padding: '16px',
+               backgroundColor: '#f8f9fa',
+               borderRadius: '12px',
+               border: '2px solid #e9ecef',
+               boxShadow: '0 2px 8px rgba(0, 0, 0, 0.1)'
+             }}>
+               <div style={{
+                 display: 'flex',
+                 flexDirection: 'column',
+                 gap: '16px'
+               }}>
+                 {recommendations.map((recommendation, index) => (
+                   <div key={index} style={{
+                     padding: '16px',
+                     backgroundColor: 'white',
+                     borderRadius: '8px',
+                     borderLeft: '4px solid #3b82f6',
+                     boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)',
+                     transition: 'all 0.2s ease'
+                   }}>
+                     <div style={{
+                       display: 'flex',
+                       alignItems: 'flex-start',
+                       gap: '12px'
+                     }}>
+                       <span style={{
+                         color: '#3b82f6',
+                         fontWeight: '700',
+                         fontSize: '16px',
+                         lineHeight: '1.4'
+                       }}>•</span>
+                       <span style={{
+                         color: '#333',
+                         lineHeight: '1.6',
+                         fontSize: '14px'
+                       }}>{recommendation}</span>
+                     </div>
+                   </div>
+                 ))}
+               </div>
+             </div>
+           </SummarySection>
+         )}
+         </div>
+       </div>
 
       {/* 막대 그래프 섹션 */}
       <BarChartSection>

@@ -10,7 +10,7 @@ from .services import JobPostingService
 from ..shared.models import BaseResponse, PaginationParams
 import base64
 
-router = APIRouter(prefix="/api/job-postings", tags=["채용공고"])
+router = APIRouter(prefix="/api/job-posting-module", tags=["채용공고"])
 
 def get_job_posting_service(db: motor.motor_asyncio.AsyncIOMotorDatabase = Depends()) -> JobPostingService:
     return JobPostingService(db)

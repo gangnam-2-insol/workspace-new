@@ -20,7 +20,7 @@ const ModalOverlay = styled(motion.div)`
 const ModalContent = styled(motion.div)`
   background: white;
   border-radius: 12px;
-  max-width: 1200px;
+  max-width: 1800px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
@@ -210,7 +210,7 @@ const DocumentTitle = styled.h3`
 
 const AnalysisGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(800px, 1fr));
   gap: 20px;
   margin-top: 20px;
 `;

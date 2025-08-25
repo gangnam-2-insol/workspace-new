@@ -3,9 +3,30 @@ from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models.applicant import Applicant, ApplicantCreate
-from modules.core.services.embedding_service import EmbeddingService
-from modules.core.services.similarity_service import SimilarityService
-from modules.core.services.vector_service import VectorService
+# 조건부 import로 변경
+try:
+    from modules.core.services.embedding_service import EmbeddingService
+    EMBEDDING_SERVICE_AVAILABLE = True
+except ImportError:
+    print("Warning: EmbeddingService import 실패")
+    EMBEDDING_SERVICE_AVAILABLE = False
+    EmbeddingService = None
+
+try:
+    from modules.core.services.similarity_service import SimilarityService
+    SIMILARITY_SERVICE_AVAILABLE = True
+except ImportError:
+    print("Warning: SimilarityService import 실패")
+    SIMILARITY_SERVICE_AVAILABLE = False
+    SimilarityService = None
+
+try:
+    from modules.core.services.vector_service import VectorService
+    VECTOR_SERVICE_AVAILABLE = True
+except ImportError:
+    print("Warning: VectorService import 실패")
+    VECTOR_SERVICE_AVAILABLE = False
+    VectorService = None
 from modules.core.services.mongo_service import MongoService
 
 router = APIRouter(prefix="/api/applicants", tags=["applicants"])
@@ -17,16 +38,24 @@ def get_mongo_service():
 
 # SimilarityService 의존성
 def get_similarity_service():
-    # 환경 변수에서 API 키 로드
-    pinecone_api_key = os.getenv("PINECONE_API_KEY", "dummy-key")
-    pinecone_index_name = os.getenv("PINECONE_INDEX_NAME", "resume-vectors")
+    if not all([EMBEDDING_SERVICE_AVAILABLE, SIMILARITY_SERVICE_AVAILABLE, VECTOR_SERVICE_AVAILABLE]):
+        print("Warning: SimilarityService 관련 서비스들이 사용 불가능합니다.")
+        return None
+    
+    try:
+        # 환경 변수에서 API 키 로드
+        pinecone_api_key = os.getenv("PINECONE_API_KEY", "dummy-key")
+        pinecone_index_name = os.getenv("PINECONE_INDEX_NAME", "resume-vectors")
 
-    embedding_service = EmbeddingService()
-    vector_service = VectorService(
-        api_key=pinecone_api_key,
-        index_name=pinecone_index_name
-    )
-    return SimilarityService(embedding_service, vector_service)
+        embedding_service = EmbeddingService()
+        vector_service = VectorService(
+            api_key=pinecone_api_key,
+            index_name=pinecone_index_name
+        )
+        return SimilarityService(embedding_service, vector_service)
+    except Exception as e:
+        print(f"Warning: SimilarityService 초기화 실패: {e}")
+        return None
 
 @router.post("/", response_model=Applicant)
 async def create_or_get_applicant(
