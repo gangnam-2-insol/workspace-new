@@ -193,6 +193,58 @@ const api = {
       console.error('포트폴리오 데이터 조회 오류:', error);
       throw error;
     }
+  },
+
+  // 유사인재 추천
+  getTalentRecommendations: async (applicantId) => {
+    try {
+      console.log(`[API] 유사인재 추천 요청 - applicantId: ${applicantId}`);
+      const response = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/recommendations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ 유사인재 추천 API 오류:', errorText);
+        throw new Error(`유사인재 추천 실패: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('✅ 유사인재 추천 성공:', data);
+      return data;
+    } catch (error) {
+      console.error('유사인재 추천 오류:', error);
+      throw error;
+    }
+  },
+
+  // 자기소개서 표절 검사
+  checkCoverLetterPlagiarism: async (applicantId) => {
+    try {
+      console.log(`[API] 자기소개서 표절 검사 요청 - applicantId: ${applicantId}`);
+      const response = await fetch(`${API_BASE_URL}/api/coverletter/similarity-check/${applicantId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ 자기소개서 표절 검사 API 오류:', errorText);
+        throw new Error(`자기소개서 표절 검사 실패: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('✅ 자기소개서 표절 검사 성공:', data);
+      return data;
+    } catch (error) {
+      console.error('자기소개서 표절 검사 오류:', error);
+      throw error;
+    }
   }
 };
 
@@ -1944,6 +1996,7 @@ const ResumeViewButton = styled(ActionButton).attrs({
   }
 `;
 
+
 const EmptyState = styled.div.attrs({
   id: 'applicant-management-empty-state'
 })`
@@ -2830,7 +2883,7 @@ const ApplicantManagement = () => {
   const [filterStatus, setFilterStatus] = useState('전체');
   const [selectedApplicant, setSelectedApplicant] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [documentModal, setDocumentModal] = useState({ isOpen: false, type: '', applicant: null, isOriginal: false, similarityData: null, isLoadingSimilarity: false, documentData: null });
+  const [documentModal, setDocumentModal] = useState({ isOpen: false, type: '', applicant: null, isOriginal: false, similarityData: null, isLoadingSimilarity: false, documentData: null, plagiarismData: null, isLoadingPlagiarism: false });
   // 포트폴리오 모달 내 뷰 선택 상태: 'select' | 'github' | 'portfolio'
   const [portfolioView, setPortfolioView] = useState('select');
   // 포트폴리오 데이터 상태
@@ -2871,6 +2924,12 @@ const ApplicantManagement = () => {
   const [replaceExisting, setReplaceExisting] = useState(false);
   const [isDragOver, setIsDragOver] = useState(false);
   const [showDetailedAnalysis, setShowDetailedAnalysis] = useState(false);
+  
+  // 인재추천 요청 상태
+  const [isRequestingRecommendation, setIsRequestingRecommendation] = useState(false);
+  const [recommendationResult, setRecommendationResult] = useState(null);
+  const [recommendationErrorModal, setRecommendationErrorModal] = useState({ isOpen: false, message: '', applicantName: '' });
+  
   const [resumeData, setResumeData] = useState({
     name: '',
     email: '',
@@ -3850,6 +3909,8 @@ const ApplicantManagement = () => {
   const handleCardClick = (applicant) => {
     setSelectedApplicant(applicant);
     setIsModalOpen(true);
+    // 모달이 열릴 때 자동으로 유사인재 추천 요청
+    handleTalentRecommendationRequest(applicant);
   };
 
   const handleResumeModalOpen = (applicant) => {
@@ -3860,6 +3921,9 @@ const ApplicantManagement = () => {
   const handleCloseModal = () => {
     setIsModalOpen(false);
     setSelectedApplicant(null);
+    // 유사인재 추천 상태 초기화
+    setRecommendationResult(null);
+    setIsRequestingRecommendation(false);
     // 이력서 모달이 열려있으면 닫지 않음
   };
 
@@ -3873,25 +3937,98 @@ const ApplicantManagement = () => {
     setSelectedApplicantForCoverLetter(applicant);
     setIsCoverLetterAnalysisModalOpen(true);
 
+    // 먼저 기존 분석 데이터가 있는지 확인
+    const existingAnalysis = applicant.cover_letter_analysis || applicant.analysis_result?.cover_letter_analysis;
+    
+    if (existingAnalysis) {
+      // 기존 분석 데이터가 있으면 바로 사용
+      setSelectedCoverLetterData(existingAnalysis);
+      return;
+    }
+
     try {
       // 지원자의 자소서 데이터를 API에서 가져오기
       const applicantId = applicant._id || applicant.id;
       const coverLetterData = await CoverLetterAnalysisApi.getApplicantCoverLetter(applicantId);
 
       if (coverLetterData && coverLetterData.success) {
-        setSelectedCoverLetterData(coverLetterData.data?.cover_letter_analysis || coverLetterData.data?.analysis_result?.cover_letter_analysis);
+        const analysisData = coverLetterData.data?.cover_letter_analysis || coverLetterData.data?.analysis_result?.cover_letter_analysis;
+        setSelectedCoverLetterData(analysisData);
+        
+        // API에서 가져온 데이터도 지원자 객체에 저장
+        if (analysisData) {
+          const updatedApplicant = {
+            ...applicant,
+            cover_letter_analysis: analysisData
+          };
+          
+          // 지원자 목록에서 해당 지원자 업데이트
+          setApplicants(prevApplicants => 
+            prevApplicants.map(app => 
+              app._id === applicant._id || 
+              app.id === applicant._id ||
+              app._id === applicant.id ||
+              app.id === applicant.id
+                ? updatedApplicant
+                : app
+            )
+          );
+          
+          // 현재 선택된 지원자도 업데이트
+          if (selectedApplicant && (
+            selectedApplicant._id === applicant._id ||
+            selectedApplicant.id === applicant._id ||
+            selectedApplicant._id === applicant.id ||
+            selectedApplicant.id === applicant.id
+          )) {
+            setSelectedApplicant(updatedApplicant);
+          }
+          
+          // 선택된 지원자 상태도 업데이트
+          setSelectedApplicantForCoverLetter(updatedApplicant);
+        }
       } else {
         // API에서 데이터를 가져올 수 없는 경우 기존 데이터 사용
-        setSelectedCoverLetterData(applicant.cover_letter_analysis || applicant.analysis_result?.cover_letter_analysis);
+        setSelectedCoverLetterData(existingAnalysis);
       }
     } catch (error) {
       console.error('자소서 데이터 로드 오류:', error);
       // 에러 발생 시 기존 데이터 사용
-      setSelectedCoverLetterData(applicant.cover_letter_analysis || applicant.analysis_result?.cover_letter_analysis);
+      setSelectedCoverLetterData(existingAnalysis);
     }
   };
 
   const handleCoverLetterAnalysisModalClose = () => {
+    // 자소서 분석 데이터를 지원자 객체에 저장하여 유지
+    if (selectedApplicantForCoverLetter && selectedCoverLetterData) {
+      const updatedApplicant = {
+        ...selectedApplicantForCoverLetter,
+        cover_letter_analysis: selectedCoverLetterData
+      };
+      
+      // 지원자 목록에서 해당 지원자 업데이트
+      setApplicants(prevApplicants => 
+        prevApplicants.map(applicant => 
+          applicant._id === selectedApplicantForCoverLetter._id || 
+          applicant.id === selectedApplicantForCoverLetter._id ||
+          applicant._id === selectedApplicantForCoverLetter.id ||
+          applicant.id === selectedApplicantForCoverLetter.id
+            ? updatedApplicant
+            : applicant
+        )
+      );
+      
+      // 현재 선택된 지원자도 업데이트
+      if (selectedApplicant && (
+        selectedApplicant._id === selectedApplicantForCoverLetter._id ||
+        selectedApplicant.id === selectedApplicantForCoverLetter._id ||
+        selectedApplicant._id === selectedApplicantForCoverLetter.id ||
+        selectedApplicant.id === selectedApplicantForCoverLetter.id
+      )) {
+        setSelectedApplicant(updatedApplicant);
+      }
+    }
+    
     setIsCoverLetterAnalysisModalOpen(false);
     setSelectedCoverLetterData(null);
     setSelectedApplicantForCoverLetter(null);
@@ -3902,7 +4039,42 @@ const ApplicantManagement = () => {
     try {
       const result = await CoverLetterAnalysisApi.analyzeApplicantCoverLetter(applicantId, analysisRequest);
       if (result && result.success) {
-        setSelectedCoverLetterData(result.data?.cover_letter_analysis || result.data?.analysis_result?.cover_letter_analysis);
+        const analysisData = result.data?.cover_letter_analysis || result.data?.analysis_result?.cover_letter_analysis;
+        setSelectedCoverLetterData(analysisData);
+        
+        // 분석 결과를 지원자 객체에 저장
+        if (selectedApplicantForCoverLetter && analysisData) {
+          const updatedApplicant = {
+            ...selectedApplicantForCoverLetter,
+            cover_letter_analysis: analysisData
+          };
+          
+          // 지원자 목록에서 해당 지원자 업데이트
+          setApplicants(prevApplicants => 
+            prevApplicants.map(applicant => 
+              applicant._id === selectedApplicantForCoverLetter._id || 
+              applicant.id === selectedApplicantForCoverLetter._id ||
+              applicant._id === selectedApplicantForCoverLetter.id ||
+              applicant.id === selectedApplicantForCoverLetter.id
+                ? updatedApplicant
+                : applicant
+            )
+          );
+          
+          // 현재 선택된 지원자도 업데이트
+          if (selectedApplicant && (
+            selectedApplicant._id === selectedApplicantForCoverLetter._id ||
+            selectedApplicant.id === selectedApplicantForCoverLetter._id ||
+            selectedApplicant._id === selectedApplicantForCoverLetter.id ||
+            selectedApplicant.id === selectedApplicantForCoverLetter.id
+          )) {
+            setSelectedApplicant(updatedApplicant);
+          }
+          
+          // 선택된 지원자 상태도 업데이트
+          setSelectedApplicantForCoverLetter(updatedApplicant);
+        }
+        
         return result;
       } else {
         throw new Error(result?.message || '자소서 분석에 실패했습니다.');
@@ -3922,8 +4094,19 @@ const ApplicantManagement = () => {
       _id: applicant._id || applicant.id
     };
 
-    // 모달 먼저 열기
-    setDocumentModal({ isOpen: true, type, applicant: applicantWithId, isOriginal: false, similarityData: null, isLoadingSimilarity: false });
+    // 모달 먼저 열기 (로딩 상태로)
+    setDocumentModal({ 
+      isOpen: true, 
+      type, 
+      applicant: applicantWithId, 
+      isOriginal: false, 
+      similarityData: null, 
+      isLoadingSimilarity: type === 'coverLetter', // 자소서일 때만 로딩 표시
+      documentData: null, 
+      plagiarismData: null, 
+      isLoadingPlagiarism: type === 'coverLetter' // 자소서일 때만 로딩 표시
+    });
+    
     if (type === 'portfolio') {
       setPortfolioView('select');
     }
@@ -3945,12 +4128,13 @@ const ApplicantManagement = () => {
           break;
 
         case 'coverLetter':
+          // 자소서 데이터 로드
           const coverLetterResponse = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/cover-letter`);
           if (coverLetterResponse.ok) {
             documentData = await coverLetterResponse.json();
             console.log('✅ 자소서 데이터 로드 완료:', documentData);
 
-            // 자소서 분석 수행
+            // 자소서 분석 수행 (선택사항)
             try {
               const analysisResponse = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/cover-letter/analysis`, {
                 method: 'POST',
@@ -3961,14 +4145,60 @@ const ApplicantManagement = () => {
                 const analysisData = await analysisResponse.json();
                 documentData.analysis = analysisData.analysis || analysisData;
                 console.log('✅ 자소서 분석 완료:', analysisData);
-              } else {
-                console.error('❌ 자소서 분석 실패:', analysisResponse.status);
               }
             } catch (analysisError) {
-              console.error('❌ 자소서 분석 오류:', analysisError);
+              console.log('ℹ️ 자소서 분석 건너뜀:', analysisError.message);
+            }
+
+            // 표절 검사/유사도 체크 수행 (통합)
+            try {
+              console.log('🔍 자소서 표절체크 시작...');
+              const plagiarismResult = await api.checkCoverLetterPlagiarism(applicantId);
+              console.log('✅ 자소서 표절체크 완료:', plagiarismResult);
+              
+              // 백엔드 응답 구조에 맞게 파싱
+              let parsedResult = plagiarismResult;
+              if (plagiarismResult?.plagiarism_result) {
+                const result = plagiarismResult.plagiarism_result;
+                if (result?.data?.suspicion_analysis) {
+                  // 새로운 구조에서 suspicion_analysis 추출
+                  parsedResult = result.data.suspicion_analysis;
+                } else {
+                  parsedResult = result;
+                }
+              } else if (plagiarismResult?.data?.suspicion_analysis) {
+                parsedResult = plagiarismResult.data.suspicion_analysis;
+              } else if (plagiarismResult?.data) {
+                parsedResult = plagiarismResult.data;
+              }
+              
+              setDocumentModal(prev => ({ 
+                ...prev, 
+                plagiarismData: parsedResult,
+                similarityData: parsedResult, // 동일한 데이터 사용
+                isLoadingPlagiarism: false,
+                isLoadingSimilarity: false
+              }));
+            } catch (error) {
+              console.error('❌ 자소서 표절체크 실패:', error);
+              setDocumentModal(prev => ({ 
+                ...prev, 
+                isLoadingPlagiarism: false,
+                isLoadingSimilarity: false,
+                plagiarismData: {
+                  status: 'error',
+                  message: '표절 검사 중 오류가 발생했습니다.',
+                  error: error.message
+                }
+              }));
             }
           } else {
             console.error('❌ 자소서 데이터 로드 실패:', coverLetterResponse.status);
+            setDocumentModal(prev => ({ 
+              ...prev, 
+              isLoadingPlagiarism: false,
+              isLoadingSimilarity: false
+            }));
           }
           break;
 
@@ -3987,46 +4217,17 @@ const ApplicantManagement = () => {
       if (documentData) {
         setDocumentModal(prev => ({
           ...prev,
-          documentData,
-          isLoadingSimilarity: false
+          documentData
         }));
       }
 
     } catch (error) {
       console.error('❌ 문서 데이터 로드 오류:', error);
-      setDocumentModal(prev => ({ ...prev, isLoadingSimilarity: false }));
-    }
-
-    // 자소서 타입일 때만 유사도 체크 실행
-    if (type === 'coverLetter') {
-      setDocumentModal(prev => ({ ...prev, isLoadingSimilarity: true }));
-
-      try {
-        const endpoint = 'coverletter';
-        const response = await fetch(`${API_BASE_URL}/api/${endpoint}/similarity-check/${applicantWithId._id}`, {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
-
-        if (response.ok) {
-          const similarityData = await response.json();
-          console.log('✅ 유사도 체크 완료:', similarityData);
-
-          setDocumentModal(prev => ({
-            ...prev,
-            similarityData,
-            isLoadingSimilarity: false
-          }));
-        } else {
-          console.error('❌ 유사도 체크 실패:', response.status);
-          setDocumentModal(prev => ({ ...prev, isLoadingSimilarity: false }));
-        }
-      } catch (error) {
-        console.error('❌ 유사도 체크 오류:', error);
-        setDocumentModal(prev => ({ ...prev, isLoadingSimilarity: false }));
-      }
+      setDocumentModal(prev => ({ 
+        ...prev, 
+        isLoadingSimilarity: false,
+        isLoadingPlagiarism: false
+      }));
     }
   };
 
@@ -4035,7 +4236,7 @@ const ApplicantManagement = () => {
   };
 
   const handleCloseDocumentModal = () => {
-    setDocumentModal({ isOpen: false, type: '', applicant: null, isOriginal: false, similarityData: null, isLoadingSimilarity: false, documentData: null });
+    setDocumentModal({ isOpen: false, type: '', applicant: null, isOriginal: false, similarityData: null, isLoadingSimilarity: false, documentData: null, plagiarismData: null, isLoadingPlagiarism: false });
     setPortfolioView('select');
     setPortfolioData(null);
   };
@@ -4241,6 +4442,109 @@ const ApplicantManagement = () => {
     if ((selectedJobs || []).length > 0) filters.push(`직무: ${(selectedJobs || []).join(', ')}`);
     if ((selectedExperience || []).length > 0) filters.push(`경력: ${(selectedExperience || []).join(', ')}`);
     return filters.join(' | ');
+  };
+
+  // 유사인재 추천 및 표절 검사 핸들러들
+  const handleTalentRecommendation = async (applicantId) => {
+    try {
+      console.log('🎯 유사인재 추천 요청:', applicantId);
+      const result = await api.getTalentRecommendations(applicantId);
+      console.log('✅ 유사인재 추천 결과:', result);
+      
+      // TODO: 결과를 모달이나 별도 화면에 표시
+      alert(`유사인재 추천이 완료되었습니다!\n\n추천된 인재 수: ${result.recommendations?.length || 0}명`);
+    } catch (error) {
+      console.error('❌ 유사인재 추천 실패:', error);
+      alert('유사인재 추천 중 오류가 발생했습니다.');
+    }
+  };
+
+  const handlePlagiarismCheck = async (applicantId) => {
+    try {
+      console.log('🎯 표절 검사 요청:', applicantId);
+      const result = await api.checkCoverLetterPlagiarism(applicantId);
+      console.log('✅ 표절 검사 결과:', result);
+      
+      // TODO: 결과를 모달이나 별도 화면에 표시
+      alert(`표절 검사가 완료되었습니다!\n\n의심도: ${result.suspicion_score || 0}%`);
+    } catch (error) {
+      console.error('❌ 표절 검사 실패:', error);
+      alert('표절 검사 중 오류가 발생했습니다.');
+    }
+  };
+
+  // 인재추천 요청 핸들러
+  const handleTalentRecommendationRequest = async (applicant) => {
+    if (!applicant) return;
+    
+    setIsRequestingRecommendation(true);
+    setRecommendationResult(null);
+    
+    try {
+      console.log('🤖 인재추천 요청 시작:', applicant.name);
+      
+      // API 요청 데이터 구성
+      const requestData = {
+        applicant_id: applicant.id,
+        applicant_name: applicant.name,
+        position: applicant.position || '개발자',
+        skills: applicant.skills || [],
+        experience: applicant.experience || '신입',
+        email: applicant.email,
+        phone: applicant.phone,
+        analysisScore: applicant.analysisScore || 0
+      };
+      
+      console.log('📤 인재추천 API 요청 데이터:', requestData);
+      
+      const response = await fetch(`${API_BASE_URL}/api/applicants/${applicant.id}/recommendations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(requestData)
+      });
+      
+      console.log('📥 인재추천 API 응답 상태:', response.status);
+      
+      if (!response.ok) {
+        throw new Error(`인재추천 API 호출 실패: ${response.status}`);
+      }
+      
+      const result = await response.json();
+      console.log('✅ 인재추천 결과:', result);
+      
+      setRecommendationResult({
+        success: result.status === 'success',
+        data: result,
+        applicant: applicant,
+        requestTime: new Date().toLocaleString(),
+        message: result.message
+      });
+      
+      // 성공 로그 (백그라운드 처리)
+      console.log(`✅ ${applicant.name} 지원자 인재추천 완료: ${result.recommendations?.data?.results?.length || 0}명 추천`);
+      
+    } catch (error) {
+      console.error('❌ 인재추천 요청 실패:', error);
+      
+      setRecommendationResult({
+        success: false,
+        error: error.message,
+        applicant: applicant,
+        requestTime: new Date().toLocaleString()
+      });
+      
+      // 실패 모달 표시
+      console.error(`❌ ${applicant.name} 지원자 인재추천 실패: ${error.message}`);
+      setRecommendationErrorModal({
+        isOpen: true,
+        message: error.message,
+        applicantName: applicant.name
+      });
+    } finally {
+      setIsRequestingRecommendation(false);
+    }
   };
 
   // 새 이력서 등록 핸들러들
@@ -5757,6 +6061,272 @@ const ApplicantManagement = () => {
                 </DocumentButton>
               </DocumentButtons>
 
+              {/* 유사인재 추천 섹션 */}
+              <SimilarTalentSection>
+                <SectionTitle>
+                  <FiStar size={20} />
+                  유사인재 추천
+                </SectionTitle>
+                
+                {isRequestingRecommendation && (
+                  <LoadingMessage>
+                    <RecommendationSpinner />
+                    유사인재를 검색하고 있습니다...
+                  </LoadingMessage>
+                )}
+                
+                {recommendationResult && recommendationResult.success && (
+                  <RecommendationContent>
+                    <RecommendationMessage>
+                      {selectedApplicant?.name} 지원자와 유사한 인재를 추천합니다.
+                    </RecommendationMessage>
+                    
+                    {recommendationResult.data && recommendationResult.data.recommendations && recommendationResult.data.recommendations.success && recommendationResult.data.recommendations.data && (
+                      <div style={{ marginTop: '16px' }}>
+
+                        <h4 style={{ marginBottom: '12px', color: 'var(--text-primary)' }}>
+                          추천된 유사 인재 ({recommendationResult.data.recommendations.data.results?.length || 0}명)
+                        </h4>
+                        {recommendationResult.data.recommendations.data.results?.map((talent, index) => {
+                          const applicant = talent.applicant || {};
+                          
+                          // 디버깅: 전체 LLM 분석 텍스트 확인 (첫 번째 카드에서만)
+                          if (index === 0) {
+                            console.log('[DEBUG] 전체 LLM 분석 텍스트:', recommendationResult.data.recommendations.data.llm_analysis?.analysis);
+                          }
+                          
+                          // LLM 분석 결과에서 해당 지원자의 개별 분석 추출 (개선된 파싱 로직)
+                          const getIndividualAnalysis = (applicantName, llmAnalysis, index) => {
+                            if (!llmAnalysis || !llmAnalysis.analysis) {
+                              console.log(`[DEBUG] LLM 분석 데이터 없음:`, llmAnalysis);
+                              return null;
+                            }
+                            
+                            const analysisText = llmAnalysis.analysis;
+                            console.log(`[DEBUG] 전체 분석 텍스트:`, analysisText);
+                            
+                            // 방법 1: "### 3. 각 유사 지원자별 상세 분석" 섹션에서 파싱
+                            const individualAnalysisMatch = analysisText.match(/###\s*3\.\s*각\s*유사\s*지원자별\s*상세\s*분석\s*([\s\S]*?)(?=###\s*[^3]|$)/i);
+                            
+                            if (individualAnalysisMatch) {
+                              const individualAnalysisSection = individualAnalysisMatch[1].trim();
+                              console.log(`[DEBUG] 개별 분석 섹션:`, individualAnalysisSection);
+                              
+                              // "- **[지원자명]**" 패턴으로 분할
+                              const applicantPattern = /- \*\*\[[^\]]+\]\*\*/g;
+                              const splits = individualAnalysisSection.split(applicantPattern);
+                              
+                              // index+1번째 섹션 사용 (첫 번째는 보통 빈 문자열)
+                              if (splits.length > index + 1) {
+                                const section = splits[index + 1].trim();
+                                console.log(`[DEBUG] ${index + 1}번째 섹션:`, section);
+                                
+                                if (section && section.includes('핵심 공통점')) {
+                                  console.log(`[DEBUG] 핵심 공통점 발견, 파싱 결과:`, section);
+                                  return section;
+                                }
+                              }
+                            }
+                            
+                            // 방법 2: 순위 기반으로 찾기 (1순위, 2순위 등)
+                            const rankPattern = new RegExp(`(${index + 1}순위\\.?\\s*[^\\n]*\\n[\\s\\S]*?)(?=${index + 2}순위\\.|$)`, 'i');
+                            const rankMatch = analysisText.match(rankPattern);
+                            
+                            if (rankMatch) {
+                              const rankSection = rankMatch[1].trim();
+                              console.log(`[DEBUG] ${index + 1}순위 섹션:`, rankSection);
+                              
+                              if (rankSection && rankSection.includes('핵심 공통점')) {
+                                return rankSection;
+                              }
+                            }
+                            
+                            // 방법 3: 지원자 이름으로 직접 찾기
+                            const namePattern = new RegExp(`\\*\\*${applicantName}\\*\\*([\\s\\S]*?)(?=\\*\\*[^\\*]+\\*\\*|$)`, 'i');
+                            const nameMatch = analysisText.match(namePattern);
+                            
+                            if (nameMatch) {
+                              const nameSection = nameMatch[1].trim();
+                              console.log(`[DEBUG] 이름 매칭 파싱 결과:`, nameSection);
+                              
+                              if (nameSection && nameSection.includes('핵심 공통점')) {
+                                return nameSection;
+                              }
+                            }
+                            
+                            // 방법 4: 전체 텍스트에서 핵심 공통점이 포함된 섹션 찾기
+                            const commonalitiesPattern = /🔍\s*\*\*핵심\s*공통점\*\*:([^🔍🎯💡⭐]*?)(?=🔍|🎯|💡|⭐|\*\*[^*]+\*\*|$)/gi;
+                            const matches = [...analysisText.matchAll(commonalitiesPattern)];
+                            
+                            if (matches.length > index) {
+                              const match = matches[index];
+                              const content = `🔍 **핵심 공통점**:${match[1].trim()}`;
+                              console.log(`[DEBUG] 공통점 패턴 매칭 - 내용:`, content);
+                              
+                              return content;
+                            }
+                            
+                            // 방법 5: 기존 형식 폴백 (### N순위. 지원자명 형태)
+                            const sections = analysisText.split(/###\s*\d+순위\.\s*/);
+                            console.log(`[DEBUG] 기존 형식 섹션 수:`, sections.length);
+                            
+                            if (sections.length > index + 1) {
+                              const section = sections[index + 1].trim();
+                              console.log(`[DEBUG] 기존 형식 ${index + 1}번째 섹션:`, section);
+                              
+                              const lines = section.split('\n');
+                              if (lines.length > 1) {
+                                const result = lines.slice(1).join('\n').trim();
+                                console.log(`[DEBUG] 기존 형식 파싱 결과:`, result);
+                                return result;
+                              }
+                            }
+                            
+                            console.log(`[DEBUG] 모든 파싱 방법 실패 - 지원자명: ${applicantName}, 인덱스: ${index}`);
+                            return null;
+                          };
+                          
+                          const individualAnalysis = getIndividualAnalysis(
+                            applicant.name, 
+                            recommendationResult.data.recommendations.data.llm_analysis,
+                            index
+                          );
+                          
+                          // 디버깅: 개별 분석 결과 확인
+                          console.log(`[DEBUG] ${applicant.name} 개별 분석:`, individualAnalysis);
+                          
+                          return (
+                            <div 
+                              key={index} 
+                              onClick={() => {
+                                console.log('유사인재 카드 클릭:', applicant);
+                                let foundApplicant = null;
+                                
+                                if (applicant._id) {
+                                  foundApplicant = applicants.find(a => a._id === applicant._id || a.id === applicant._id);
+                                  if (foundApplicant) {
+                                    console.log('지원자 발견 (ID 매칭):', foundApplicant);
+                                    handleCloseModal();
+                                    setTimeout(() => handleCardClick(foundApplicant), 300);
+                                    return;
+                                  }
+                                }
+                                
+                                if (applicant.name && applicant.email) {
+                                  foundApplicant = applicants.find(a => 
+                                    a.name === applicant.name && a.email === applicant.email
+                                  );
+                                  if (foundApplicant) {
+                                    console.log('지원자 발견 (이름+이메일 매칭):', foundApplicant);
+                                    handleCloseModal();
+                                    setTimeout(() => handleCardClick(foundApplicant), 300);
+                                    return;
+                                  }
+                                }
+                                
+                                console.warn('지원자를 찾을 수 없습니다:', applicant);
+                                alert('해당 지원자의 상세 정보를 찾을 수 없습니다.');
+                              }}
+                              style={{
+                                background: 'white',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '8px',
+                                padding: '16px',
+                                marginBottom: '12px',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease',
+                                boxShadow: '0 1px 3px rgba(0, 0, 0, 0.1)'
+                              }}
+                            >
+                              <div style={{ 
+                                display: 'flex', 
+                                justifyContent: 'space-between', 
+                                alignItems: 'flex-start',
+                                marginBottom: '12px'
+                              }}>
+                                <div>
+                                  <h5 style={{ 
+                                    margin: '0 0 4px 0', 
+                                    fontSize: '16px', 
+                                    fontWeight: '600',
+                                    color: '#1a202c'
+                                  }}>
+                                    {applicant.name || 'Unknown'}
+                                  </h5>
+                                  <p style={{ 
+                                    margin: '0 0 2px 0', 
+                                    fontSize: '14px', 
+                                    color: '#4a5568'
+                                  }}>
+                                    {applicant.position || 'N/A'} • {applicant.email || 'N/A'}
+                                  </p>
+                                  <p style={{ 
+                                    margin: '0', 
+                                    fontSize: '12px', 
+                                    color: '#718096'
+                                  }}>
+                                    유사도: {talent.final_score ? `${(talent.final_score * 100).toFixed(1)}%` : 'N/A'}
+                                  </p>
+                                </div>
+                              </div>
+                              
+                              <div style={{
+                                fontSize: '13px',
+                                color: '#475569',
+                                lineHeight: '1.4',
+                                whiteSpace: 'pre-line'
+                              }}>
+                                {individualAnalysis ? (
+                                  <div 
+                                    dangerouslySetInnerHTML={{ 
+                                      __html: individualAnalysis
+                                        .replace(/\d+순위[:\.]?\s*[^\n]*\n?/g, '') // Remove "N순위: 지원자명" lines
+                                        .replace(/###\s*/g, '') // Remove "###" symbols
+                                        .replace(/\n\s*\n/g, '\n') // Remove empty lines
+                                        .replace(/^\s*\n/, '') // Remove leading empty lines
+                                        .replace(/\n/g, '<br>')
+                                        .replace(/- 🔍 \*\*핵심 공통점\*\*:/g, '<div style="margin: 8px 0;"><strong>🔍 핵심 공통점:</strong>')
+                                        .replace(/- 💡 \*\*주요 특징\*\*:/g, '</div><div style="margin: 8px 0;"><strong>💡 주요 특징:</strong>')
+                                        .replace(/- ⭐ \*\*추천 이유\*\*:/g, '</div><div style="margin: 8px 0;"><strong>⭐ 추천 이유:</strong>')
+                                        .replace(/- 🎯 \*\*유사성 요인\*\*:/g, '</div><div style="margin: 8px 0;"><strong>🎯 유사성 요인:</strong>')
+                                        + '</div>'
+                                    }} 
+                                  />
+                                ) : (
+                                  <div style={{ marginTop: '8px' }}>
+                                    <div style={{ margin: '8px 0' }}>
+                                      <strong>🔍 핵심 공통점:</strong> {applicant.position === selectedApplicant?.position ? '같은 직무' : '다른 직무'} 지원자로 
+                                      {talent.final_score ? `${(talent.final_score * 100).toFixed(1)}%` : 
+                                       talent.vector_score ? `${(talent.vector_score * 100).toFixed(1)}%` :
+                                       talent.similarity_score ? `${(talent.similarity_score * 100).toFixed(1)}%` : '0.0%'} 유사도를 보입니다.
+                                    </div>
+                                    <div style={{ margin: '8px 0' }}>
+                                      <strong>💡 주요 특징:</strong> {applicant.position || 'N/A'} • 경력 {applicant.experience || 'N/A'}년 
+                                      {applicant.skills && Array.isArray(applicant.skills) && applicant.skills.length > 0 ? 
+                                        ` • 주요 기술: ${applicant.skills.slice(0, 3).join(', ')}` : ''}
+                                    </div>
+                                    <div style={{ margin: '8px 0' }}>
+                                      <strong>⭐ 추천 이유:</strong> 선택된 지원자와 유사한 프로필을 가진 우수한 후보자입니다.
+                                    </div>
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </RecommendationContent>
+                )}
+                
+                {recommendationResult && !recommendationResult.success && (
+                  <ErrorMessage>
+                    <FiX size={16} />
+                    유사인재 추천 요청 실패: {recommendationResult.error}
+                  </ErrorMessage>
+                )}
+              </SimilarTalentSection>
+
               <DeleteButton onClick={() => handleDeleteApplicant(selectedApplicant.id)}>
                 <FiX size={16} />
                 지원자 삭제
@@ -6112,7 +6682,7 @@ const ApplicantManagement = () => {
                     <DocumentSection>
                       <DocumentSectionTitle>자소서 분석 결과</DocumentSectionTitle>
                       <CoverLetterAnalysis
-                        analysisData={documentModal.documentData?.analysis || {
+                        analysisData={selectedApplicant?.cover_letter_analysis || documentModal.documentData?.analysis || {
                           technical_suitability: { score: 75, feedback: '기술적합성에 대한 분석이 필요합니다.' },
                           job_understanding: { score: 80, feedback: '직무이해도에 대한 분석이 필요합니다.' },
                           growth_potential: { score: 85, feedback: '성장가능성에 대한 분석이 필요합니다.' },
@@ -6122,160 +6692,60 @@ const ApplicantManagement = () => {
                       />
                     </DocumentSection>
 
-                    {/* 유사도 체크 결과 섹션 */}
-                    <DocumentSection>
-                      <DocumentSectionTitle>🔍 유사도 체크 결과</DocumentSectionTitle>
 
-                      {documentModal.isLoadingSimilarity && (
+                    {/* 표절 의심도 분석 결과 섹션 */}
+                    <DocumentSection>
+                      <DocumentSectionTitle>
+                        🔍 표절 의심도 분석 결과
+                      </DocumentSectionTitle>
+                      
+                      {documentModal.isLoadingPlagiarism && (
                         <DocumentCard>
-                          <DocumentCardText>
-                            📊 다른 {documentModal.type === 'resume' ? '이력서' : '자소서'}들과의 유사도를 분석 중입니다...
-                          </DocumentCardText>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
+                            <span 
+                              className="spinner" 
+                              style={{ 
+                                display: 'inline-block',
+                                width: '16px', 
+                                height: '16px', 
+                                border: '2px solid transparent', 
+                                borderTop: '2px solid var(--primary-color)', 
+                                borderRadius: '50%', 
+                                animation: 'spin 1s linear infinite' 
+                              }}
+                            ></span>
+                            다른 자소서들과의 표절 의심도를 분석 중입니다...
+                          </div>
                         </DocumentCard>
                       )}
-
-                      {!documentModal.isLoadingSimilarity && documentModal.similarityData && (
-                        <>
-                          {/* 통계 정보 */}
-                          <DocumentCard>
-                            <DocumentCardTitle>📈 유사도 분석 통계</DocumentCardTitle>
-                            <DocumentGrid style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '10px'}}>
-                              <div>
-                                <strong>비교 대상:</strong> {documentModal.similarityData.statistics.total_compared}명
-                              </div>
-                              <div>
-                                <strong>평균 유사도:</strong> {(documentModal.similarityData.statistics.average_similarity * 100).toFixed(1)}%
-                              </div>
-                              <div>
-                                <strong>높은 유사도:</strong> {documentModal.similarityData.statistics.high_similarity_count}명 (70% 이상)
-                              </div>
-                              <div>
-                                <strong>중간 유사도:</strong> {documentModal.similarityData.statistics.moderate_similarity_count}명 (40-70%)
-                              </div>
-                            </DocumentGrid>
-                          </DocumentCard>
-
-                          {/* 표절 위험도 분석 */}
-                          {documentModal.similarityData.plagiarism_analysis && documentModal.similarityData.plagiarism_analysis.success && (
-                            <DocumentCard>
-                              <DocumentCardTitle>⚠️ 표절 위험도 분석</DocumentCardTitle>
-                              <div style={{
-                                padding: '12px',
-                                borderRadius: '8px',
-                                backgroundColor: documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#fff5f5' :
-                                                documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#fffbf0' : '#f0fff4',
-                                border: `2px solid ${documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#ff4757' :
-                                                   documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#ffa502' : '#2ed573'}`
-                              }}>
-                                <div style={{
-                                  fontWeight: 'bold',
-                                  marginBottom: '8px',
-                                  color: documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#ff4757' :
-                                        documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#ffa502' : '#2ed573'
-                                }}>
-                                  위험도: {documentModal.similarityData.plagiarism_analysis.risk_level}
-                                  ({(documentModal.similarityData.plagiarism_analysis.risk_score * 100).toFixed(1)}%)
-                                </div>
-                                <div style={{fontSize: '14px', color: '#333', marginBottom: '8px', whiteSpace: 'pre-line'}}>
-                                  {documentModal.similarityData.plagiarism_analysis.analysis}
-                                </div>
-
-                                {documentModal.similarityData.plagiarism_analysis.recommendations &&
-                                 documentModal.similarityData.plagiarism_analysis.recommendations.length > 0 && (
-                                  <div>
-                                    <div style={{fontSize: '12px', fontWeight: 'bold', color: '#666', marginBottom: '4px'}}>
-                                      권장사항:
-                                    </div>
-                                    <ul style={{margin: '0', paddingLeft: '16px'}}>
-                                      {documentModal.similarityData.plagiarism_analysis.recommendations.map((rec, idx) => (
-                                        <li key={idx} style={{fontSize: '12px', color: '#666', marginBottom: '2px'}}>
-                                          {rec}
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                )}
-                              </div>
-                            </DocumentCard>
+                      
+                      {documentModal.plagiarismData && (
+                        <DocumentCard>
+                          <DocumentCardTitle>
+                            표절 의심도: <span style={{
+                              color: documentModal.plagiarismData.suspicion_level === 'HIGH' ? '#dc3545' :
+                                     documentModal.plagiarismData.suspicion_level === 'MEDIUM' ? '#fd7e14' :
+                                     documentModal.plagiarismData.suspicion_level === 'LOW' ? '#28a745' : '#6c757d',
+                              fontWeight: '700'
+                            }}>
+                              {documentModal.plagiarismData.suspicion_level || 'UNKNOWN'}
+                            </span>
+                          </DocumentCardTitle>
+                          <DocumentCardText>
+                            {documentModal.plagiarismData.analysis || '분석 결과 없음'}
+                          </DocumentCardText>
+                          {documentModal.plagiarismData.similar_count > 0 && (
+                            <DocumentCardText style={{ marginTop: '10px', color: '#dc3545' }}>
+                              유사한 자소서 {documentModal.plagiarismData.similar_count}개 발견
+                            </DocumentCardText>
                           )}
-
-                          {/* 상위 유사 이력서들 */}
-                          {documentModal.similarityData.top_similar.length > 0 && (
-                            <DocumentCard>
-                              <DocumentCardTitle>🎯 가장 유사한 자소서 TOP 5</DocumentCardTitle>
-                              {documentModal.similarityData.top_similar.map((similar, index) => (
-                                <div key={similar.resume_id} style={{
-                                  padding: '12px',
-                                  margin: '8px 0',
-                                  border: `2px solid ${similar.is_high_similarity ? '#ff4757' : similar.is_moderate_similarity ? '#ffa502' : '#2ed573'}`,
-                                  borderRadius: '8px',
-                                  backgroundColor: similar.is_high_similarity ? '#fff5f5' : similar.is_moderate_similarity ? '#fffbf0' : '#f0fff4',
-                                  cursor: 'pointer',
-                                  transition: 'all 0.2s ease'
-                                }}
-                                onClick={() => handleSimilarApplicantClick(similar)}
-                                onMouseEnter={(e) => {
-                                  e.target.style.transform = 'translateY(-2px)';
-                                  e.target.style.boxShadow = '0 4px 12px rgba(0,0,0,0.15)';
-                                }}
-                                onMouseLeave={(e) => {
-                                  e.target.style.transform = 'translateY(0)';
-                                  e.target.style.boxShadow = 'none';
-                                }}>
-                                  <div style={{fontWeight: 'bold', marginBottom: '4px'}}>
-                                    #{index + 1}. {similar.applicant_name} ({similar.position})
-                                  </div>
-                                  <div style={{fontSize: '14px', color: '#666'}}>
-                                    전체 유사도: <strong style={{color: similar.is_high_similarity ? '#ff4757' : similar.is_moderate_similarity ? '#ffa502' : '#2ed573'}}>
-                                      {(similar.overall_similarity * 100).toFixed(1)}%
-                                    </strong>
-                                  </div>
-                                  <div style={{fontSize: '12px', color: '#888', marginTop: '4px'}}>
-                                    전체 유사도: {(similar.overall_similarity * 100).toFixed(1)}%
-                                  </div>
-
-                                  {/* LLM 분석 결과 추가 */}
-                                  {similar.llm_analysis && similar.llm_analysis.success && (
-                                    <div style={{
-                                      marginTop: '8px',
-                                      padding: '8px',
-                                      backgroundColor: '#f0f8ff',
-                                      borderLeft: '4px solid #4a90e2',
-                                      borderRadius: '4px'
-                                    }}>
-                                      <div style={{fontSize: '11px', fontWeight: 'bold', color: '#4a90e2', marginBottom: '4px'}}>
-                                        🤖 AI 분석
-                                      </div>
-                                      <div style={{fontSize: '12px', color: '#333', lineHeight: '1.4', whiteSpace: 'pre-line'}}>
-                                        {similar.llm_analysis.analysis}
-                                      </div>
-                                    </div>
-                                  )}
-
-                                  {similar.llm_analysis && !similar.llm_analysis.success && (
-                                    <div style={{
-                                      marginTop: '8px',
-                                      padding: '8px',
-                                      backgroundColor: '#fff0f0',
-                                      borderLeft: '4px solid #e74c3c',
-                                      borderRadius: '4px'
-                                    }}>
-                                      <div style={{fontSize: '11px', color: '#e74c3c'}}>
-                                        AI 분석 실패: {similar.llm_analysis.error || 'Unknown error'}
-                                      </div>
-                                    </div>
-                                  )}
-                                </div>
-                              ))}
-                            </DocumentCard>
-                          )}
-                        </>
+                        </DocumentCard>
                       )}
-
-                      {!documentModal.isLoadingSimilarity && !documentModal.similarityData && (
+                      
+                      {!documentModal.isLoadingPlagiarism && !documentModal.plagiarismData && (
                         <DocumentCard>
                           <DocumentCardText>
-                            유사도 체크 중 오류가 발생했습니다. 다시 시도해주세요.
+                            자소서 모달 열기와 동시에 자동으로 표절 의심도 분석이 시작됩니다.
                           </DocumentCardText>
                         </DocumentCard>
                       )}
@@ -7672,6 +8142,73 @@ const CardActionButton = styled.button`
     color: var(--primary-color);
     transform: translateY(-1px);
   }
+`;
+
+// 유사인재 추천 섹션 스타일
+const SimilarTalentSection = styled.div`
+  margin-top: 24px;
+  padding: 20px;
+  background: linear-gradient(135deg, #f8faff 0%, #f0f7ff 100%);
+  border-radius: var(--border-radius);
+  border: 1px solid #e3f2fd;
+`;
+
+const LoadingMessage = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-top: 16px;
+`;
+
+const RecommendationSpinner = styled.div`
+  width: 16px;
+  height: 16px;
+  border: 2px solid #e3f2fd;
+  border-top: 2px solid var(--primary-color);
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+
+const RecommendationContent = styled.div`
+  margin-top: 16px;
+`;
+
+const RecommendationMessage = styled.p`
+  color: var(--text-primary);
+  font-size: 14px;
+  margin: 0 0 12px 0;
+  font-weight: 500;
+`;
+
+const RecommendationDetails = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+`;
+
+const RecommendationTime = styled.span`
+  color: var(--text-secondary);
+  font-size: 12px;
+`;
+
+const ErrorMessage = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #dc3545;
+  font-size: 14px;
+  margin-top: 16px;
+  padding: 12px;
+  background: #fff5f5;
+  border: 1px solid #fed7d7;
+  border-radius: 6px;
 `;
 
 export default ApplicantManagement;

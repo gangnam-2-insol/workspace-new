@@ -657,7 +657,9 @@ class KeywordSearchService:
             
             # MongoDB에서 상세 정보 조회
             resume_ids = [ObjectId(hit["_source"]["resume_id"]) for hit in hits]
-            resumes = {str(r["_id"]): r for r in collection.find({"_id": {"$in": resume_ids}})}
+            resume_cursor = collection.find({"_id": {"$in": resume_ids}})
+            resume_list = await resume_cursor.to_list(length=None)
+            resumes = {str(r["_id"]): r for r in resume_list}
             
             # 결과 매핑
             results = []

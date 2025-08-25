@@ -15,7 +15,6 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 
 # chatbot 라우터 추가
-from modules.data.services.github import router as github_router
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel
 from routers.applicants import get_mongo_service, get_similarity_service
@@ -106,7 +105,6 @@ async def add_charset_header(request, call_next):
     return response
 
 # 라우터 등록
-app.include_router(github_router, prefix="/api", tags=["github"])
 app.include_router(upload_router, tags=["upload"])
 app.include_router(pick_chatbot_router, prefix="/api/pick-chatbot", tags=["pick-chatbot"])
 app.include_router(integrated_ocr_router, prefix="/api/integrated-ocr", tags=["integrated-ocr"])
@@ -1004,10 +1002,14 @@ async def check_resume_similarity(resume_id: str):
             if overall_similarity >= 0.3:  # 30% 이상 유사할 때만 LLM 분석
                 try:
                     print(f"[API] LLM 분석 시작 - 유사도: {overall_similarity:.3f}")
-                    llm_analysis = await similarity_service.llm_service.analyze_similarity_reasoning(
-                        original_resume=current_resume,
-                        similar_resume=other_resume,
-                        similarity_score=overall_similarity
+                    llm_analysis = await similarity_service.llm_service.analyze_plagiarism_suspicion(
+                        similarity_score=overall_similarity,
+                        similar_documents=[{
+                            "similarity_score": overall_similarity,
+                            "name": other_resume.get("name", "Unknown"),
+                            "basic_info_names": other_resume.get("name", "Unknown")
+                        }],
+                        document_type="resume"
                     )
                     print(f"[API] LLM 분석 완료")
                 except Exception as llm_error:
@@ -1132,9 +1134,23 @@ async def check_coverletter_similarity(
             if not cover_letter:
                 raise HTTPException(status_code=404, detail="자소서를 찾을 수 없습니다")
 
-            cover_letter_text = cover_letter.get("content", "")
+            # 자소서 내용 추출 (content 또는 extracted_text 필드에서)
+            cover_letter_text = cover_letter.get("content", "") or cover_letter.get("extracted_text", "")
             if not cover_letter_text:
-                raise HTTPException(status_code=404, detail="자소서 내용이 없습니다")
+                print(f"[WARNING] 자소서 내용이 비어있음 - applicant_id: {applicant_id}")
+                return {
+                    "status": "success",
+                    "applicant_id": applicant_id,
+                    "plagiarism_result": {
+                        "status": "no_content",
+                        "message": "자소서 내용이 없어 표절 검사를 수행할 수 없습니다.",
+                        "similar_count": 0,
+                        "suspicion_level": "UNKNOWN"
+                    },
+                    "message": "자소서 내용이 없습니다"
+                }
+            
+            print(f"[INFO] 자소서 내용 발견 - 길이: {len(cover_letter_text)}자")
 
         except HTTPException:
             raise
@@ -1146,9 +1162,10 @@ async def check_coverletter_similarity(
         similarity_service = get_similarity_service()
 
         # 5. 자소서 표절체크 수행 (청킹 기반 유사도 검색 사용)
+        # cover_letter_id를 사용하여 cover_letters 컬렉션에서 검색
         result = await similarity_service.find_similar_documents_by_chunks(
-            document_id=applicant_id,
-            collection=mongo_service.db.applicants,
+            document_id=cover_letter_id,
+            collection=db.cover_letters,
             document_type="cover_letter",
             limit=10
         )

@@ -694,7 +694,7 @@ const CoverLetterValidation = () => {
           talentFit: Math.floor(Math.random() * 30) + 70, // 70-100%
           overallScore: Math.floor(Math.random() * 20) + 75, // 75-95%
           analysis: {
-            plagiarism: '표절 검사 결과 양호합니다. 원본성 있는 내용으로 구성되어 있습니다.',
+            plagiarism: '표절 의심도 분석 결과 양호합니다. 원본성 있는 내용으로 구성되어 있습니다.',
             jobFit: '지원 직무와 높은 적합성을 보입니다. 관련 경험과 기술이 잘 드러나 있습니다.',
             talentFit: '회사 인재상과 잘 맞습니다. 성장 의지와 협업 능력이 돋보입니다.',
             overall: '전반적으로 우수한 자소서입니다. 개선 여지가 있지만 충분히 경쟁력 있는 내용입니다.'
@@ -987,7 +987,7 @@ const CoverLetterValidation = () => {
             <SectionTitle>{result.name} - {result.position}</SectionTitle>
             <DetailGrid>
               <DetailItem>
-                <DetailLabel>표절률</DetailLabel>
+                <DetailLabel>표절 의심도</DetailLabel>
                 <DetailValue style={{ color: result.plagiarismRate < 15 ? '#10b981' : '#f59e0b' }}>
                   {result.plagiarismRate}%
                 </DetailValue>
@@ -1018,7 +1018,7 @@ const CoverLetterValidation = () => {
             <DetailSection>
               <SectionTitle>상세 분석</SectionTitle>
               <DetailText>
-                <strong>표절 검사:</strong> {result.analysis.plagiarism}
+                <strong>표절 의심도:</strong> {result.analysis.plagiarism}
               </DetailText>
               <DetailText>
                 <strong>직무 적합성:</strong> {result.analysis.jobFit}
@@ -1104,7 +1104,7 @@ const CoverLetterValidation = () => {
                   <MetricValue>{selectedCoverLetter.grammar}%</MetricValue>
                 </MetricItem>
                 <MetricItem>
-                  <MetricLabel>표절률</MetricLabel>
+                  <MetricLabel>표절 의심도</MetricLabel>
                   <MetricBar>
                     <MetricFill score={selectedCoverLetter.plagiarism} />
                   </MetricBar>
@@ -1136,7 +1136,7 @@ const CoverLetterValidation = () => {
             </DetailSection>
 
             <DetailSection>
-              <SectionTitle>표절 탐지 결과</SectionTitle>
+              <SectionTitle>표절 의심도 분석 결과</SectionTitle>
               <PlagiarismSection score={selectedCoverLetter.plagiarismDetails.score}>
                 <PlagiarismScore score={selectedCoverLetter.plagiarismDetails.score}>
                   {selectedCoverLetter.plagiarismDetails.score}% - {selectedCoverLetter.plagiarismDetails.status}
