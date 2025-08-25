@@ -7,6 +7,10 @@ from datetime import datetime, timedelta
 from typing import Any, Dict, List, Optional
 
 import uvicorn
+from dotenv import load_dotenv
+
+# .env 파일 로드 (가장 먼저 실행)
+load_dotenv()
 from bson import ObjectId
 from chatbot.routers.chatbot_router import router as chatbot_router
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -15,7 +19,12 @@ from fastapi.middleware.trustedhost import TrustedHostMiddleware
 from fastapi.responses import JSONResponse
 
 # chatbot 라우터 추가
-from modules.data.services.github import router as github_router
+try:
+    from github import router as github_router
+    print("✅ GitHub 라우터 import 성공")
+except ImportError as e:
+    print(f"⚠️ GitHub 모듈 import 오류: {e}")
+    github_router = None
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel
 from routers.applicants import get_mongo_service, get_similarity_service
@@ -26,6 +35,14 @@ from routers.pdf_ocr import router as pdf_ocr_router
 from routers.pick_chatbot import router as pick_chatbot_router
 from routers.sample_data import router as sample_data_router
 from routers.upload import router as upload_router
+
+# 회사 인재상 라우터 추가
+try:
+    from routers.company_culture import router as company_culture_router
+    print("✅ 회사 인재상 라우터 import 성공")
+except ImportError as e:
+    print(f"⚠️ 회사 인재상 모듈 import 오류: {e}")
+    company_culture_router = None
 
 # 모듈화된 라우터 추가
 try:
@@ -106,7 +123,11 @@ async def add_charset_header(request, call_next):
     return response
 
 # 라우터 등록
-app.include_router(github_router, prefix="/api", tags=["github"])
+if github_router:
+    app.include_router(github_router, prefix="/api", tags=["github"])
+    print("✅ GitHub 라우터 등록 완료")
+else:
+    print("❌ GitHub 라우터 등록 실패")
 app.include_router(upload_router, tags=["upload"])
 app.include_router(pick_chatbot_router, prefix="/api/pick-chatbot", tags=["pick-chatbot"])
 app.include_router(integrated_ocr_router, prefix="/api/integrated-ocr", tags=["integrated-ocr"])
@@ -115,6 +136,13 @@ app.include_router(job_posting_router, tags=["job-postings"])
 app.include_router(applicants_router, tags=["applicants"])
 app.include_router(sample_data_router, tags=["sample-data"])
 app.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
+
+# 회사 인재상 라우터 등록
+if company_culture_router:
+    app.include_router(company_culture_router, tags=["company-culture"])
+    print("✅ 회사 인재상 라우터 등록 완료")
+else:
+    print("❌ 회사 인재상 라우터 등록 실패")
 
 # 모듈화된 라우터 등록
 print("\n🔧 모듈화된 라우터 등록 시작...")
@@ -166,12 +194,31 @@ PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "resume-vectors")
 
 # 서비스 초기화
-embedding_service = EmbeddingService()
-vector_service = VectorService(
-    api_key=PINECONE_API_KEY or "dummy-key",  # API 키가 없어도 서버 시작은 가능
-    index_name=PINECONE_INDEX_NAME
-)
-similarity_service = SimilarityService(embedding_service, vector_service)
+try:
+    embedding_service = EmbeddingService()
+    print("✅ Embedding 서비스 초기화 성공")
+except Exception as e:
+    print(f"⚠️ Embedding 서비스 초기화 실패: {e}")
+    embedding_service = None
+
+# VectorService 선택적 초기화
+try:
+    vector_service = VectorService(
+        api_key=PINECONE_API_KEY or "dummy-key",
+        index_name=PINECONE_INDEX_NAME
+    )
+    print("✅ Pinecone 벡터 서비스 초기화 성공")
+except Exception as e:
+    print(f"⚠️ Pinecone 벡터 서비스 초기화 실패: {e}")
+    vector_service = None
+
+# SimilarityService 초기화 (vector_service가 None일 수 있음)
+try:
+    similarity_service = SimilarityService(embedding_service, vector_service)
+    print("✅ 유사도 서비스 초기화 성공")
+except Exception as e:
+    print(f"⚠️ 유사도 서비스 초기화 실패: {e}")
+    similarity_service = None
 
 # Pydantic 모델들
 class User(BaseModel):

@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
-import { 
-  FiPlus, 
-  FiEdit3, 
-  FiTrash2, 
-  FiEye, 
+import {
+  FiPlus,
+  FiEdit3,
+  FiTrash2,
+  FiEye,
   FiCalendar,
   FiMapPin,
   FiDollarSign,
@@ -24,6 +24,7 @@ import ImageBasedRegistration from './ImageBasedRegistration';
 import TemplateModal from './TemplateModal';
 
 import jobPostingApi from '../../services/jobPostingApi';
+import companyCultureApi from '../../services/companyCultureApi';
 
 const Container = styled.div`
   max-width: 1200px;
@@ -435,6 +436,11 @@ const JobPostingRegistration = () => {
   const [templates, setTemplates] = useState([]);
   const [autoFillData, setAutoFillData] = useState(null);
 
+  // 인재상 관련 상태
+  const [cultures, setCultures] = useState([]);
+  const [defaultCulture, setDefaultCulture] = useState(null);
+  const [loadingCultures, setLoadingCultures] = useState(false);
+
   const [formData, setFormData] = useState({
     title: '',
     company: '',
@@ -457,10 +463,12 @@ const JobPostingRegistration = () => {
     require_motivation: false,
     require_career_history: false,
     max_file_size_mb: 50,
-    allowed_file_types: ['pdf', 'doc', 'docx']
+    allowed_file_types: ['pdf', 'doc', 'docx'],
+    // 인재상 선택 필드 추가
+    selected_culture_id: null
   });
 
-      // 챗봇 액션 이벤트 리스너
+  // 챗봇 액션 이벤트 리스너
     useEffect(() => {
       // URL 파라미터에서 자동입력 데이터 확인
       const urlParams = new URLSearchParams(window.location.search);
@@ -520,15 +528,15 @@ const JobPostingRegistration = () => {
       console.log('=== AI 도우미 시작됨 ===');
       console.log('현재 상태: showTextRegistration =', showTextRegistration);
       console.log('이벤트 리스너가 제대로 등록되었는지 확인');
-      
+
       setShowTextRegistration(true);
       console.log('텍스트 기반 등록 모달 열기 완료 - showTextRegistration = true로 설정됨');
-      
+
       // 즉시 상태 확인
       setTimeout(() => {
         console.log('1초 후 상태 확인: showTextRegistration =', showTextRegistration);
       }, 1000);
-      
+
       // 1초 후 자동으로 AI 챗봇 시작
       setTimeout(() => {
         console.log('1초 타이머 완료 - startTextBasedAIChatbot 이벤트 발생');
@@ -542,8 +550,8 @@ const JobPostingRegistration = () => {
       console.log('부서 업데이트:', newDepartment);
       // 현재 열린 모달이나 폼에서 부서 정보 업데이트
       if (showTextRegistration) {
-        window.dispatchEvent(new CustomEvent('updateTextFormDepartment', { 
-          detail: { value: newDepartment } 
+        window.dispatchEvent(new CustomEvent('updateTextFormDepartment', {
+          detail: { value: newDepartment }
         }));
       }
     };
@@ -553,8 +561,8 @@ const JobPostingRegistration = () => {
       console.log('인원 업데이트:', newHeadcount);
       // 현재 열린 모달이나 폼에서 인원 정보 업데이트
       if (showTextRegistration) {
-        window.dispatchEvent(new CustomEvent('updateTextFormHeadcount', { 
-          detail: { value: newHeadcount } 
+        window.dispatchEvent(new CustomEvent('updateTextFormHeadcount', {
+          detail: { value: newHeadcount }
         }));
       }
     };
@@ -564,8 +572,8 @@ const JobPostingRegistration = () => {
       console.log('급여 업데이트:', newSalary);
       // 현재 열린 모달이나 폼에서 급여 정보 업데이트
       if (showTextRegistration) {
-        window.dispatchEvent(new CustomEvent('updateTextFormSalary', { 
-          detail: { value: newSalary } 
+        window.dispatchEvent(new CustomEvent('updateTextFormSalary', {
+          detail: { value: newSalary }
         }));
       }
     };
@@ -575,8 +583,8 @@ const JobPostingRegistration = () => {
       console.log('업무 내용 업데이트:', newWorkContent);
       // 현재 열린 모달이나 폼에서 업무 내용 업데이트
       if (showTextRegistration) {
-        window.dispatchEvent(new CustomEvent('updateTextFormWorkContent', { 
-          detail: { value: newWorkContent } 
+        window.dispatchEvent(new CustomEvent('updateTextFormWorkContent', {
+          detail: { value: newWorkContent }
         }));
       }
     };
@@ -595,7 +603,7 @@ const JobPostingRegistration = () => {
     window.addEventListener('startImageBasedFlow', handleStartImageBasedFlow);
     window.addEventListener('startAIAssistant', handleStartAIAssistant);
 
-    
+
     // 채팅봇 수정 명령 이벤트 리스너 등록
     window.addEventListener('updateDepartment', handleUpdateDepartment);
     window.addEventListener('updateHeadcount', handleUpdateHeadcount);
@@ -613,7 +621,7 @@ const JobPostingRegistration = () => {
       window.removeEventListener('startImageBasedFlow', handleStartImageBasedFlow);
       window.removeEventListener('startAIAssistant', handleStartAIAssistant);
 
-      
+
       // 채팅봇 수정 명령 이벤트 리스너 제거
       window.removeEventListener('updateDepartment', handleUpdateDepartment);
       window.removeEventListener('updateHeadcount', handleUpdateHeadcount);
@@ -634,21 +642,21 @@ const JobPostingRegistration = () => {
 
     setSelectedJob(null);
     setModalMode('view');
-    
+
     // 플로팅 챗봇 다시 표시
     const floatingChatbot = document.querySelector('.floating-chatbot');
     if (floatingChatbot) {
       floatingChatbot.style.display = 'flex';
     }
     window.dispatchEvent(new CustomEvent('showFloatingChatbot'));
-    
+
     console.log('=== 모든 모달창 초기화 완료 ===');
   };
 
   const [jobPostings, setJobPostings] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+
   // 검색 및 필터링 상태
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
@@ -673,9 +681,57 @@ const JobPostingRegistration = () => {
     }
   };
 
+  // 인재상 데이터 로드
+  useEffect(() => {
+    loadCultures();
+  }, []);
+
+  const loadCultures = async () => {
+    try {
+      setLoadingCultures(true);
+
+      // 모든 인재상 데이터 로드
+      const culturesData = await companyCultureApi.getAllCultures(true);
+      setCultures(culturesData);
+
+      // 기본 인재상 데이터 로드 (에러 처리 포함)
+      let defaultCultureData = null;
+      try {
+        defaultCultureData = await companyCultureApi.getDefaultCulture();
+        setDefaultCulture(defaultCultureData);
+      } catch (error) {
+        console.log('기본 인재상이 설정되지 않았습니다:', error.message);
+        setDefaultCulture(null);
+      }
+
+      // 기본 인재상이 있으면 formData에 설정
+      if (defaultCultureData) {
+        setFormData(prev => ({
+          ...prev,
+          selected_culture_id: defaultCultureData.id
+        }));
+        console.log('기본 인재상이 formData에 설정됨:', defaultCultureData.id);
+      } else {
+        // 기본 인재상이 없으면 첫 번째 활성 인재상을 기본값으로 설정
+        if (culturesData && culturesData.length > 0) {
+          const firstCulture = culturesData[0];
+          setFormData(prev => ({
+            ...prev,
+            selected_culture_id: firstCulture.id
+          }));
+          console.log('첫 번째 인재상이 formData에 설정됨:', firstCulture.id);
+        }
+      }
+    } catch (error) {
+      console.error('인재상 로드 실패:', error);
+    } finally {
+      setLoadingCultures(false);
+    }
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    
+
     // 급여 필드에 대한 특별 처리
     if (name === 'salary') {
       // 입력값에서 숫자만 추출 (콤마, 하이픈, 틸드 포함)
@@ -691,21 +747,21 @@ const JobPostingRegistration = () => {
       }));
     }
   };
-  
+
   // 급여를 표시용으로 포맷하는 함수
   const formatSalaryDisplay = (salaryValue) => {
     if (!salaryValue) return '';
-    
+
     // 이미 "만원"이 포함되어 있으면 그대로 반환
     if (salaryValue.includes('만원') || salaryValue.includes('협의') || salaryValue.includes('면접')) {
       return salaryValue;
     }
-    
+
     // 숫자만 있는 경우 "만원" 추가
     if (/^\d+([,\d~\-]*)?$/.test(salaryValue.trim())) {
       return `${salaryValue}만원`;
     }
-    
+
     return salaryValue;
   };
 
@@ -736,7 +792,9 @@ const JobPostingRegistration = () => {
         require_motivation: false,
         require_career_history: false,
         max_file_size_mb: 50,
-        allowed_file_types: ['pdf', 'doc', 'docx']
+        allowed_file_types: ['pdf', 'doc', 'docx'],
+        // 인재상 선택 필드 초기화
+        selected_culture_id: null
       });
       setShowForm(false);
     } catch (err) {
@@ -759,8 +817,8 @@ const JobPostingRegistration = () => {
   const handlePublish = async (id) => {
     try {
       await jobPostingApi.publishJobPosting(id);
-      setJobPostings(prev => 
-        prev.map(job => 
+      setJobPostings(prev =>
+        prev.map(job =>
           job.id === id ? { ...job, status: 'published' } : job
         )
       );
@@ -786,8 +844,8 @@ const JobPostingRegistration = () => {
     try {
       const { id, ...updateData } = updatedJob;
       await jobPostingApi.updateJobPosting(id, updateData);
-      setJobPostings(prev => 
-        prev.map(job => 
+      setJobPostings(prev =>
+        prev.map(job =>
           job.id === updatedJob.id ? updatedJob : job
         )
       );
@@ -802,7 +860,7 @@ const JobPostingRegistration = () => {
 
   const handleTextRegistrationComplete = async (data) => {
     console.log('TextBasedRegistration 완료 데이터:', data);
-    
+
     try {
       const jobData = {
         title: data.title,
@@ -815,13 +873,15 @@ const JobPostingRegistration = () => {
         description: data.mainDuties || data.description || '웹개발', // mainDuties를 description으로 매핑
         requirements: data.requirements || 'JavaScript, React 실무 경험',
         benefits: data.benefits || '주말보장, 재택가능',
-        deadline: data.deadline || '9월 3일까지'
+        deadline: data.deadline || '9월 3일까지',
+        // 인재상 선택 필드 추가
+        selected_culture_id: data.selected_culture_id || null
       };
-      
+
       console.log('생성할 채용공고 데이터:', jobData);
       const newJob = await jobPostingApi.createJobPosting(jobData);
       setJobPostings(prev => [newJob, ...prev]);
-      
+
       // 모든 모달창 초기화
       resetAllModals();
     } catch (err) {
@@ -832,7 +892,7 @@ const JobPostingRegistration = () => {
 
   const handleImageRegistrationComplete = async (data) => {
     console.log('ImageBasedRegistration 완료 데이터:', data);
-    
+
     try {
       const jobData = {
         title: data.title,
@@ -845,13 +905,15 @@ const JobPostingRegistration = () => {
         description: data.mainDuties || data.description || '웹개발',
         requirements: data.requirements || 'JavaScript, React 실무 경험',
         benefits: data.benefits || '주말보장, 재택가능',
-        deadline: data.deadline || '9월 3일까지'
+        deadline: data.deadline || '9월 3일까지',
+        // 인재상 선택 필드 추가
+        selected_culture_id: data.selected_culture_id || null
       };
-      
+
       console.log('생성할 채용공고 데이터:', jobData);
       const newJob = await jobPostingApi.createJobPosting(jobData);
       setJobPostings(prev => [newJob, ...prev]);
-      
+
       // 모든 모달창 초기화
       resetAllModals();
     } catch (err) {
@@ -896,10 +958,10 @@ const JobPostingRegistration = () => {
     const matchesSearch = job.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          job.company.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          job.location.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     const matchesStatus = statusFilter === 'all' || job.status === statusFilter;
     const matchesCompany = !companyFilter || job.company.toLowerCase().includes(companyFilter.toLowerCase());
-    
+
     return matchesSearch && matchesStatus && matchesCompany;
   });
 
@@ -1015,9 +1077,9 @@ const JobPostingRegistration = () => {
                   )}
                 </div>
                 {formData.salary && (
-                  <div style={{ 
-                    fontSize: '0.8em', 
-                    color: '#667eea', 
+                  <div style={{
+                    fontSize: '0.8em',
+                    color: '#667eea',
                     marginTop: '4px',
                     fontWeight: 'bold'
                   }}>
@@ -1046,6 +1108,42 @@ const JobPostingRegistration = () => {
                   onChange={handleInputChange}
                   placeholder="예: 대졸 이상"
                 />
+              </FormGroup>
+
+              <FormGroup>
+                <Label>회사 인재상</Label>
+                <Select
+                  name="selected_culture_id"
+                  value={formData.selected_culture_id || ''}
+                  onChange={handleInputChange}
+                >
+                  <option value="">기본 인재상 사용</option>
+                  {cultures.map(culture => (
+                    <option key={culture.id} value={culture.id}>
+                      {culture.name} {culture.is_default ? '(기본)' : ''}
+                    </option>
+                  ))}
+                </Select>
+                {formData.selected_culture_id && (
+                  <div style={{
+                    fontSize: '0.8em',
+                    color: '#667eea',
+                    marginTop: '4px',
+                    fontWeight: 'bold'
+                  }}>
+                    ✅ 선택됨: {cultures.find(c => c.id === formData.selected_culture_id)?.name}
+                  </div>
+                )}
+                {!formData.selected_culture_id && defaultCulture && (
+                  <div style={{
+                    fontSize: '0.8em',
+                    color: '#28a745',
+                    marginTop: '4px',
+                    fontWeight: 'bold'
+                  }}>
+                    ✅ 기본 인재상: {defaultCulture.name}
+                  </div>
+                )}
               </FormGroup>
 
               <FormGroup>
@@ -1091,20 +1189,20 @@ const JobPostingRegistration = () => {
             </FormGroup>
 
             {/* 지원자 요구 항목 섹션 */}
-            <div style={{ 
-              borderTop: '2px solid #e5e7eb', 
-              marginTop: '32px', 
-              paddingTop: '24px' 
+            <div style={{
+              borderTop: '2px solid #e5e7eb',
+              marginTop: '32px',
+              paddingTop: '24px'
             }}>
-              <h3 style={{ 
-                marginBottom: '24px', 
-                color: 'var(--text-primary)', 
+              <h3 style={{
+                marginBottom: '24px',
+                color: 'var(--text-primary)',
                 fontSize: '18px',
                 fontWeight: '600'
               }}>
                 📋 지원자 요구 항목
               </h3>
-              
+
               <FormGrid>
                 <FormGroup>
                   <Label>필수 제출 서류 *</Label>
@@ -1114,7 +1212,7 @@ const JobPostingRegistration = () => {
                         type="checkbox"
                         checked={formData.required_documents.includes('resume')}
                         onChange={(e) => {
-                          const newDocs = e.target.checked 
+                          const newDocs = e.target.checked
                             ? [...formData.required_documents, 'resume']
                             : formData.required_documents.filter(doc => doc !== 'resume');
                           setFormData(prev => ({ ...prev, required_documents: newDocs }));
@@ -1127,7 +1225,7 @@ const JobPostingRegistration = () => {
                         type="checkbox"
                         checked={formData.required_documents.includes('cover_letter')}
                         onChange={(e) => {
-                          const newDocs = e.target.checked 
+                          const newDocs = e.target.checked
                             ? [...formData.required_documents, 'cover_letter']
                             : formData.required_documents.filter(doc => doc !== 'cover_letter');
                           setFormData(prev => ({ ...prev, required_documents: newDocs }));
@@ -1140,7 +1238,7 @@ const JobPostingRegistration = () => {
                         type="checkbox"
                         checked={formData.required_documents.includes('portfolio')}
                         onChange={(e) => {
-                          const newDocs = e.target.checked 
+                          const newDocs = e.target.checked
                             ? [...formData.required_documents, 'portfolio']
                             : formData.required_documents.filter(doc => doc !== 'portfolio');
                           setFormData(prev => ({ ...prev, required_documents: newDocs }));
@@ -1184,9 +1282,9 @@ const JobPostingRegistration = () => {
                       <input
                         type="checkbox"
                         checked={formData.require_portfolio_pdf}
-                        onChange={(e) => setFormData(prev => ({ 
-                          ...prev, 
-                          require_portfolio_pdf: e.target.checked 
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          require_portfolio_pdf: e.target.checked
                         }))}
                       />
                       포트폴리오 PDF 제출 필수
@@ -1195,9 +1293,9 @@ const JobPostingRegistration = () => {
                       <input
                         type="checkbox"
                         checked={formData.require_github_url}
-                        onChange={(e) => setFormData(prev => ({ 
-                          ...prev, 
-                          require_github_url: e.target.checked 
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          require_github_url: e.target.checked
                         }))}
                       />
                       GitHub URL 제출 필수
@@ -1212,9 +1310,9 @@ const JobPostingRegistration = () => {
                       <input
                         type="checkbox"
                         checked={formData.require_growth_background}
-                        onChange={(e) => setFormData(prev => ({ 
-                          ...prev, 
-                          require_growth_background: e.target.checked 
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          require_growth_background: e.target.checked
                         }))}
                       />
                       성장 배경 작성 필수
@@ -1223,9 +1321,9 @@ const JobPostingRegistration = () => {
                       <input
                         type="checkbox"
                         checked={formData.require_motivation}
-                        onChange={(e) => setFormData(prev => ({ 
-                          ...prev, 
-                          require_motivation: e.target.checked 
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          require_motivation: e.target.checked
                         }))}
                       />
                       지원 동기 작성 필수
@@ -1234,9 +1332,9 @@ const JobPostingRegistration = () => {
                       <input
                         type="checkbox"
                         checked={formData.require_career_history}
-                        onChange={(e) => setFormData(prev => ({ 
-                          ...prev, 
-                          require_career_history: e.target.checked 
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          require_career_history: e.target.checked
                         }))}
                       />
                       경력 사항 작성 필수
@@ -1252,9 +1350,9 @@ const JobPostingRegistration = () => {
                       <Input
                         type="number"
                         value={formData.max_file_size_mb}
-                        onChange={(e) => setFormData(prev => ({ 
-                          ...prev, 
-                          max_file_size_mb: parseInt(e.target.value) || 50 
+                        onChange={(e) => setFormData(prev => ({
+                          ...prev,
+                          max_file_size_mb: parseInt(e.target.value) || 50
                         }))}
                         style={{ width: '100px', marginLeft: '8px' }}
                       />
@@ -1305,7 +1403,7 @@ const JobPostingRegistration = () => {
                 onChange={(e) => setSearchTerm(e.target.value)}
               />
             </FilterGroup>
-            
+
             <FilterGroup>
               <FilterLabel>상태</FilterLabel>
               <FilterSelect
@@ -1319,7 +1417,7 @@ const JobPostingRegistration = () => {
                 <option value="expired">만료됨</option>
               </FilterSelect>
             </FilterGroup>
-            
+
             <FilterGroup>
               <FilterLabel>회사명</FilterLabel>
               <SearchInput
@@ -1329,7 +1427,7 @@ const JobPostingRegistration = () => {
                 onChange={(e) => setCompanyFilter(e.target.value)}
               />
             </FilterGroup>
-            
+
             <div style={{ display: 'flex', alignItems: 'end' }}>
               <ClearFiltersButton
                 onClick={() => {
@@ -1351,10 +1449,10 @@ const JobPostingRegistration = () => {
         )}
 
         {error && (
-          <div style={{ 
-            textAlign: 'center', 
-            padding: '20px', 
-            color: '#dc3545', 
+          <div style={{
+            textAlign: 'center',
+            padding: '20px',
+            color: '#dc3545',
             backgroundColor: '#f8d7da',
             borderRadius: '8px',
             marginBottom: '20px'
@@ -1365,7 +1463,7 @@ const JobPostingRegistration = () => {
 
         {!loading && !error && filteredJobPostings.length === 0 && (
           <div style={{ textAlign: 'center', padding: '40px', color: 'var(--text-secondary)' }}>
-            {jobPostings.length === 0 
+            {jobPostings.length === 0
               ? '등록된 채용공고가 없습니다. 새로운 채용공고를 등록해보세요.'
               : '검색 조건에 맞는 채용공고가 없습니다.'
             }
@@ -1400,7 +1498,7 @@ const JobPostingRegistration = () => {
               </JobDetail>
               <JobDetail>
                 <FiDollarSign size={16} />
-                {job.salary ? 
+                {job.salary ?
                   (() => {
                     // 천 단위 구분자 제거 후 숫자 추출
                     const cleanSalary = job.salary.replace(/[,\s]/g, '');
@@ -1425,7 +1523,7 @@ const JobPostingRegistration = () => {
                       }
                     }
                     return job.salary;
-                  })() : 
+                  })() :
                   '협의'
                 }
               </JobDetail>
@@ -1452,7 +1550,7 @@ const JobPostingRegistration = () => {
                 <FiEdit3 size={14} />
                 수정
               </ActionButton>
-              <ActionButton 
+              <ActionButton
                 className={`publish ${job.status === 'published' ? 'disabled' : ''}`}
                 onClick={() => job.status === 'draft' && handlePublish(job.id)}
                 disabled={job.status === 'published'}
@@ -1508,4 +1606,4 @@ const JobPostingRegistration = () => {
   );
 };
 
-export default JobPostingRegistration; 
+export default JobPostingRegistration;
