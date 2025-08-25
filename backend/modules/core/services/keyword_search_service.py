@@ -600,16 +600,11 @@ class KeywordSearchService:
                                 "multi_match": {
                                     "query": query,
                                     "fields": [
-                                        "name^3",           # 이름에 가중치 3
-                                        "position^2",       # 직무에 가중치 2
-                                        "skills^2",         # 기술스택에 가중치 2
-                                        "department^1.5",   # 부서에 가중치 1.5
-                                        "experience",
-                                        "growth_background",
-                                        "motivation",
-                                        "career_history",
-                                        "resume_text",
-                                        "all_content"
+                                        "basic_info_names^3",  # 이름에 가중치 3
+                                        "keywords^2",          # 키워드에 가중치 2
+                                        "summary^1.5",         # 요약에 가중치 1.5
+                                        "extracted_text",      # 추출된 텍스트
+                                        "all_content"          # 전체 내용
                                     ],
                                     "type": "best_fields",
                                     "fuzziness": "AUTO"
@@ -628,15 +623,16 @@ class KeywordSearchService:
                 "highlight": {
                     "fields": {
                         "all_content": {},
-                        "name": {},
-                        "position": {},
-                        "skills": {}
+                        "basic_info_names": {},
+                        "keywords": {},
+                        "summary": {},
+                        "extracted_text": {}
                     },
                     "pre_tags": ["**"],
                     "post_tags": ["**"]
                 },
                 "size": limit,
-                "_source": ["resume_id", "name", "position", "department", "skills", "indexed_at"]
+                "_source": ["resume_id", "basic_info_names", "applicant_id", "keywords", "summary", "extracted_text", "indexed_at"]
             }
             
             # Elasticsearch 검색 실행 (8.x 버전 호환)

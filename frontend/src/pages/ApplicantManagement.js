@@ -6112,14 +6112,20 @@ const ApplicantManagement = () => {
                               const individualAnalysisSection = individualAnalysisMatch[1].trim();
                               console.log(`[DEBUG] 개별 분석 섹션:`, individualAnalysisSection);
                               
-                              // "- **[지원자명]**" 패턴으로 분할
-                              const applicantPattern = /- \*\*\[[^\]]+\]\*\*/g;
-                              const splits = individualAnalysisSection.split(applicantPattern);
+                              // "- **[지원자명]**" 또는 "- **지원자명**" 패턴으로 분할
+                              const applicantPattern = /- \*\*\[?([^\]]+)\]?\*\*/g;
+                              const matches = [...individualAnalysisSection.matchAll(applicantPattern)];
                               
-                              // index+1번째 섹션 사용 (첫 번째는 보통 빈 문자열)
-                              if (splits.length > index + 1) {
-                                const section = splits[index + 1].trim();
-                                console.log(`[DEBUG] ${index + 1}번째 섹션:`, section);
+                              if (matches.length > index) {
+                                // 현재 지원자와 다음 지원자 사이의 텍스트 추출
+                                const currentMatch = matches[index];
+                                const nextMatch = matches[index + 1];
+                                
+                                const startIndex = currentMatch.index + currentMatch[0].length;
+                                const endIndex = nextMatch ? nextMatch.index : individualAnalysisSection.length;
+                                
+                                const section = individualAnalysisSection.substring(startIndex, endIndex).trim();
+                                console.log(`[DEBUG] ${applicantName} 섹션:`, section);
                                 
                                 if (section && section.includes('핵심 공통점')) {
                                   console.log(`[DEBUG] 핵심 공통점 발견, 파싱 결과:`, section);
@@ -6128,16 +6134,36 @@ const ApplicantManagement = () => {
                               }
                             }
                             
-                            // 방법 2: 순위 기반으로 찾기 (1순위, 2순위 등)
-                            const rankPattern = new RegExp(`(${index + 1}순위\\.?\\s*[^\\n]*\\n[\\s\\S]*?)(?=${index + 2}순위\\.|$)`, 'i');
+                            // 방법 2: 순위 기반으로 찾기 (### N순위: 지원자명 형식)
+                            const rankPattern = new RegExp(`###\\s*${index + 1}순위[:\\.]?\\s*[^\\n]*\\n([\\s\\S]*?)(?=###\\s*${index + 2}순위|$)`, 'i');
                             const rankMatch = analysisText.match(rankPattern);
                             
                             if (rankMatch) {
                               const rankSection = rankMatch[1].trim();
-                              console.log(`[DEBUG] ${index + 1}순위 섹션:`, rankSection);
+                              console.log(`[DEBUG] ### ${index + 1}순위 섹션:`, rankSection);
                               
-                              if (rankSection && rankSection.includes('핵심 공통점')) {
+                              // 4가지 항목이 모두 있는지 확인
+                              const hasAllItems = rankSection.includes('핵심 공통점') && 
+                                                rankSection.includes('주요 특징') && 
+                                                rankSection.includes('추천 이유') && 
+                                                rankSection.includes('유사성 요인');
+                              
+                              if (hasAllItems) {
+                                console.log(`[DEBUG] 모든 항목 발견, ### ${index + 1}순위 파싱 결과:`, rankSection);
                                 return rankSection;
+                              }
+                            }
+                            
+                            // 방법 2-2: 일반 순위 형식 (N순위. 지원자명)
+                            const simpleRankPattern = new RegExp(`(${index + 1}순위\\.?\\s*[^\\n]*\\n[\\s\\S]*?)(?=${index + 2}순위\\.|$)`, 'i');
+                            const simpleRankMatch = analysisText.match(simpleRankPattern);
+                            
+                            if (simpleRankMatch) {
+                              const simpleRankSection = simpleRankMatch[1].trim();
+                              console.log(`[DEBUG] ${index + 1}순위 섹션:`, simpleRankSection);
+                              
+                              if (simpleRankSection && simpleRankSection.includes('핵심 공통점')) {
+                                return simpleRankSection;
                               }
                             }
                             
@@ -6260,16 +6286,35 @@ const ApplicantManagement = () => {
                                   }}>
                                     {applicant.position || 'N/A'} • {applicant.email || 'N/A'}
                                   </p>
-                                  <p style={{ 
-                                    margin: '0', 
-                                    fontSize: '12px', 
-                                    color: '#718096'
-                                  }}>
-                                    유사도: {talent.final_score ? `${(talent.final_score * 100).toFixed(1)}%` : 'N/A'}
-                                  </p>
+                                </div>
+                                <div style={{
+                                  background: '#22c55e',
+                                  color: 'white',
+                                  padding: '6px 12px',
+                                  borderRadius: '20px',
+                                  fontSize: '12px',
+                                  fontWeight: '600',
+                                  minWidth: '60px',
+                                  textAlign: 'center'
+                                }}>
+                                  {talent.final_score ? `${(talent.final_score * 100).toFixed(1)}%` : 'N/A'}
                                 </div>
                               </div>
                               
+                              {/* AI 유사인재 추천 이유 헤더 */}
+                              <div style={{
+                                background: '#f8fafc',
+                                border: '1px solid #e2e8f0',
+                                borderRadius: '6px',
+                                padding: '8px 12px',
+                                margin: '0 0 12px 0',
+                                fontSize: '13px',
+                                fontWeight: '600',
+                                color: '#374151'
+                              }}>
+                                🤖 AI 기반 유사인재 추천 이유
+                              </div>
+
                               <div style={{
                                 fontSize: '13px',
                                 color: '#475569',
@@ -6730,7 +6775,27 @@ const ApplicantManagement = () => {
                             }}>
                               {documentModal.plagiarismData.suspicion_level || 'UNKNOWN'}
                             </span>
+                            {documentModal.plagiarismData.suspicion_score_percent !== undefined && (
+                              <span style={{ fontWeight: '700', marginLeft: '4px' }}>
+                                (유사도 {documentModal.plagiarismData.suspicion_score_percent}%)
+                              </span>
+                            )}
                           </DocumentCardTitle>
+                          
+                          {/* AI 기반 표절 의심도 분석 이유 헤더 */}
+                          <div style={{
+                            background: '#f8fafc',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: '6px',
+                            padding: '8px 12px',
+                            margin: '12px 0',
+                            fontSize: '13px',
+                            fontWeight: '600',
+                            color: '#374151'
+                          }}>
+                            🤖 AI 기반 표절 의심도 분석 이유
+                          </div>
+                          
                           <DocumentCardText>
                             {documentModal.plagiarismData.analysis || '분석 결과 없음'}
                           </DocumentCardText>
