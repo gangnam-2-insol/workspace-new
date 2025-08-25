@@ -1115,15 +1115,7 @@ const ResumeModal = ({ isOpen, onClose, applicant, onViewSummary }) => {
                       </InfoContent>
                     </InfoItem>
                     
-                    <InfoItem>
-                      <InfoIcon>
-                        <FiMapPin size={16} />
-                      </InfoIcon>
-                      <InfoContent>
-                        <InfoLabel>부서</InfoLabel>
-                        <InfoValue>{applicant.department || '정보 없음'}</InfoValue>
-                      </InfoContent>
-                    </InfoItem>
+
                     
                     <InfoItem>
                       <InfoIcon>
