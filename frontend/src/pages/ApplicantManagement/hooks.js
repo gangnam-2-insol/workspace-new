@@ -155,7 +155,6 @@ export const useApplicantFilter = (applicants) => {
       return (
         applicant.name?.toLowerCase().includes(searchLower) ||
         applicant.position?.toLowerCase().includes(searchLower) ||
-        applicant.department?.toLowerCase().includes(searchLower) ||
         applicant.skills?.toLowerCase().includes(searchLower)
       );
     });
