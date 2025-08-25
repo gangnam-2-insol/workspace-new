@@ -5596,10 +5596,6 @@ const ApplicantManagement = () => {
                     <ProfileValue>{selectedApplicant.experience}</ProfileValue>
                   </ProfileItem>
                   <ProfileItem>
-                    <ProfileLabel>희망부서</ProfileLabel>
-                    <ProfileValue>{selectedApplicant.department}</ProfileValue>
-                  </ProfileItem>
-                  <ProfileItem>
                     <ProfileLabel>희망직책</ProfileLabel>
                     <ProfileValue>{selectedApplicant.position}</ProfileValue>
                   </ProfileItem>

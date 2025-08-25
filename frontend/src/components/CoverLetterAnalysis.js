@@ -312,9 +312,15 @@ const CoverLetterAnalysis = ({ analysisData }) => {
   // 분석 요약 가져오기
   const summary = analysisData?.summary || '자소서 분석 결과를 확인할 수 있습니다.';
 
-  // 개선 권장사항 가져오기 (최대 2개로 제한)
+  // 개선 권장사항 가져오기 (항상 최대 2개로 제한)
   const allRecommendations = analysisData?.recommendations || ['지속적인 성장과 발전을 권장합니다.'];
+  // slice(0, 2)를 사용하여 항상 최대 2개만 표시
   const recommendations = allRecommendations.slice(0, 2);
+  
+  // 권장사항이 2개 미만인 경우 기본 권장사항으로 채움
+  while (recommendations.length < 2) {
+    recommendations.push('지속적인 성장과 발전을 권장합니다.');
+  }
 
   // 분석 시간 가져오기
   const analyzedAt = analysisData?.analyzed_at ? new Date(analysisData.analyzed_at).toLocaleString('ko-KR') : null;
@@ -558,7 +564,7 @@ const CoverLetterAnalysis = ({ analysisData }) => {
           )}
         </SummarySection>
 
-        {/* 개선 권장사항 */}
+        {/* 개선 권장사항 (항상 최대 2개 표시) */}
         {recommendations && recommendations.length > 0 && (
           <SummarySection>
             <SummaryTitle>

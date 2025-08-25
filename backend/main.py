@@ -186,7 +186,6 @@ class Resume(BaseModel):
     resume_id: Optional[str] = None
     name: str
     position: Optional[str] = ""
-    department: Optional[str] = ""
     experience: Optional[str] = ""
     skills: Optional[str] = ""
     growthBackground: Optional[str] = ""
@@ -260,7 +259,6 @@ async def seed_applicants_from_csv_if_empty() -> None:
                 string_fields = [
                     "name",
                     "position",
-                    "department",
                     "experience",
                     "skills",
                     "growthBackground",
@@ -322,7 +320,6 @@ def load_applicants_from_csv() -> List[Dict[str, Any]]:
                 for field_name in [
                     "name",
                     "position",
-                    "department",
                     "experience",
                     "skills",
                     "growthBackground",
@@ -617,7 +614,6 @@ async def process_resume_with_chunking(data: Dict[str, Any]):
                             "metadata": {
                                 "applicant_name": resume.get("name", ""),
                                 "position": resume.get("position", ""),
-                                "department": resume.get("department", ""),
                                 "length": len(chunk_text)
                             },
                             "created_at": datetime.now()
@@ -917,7 +913,6 @@ async def check_resume_similarity(resume_id: str):
                 "resume_id": str(similar["resume"]["_id"]),
                 "applicant_name": similar["resume"].get("name", "알 수 없음"),
                 "position": similar["resume"].get("position", ""),
-                "department": similar["resume"].get("department", ""),
                 "overall_similarity": round(similar["similarity_score"], 4),
                 "field_similarities": {
                     "growthBackground": round(field_similarities["growthBackground"], 4),
@@ -1022,7 +1017,6 @@ async def check_resume_similarity(resume_id: str):
                 "resume_id": other_id,
                 "applicant_name": other_resume.get("name", "알 수 없음"),
                 "position": other_resume.get("position", ""),
-                "department": other_resume.get("department", ""),
                 "overall_similarity": round(overall_similarity, 4),
                 "field_similarities": {
                     "growthBackground": round(field_similarities["growthBackground"], 4),
@@ -1070,8 +1064,7 @@ async def check_resume_similarity(resume_id: str):
             "current_resume": {
                 "id": resume_id,
                 "name": current_resume.get("name", ""),
-                "position": current_resume.get("position", ""),
-                "department": current_resume.get("department", "")
+                "position": current_resume.get("position", "")
             },
             "similarity_results": similarity_results,
             "statistics": {
