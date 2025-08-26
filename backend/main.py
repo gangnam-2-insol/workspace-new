@@ -461,6 +461,368 @@ async def create_resume(resume: Resume):
     resume_dict["id"] = str(result.inserted_id)
     return Resume(**resume_dict)
 
+# 지원자별 이력서 조회 API (모든 정보 포함)
+@app.get("/api/applicants/{applicant_id}/resume")
+async def get_applicant_resume(applicant_id: str):
+    """지원자의 이력서 정보를 모두 가져옴 (분석 결과 포함)"""
+    try:
+        # 1. 지원자 정보 조회
+        applicant = await db.applicants.find_one({"_id": ObjectId(applicant_id)})
+        if not applicant:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다.")
+        
+        # 2. 이력서 ID 확인
+        resume_id = applicant.get("resume_id")
+        if not resume_id:
+            raise HTTPException(status_code=404, detail="이력서가 등록되지 않았습니다.")
+        
+        # 3. 이력서 정보 조회 (resumes 컬렉션에서)
+        resume = await db.resumes.find_one({"_id": ObjectId(resume_id)})
+        if not resume:
+            # resumes 컬렉션에 없으면 applicants 컬렉션의 이력서 필드들 사용
+            resume_data = {
+                "name": applicant.get("name", ""),
+                "position": applicant.get("position", ""),
+                "department": applicant.get("department", ""),
+                "experience": applicant.get("experience", ""),
+                "skills": applicant.get("skills", ""),
+                "growthBackground": applicant.get("growthBackground", ""),
+                "motivation": applicant.get("motivation", ""),
+                "careerHistory": applicant.get("careerHistory", ""),
+                "analysisScore": applicant.get("analysisScore", 0),
+                "analysisResult": applicant.get("analysisResult", ""),
+                "status": applicant.get("status", "pending"),
+                "created_at": applicant.get("created_at"),
+                "extracted_text": applicant.get("extracted_text", ""),
+                "file_metadata": applicant.get("file_metadata", {}),
+                "source": "applicants_collection"
+            }
+        else:
+            # resumes 컬렉션에서 가져온 데이터
+            resume_data = resume.copy()
+            resume_data["source"] = "resumes_collection"
+        
+        # 4. _id를 문자열로 변환
+        if "_id" in resume_data:
+            resume_data["id"] = str(resume_data["_id"])
+            del resume_data["_id"]
+        
+        # 5. 지원자 기본 정보도 포함
+        resume_data["applicant_info"] = {
+            "id": str(applicant["_id"]),
+            "name": applicant.get("name", ""),
+            "email": applicant.get("email", ""),
+            "phone": applicant.get("phone", ""),
+            "status": applicant.get("status", ""),
+            "applied_at": applicant.get("applied_at"),
+            "created_at": applicant.get("created_at")
+        }
+        
+        # 6. AI 분석 결과 조회 (있는 경우)
+        try:
+            from modules.ai.resume_analysis_service import ResumeAnalysisService
+            analysis_service = ResumeAnalysisService(db)
+            analysis_result = await analysis_service.get_applicant_analysis(applicant_id)
+            if analysis_result:
+                resume_data["ai_analysis"] = analysis_result
+        except Exception as e:
+            print(f"[WARNING] AI 분석 결과 조회 실패: {str(e)}")
+            # AI 분석 실패해도 기본 이력서 정보는 반환
+        
+        return {
+            "success": True,
+            "message": "이력서 정보 조회 성공",
+            "data": resume_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 이력서 조회 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"이력서 조회에 실패했습니다: {str(e)}")
+
+# AI 이력서 분석 API
+@app.post("/api/ai-analysis/resume/analyze")
+async def analyze_resume(request: dict):
+    """이력서 AI 분석 실행"""
+    try:
+        from modules.ai.resume_analysis_service import ResumeAnalysisService
+        from models.resume_analysis import ResumeAnalysisRequest
+        
+        # 요청 데이터 검증
+        applicant_id = request.get("applicant_id")
+        analysis_type = request.get("analysis_type", "openai")
+        force_reanalysis = request.get("force_reanalysis", False)
+        
+        if not applicant_id:
+            raise HTTPException(status_code=400, detail="지원자 ID가 필요합니다.")
+        
+        # 분석 서비스 초기화
+        analysis_service = ResumeAnalysisService(db)
+        
+        # 분석 요청 생성
+        analysis_request = ResumeAnalysisRequest(
+            applicant_id=applicant_id,
+            analysis_type=analysis_type,
+            force_reanalysis=force_reanalysis
+        )
+        
+        # 분석 실행
+        result = await analysis_service.analyze_resume(analysis_request)
+        
+        if result.success:
+            return {
+                "success": True,
+                "message": result.message,
+                "data": result.data,
+                "analysis_id": result.analysis_id,
+                "processing_time": result.processing_time
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result.message)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] AI 분석 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AI 분석에 실패했습니다: {str(e)}")
+
+@app.post("/api/ai-analysis/resume/batch-analyze")
+async def batch_analyze_resumes(request: dict):
+    """이력서 일괄 AI 분석"""
+    try:
+        from modules.ai.resume_analysis_service import ResumeAnalysisService
+        from models.resume_analysis import BatchAnalysisRequest
+        
+        # 요청 데이터 검증
+        applicant_ids = request.get("applicant_ids", [])
+        analysis_type = request.get("analysis_type", "openai")
+        
+        if not applicant_ids:
+            raise HTTPException(status_code=400, detail="지원자 ID 리스트가 필요합니다.")
+        
+        # 분석 서비스 초기화
+        analysis_service = ResumeAnalysisService(db)
+        
+        # 일괄 분석 요청 생성
+        batch_request = BatchAnalysisRequest(
+            applicant_ids=applicant_ids,
+            analysis_type=analysis_type
+        )
+        
+        # 일괄 분석 실행
+        result = await analysis_service.batch_analyze(batch_request)
+        
+        if result.success:
+            return {
+                "success": True,
+                "message": result.message,
+                "data": result.data,
+                "processing_time": result.processing_time
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result.message)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 일괄 AI 분석 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"일괄 AI 분석에 실패했습니다: {str(e)}")
+
+@app.post("/api/ai-analysis/resume/reanalyze")
+async def reanalyze_resume(request: dict):
+    """이력서 재분석"""
+    try:
+        from modules.ai.resume_analysis_service import ResumeAnalysisService
+        from models.resume_analysis import ResumeAnalysisRequest
+        
+        # 요청 데이터 검증
+        applicant_id = request.get("applicant_id")
+        analysis_type = request.get("analysis_type", "openai")
+        
+        if not applicant_id:
+            raise HTTPException(status_code=400, detail="지원자 ID가 필요합니다.")
+        
+        # 분석 서비스 초기화
+        analysis_service = ResumeAnalysisService(db)
+        
+        # 재분석 요청 생성
+        analysis_request = ResumeAnalysisRequest(
+            applicant_id=applicant_id,
+            analysis_type=analysis_type,
+            force_reanalysis=True
+        )
+        
+        # 재분석 실행
+        result = await analysis_service.reanalyze_resume(analysis_request)
+        
+        if result.success:
+            return {
+                "success": True,
+                "message": result.message,
+                "data": result.data,
+                "analysis_id": result.analysis_id,
+                "processing_time": result.processing_time
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result.message)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 재분석 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"재분석에 실패했습니다: {str(e)}")
+
+@app.get("/api/ai-analysis/resume/analysis-status")
+async def get_analysis_status():
+    """AI 분석 상태 조회"""
+    try:
+        from modules.ai.resume_analysis_service import ResumeAnalysisService
+        
+        # 분석 서비스 초기화
+        analysis_service = ResumeAnalysisService(db)
+        
+        # 상태 조회
+        status = await analysis_service.get_analysis_status()
+        
+        if status.success:
+            return {
+                "success": True,
+                "message": status.message,
+                "data": status.data,
+                "total_applicants": status.total_applicants,
+                "analyzed_count": status.analyzed_count,
+                "pending_count": status.pending_count,
+                "failed_count": status.failed_count,
+                "progress_percentage": status.progress_percentage
+            }
+        else:
+            raise HTTPException(status_code=500, detail=status.message)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 분석 상태 조회 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"분석 상태 조회에 실패했습니다: {str(e)}")
+
+@app.get("/api/ai-analysis/resume/{applicant_id}")
+async def get_applicant_analysis(applicant_id: str):
+    """지원자별 AI 분석 결과 조회"""
+    try:
+        from modules.ai.resume_analysis_service import ResumeAnalysisService
+        
+        # 분석 서비스 초기화
+        analysis_service = ResumeAnalysisService(db)
+        
+        # 분석 결과 조회
+        analysis_result = await analysis_service.get_applicant_analysis(applicant_id)
+        
+        if analysis_result:
+            return {
+                "success": True,
+                "message": "AI 분석 결과 조회 성공",
+                "data": analysis_result
+            }
+        else:
+            raise HTTPException(status_code=404, detail="AI 분석 결과를 찾을 수 없습니다.")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] AI 분석 결과 조회 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AI 분석 결과 조회에 실패했습니다: {str(e)}")
+
+# 지원자별 자기소개서 조회 API
+@app.get("/api/applicants/{applicant_id}/cover-letter")
+async def get_applicant_cover_letter(applicant_id: str):
+    """지원자의 자기소개서 정보를 모두 가져옴"""
+    try:
+        # 1. 지원자 정보 조회
+        applicant = await db.applicants.find_one({"_id": ObjectId(applicant_id)})
+        if not applicant:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다.")
+        
+        # 2. 자기소개서 정보 조회 (applicants 컬렉션에서)
+        cover_letter_data = {
+            "name": applicant.get("name", ""),
+            "position": applicant.get("position", ""),
+            "cover_letter_text": applicant.get("cover_letter_text", ""),
+            "cover_letter_summary": applicant.get("cover_letter_summary", ""),
+            "cover_letter_analysis": applicant.get("cover_letter_analysis", {}),
+            "extracted_text": applicant.get("cover_letter_extracted_text", ""),
+            "file_metadata": applicant.get("cover_letter_file_metadata", {}),
+            "created_at": applicant.get("created_at"),
+            "source": "applicants_collection"
+        }
+        
+        # 3. 지원자 기본 정보도 포함
+        cover_letter_data["applicant_info"] = {
+            "id": str(applicant["_id"]),
+            "name": applicant.get("name", ""),
+            "email": applicant.get("email", ""),
+            "phone": applicant.get("phone", ""),
+            "status": applicant.get("status", ""),
+            "applied_at": applicant.get("applied_at"),
+            "created_at": applicant.get("created_at")
+        }
+        
+        return {
+            "success": True,
+            "message": "자기소개서 정보 조회 성공",
+            "data": cover_letter_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 자기소개서 조회 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"자기소개서 조회에 실패했습니다: {str(e)}")
+
+# 지원자별 포트폴리오 조회 API
+@app.get("/api/applicants/{applicant_id}/portfolio")
+async def get_applicant_portfolio(applicant_id: str):
+    """지원자의 포트폴리오 정보를 모두 가져옴"""
+    try:
+        # 1. 지원자 정보 조회
+        applicant = await db.applicants.find_one({"_id": ObjectId(applicant_id)})
+        if not applicant:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다.")
+        
+        # 2. 포트폴리오 정보 조회 (applicants 컬렉션에서)
+        portfolio_data = {
+            "name": applicant.get("name", ""),
+            "position": applicant.get("position", ""),
+            "github_url": applicant.get("github_url", ""),
+            "github_analysis": applicant.get("github_analysis", {}),
+            "portfolio_files": applicant.get("portfolio_files", []),
+            "portfolio_summary": applicant.get("portfolio_summary", ""),
+            "created_at": applicant.get("created_at"),
+            "source": "applicants_collection"
+        }
+        
+        # 3. 지원자 기본 정보도 포함
+        portfolio_data["applicant_info"] = {
+            "id": str(applicant["_id"]),
+            "name": applicant.get("name", ""),
+            "email": applicant.get("email", ""),
+            "phone": applicant.get("phone", ""),
+            "status": applicant.get("status", ""),
+            "applied_at": applicant.get("applied_at"),
+            "created_at": applicant.get("created_at")
+        }
+        
+        return {
+            "success": True,
+            "message": "포트폴리오 정보 조회 성공",
+            "data": portfolio_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 포트폴리오 조회 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"포트폴리오 조회에 실패했습니다: {str(e)}")
+
 # 면접 관련 API
 @app.get("/api/interviews", response_model=List[Interview])
 async def get_interviews():
