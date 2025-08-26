@@ -9,14 +9,12 @@ class ResumeAnalysisResult(BaseModel):
     experience_score: int = Field(description="경력 및 직무 경험 점수 (0-100)", ge=0, le=100)
     skills_score: int = Field(description="보유 기술 및 역량 점수 (0-100)", ge=0, le=100)
     projects_score: int = Field(description="프로젝트 및 성과 점수 (0-100)", ge=0, le=100)
-    growth_score: int = Field(description="자기계발 및 성장 가능성 점수 (0-100)", ge=0, le=100)
     
     # 상세 분석 내용
     education_analysis: str = Field(description="학력 및 전공에 대한 상세 분석")
     experience_analysis: str = Field(description="경력 및 직무 경험에 대한 상세 분석")
     skills_analysis: str = Field(description="보유 기술 및 역량에 대한 상세 분석")
     projects_analysis: str = Field(description="프로젝트 및 성과에 대한 상세 분석")
-    growth_analysis: str = Field(description="자기계발 및 성장 가능성에 대한 상세 분석")
     
     # 종합 피드백
     strengths: List[str] = Field(description="주요 강점 리스트")
@@ -26,13 +24,12 @@ class ResumeAnalysisResult(BaseModel):
 
 class HuggingFaceAnalysisResult(BaseModel):
     """HuggingFace 기반 확장 이력서 분석 결과"""
-    # 기본 5개 항목
+    # 기본 4개 항목
     overall_score: int = Field(description="종합 점수 (0-100)", ge=0, le=100)
     education_score: int = Field(description="학력 및 전공 점수 (0-100)", ge=0, le=100)
     experience_score: int = Field(description="경력 및 직무 경험 점수 (0-100)", ge=0, le=100)
     skills_score: int = Field(description="보유 기술 및 역량 점수 (0-100)", ge=0, le=100)
     projects_score: int = Field(description="프로젝트 및 성과 점수 (0-100)", ge=0, le=100)
-    growth_score: int = Field(description="자기계발 및 성장 가능성 점수 (0-100)", ge=0, le=100)
     
     # 추가 분석 결과
     grammar_score: int = Field(description="문법 및 표현 점수 (0-100)", ge=0, le=100)
@@ -45,7 +42,6 @@ class HuggingFaceAnalysisResult(BaseModel):
     experience_analysis: str = Field(description="경력 및 직무 경험에 대한 상세 분석")
     skills_analysis: str = Field(description="보유 기술 및 역량에 대한 상세 분석")
     projects_analysis: str = Field(description="프로젝트 및 성과에 대한 상세 분석")
-    growth_analysis: str = Field(description="자기계발 및 성장 가능성에 대한 상세 분석")
     
     strengths: List[str] = Field(description="주요 강점 리스트")
     improvements: List[str] = Field(description="개선이 필요한 부분 리스트")
