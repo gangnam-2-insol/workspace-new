@@ -350,6 +350,10 @@ export const mailApi = {
   // 대량 메일 발송
   sendBulkMail: async (statusType) => {
     try {
+      console.log('📧 [DEBUG] 메일 발송 시작 - statusType:', statusType);
+      console.log('📧 [DEBUG] API URL:', 'http://localhost:8000/api/send-bulk-mail');
+      console.log('📧 [DEBUG] 요청 데이터:', { statusType });
+
       const response = await fetch('http://localhost:8000/api/send-bulk-mail', {
         method: 'POST',
         headers: {
@@ -358,14 +362,21 @@ export const mailApi = {
         body: JSON.stringify({ statusType })
       });
 
+      console.log('📧 [DEBUG] 응답 상태:', response.status);
+      console.log('📧 [DEBUG] 응답 헤더:', Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
-        throw new Error('대량 메일 발송 실패');
+        const errorText = await response.text();
+        console.error('📧 [DEBUG] 응답 오류 내용:', errorText);
+        throw new Error(`대량 메일 발송 실패: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
+      console.log('📧 [DEBUG] 응답 결과:', result);
       return result;
     } catch (error) {
-      console.error('대량 메일 발송 오류:', error);
+      console.error('📧 [DEBUG] 메일 발송 오류 상세:', error);
+      console.error('📧 [DEBUG] 오류 스택:', error.stack);
       throw error;
     }
   }

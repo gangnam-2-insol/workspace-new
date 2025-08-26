@@ -142,7 +142,7 @@ app.include_router(integrated_ocr_router, prefix="/api/integrated-ocr", tags=["i
 app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
 app.include_router(job_posting_router, tags=["job-postings"])
 app.include_router(applicants_router, tags=["applicants"])
-app.include_router(sample_data_router, tags=["sample-data"])
+app.include_router(sample_data_router, prefix="/api/sample", tags=["sample-data"])
 app.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
 
 # 회사 인재상 라우터 등록
@@ -1341,7 +1341,21 @@ async def get_mail_templates():
     """메일 템플릿 조회"""
     try:
         templates = await db.mail_templates.find_one({"_id": "default"})
-        if not templates:
+
+        # 기존 템플릿이 있더라도 새로운 상태 타입들이 없으면 재생성
+        should_recreate = False
+        if templates:
+            required_types = ["passed", "document_passed", "final_passed", "rejected", "document_rejected"]
+            for required_type in required_types:
+                if required_type not in templates:
+                    should_recreate = True
+                    break
+
+        if not templates or should_recreate:
+            # 기존 템플릿이 있으면 삭제
+            if templates:
+                await db.mail_templates.delete_one({"_id": "default"})
+
             # 기본 템플릿 생성
             default_templates = {
                 "_id": "default",
@@ -1356,7 +1370,41 @@ async def get_mail_templates():
 감사합니다.
 {company_name} 채용팀"""
                 },
+                "document_passed": {
+                    "subject": "축하합니다! 서류 전형 합격 안내",
+                    "content": """안녕하세요, {applicant_name}님
+
+축하드립니다! {job_posting_title} 포지션에 대한 서류 전형에 합격하셨습니다.
+
+다음 단계인 면접 일정은 추후 별도로 안내드리겠습니다.
+
+감사합니다.
+{company_name} 채용팀"""
+                },
+                "final_passed": {
+                    "subject": "축하합니다! 최종 합격 안내",
+                    "content": """안녕하세요, {applicant_name}님
+
+축하드립니다! {job_posting_title} 포지션에 대한 최종 전형에 합격하셨습니다.
+
+입사 관련 상세 안내는 추후 별도로 연락드리겠습니다.
+
+감사합니다.
+{company_name} 채용팀"""
+                },
                 "rejected": {
+                    "subject": "서류 전형 결과 안내",
+                    "content": """안녕하세요, {applicant_name}님
+
+{job_posting_title} 포지션에 대한 서류 전형 결과를 안내드립니다.
+
+안타깝게도 이번 전형에서는 합격하지 못했습니다.
+앞으로 더 좋은 기회가 있을 때 다시 지원해 주시기 바랍니다.
+
+감사합니다.
+{company_name} 채용팀"""
+                },
+                "document_rejected": {
                     "subject": "서류 전형 결과 안내",
                     "content": """안녕하세요, {applicant_name}님
 
@@ -1386,7 +1434,10 @@ async def save_mail_templates(templates: Dict[str, Any]):
     try:
         update_data = {
             "passed": templates.get("passed", {}),
+            "document_passed": templates.get("document_passed", {}),
+            "final_passed": templates.get("final_passed", {}),
             "rejected": templates.get("rejected", {}),
+            "document_rejected": templates.get("document_rejected", {}),
             "updated_at": datetime.now()
         }
 
@@ -1549,6 +1600,195 @@ async def send_test_mail(request: Request):
     except Exception as e:
         print(f"테스트 메일 발송 중 오류: {str(e)}")  # 디버깅용 로그
         raise HTTPException(status_code=500, detail=f"테스트 메일 발송 중 오류가 발생했습니다: {str(e)}")
+
+@app.post("/api/send-bulk-mail")
+async def send_bulk_mail(request: Request):
+    """대량 메일 발송"""
+    try:
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+
+        print(f"📧 [DEBUG] 대량 메일 발송 요청 시작")
+
+        data = await request.json()
+        print(f"📧 [DEBUG] 받은 데이터: {data}")
+
+        status_type = data.get("statusType")
+        print(f"📧 [DEBUG] statusType: {status_type}")
+
+        if not status_type:
+            print(f"📧 [DEBUG] 상태 타입이 없음")
+            raise HTTPException(status_code=400, detail="상태 타입이 필요합니다.")
+
+        # 메일 설정 조회
+        print(f"📧 [DEBUG] 메일 설정 조회 시작")
+        mail_settings = await db.mail_settings.find_one({"_id": "default"})
+        print(f"📧 [DEBUG] 메일 설정 조회 결과: {mail_settings}")
+
+        if not mail_settings:
+            print(f"📧 [DEBUG] 메일 설정이 없음")
+            raise HTTPException(status_code=400, detail="메일 설정이 필요합니다.")
+
+        # 메일 템플릿 조회
+        print(f"📧 [DEBUG] 메일 템플릿 조회 시작")
+        mail_templates = await db.mail_templates.find_one({"_id": "default"})
+        print(f"📧 [DEBUG] 메일 템플릿 조회 결과: {mail_templates}")
+
+        if not mail_templates:
+            print(f"📧 [DEBUG] 메일 템플릿이 없음")
+            raise HTTPException(status_code=400, detail="메일 템플릿이 필요합니다.")
+
+        # 지원자 조회
+        print(f"📧 [DEBUG] 지원자 조회 시작 - statusType: {status_type}")
+
+        if status_type == 'passed':
+            # 합격자 (서류합격, 최종합격)
+            print(f"📧 [DEBUG] 합격자 조회 쿼리 실행")
+            applicants = await db.applicants.find({
+                "status": {"$in": ["서류합격", "최종합격"]}
+            }).to_list(None)
+            print(f"📧 [DEBUG] 합격자 조회 결과: {len(applicants)}명")
+        elif status_type == 'document_passed':
+            # 서류합격자
+            print(f"📧 [DEBUG] 서류합격자 조회 쿼리 실행")
+            applicants = await db.applicants.find({
+                "status": "서류합격"
+            }).to_list(None)
+            print(f"📧 [DEBUG] 서류합격자 조회 결과: {len(applicants)}명")
+        elif status_type == 'final_passed':
+            # 최종합격자
+            print(f"📧 [DEBUG] 최종합격자 조회 쿼리 실행")
+            applicants = await db.applicants.find({
+                "status": "최종합격"
+            }).to_list(None)
+            print(f"📧 [DEBUG] 최종합격자 조회 결과: {len(applicants)}명")
+        elif status_type == 'rejected':
+            # 불합격자 (서류불합격)
+            print(f"📧 [DEBUG] 불합격자 조회 쿼리 실행")
+            applicants = await db.applicants.find({
+                "status": "서류불합격"
+            }).to_list(None)
+            print(f"📧 [DEBUG] 불합격자 조회 결과: {len(applicants)}명")
+        elif status_type == 'document_rejected':
+            # 서류불합격자
+            print(f"📧 [DEBUG] 서류불합격자 조회 쿼리 실행")
+            applicants = await db.applicants.find({
+                "status": "서류불합격"
+            }).to_list(None)
+            print(f"📧 [DEBUG] 서류불합격자 조회 결과: {len(applicants)}명")
+        else:
+            print(f"📧 [DEBUG] 잘못된 상태 타입: {status_type}")
+            raise HTTPException(status_code=400, detail="잘못된 상태 타입입니다.")
+
+        print(f"📧 [DEBUG] 조회된 지원자 목록:")
+        for i, applicant in enumerate(applicants[:5]):  # 처음 5명만 출력
+            print(f"  {i+1}. {applicant.get('name', 'Unknown')} - {applicant.get('email', 'No email')} - {applicant.get('status', 'No status')}")
+
+        if not applicants:
+            print(f"📧 [DEBUG] 발송할 지원자가 없음")
+            return {
+                "success": False,
+                "message": "발송할 지원자가 없습니다.",
+                "total": 0,
+                "success_count": 0,
+                "failed_count": 0
+            }
+
+        # 메일 템플릿 선택
+        template = mail_templates.get(status_type, {})
+        if not template:
+            print(f"📧 [DEBUG] {status_type} 상태에 대한 메일 템플릿이 없습니다.")
+            print(f"📧 [DEBUG] 사용 가능한 템플릿: {list(mail_templates.keys())}")
+            return {
+                "success": False,
+                "message": f"{status_type} 상태에 대한 메일 템플릿이 없습니다. /settings 페이지에서 템플릿을 추가해주세요.",
+                "total": 0,
+                "success_count": 0,
+                "failed_count": 0
+            }
+
+        success_count = 0
+        failed_count = 0
+        failed_emails = []
+
+        for applicant in applicants:
+            # 지원자 이메일 확인
+            email = applicant.get('email')
+            if not email:
+                failed_count += 1
+                continue
+
+            # 채용공고 정보 조회
+            job_posting_id = applicant.get('job_posting_id')
+            job_posting = {}
+            if job_posting_id:
+                job_posting = await db.job_postings.find_one({"_id": ObjectId(job_posting_id)}) or {}
+
+            # 메일 내용 포맷팅
+            try:
+                content = template.get('content', '').format(
+                    applicant_name=applicant.get('name', '지원자'),
+                    job_posting_title=job_posting.get('title', '채용공고'),
+                    company_name=job_posting.get('company', '회사명'),
+                    position=applicant.get('position', '지원 직무')
+                )
+            except Exception as e:
+                print(f"메일 내용 포맷팅 실패: {e}")
+                content = template.get('content', '')
+
+            # 메일 객체 생성
+            msg = MIMEMultipart()
+            msg['From'] = f"{mail_settings.get('senderName', '')} <{mail_settings.get('senderEmail')}>"
+            msg['To'] = email
+            msg['Subject'] = template.get('subject', '안내 메일')
+            msg.attach(MIMEText(content, 'plain', 'utf-8'))
+
+            # SMTP 서버 연결 및 메일 발송
+            try:
+                smtp_port = mail_settings.get('smtpPort', 587)
+                smtp_server = mail_settings.get('smtpServer', 'smtp.gmail.com')
+
+                if smtp_port == 465:
+                    with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+                        server.login(mail_settings.get('senderEmail'), mail_settings.get('senderPassword'))
+                        server.send_message(msg)
+                else:
+                    with smtplib.SMTP(smtp_server, smtp_port) as server:
+                        server.starttls()
+                        server.login(mail_settings.get('senderEmail'), mail_settings.get('senderPassword'))
+                        server.send_message(msg)
+
+                success_count += 1
+                print(f"✅ {applicant.get('name', 'Unknown')} ({email}) - 메일 발송 성공")
+
+            except Exception as e:
+                failed_count += 1
+                failed_emails.append(email)
+                print(f"❌ {applicant.get('name', 'Unknown')} ({email}) - 메일 발송 실패: {e}")
+
+        # 결과 반환
+        result = {
+            "success": True,
+            "total": len(applicants),
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "failed_emails": failed_emails,
+            "message": f"메일 발송 완료: {success_count}건 성공, {failed_count}건 실패"
+        }
+
+        print(f"\n📊 메일 발송 결과:")
+        print(f"  - 총 대상: {len(applicants)}명")
+        print(f"  - 성공: {success_count}건")
+        print(f"  - 실패: {failed_count}건")
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"대량 메일 발송 중 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"대량 메일 발송 중 오류가 발생했습니다: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)
