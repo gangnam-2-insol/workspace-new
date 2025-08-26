@@ -82,6 +82,17 @@ async def generate_sample_applicants(
             # 해당 직무에 맞는 기술 스킬 생성
             skills = random.sample(skills_map.get(position, ["기술 스킬"]), random.randint(2, 4))
 
+            # GitHub URL 목록 (제공된 URL들)
+            github_urls = [
+                "https://github.com/kyungho222/myResume",
+                "https://github.com/kyungho222/hireme",
+                "https://github.com/kyungho222",
+                "https://github.com/rangrang-53",
+                "https://github.com/gaa149",
+                "https://github.com/Drew9703",
+                "https://github.com/Seastar0521"
+            ]
+
             applicant = {
                 "name": fake.name(),
                 "email": fake.email(),
@@ -97,6 +108,9 @@ async def generate_sample_applicants(
                 "analysisResult": fake.text(max_nb_chars=200),
                 "status": status,
                 "job_posting_id": selected_job_id,
+                "github_url": random.choice(github_urls) if random.choice([True, False]) else None,
+                "linkedin_url": f"https://linkedin.com/in/{fake.user_name()}" if random.choice([True, False]) else None,
+                "portfolio_url": f"https://portfolio.example.com/{fake.user_name()}" if random.choice([True, False]) else None,
                 "created_at": datetime.now(),
                 "updated_at": datetime.now()
             }

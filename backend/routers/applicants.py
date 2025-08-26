@@ -178,7 +178,14 @@ async def get_applicant_cover_letter(
         # 2. 자소서 ID 확인
         cover_letter_id = applicant.get("cover_letter_id")
         if not cover_letter_id:
-            raise HTTPException(status_code=404, detail="자소서가 없습니다")
+            # 자소서가 없는 경우 빈 응답 반환 (404 대신)
+            return {
+                "status": "success",
+                "applicant_id": applicant_id,
+                "cover_letter": None,
+                "message": "자소서가 없습니다",
+                "has_cover_letter": False
+            }
 
         # 3. 자소서 조회
         from bson import ObjectId
@@ -192,7 +199,14 @@ async def get_applicant_cover_letter(
         client.close()
 
         if not cover_letter:
-            raise HTTPException(status_code=404, detail="자소서를 찾을 수 없습니다")
+            # 자소서 ID는 있지만 실제 자소서가 없는 경우
+            return {
+                "status": "success",
+                "applicant_id": applicant_id,
+                "cover_letter": None,
+                "message": "자소서를 찾을 수 없습니다",
+                "has_cover_letter": False
+            }
 
         # ObjectId를 문자열로 변환하여 JSON 직렬화 문제 해결
         if "_id" in cover_letter:
@@ -202,7 +216,8 @@ async def get_applicant_cover_letter(
             "status": "success",
             "applicant_id": applicant_id,
             "cover_letter": cover_letter,
-            "message": "자소서 조회 완료"
+            "message": "자소서 조회 완료",
+            "has_cover_letter": True
         }
 
     except HTTPException:
@@ -222,38 +237,38 @@ async def get_talent_recommendations(
     """지원자 기반 유사 인재 추천"""
     try:
         print(f"[INFO] 유사 인재 추천 요청 - applicant_id: {applicant_id}")
-        
+
         # 1. 지원자 존재 확인
         from bson import ObjectId
         applicant_collection = mongo_service.db.applicants
         target_applicant = await applicant_collection.find_one({"_id": ObjectId(applicant_id)})
-        
+
         if not target_applicant:
             raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
-        
+
         # 2. 유사도 서비스 초기화
         similarity_service = get_similarity_service()
-        
+
         # 3. 유사 인재 추천 수행
         result = await similarity_service.search_similar_applicants_hybrid(
             target_applicant=target_applicant,
             applicants_collection=applicant_collection,
             limit=5
         )
-        
+
         return {
             "status": "success",
             "applicant_id": applicant_id,
             "recommendations": result,
             "message": "유사 인재 추천 완료"
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
         print(f"[ERROR] 유사 인재 추천 실패: {str(e)}")
         raise HTTPException(
-            status_code=500, 
+            status_code=500,
             detail=f"유사 인재 추천 중 오류가 발생했습니다: {str(e)}"
         )
 

@@ -941,6 +941,78 @@ const SampleDataManagement = () => {
                     <SchemaTd>✓</SchemaTd>
                     <SchemaTd>상태 (pending/reviewing/interview_scheduled/passed/rejected)</SchemaTd>
                   </tr>
+                  <tr>
+                    <SchemaTd>analysisScore</SchemaTd>
+                    <SchemaTd>Number</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>분석 점수 (0-100)</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>analysisResult</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>분석 결과</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>job_posting_id</SchemaTd>
+                    <SchemaTd>ObjectId</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>연결된 채용공고 ID</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>github_url</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✗</SchemaTd>
+                    <SchemaTd>GitHub 프로필 URL</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>linkedin_url</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✗</SchemaTd>
+                    <SchemaTd>LinkedIn 프로필 URL</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>portfolio_url</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✗</SchemaTd>
+                    <SchemaTd>포트폴리오 URL</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>resume_id</SchemaTd>
+                    <SchemaTd>ObjectId</SchemaTd>
+                    <SchemaTd>✗</SchemaTd>
+                    <SchemaTd>연결된 이력서 ID</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>cover_letter_id</SchemaTd>
+                    <SchemaTd>ObjectId</SchemaTd>
+                    <SchemaTd>✗</SchemaTd>
+                    <SchemaTd>연결된 자기소개서 ID</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>portfolio_id</SchemaTd>
+                    <SchemaTd>ObjectId</SchemaTd>
+                    <SchemaTd>✗</SchemaTd>
+                    <SchemaTd>연결된 포트폴리오 ID</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>ranks</SchemaTd>
+                    <SchemaTd>Object</SchemaTd>
+                    <SchemaTd>✗</SchemaTd>
+                    <SchemaTd>랭킹 정보 (resume, coverLetter, portfolio, total)</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>created_at</SchemaTd>
+                    <SchemaTd>Date</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>생성일시</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>updated_at</SchemaTd>
+                    <SchemaTd>Date</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>수정일시</SchemaTd>
+                  </tr>
                 </tbody>
               </SchemaTable>
             </SchemaContainer>
@@ -1019,6 +1091,205 @@ const SampleDataManagement = () => {
                     <SchemaTd>String</SchemaTd>
                     <SchemaTd>✓</SchemaTd>
                     <SchemaTd>상태 (draft/published/closed)</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>type</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>고용 형태 (full-time/part-time/contract)</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>education</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>학력 요건</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>benefits</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>복리후생</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>deadline</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>지원 마감일</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>applicants</SchemaTd>
+                    <SchemaTd>Number</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>지원자 수</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>views</SchemaTd>
+                    <SchemaTd>Number</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>조회수</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>bookmarks</SchemaTd>
+                    <SchemaTd>Number</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>북마크 수</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>shares</SchemaTd>
+                    <SchemaTd>Number</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>공유 수</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>created_at</SchemaTd>
+                    <SchemaTd>Date</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>생성일시</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>updated_at</SchemaTd>
+                    <SchemaTd>Date</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>수정일시</SchemaTd>
+                  </tr>
+                </tbody>
+              </SchemaTable>
+            </SchemaContainer>
+
+            <SchemaContainer>
+              <SchemaTitle>
+                <FiFileText />
+                자소서 (cover_letters) 테이블
+              </SchemaTitle>
+              <SchemaTable>
+                <thead>
+                  <tr>
+                    <SchemaTh>필드명</SchemaTh>
+                    <SchemaTh>타입</SchemaTh>
+                    <SchemaTh>필수</SchemaTh>
+                    <SchemaTh>설명</SchemaTh>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <SchemaTd>applicant_id</SchemaTd>
+                    <SchemaTd>ObjectId</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>연결된 지원자 ID</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>content</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>자소서 전체 내용</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>motivation</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>지원 동기</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>career_goals</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>경력 목표</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>strengths</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>강점 및 역량</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>experience</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>관련 경험</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>achievements</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>주요 성과</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>skills</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>보유 기술</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>projects</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>프로젝트 경험</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>education</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>학력 사항</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>certifications</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>자격증</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>languages</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>언어 능력</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>personal_statement</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>자기소개</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>future_plans</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>향후 계획</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>filename</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>파일명</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>file_size</SchemaTd>
+                    <SchemaTd>Number</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>파일 크기 (bytes)</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>extracted_text</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>추출된 텍스트</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>status</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>상태 (submitted/reviewed/approved/rejected)</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>created_at</SchemaTd>
+                    <SchemaTd>Date</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>생성일시</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>updated_at</SchemaTd>
+                    <SchemaTd>Date</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>수정일시</SchemaTd>
                   </tr>
                 </tbody>
               </SchemaTable>

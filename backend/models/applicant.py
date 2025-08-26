@@ -27,6 +27,11 @@ class ApplicantCreate(ApplicantBase):
     cover_letter_id: Optional[str] = Field(None, description="자기소개서 ID")
     portfolio_id: Optional[str] = Field(None, description="포트폴리오 ID")
 
+    # 소셜 미디어 및 포트폴리오 URL
+    github_url: Optional[str] = Field(None, description="GitHub 프로필 URL")
+    linkedin_url: Optional[str] = Field(None, description="LinkedIn 프로필 URL")
+    portfolio_url: Optional[str] = Field(None, description="포트폴리오 URL")
+
 class Applicant(ApplicantBase):
     id: str = Field(alias="_id", description="지원자 ID")
     position: Optional[str] = Field(None, description="지원 직무")
@@ -45,6 +50,11 @@ class Applicant(ApplicantBase):
     resume_id: Optional[str] = Field(None, description="이력서 ID")
     cover_letter_id: Optional[str] = Field(None, description="자기소개서 ID")
     portfolio_id: Optional[str] = Field(None, description="포트폴리오 ID")
+
+    # 소셜 미디어 및 포트폴리오 URL
+    github_url: Optional[str] = Field(None, description="GitHub 프로필 URL")
+    linkedin_url: Optional[str] = Field(None, description="LinkedIn 프로필 URL")
+    portfolio_url: Optional[str] = Field(None, description="포트폴리오 URL")
 
     # 랭킹 정보
     ranks: Optional[Dict[str, int]] = Field(
@@ -75,6 +85,9 @@ class Applicant(ApplicantBase):
                 "resume_id": "507f1f77bcf86cd799439012",
                 "cover_letter_id": "507f1f77bcf86cd799439013",
                 "portfolio_id": "507f1f77bcf86cd799439014",
+                "github_url": "https://github.com/kyungho222",
+                "linkedin_url": "https://linkedin.com/in/honggildong",
+                "portfolio_url": "https://portfolio.example.com/honggildong",
                 "ranks": {
                     "resume": 85,
                     "coverLetter": 78,
