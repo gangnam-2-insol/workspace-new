@@ -183,8 +183,6 @@ class LangChainHybridService:
         LangChain Document 객체들을 지원자 정보로 변환
         """
         try:
-            print(f"[LangChainHybridService] === 문서를 지원자 정보로 변환 시작 ===")
-
             # 문서에서 resume_id 추출하여 지원자 매핑
             applicant_scores = {}
             target_resume_id = target_applicant.get('resume_id')
@@ -198,87 +196,82 @@ class LangChainHybridService:
 
                     if hasattr(doc, 'metadata') and doc.metadata:
                         chunk_type = doc.metadata.get('chunk_type')
-                        print(f"[DEBUG] Doc {i}: chunk_type={chunk_type}, metadata={doc.metadata}")
 
                         if chunk_type == 'applicant':
                             # 지원자 벡터의 경우: document_id가 applicant_id임
                             applicant_id = doc.metadata.get('document_id')
-                            print(f"[DEBUG] Applicant chunk: applicant_id={applicant_id}, target_id={target_applicant.get('_id')}")
                             if applicant_id and applicant_id != str(target_applicant.get('_id')):
                                 from bson import ObjectId
                                 applicant = await applicants_collection.find_one({"_id": ObjectId(applicant_id)})
-                                print(f"[DEBUG] Found applicant: {applicant.get('name', 'Unknown') if applicant else 'None'}")
                         else:
                             # 이력서/키워드 검색 결과의 경우: resume_id 기준
                             resume_id = doc.metadata.get('resume_id') or doc.metadata.get('document_id')
-                            print(f"[DEBUG] Resume chunk: resume_id={resume_id}, target_resume_id={target_resume_id}")
                             if resume_id and resume_id != target_resume_id:
                                 applicant = await applicants_collection.find_one({"resume_id": resume_id})
-                                print(f"[DEBUG] Found applicant by resume_id: {applicant.get('name', 'Unknown') if applicant else 'None'}")
-                    else:
-                        print(f"[DEBUG] Doc {i}: No metadata or invalid document")
-                        if applicant:
-                            applicant_id = str(applicant["_id"])
+                    
+                    if applicant:
+                        applicant_id = str(applicant["_id"])
 
-                            # 하이브리드 점수 계산 (순위 기반)
-                            hybrid_score = max(0, (len(hybrid_docs) - i) / len(hybrid_docs))
+                        # 하이브리드 점수 계산 (순위 기반)
+                        hybrid_score = max(0, (len(hybrid_docs) - i) / len(hybrid_docs))
 
-                            # 벡터/키워드 개별 점수 계산
-                            vector_score = 0
-                            keyword_score = 0
+                        # 벡터/키워드 개별 점수 계산
+                        vector_score = 0
+                        keyword_score = 0
 
-                            # 벡터 결과에서 점수 찾기 (지원자 벡터 고려)
-                            for v_i, v_doc in enumerate(vector_docs):
-                                v_applicant_id = None
-                                v_resume_id = None
+                        # 벡터 결과에서 점수 찾기 (지원자 벡터 고려)
+                        for v_i, v_doc in enumerate(vector_docs):
+                            v_applicant_id = None
+                            v_resume_id = None
 
-                                if hasattr(v_doc, 'metadata') and v_doc.metadata:
-                                    v_chunk_type = v_doc.metadata.get('chunk_type')
-                                    if v_chunk_type == 'applicant':
-                                        v_applicant_id = v_doc.metadata.get('document_id')
-                                    else:
-                                        v_resume_id = v_doc.metadata.get('resume_id') or v_doc.metadata.get('document_id')
+                            if hasattr(v_doc, 'metadata') and v_doc.metadata:
+                                v_chunk_type = v_doc.metadata.get('chunk_type')
+                                if v_chunk_type == 'applicant':
+                                    v_applicant_id = v_doc.metadata.get('document_id')
+                                else:
+                                    v_resume_id = v_doc.metadata.get('resume_id') or v_doc.metadata.get('document_id')
 
-                                # 현재 지원자와 매칭되는지 확인
-                                is_match = False
-                                if chunk_type == 'applicant' and v_applicant_id == applicant_id:
-                                    is_match = True
-                                elif chunk_type != 'applicant' and v_resume_id == resume_id:
-                                    is_match = True
+                            # 현재 지원자와 매칭되는지 확인
+                            is_match = False
+                            if chunk_type == 'applicant' and v_applicant_id == applicant_id:
+                                is_match = True
+                            elif chunk_type != 'applicant' and v_resume_id == resume_id:
+                                is_match = True
 
-                                if is_match:
-                                    vector_score = max(0, (len(vector_docs) - v_i) / len(vector_docs))
-                                    break
+                            if is_match:
+                                vector_score = max(0, (len(vector_docs) - v_i) / len(vector_docs))
+                                break
 
-                            # 키워드 결과에서 점수 찾기 (BM25 점수 기반)
-                            for k_i, k_doc in enumerate(keyword_docs):
-                                k_resume_id = None
-                                if hasattr(k_doc, 'metadata') and k_doc.metadata:
-                                    k_resume_id = k_doc.metadata.get('resume_id') or k_doc.metadata.get('document_id')
-                                if k_resume_id == resume_id:
-                                    # BM25 점수를 0-1 범위로 정규화 (일반적으로 BM25는 0-10 범위)
-                                    bm25_score = k_doc.metadata.get('bm25_score', 0)
-                                    keyword_score = min(1.0, max(0.0, bm25_score / 10.0))  # 10으로 나누어 정규화
-                                    print(f"[LangChainHybridService] 키워드 점수 계산: BM25={bm25_score}, 정규화={keyword_score:.3f}")
-                                    break
+                        # 키워드 결과에서 점수 찾기 (BM25 점수 기반)
+                        for k_i, k_doc in enumerate(keyword_docs):
+                            k_resume_id = None
+                            if hasattr(k_doc, 'metadata') and k_doc.metadata:
+                                k_resume_id = k_doc.metadata.get('resume_id') or k_doc.metadata.get('document_id')
+                            if k_resume_id == resume_id:
+                                # BM25 점수를 0-1 범위로 정규화
+                                bm25_score = k_doc.metadata.get('bm25_score', 0)
+                                keyword_score = min(1.0, max(0.0, bm25_score / 50.0))  # 50으로 나누어 정규화 (더 관대하게)
+                                break
 
-                            if applicant_id not in applicant_scores or hybrid_score > applicant_scores[applicant_id]['final_score']:
-                                applicant_scores[applicant_id] = {
-                                    'final_score': hybrid_score,
-                                    'vector_score': vector_score,
-                                    'keyword_score': keyword_score,
-                                    'applicant': applicant,
-                                    'search_methods': []
-                                }
+                        if applicant_id not in applicant_scores or hybrid_score > applicant_scores[applicant_id]['final_score']:
+                            applicant_scores[applicant_id] = {
+                                'final_score': hybrid_score,
+                                'vector_score': vector_score,
+                                'keyword_score': keyword_score,
+                                'applicant': applicant,
+                                'search_methods': []
+                            }
 
-                                # 검색 방법 추가
-                                if vector_score > 0:
-                                    applicant_scores[applicant_id]['search_methods'].append('vector')
-                                if keyword_score > 0:
-                                    applicant_scores[applicant_id]['search_methods'].append('keyword')
+                            # 검색 방법 추가 - 하이브리드 검색에서는 기본적으로 둘 다 사용
+                            search_methods = []
+                            if len(vector_docs) > 0:  # 벡터 검색이 실행되었다면
+                                search_methods.append('vector')
+                            if len(keyword_docs) > 0:  # 키워드 검색이 실행되었다면
+                                search_methods.append('keyword')
+                            
+                            applicant_scores[applicant_id]['search_methods'] = search_methods
 
                 except Exception as e:
-                    print(f"[LangChainHybridService] 문서 {i} 처리 중 오류: {e}")
                     continue
 
             # 결과 정렬 및 포맷팅
@@ -313,12 +306,6 @@ class LangChainHybridService:
             final_results = results[:limit]
 
             print(f"[LangChainHybridService] 최종 결과: {len(final_results)}개 지원자")
-            for i, result in enumerate(final_results[:3]):
-                applicant_name = result['applicant'].get('name', '이름미상')
-                applicant_position = result['applicant'].get('position', 'N/A')
-                print(f"[LangChainHybridService] #{i+1}: {applicant_name} ({applicant_position}) "
-                      f"(최종:{result['final_score']:.3f}, V:{result['vector_score']:.3f}, "
-                      f"K:{result['keyword_score']:.3f})")
 
             return {
                 "success": True,

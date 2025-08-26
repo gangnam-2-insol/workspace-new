@@ -689,7 +689,7 @@ const CoverLetterAnalysisModal = ({
                   console.log('- suspicionResult:', suspicionResult);
                   console.log('- isLoading:', isLoading);
                   
-                  if (isLoading) {
+                  if (isLoading || !suspicionResult) {
                     return (
                       <LoadingSpinner>
                         다른 자소서들과의 표절 의심도를 분석 중입니다...
