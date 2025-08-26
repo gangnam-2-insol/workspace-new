@@ -1,13 +1,29 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { PieChart, Pie, Cell, Tooltip, ResponsiveContainer } from 'recharts';
 
-const TestGithubSummary = () => {
-  const [username, setUsername] = useState('');
+const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant = null }) => {
+  const [username, setUsername] = useState(initialUsername);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState(null);
   const [showAllFields, setShowAllFields] = useState(false);
   const [progress, setProgress] = useState({ current: 0, total: 5, step: '' });
+  const [contentChanged, setContentChanged] = useState(false);
+  const [showReanalysisButton, setShowReanalysisButton] = useState(false);
+
+  // initialUsername이 변경되면 username 상태 업데이트
+  useEffect(() => {
+    if (initialUsername) {
+      setUsername(initialUsername);
+    }
+  }, [initialUsername]);
+
+  // autoSubmit이 true이고 username이 있으면 자동으로 요약 실행
+  useEffect(() => {
+    if (autoSubmit && username && !loading && !result) {
+      handleIntegratedAnalysis();
+    }
+  }, [autoSubmit, username, loading, result]);
 
   // GitHub URL 파싱 함수 (백엔드와 동일한 로직)
   const parseGithubUrl = (url) => {
@@ -44,12 +60,59 @@ const TestGithubSummary = () => {
     await handleIntegratedAnalysis();
   };
 
+  const handleForceReanalysis = async () => {
+    setError('');
+    setResult(null);
+    setContentChanged(false);
+    setShowReanalysisButton(false);
+    setLoading(true);
+    
+    try {
+      let requestData = { 
+        username: username.trim(),
+        applicant_id: applicant?._id || null,
+        force_reanalysis: true
+      };
+      
+      if (username.trim().startsWith('https://github.com/')) {
+        const parsed = parseGithubUrl(username.trim());
+        if (parsed) {
+          requestData.username = parsed.username;
+          if (parsed.repo_name) {
+            requestData.repo_name = parsed.repo_name;
+          }
+        }
+      }
+      
+      const res = await fetch((process.env.REACT_APP_API_URL || 'http://localhost:8000') + '/api/github/summary', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestData)
+      });
+      
+      const data = await res.json();
+      if (!res.ok) {
+        throw new Error(data.detail || '재분석 중 오류가 발생했습니다.');
+      }
+      
+      setResult(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   const handleIntegratedAnalysis = async () => {
     setProgress({ current: 1, total: 5, step: 'GitHub 프로필 정보 확인 중...' });
     
     try {
       // URL 파싱하여 요청 데이터 구성
-      let requestData = { username: username.trim() };
+      let requestData = { 
+        username: username.trim(),
+        applicant_id: applicant?._id || null,
+        force_reanalysis: false
+      };
       
       if (username.trim().startsWith('https://github.com/')) {
         const parsed = parseGithubUrl(username.trim());
@@ -111,6 +174,21 @@ const TestGithubSummary = () => {
       // 5단계: 결과 생성
       setProgress({ current: 5, total: 5, step: '분석 결과 생성 중...' });
       
+      // 콘텐츠 변경 감지 및 캐시 상태 확인
+      if (data.source === 'cached') {
+        console.log('캐시된 결과 사용됨');
+        setContentChanged(false);
+        setShowReanalysisButton(false);
+      } else {
+        console.log('새로운 분석 결과');
+        setContentChanged(data.content_changed || false);
+        setShowReanalysisButton(data.content_changed || false);
+        
+        if (data.content_changed && data.changes_detected) {
+          console.log('감지된 변경 사항:', data.changes_detected);
+        }
+      }
+      
       setResult(data);
     } catch (err) {
       setError(err.message);
@@ -141,99 +219,103 @@ const TestGithubSummary = () => {
             margin: '0 auto', 
             fontFamily: 'Arial, sans-serif' 
           }}>
-            <div style={{ 
-              background: '#2c3e50', 
-              color: 'white', 
-              padding: '30px', 
-              borderRadius: '12px', 
-              marginBottom: '30px',
-              textAlign: 'center'
-            }}>
-              <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 'bold' }}>🔍 GitHub 프로젝트 상세 분석</h1>
-              <p style={{ margin: '10px 0 0 0', opacity: 0.9 }}>AI 기반 프로젝트 아키텍처 및 기술 스택 분석</p>
-              
+            {!autoSubmit && (
               <div style={{ 
-                marginTop: '15px',
-                padding: '10px',
-                background: 'rgba(52, 152, 219, 0.2)',
-                borderRadius: '6px',
-                fontSize: '13px',
-                opacity: 0.9
+                background: '#2c3e50', 
+                color: 'white', 
+                padding: '30px', 
+                borderRadius: '12px', 
+                marginBottom: '30px',
+                textAlign: 'center'
               }}>
-                💡 통합 분석: 요약 분석과 아키텍처 분석이 자동으로 함께 수행됩니다.
-                <br />
-                특정 레포지토리 URL을 입력하면 더 상세한 아키텍처 분석이 포함됩니다.
+                <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 'bold' }}>🔍 GitHub 프로젝트 상세 분석</h1>
+                <p style={{ margin: '10px 0 0 0', opacity: 0.9 }}>AI 기반 프로젝트 아키텍처 및 기술 스택 분석</p>
+                
+                <div style={{ 
+                  marginTop: '15px',
+                  padding: '10px',
+                  background: 'rgba(52, 152, 219, 0.2)',
+                  borderRadius: '6px',
+                  fontSize: '13px',
+                  opacity: 0.9
+                }}>
+                  💡 통합 분석: 요약 분석과 아키텍처 분석이 자동으로 함께 수행됩니다.
+                  <br />
+                  특정 레포지토리 URL을 입력하면 더 상세한 아키텍처 분석이 포함됩니다.
+                </div>
               </div>
-            </div>
+            )}
 
-          <div style={{ 
-            background: 'white', 
-            borderRadius: '12px', 
-            padding: '25px', 
-            boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
-            marginBottom: '25px'
-          }}>
-            <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
-              <div style={{ flex: 1, position: 'relative' }}>
-                <input
-                  placeholder="GitHub 아이디 또는 GitHub URL을 입력하세요 (예: https://github.com/test/test_project)"
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+          {!autoSubmit && (
+            <div style={{ 
+              background: 'white', 
+              borderRadius: '12px', 
+              padding: '25px', 
+              boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
+              marginBottom: '25px'
+            }}>
+              <form onSubmit={handleSubmit} style={{ display: 'flex', gap: 12, alignItems: 'center' }}>
+                <div style={{ flex: 1, position: 'relative' }}>
+                  <input
+                    placeholder="GitHub 아이디 또는 GitHub URL을 입력하세요 (예: https://github.com/test/test_project)"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    style={{ 
+                      width: '100%', 
+                      padding: '15px 20px', 
+                      borderRadius: '8px', 
+                      border: '2px solid #e1e5e9',
+                      fontSize: '16px',
+                      outline: 'none',
+                      transition: 'border-color 0.3s ease'
+                    }}
+                    onFocus={(e) => e.target.style.borderColor = '#2c3e50'}
+                    onBlur={(e) => e.target.style.borderColor = '#e1e5e9'}
+                  />
+                </div>
+                <button 
+                  type="submit" 
+                  disabled={loading} 
                   style={{ 
-                    width: '100%', 
-                    padding: '15px 20px', 
-                    borderRadius: '8px', 
-                    border: '2px solid #e1e5e9',
+                    padding: '15px 25px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    background: loading ? '#ccc' : '#2c3e50',
+                    color: 'white',
                     fontSize: '16px',
-                    outline: 'none',
-                    transition: 'border-color 0.3s ease'
+                    fontWeight: 'bold',
+                    cursor: loading ? 'not-allowed' : 'pointer',
+                    transition: 'transform 0.2s ease',
+                    minWidth: '120px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '8px'
                   }}
-                  onFocus={(e) => e.target.style.borderColor = '#2c3e50'}
-                  onBlur={(e) => e.target.style.borderColor = '#e1e5e9'}
-                />
-              </div>
-              <button 
-                type="submit" 
-                disabled={loading} 
-                style={{ 
-                  padding: '15px 25px',
-                  borderRadius: '8px',
-                  border: 'none',
-                  background: loading ? '#ccc' : '#2c3e50',
-                  color: 'white',
-                  fontSize: '16px',
-                  fontWeight: 'bold',
-                  cursor: loading ? 'not-allowed' : 'pointer',
-                  transition: 'transform 0.2s ease',
-                  minWidth: '120px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px'
-                }}
-                onMouseOver={(e) => !loading && (e.target.style.transform = 'translateY(-2px)')}
-                onMouseOut={(e) => !loading && (e.target.style.transform = 'translateY(0)')}
-              >
-                {loading ? (
-                  <>
-                    <div style={{ 
-                      width: '16px', 
-                      height: '16px', 
-                      borderRadius: '50%', 
-                      border: '2px solid white',
-                      borderTop: '2px solid transparent',
-                      animation: 'spin 1s linear infinite'
-                    }} />
-                    분석 중...
-                  </>
-                ) : (
-                  <>
-                    <span>🚀</span>
-                    분석하기
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
+                  onMouseOver={(e) => !loading && (e.target.style.transform = 'translateY(-2px)')}
+                  onMouseOut={(e) => !loading && (e.target.style.transform = 'translateY(0)')}
+                >
+                  {loading ? (
+                    <>
+                      <div style={{ 
+                        width: '16px', 
+                        height: '16px', 
+                        borderRadius: '50%', 
+                        border: '2px solid white',
+                        borderTop: '2px solid transparent',
+                        animation: 'spin 1s linear infinite'
+                      }} />
+                      분석 중...
+                    </>
+                  ) : (
+                    <>
+                      <span>🚀</span>
+                      분석하기
+                    </>
+                  )}
+                </button>
+              </form>
+            </div>
+          )}
 
           {/* 진행 상황 표시 */}
           {loading && progress.current > 0 && (
@@ -264,7 +346,7 @@ const TestGithubSummary = () => {
                   fontWeight: '600', 
                   color: '#2c3e50' 
                 }}>
-                  분석 진행 중...
+                  {autoSubmit ? `${username}의 GitHub 분석 중...` : '분석 진행 중...'}
                 </span>
               </div>
               
@@ -374,6 +456,89 @@ const TestGithubSummary = () => {
               padding: '25px', 
               boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
             }}>
+              {/* 콘텐츠 변경 알림 및 재분석 버튼 */}
+              {contentChanged && (
+                <div style={{
+                  background: '#fff3cd',
+                  border: '1px solid #ffeaa7',
+                  borderRadius: '8px',
+                  padding: '15px',
+                  marginBottom: '20px'
+                }}>
+                  <div style={{ 
+                    display: 'flex', 
+                    alignItems: 'center', 
+                    justifyContent: 'space-between',
+                    marginBottom: result.changes_detected && result.changes_detected.length > 0 ? '10px' : '0'
+                  }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                      <span style={{ fontSize: '20px' }}>⚠️</span>
+                      <span style={{ color: '#856404', fontWeight: 'bold' }}>
+                        등록된 정보가 차이가 납니다
+                      </span>
+                    </div>
+                    <button
+                      onClick={handleForceReanalysis}
+                      disabled={loading}
+                      style={{
+                        background: '#dc3545',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '6px',
+                        padding: '8px 16px',
+                        cursor: loading ? 'not-allowed' : 'pointer',
+                        fontSize: '14px',
+                        fontWeight: 'bold'
+                      }}
+                    >
+                      {loading ? '재분석 중...' : '재분석'}
+                    </button>
+                  </div>
+                  
+                  {/* 변경 사항 목록 표시 */}
+                  {result.changes_detected && result.changes_detected.length > 0 && (
+                    <div style={{ 
+                      background: 'rgba(255, 255, 255, 0.5)', 
+                      borderRadius: '6px', 
+                      padding: '10px',
+                      marginTop: '10px'
+                    }}>
+                      <div style={{ color: '#856404', fontSize: '14px', fontWeight: 'bold', marginBottom: '5px' }}>
+                        감지된 변경 사항:
+                      </div>
+                      <ul style={{ 
+                        margin: 0, 
+                        paddingLeft: '20px', 
+                        color: '#856404',
+                        fontSize: '13px'
+                      }}>
+                        {result.changes_detected.map((change, index) => (
+                          <li key={index}>{change}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+              
+              {/* 캐시된 결과 알림 */}
+              {result.source === 'cached' && (
+                <div style={{
+                  background: '#d1ecf1',
+                  border: '1px solid #bee5eb',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  marginBottom: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px'
+                }}>
+                  <span style={{ fontSize: '16px' }}>💾</span>
+                  <span style={{ color: '#0c5460', fontSize: '14px' }}>
+                    캐시된 분석 결과를 사용합니다
+                  </span>
+                </div>
+              )}
               <div style={{ 
                 display: 'flex', 
                 gap: '20px', 
@@ -412,11 +577,8 @@ const TestGithubSummary = () => {
               {/* 언어 사용량 차트 섹션 - 인터랙티브(Recharts) */}
               {result.language_stats && Object.keys(result.language_stats).length > 0 ? (
                 <div style={{ 
-                  marginBottom: '25px', 
-                  // padding: '25px', 
-                  // background: '#f8f9fa', 
-                  // borderRadius: '12px',
-                  // border: '1px solid #e1e5e9'
+                  marginBottom: '25px',
+                  textAlign: 'center'
                 }}>
                   <h3 style={{ 
                     margin: '0 0 20px 0', 
@@ -424,6 +586,7 @@ const TestGithubSummary = () => {
                     fontSize: '20px',
                     display: 'flex',
                     alignItems: 'center',
+                    justifyContent: 'center',
                     gap: '10px'
                   }}>
                     📊 언어 사용량 분석
@@ -433,16 +596,56 @@ const TestGithubSummary = () => {
                     const total = result.language_total_bytes || Object.values(stats).reduce((a, b) => a + b, 0);
                     const entries = Object.entries(stats).sort(([,a], [,b]) => b - a);
                     
-                    // 기타를 맨 마지막에 배치
-                    const processed = entries
-                      .filter(([name]) => name !== '기타')
-                      .map(([name, value]) => ({ name, value }));
+                    // 글자 겹침 방지를 위한 자동 "기타" 조정 로직
+                    const processChartData = (data, totalBytes) => {
+                      const processed = [];
+                      let othersValue = 0;
+                      let othersLanguages = [];
+                      
+                      // 최소 비율 설정 (차트에서 라벨이 겹치지 않도록)
+                      const MIN_PERCENTAGE = 5; // 5% 미만은 기타로 분류
+                      const MAX_VISIBLE_ITEMS = 6; // 최대 6개 항목만 표시
+                      
+                      for (let i = 0; i < data.length; i++) {
+                        const [name, value] = data[i];
+                        const percentage = (value / totalBytes) * 100;
+                        
+                        // 기타 항목은 건너뛰기 (나중에 처리)
+                        if (name === '기타') {
+                          othersValue += value;
+                          continue;
+                        }
+                        
+                        // 조건 1: 5% 미만인 경우 기타로 분류
+                        // 조건 2: 6개 이상의 항목이 있는 경우 작은 것들을 기타로 분류
+                        if (percentage < MIN_PERCENTAGE || processed.length >= MAX_VISIBLE_ITEMS) {
+                          othersValue += value;
+                          othersLanguages.push({ name, value, percentage });
+                        } else {
+                          processed.push({ name, value });
+                        }
+                      }
+                      
+                      // 기타 항목이 있으면 추가 (단, 기타로 분류되는 항목이 하나뿐이면 기타로 분류하지 않음)
+                      if (othersValue > 0 && othersLanguages.length > 1) {
+                        processed.push({ 
+                          name: '기타', 
+                          value: othersValue,
+                          othersLanguages: othersLanguages.sort((a, b) => b.percentage - a.percentage)
+                        });
+                      } else if (othersValue > 0 && othersLanguages.length === 1) {
+                        // 기타로 분류되는 항목이 하나뿐이면 원래 언어명으로 표시
+                        const singleLanguage = othersLanguages[0];
+                        processed.push({ 
+                          name: singleLanguage.name, 
+                          value: singleLanguage.value
+                        });
+                      }
+                      
+                      return processed;
+                    };
                     
-                    // 기타가 있으면 맨 마지막에 추가
-                    const othersEntry = entries.find(([name]) => name === '기타');
-                    if (othersEntry) {
-                      processed.push({ name: othersEntry[0], value: othersEntry[1] });
-                    }
+                    const processed = processChartData(entries, total);
 
                     const COLORS = [
                       '#F7DF1E','#3178C6','#3776AB','#ED8B00','#00599C','#A8B9CC','#239120','#777BB4',
@@ -450,27 +653,54 @@ const TestGithubSummary = () => {
                       '#4FC08D','#61DAFB','#DD0031','#339933','#00B4AB','#6C757D'
                     ];
 
-                    // 커스텀 라벨: 항상 외부 꺾임 라벨 + 가이드 라인 (차트 내부 텍스트 없음)
+                    // 커스텀 라벨: 내부 텍스트 + 외부 꺾임 라벨 조합
                     const RADIAN = Math.PI / 180;
                     const renderCustomizedLabel = (props) => {
-                      const { cx, cy, midAngle, outerRadius, percent, name } = props;
+                      const { cx, cy, midAngle, innerRadius, outerRadius, percent, name } = props;
                       const label = `${(name || '').toUpperCase()} (${(percent * 100).toFixed(1)}%)`;
-                      const sin = Math.sin(-RADIAN * midAngle);
-                      const cos = Math.cos(-RADIAN * midAngle);
-                      const sx = cx + outerRadius * cos;
-                      const sy = cy + outerRadius * sin;
-                      const mx = cx + (outerRadius + 14) * cos;
-                      const my = cy + (outerRadius + 14) * sin;
-                      const ex = mx + (cos >= 0 ? 28 : -28);
-                      const ey = my;
-                      const textAnchor = cos >= 0 ? 'start' : 'end';
+                      
+                      // 조각의 각도 계산
+                      const angle = percent * 360;
+                      
+                      // 내부 텍스트 렌더링 (모든 조각에 표시)
+                      let innerText = null;
+                      if (percent > 0.01) { // 1% 이상이면 표시
+                        const radius = innerRadius + (outerRadius - innerRadius) * 0.6;
+                        const x = cx + radius * Math.cos(-midAngle * RADIAN);
+                        const y = cy + radius * Math.sin(-midAngle * RADIAN);
+                        
+                        // 텍스트 길이에 따른 폰트 크기 조정
+                        let fontSize = '12px';
+                        if (angle > 60) fontSize = '14px';
+                        else if (angle > 40) fontSize = '13px';
+                        else if (angle > 20) fontSize = '13px';
+                        else fontSize = '13px'; // 작은 조각들 (9px에서 10px로 증가)
+                        
+                        const percentage = (percent * 100).toFixed(1);
+                        
+                        innerText = (
+                          <g>
+                            {/* 비율만 표시 */}
+                            <text 
+                              x={x} 
+                              y={y} 
+                              fill="black" 
+                              textAnchor="middle" 
+                              dominantBaseline="central"
+                              style={{ 
+                                fontSize: fontSize,
+                                fontWeight: 'normal'
+                              }}
+                            >
+                              {percentage}%
+                            </text>
+                          </g>
+                        );
+                      }
+                      
                       return (
                         <g>
-                          <path d={`M${sx},${sy}L${mx},${my}L${ex},${ey}`} stroke="#9aa0a6" fill="none" />
-                          <circle cx={ex} cy={ey} r={2} fill="#9aa0a6" />
-                          <text x={ex + (cos >= 0 ? 4 : -4)} y={ey} textAnchor={textAnchor} dominantBaseline="central" style={{ fontSize: 12, fontWeight: 700, fill: '#202124' }}>
-                            {label}
-                          </text>
+                          {innerText}
                         </g>
                       );
                     };
@@ -484,8 +714,14 @@ const TestGithubSummary = () => {
                       const header = `${name} (${((value/total)*100).toFixed(1)}%)`;
                       let detail = null;
                       
-                      // 기타 항목인 경우 원본 데이터에서 해당 언어들을 찾아 표시
-                      if (name === '기타' && result.original_language_stats) {
+                      // 기타 항목인 경우 하위 언어들을 표시
+                      if (name === '기타' && item.othersLanguages && item.othersLanguages.length > 0) {
+                        const parts = item.othersLanguages
+                          .map(({ name: langName, percentage }) => `${langName} (${percentage.toFixed(1)}%)`)
+                          .join(', ');
+                        detail = parts;
+                      } else if (name === '기타' && result.original_language_stats) {
+                        // 기존 로직 (백업용)
                         const originalEntries = Object.entries(result.original_language_stats)
                           .filter(([langName, langValue]) => {
                             const percentage = (langValue / result.language_total_bytes) * 100;
@@ -511,9 +747,9 @@ const TestGithubSummary = () => {
 
                     if (processed.length > 0) {
                       return (
-                        <div style={{ height: 360, background: 'white', borderRadius: 12, boxShadow: '0 4px 8px rgba(0,0,0,0.08)' }}>
-                          <ResponsiveContainer width="100%" height="100%">
-                            <PieChart>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '40px' }}>
+                          <ResponsiveContainer width="60%" height={360}>
+                            <PieChart key={`chart-${result?.source || 'new'}-${Date.now()}`}>
                               <Pie
                                 data={processed}
                                 dataKey="value"
@@ -524,7 +760,7 @@ const TestGithubSummary = () => {
                                 outerRadius={130}
                                 startAngle={90}
                                 endAngle={-270}
-                                isAnimationActive
+                                isAnimationActive={true}
                                 animationBegin={0}
                                 animationDuration={900}
                                 animationEasing="ease-out"
@@ -538,91 +774,41 @@ const TestGithubSummary = () => {
                               <Tooltip content={<CustomTooltip />} />
                             </PieChart>
                           </ResponsiveContainer>
+                          
+                          {/* 오른쪽 범례 */}
+                          <div style={{ 
+                            flex: 1, 
+                            display: 'flex', 
+                            flexDirection: 'column', 
+                            gap: '12px',
+                            padding: '20px'
+                          }}>
+                            {processed.map((entry, index) => (
+                              <div key={index} style={{ 
+                                display: 'flex', 
+                                alignItems: 'center', 
+                                gap: '12px',
+                                fontSize: '14px',
+                                fontWeight: '500'
+                              }}>
+                                <div style={{ 
+                                  width: '16px', 
+                                  height: '16px', 
+                                  backgroundColor: COLORS[index % COLORS.length],
+                                  borderRadius: '3px'
+                                }} />
+                                <span style={{ color: '#333' }}>{entry.name}</span>
+                                <span style={{ color: '#666', fontSize: '12px' }}>
+                                  ({((entry.value / total) * 100).toFixed(1)}%)
+                                </span>
+                              </div>
+                            ))}
+                          </div>
                         </div>
                       );
                     }
                     return null;
                   })()}
-                  
-                  {/* 언어 통계 정보 추가 */}
-                  {result.detailed_analysis && result.detailed_analysis.tech_stack && result.detailed_analysis.tech_stack.languages && (
-                    <div style={{ 
-                      background: 'white', 
-                      borderRadius: '12px', 
-                      padding: '20px',
-                      marginTop: '20px'
-                    }}>
-                      <h4 style={{ 
-                        margin: '0 0 15px 0', 
-                        color: '#333', 
-                        fontSize: '18px',
-                        display: 'flex',
-                        alignItems: 'center',
-                        gap: '8px'
-                      }}>
-                        📈 언어별 상세 통계
-                      </h4>
-                      
-                      <div style={{ 
-                        display: 'grid', 
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-                        gap: '15px',
-                        marginBottom: '15px'
-                      }}>
-                        {Object.entries(result.detailed_analysis.tech_stack.languages)
-                          .sort(([,a], [,b]) => b - a)
-                          .map(([lang, bytes]) => (
-                            <div key={lang} style={{ 
-                              background: '#f8f9fa', 
-                              padding: '15px', 
-                              borderRadius: '8px',
-                              border: '1px solid #e1e5e9',
-                              textAlign: 'center'
-                            }}>
-                              <div style={{ 
-                                fontSize: '16px', 
-                                fontWeight: 'bold', 
-                                color: '#2c3e50',
-                                marginBottom: '5px'
-                              }}>
-                                {lang}
-                              </div>
-                              <div style={{ 
-                                fontSize: '18px', 
-                                color: '#3498db',
-                                fontWeight: 'bold'
-                              }}>
-                                {((bytes / Object.values(result.detailed_analysis.tech_stack.languages).reduce((a, b) => a + b, 0)) * 100).toFixed(1)}%
-                              </div>
-                            </div>
-                          ))}
-                      </div>
-                      
-                      <div style={{ 
-                        textAlign: 'center',
-                        padding: '15px',
-                        background: '#e8f4f8',
-                        borderRadius: '8px',
-                        border: '1px solid #d1ecf1'
-                      }}>
-                        <div style={{ 
-                          fontSize: '16px', 
-                          fontWeight: 'bold', 
-                          color: '#0c5460',
-                          marginBottom: '5px'
-                        }}>
-                          총 코드량
-                        </div>
-                        <div style={{ 
-                          fontSize: '18px', 
-                          color: '#2c3e50',
-                          fontWeight: 'bold'
-                        }}>
-                          {Object.values(result.detailed_analysis.tech_stack.languages).reduce((a, b) => a + b, 0).toLocaleString()} bytes
-                        </div>
-                      </div>
-                    </div>
-                  )}
                   
                                 {/* <div style={{ 
                     marginTop: '15px', 
