@@ -311,9 +311,16 @@ export const ocrApi = {
     try {
       const formData = new FormData();
 
-      files.forEach((file, index) => {
-        formData.append(`files`, file);
-      });
+      // 파일들을 개별 파라미터로 전송
+      if (files.length > 0) {
+        formData.append('resume_file', files[0]); // 첫 번째 파일은 이력서
+      }
+      if (files.length > 1) {
+        formData.append('cover_letter_file', files[1]); // 두 번째 파일은 자기소개서
+      }
+      if (files.length > 2) {
+        formData.append('portfolio_file', files[2]); // 세 번째 파일은 포트폴리오
+      }
 
       if (githubUrl) {
         formData.append('githubUrl', githubUrl);
@@ -328,14 +335,27 @@ export const ocrApi = {
         let errorData;
         try {
           errorData = await response.json();
+          console.error('❌ 업로드 API 오류:', errorData);
+          
+          // 더 자세한 오류 정보가 있으면 사용
+          if (errorData.detail) {
+            throw new Error(errorData.detail);
+          } else if (errorData.error) {
+            throw new Error(errorData.error);
+          } else if (errorData.message) {
+            throw new Error(errorData.message);
+          } else {
+            throw new Error('문서 업로드 실패');
+          }
         } catch (e) {
+          // JSON 파싱 실패 시 텍스트로 읽기
           const errorText = await response.text();
-          console.error('❌ 업로드 API 오류:', errorText);
-          throw new Error('문서 업로드 실패');
+          console.error('❌ 업로드 API 오류 (텍스트):', errorText);
+          throw new Error(`문서 업로드 실패: ${errorText}`);
         }
-        throw new Error(errorData.message || '문서 업로드 실패');
       }
 
+      // 성공 시에만 JSON 파싱
       const result = await response.json();
       return result;
     } catch (error) {

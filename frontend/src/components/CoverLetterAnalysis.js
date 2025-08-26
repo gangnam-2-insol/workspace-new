@@ -2,10 +2,13 @@ import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 
 const Container = styled.div`
-  padding: 24px;
+  padding: 32px;
   background: white;
   border-radius: 12px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  min-width: 1000px;
+  max-width: 1200px;
+  width: 100%;
 
   @keyframes fadeInScale {
     0% {
@@ -31,10 +34,10 @@ const Container = styled.div`
 `;
 
 const Title = styled.h2`
-  font-size: 24px;
+  font-size: 20px;
   font-weight: 700;
   color: #333;
-  margin-bottom: 24px;
+  margin-bottom: 20px;
   text-align: center;
 `;
 
@@ -52,18 +55,18 @@ const RadarChartSection = styled.div`
 `;
 
 const RadarChartTitle = styled.h3`
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: #333;
-  margin-bottom: 20px;
+  margin-bottom: 16px;
   text-align: center;
   animation: fadeInScale 1s ease-out forwards;
 `;
 
 const RadarChartContainer = styled.div`
   position: relative;
-  width: 450px;
-  height: 450px;
+  width: 350px;
+  height: 350px;
   margin: 0 auto;
 `;
 
@@ -118,53 +121,53 @@ const RadarLabel = styled.text`
 const SummarySection = styled.div`
   background: linear-gradient(135deg, #f8f9fa, #e9ecef);
   border-radius: 12px;
-  padding: 20px;
+  padding: 16px;
   border-left: 4px solid #3b82f6;
 `;
 
 const SummaryTitle = styled.h3`
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: #333;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
   display: flex;
   align-items: center;
   gap: 8px;
 `;
 
 const SummaryText = styled.p`
-  font-size: 14px;
+  font-size: 13px;
   color: #666;
-  line-height: 1.6;
+  line-height: 1.5;
   background: white;
-  padding: 16px;
+  padding: 12px;
   border-radius: 8px;
   margin: 0;
 `;
 
 const BarChartSection = styled.div`
-  margin-top: 32px;
+  margin-top: 24px;
 `;
 
 const BarChartTitle = styled.h3`
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 600;
   color: #333;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   text-align: center;
 `;
 
 const BarChartContainer = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 12px;
 `;
 
 const BarItem = styled.div`
   display: flex;
   align-items: center;
-  gap: 16px;
-  padding: 12px;
+  gap: 12px;
+  padding: 10px;
   background: #f8f9fa;
   border-radius: 8px;
   border-left: 4px solid #3b82f6;
@@ -183,8 +186,8 @@ const BarItem = styled.div`
 `;
 
 const BarLabel = styled.div`
-  width: 200px;
-  font-size: 14px;
+  width: 150px;
+  font-size: 13px;
   font-weight: 500;
   color: #333;
   flex-shrink: 0;
@@ -192,16 +195,16 @@ const BarLabel = styled.div`
 
 const BarContainer = styled.div`
   flex: 1;
-  height: 24px;
+  height: 20px;
   background: #e0e0e0;
-  border-radius: 12px;
+  border-radius: 10px;
   overflow: hidden;
   position: relative;
 `;
 
 const BarFill = styled.div`
   height: 100%;
-  border-radius: 12px;
+  border-radius: 10px;
   transition: width 0.8s ease-out;
   position: relative;
   background: ${props => props.color || 'linear-gradient(90deg, #3b82f6, #1d4ed8)'};
@@ -209,19 +212,19 @@ const BarFill = styled.div`
 
 const BarValue = styled.div`
   position: absolute;
-  right: 8px;
+  right: 6px;
   top: 50%;
   transform: translateY(-50%);
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: white;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 `;
 
 const BarScore = styled.div`
-  width: 60px;
+  width: 50px;
   text-align: right;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 600;
   color: #333;
   flex-shrink: 0;
@@ -281,7 +284,7 @@ const CoverLetterAnalysis = ({ analysisData }) => {
       };
     }
 
-    // 새로운 구조: analysisData.technical_suitability.score 형태
+    // DB에서 가져온 analysis_results 구조 처리
     if (analysisData.technical_suitability && typeof analysisData.technical_suitability.score === 'number') {
       return {
         technical_suitability: analysisData.technical_suitability.score,
@@ -323,13 +326,14 @@ const CoverLetterAnalysis = ({ analysisData }) => {
   }
 
   // 분석 시간 가져오기
-  const analyzedAt = analysisData?.analyzed_at ? new Date(analysisData.analyzed_at).toLocaleString('ko-KR') : null;
+  const analyzedAt = analysisData?.analyzed_at ? new Date(analysisData.analyzed_at).toLocaleString('ko-KR') : 
+                    analysisData?.created_at ? new Date(analysisData.created_at).toLocaleString('ko-KR') : null;
 
   // 레이더차트 데이터 생성
   const generateRadarData = () => {
-    const centerX = 225;
-    const centerY = 225;
-    const radius = 120;  // 차트 반지름을 키워서 더 큰 차트 생성
+    const centerX = 175;
+    const centerY = 175;
+    const radius = 90;  // 차트 반지름을 줄여서 더 작은 차트 생성
     const points = [];
     const labels = [];
 
@@ -343,13 +347,13 @@ const CoverLetterAnalysis = ({ analysisData }) => {
 
       points.push(`${x},${y}`);
 
-      // 라벨 위치 (바깥쪽) - 직무이해도만 차트에 좀 붙여서 간격 조정
-      let labelRadius;
-      if (index === 2) {  // 직무이해도 (3번째 항목, 인덱스 2)
-        labelRadius = radius + 35;  // 간격을 35로 조정
-      } else {
-        labelRadius = radius + 70;  // 다른 항목들은 간격 조정
-      }
+             // 라벨 위치 (바깥쪽) - 직무이해도만 차트에 좀 붙여서 간격 조정
+       let labelRadius;
+       if (index === 2) {  // 직무이해도 (3번째 항목, 인덱스 2)
+         labelRadius = radius + 25;  // 간격을 25로 조정
+       } else {
+         labelRadius = radius + 50;  // 다른 항목들은 간격 조정
+       }
 
       const labelX = centerX + labelRadius * Math.cos(angle);
       const labelY = centerY + labelRadius * Math.sin(angle);
@@ -374,7 +378,7 @@ const CoverLetterAnalysis = ({ analysisData }) => {
   const generateGridCircles = () => {
     const circles = [];
     for (let i = 1; i <= 5; i++) {
-      const radius = (120 / 5) * i;
+      const radius = (90 / 5) * i;
       circles.push(radius);
     }
     return circles;
@@ -385,9 +389,9 @@ const CoverLetterAnalysis = ({ analysisData }) => {
     const axes = [];
     categories.forEach((_, index) => {
       const angle = (index * 2 * Math.PI) / categories.length;
-      const x = 225 + 120 * Math.cos(angle);
-      const y = 225 + 120 * Math.sin(angle);
-      axes.push({ x1: 225, y1: 225, x2: x, y2: y });
+      const x = 175 + 90 * Math.cos(angle);
+      const y = 175 + 90 * Math.sin(angle);
+      axes.push({ x1: 175, y1: 175, x2: x, y2: y });
     });
     return axes;
   };
@@ -402,11 +406,15 @@ const CoverLetterAnalysis = ({ analysisData }) => {
   const axes = generateAxes();
 
   // 분석 데이터가 있는지 체크
+  // 디버깅을 위한 로그 추가
+  console.log('CoverLetterAnalysis - analysisData:', analysisData);
+  console.log('CoverLetterAnalysis - analysisData type:', typeof analysisData);
+  console.log('CoverLetterAnalysis - analysisData keys:', analysisData ? Object.keys(analysisData) : 'null');
+  console.log('CoverLetterAnalysis - technical_suitability:', analysisData?.technical_suitability);
+  
   const hasValidData = analysisData &&
     typeof analysisData === 'object' &&
-    Object.keys(analysisData).length > 0 &&
-    analysisData.technical_suitability &&
-    analysisData.technical_suitability.score;
+    Object.keys(analysisData).length > 0;
 
   if (!hasValidData) {
     return (
@@ -423,116 +431,120 @@ const CoverLetterAnalysis = ({ analysisData }) => {
     <Container>
       <Title>자소서 분석 결과</Title>
 
-      <AnalysisGrid>
-        {/* 레이더차트 섹션 */}
-        <RadarChartSection>
-          <RadarChartTitle>종합 평가</RadarChartTitle>
-          <RadarChartContainer>
-            <RadarChart viewBox="0 0 450 450">
-              {/* 그리드 원 */}
-              {gridCircles.map((radius, index) => (
-                <RadarGrid key={index}>
-                  <circle
-                    cx="175"
-                    cy="175"
-                    r={radius}
-                    fill="none"
-                  />
-                </RadarGrid>
-              ))}
+             {/* 상단 레이아웃: 레이더차트(왼쪽) + 총평/권장사항(오른쪽) */}
+       <div style={{
+         display: 'grid',
+         gridTemplateColumns: '1fr 1fr',
+         gap: '32px',
+         marginBottom: '32px',
+         width: '100%',
+         maxWidth: '900px',
+         margin: '0 auto 32px auto'
+       }}>
+         {/* 왼쪽: 레이더차트 */}
+         <RadarChartSection>
+           <RadarChartTitle>종합 평가</RadarChartTitle>
+           <RadarChartContainer>
+             <RadarChart viewBox="0 0 350 350">
+               {/* 그리드 원 */}
+               {gridCircles.map((radius, index) => (
+                                   <RadarGrid key={index}>
+                    <circle
+                      cx="175"
+                      cy="175"
+                      r={radius}
+                      fill="none"
+                    />
+                  </RadarGrid>
+               ))}
 
-              {/* 축 */}
-              {axes.map((axis, index) => (
-                <RadarAxis key={index}>
-                  <line
-                    x1={axis.x1}
-                    y1={axis.y1}
-                    x2={axis.x2}
-                    y2={axis.y2}
-                  />
-                </RadarAxis>
-              ))}
+               {/* 축 */}
+               {axes.map((axis, index) => (
+                 <RadarAxis key={index}>
+                   <line
+                     x1={axis.x1}
+                     y1={axis.y1}
+                     x2={axis.x2}
+                     y2={axis.y2}
+                   />
+                 </RadarAxis>
+               ))}
 
-              {/* 데이터 영역 */}
-              <RadarData>
-                <polygon
-                  points={points.join(' ')}
-                  style={{
-                    animation: 'fadeInScale 1.5s ease-out forwards'
-                  }}
-                />
-              </RadarData>
+               {/* 데이터 영역 */}
+               <RadarData>
+                 <polygon
+                   points={points.join(' ')}
+                   style={{
+                     animation: 'fadeInScale 1.5s ease-out forwards'
+                   }}
+                 />
+               </RadarData>
 
-              {/* 데이터 포인트 */}
-              <RadarData>
-                {points.map((point, index) => {
-                  const [x, y] = point.split(',').map(Number);
-                  return (
-                    <RadarPoint key={index}>
-                      <circle
-                        cx={x}
-                        cy={y}
-                        r="4"
-                        fill="#3b82f6"
-                        style={{
-                          animation: `fadeInPoint 0.8s ease-out ${index * 0.1}s forwards`,
-                          opacity: 0
-                        }}
-                      />
-                    </RadarPoint>
-                  );
-                })}
-              </RadarData>
+               {/* 데이터 포인트 */}
+               <RadarData>
+                 {points.map((point, index) => {
+                   const [x, y] = point.split(',').map(Number);
+                   return (
+                     <RadarPoint key={index}>
+                       <circle
+                         cx={x}
+                         cy={y}
+                         r="4"
+                         fill="#3b82f6"
+                         style={{
+                           animation: `fadeInPoint 0.8s ease-out ${index * 0.1}s forwards`,
+                           opacity: 0
+                         }}
+                       />
+                     </RadarPoint>
+                   );
+                 })}
+               </RadarData>
 
-              {/* 라벨 */}
-              {labels.map((label, index) => (
-                <g key={index}>
-                  {/* 메인 텍스트 - 배경 없이 직접 표시 */}
-                  <text
-                    x={label.x}
-                    y={label.y}
-                    textAnchor="middle"
-                    dominantBaseline="middle"
-                    fontSize="13"
-                    fontWeight="600"
-                    fill="#333"
-                    cursor="pointer"
-                    onClick={() => handleCategoryClick(label.category)}
-                    style={{ userSelect: 'none' }}
-                  >
-                    {label.textLines.length > 1 ? (
-                      // 긴 텍스트는 줄바꿔서 표시 - 간격을 더 넓게
-                      label.textLines.map((line, lineIndex) => (
-                        <tspan
-                          key={lineIndex}
-                          x={label.x}
-                          dy={lineIndex === 0 ? "-1.0em" : "1.6em"}
-                        >
-                          {line}
-                        </tspan>
-                      ))
-                    ) : (
-                      // 짧은 텍스트는 한 줄로 표시
-                      label.text
-                    )}
-                  </text>
-                </g>
-              ))}
-            </RadarChart>
-          </RadarChartContainer>
-        </RadarChartSection>
+               {/* 라벨 */}
+               {labels.map((label, index) => (
+                 <g key={index}>
+                   {/* 메인 텍스트 - 배경 없이 직접 표시 */}
+                   <text
+                     x={label.x}
+                     y={label.y}
+                     textAnchor="middle"
+                     dominantBaseline="middle"
+                     fontSize="13"
+                     fontWeight="600"
+                     fill="#333"
+                     cursor="pointer"
+                     onClick={() => handleCategoryClick(label.category)}
+                     style={{ userSelect: 'none' }}
+                   >
+                     {label.textLines.length > 1 ? (
+                       // 긴 텍스트는 줄바꿔서 표시 - 간격을 더 넓게
+                       label.textLines.map((line, lineIndex) => (
+                         <tspan
+                           key={lineIndex}
+                           x={label.x}
+                           dy={lineIndex === 0 ? "-1.0em" : "1.6em"}
+                         >
+                           {line}
+                         </tspan>
+                       ))
+                     ) : (
+                       // 짧은 텍스트는 한 줄로 표시
+                       label.text
+                     )}
+                   </text>
+                 </g>
+               ))}
+             </RadarChart>
+           </RadarChartContainer>
+         </RadarChartSection>
 
-
-      </AnalysisGrid>
-
-      {/* 하단 총평 및 개선 권장사항 섹션 */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: '1fr 1fr',
-        gap: '32px',
-        marginBottom: '32px',
-        width: '100%'
-      }}>
+         {/* 오른쪽: 총평 및 개선 권장사항 (세로로 나열) */}
+         <div style={{
+           display: 'flex',
+           flexDirection: 'column',
+           gap: '24px'
+         }}>
         {/* 전체적인 총평 */}
         <SummarySection>
           <SummaryTitle>
@@ -614,12 +626,16 @@ const CoverLetterAnalysis = ({ analysisData }) => {
             </div>
           </SummarySection>
         )}
+        </div>
       </div>
 
       {/* 막대 그래프 섹션 */}
       <BarChartSection>
         <BarChartTitle>항목별 상세 분석</BarChartTitle>
-        <BarChartContainer>
+                 <BarChartContainer style={{
+           maxWidth: '900px',
+           margin: '0 auto'
+         }}>
           {categories.map((category) => (
             <BarItem
               key={category.key}
@@ -644,7 +660,10 @@ const CoverLetterAnalysis = ({ analysisData }) => {
 
       {/* 상세 설명 섹션 */}
       {selectedCategory && (
-        <DetailSection>
+                 <DetailSection style={{
+           maxWidth: '900px',
+           margin: '0 auto'
+         }}>
           <DetailTitle>
             {categories.find(cat => cat.key === selectedCategory)?.label} 상세 분석
           </DetailTitle>
@@ -668,16 +687,16 @@ const CoverLetterAnalysis = ({ analysisData }) => {
                       '기본적인 기술 역량은 갖추고 있으나, 직무 요구사항과의 일치도나 프로젝트 경험에서 보완이 필요합니다.' :
                       '기술적 역량 향상이 필요합니다. 직무 요구사항에 맞는 기술 스택 학습과 프로젝트 경험 축적이 필요합니다.')}
                 </p>
-                {analysisData?.technical_suitability?.details && (
-                  <div style={{ marginTop: '16px', padding: '12px 0', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-                    <h6 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>상세 분석</h6>
-                    <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
-                      <li>기술 스택 일치도: {analysisData.technical_suitability.details.tech_stack_alignment}점</li>
-                      <li>프로젝트 경험: {analysisData.technical_suitability.details.project_experience}점</li>
-                      <li>문제 해결 창의성: {analysisData.technical_suitability.details.problem_solving_creativity}점</li>
-                    </ul>
-                  </div>
-                )}
+                                 {analysisData?.technical_suitability?.details && (
+                   <div style={{ marginTop: '16px', padding: '12px 0', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                     <h6 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>상세 분석</h6>
+                     <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
+                       <li>기술 스택 일치도: {analysisData.technical_suitability.details.tech_stack_alignment || 'N/A'}점</li>
+                       <li>프로젝트 경험: {analysisData.technical_suitability.details.project_experience || 'N/A'}점</li>
+                       <li>문제 해결 창의성: {analysisData.technical_suitability.details.problem_solving_creativity || 'N/A'}점</li>
+                     </ul>
+                   </div>
+                 )}
               </div>
             )}
             {selectedCategory === 'job_understanding' && (
@@ -698,16 +717,16 @@ const CoverLetterAnalysis = ({ analysisData }) => {
                       '직무의 기본적인 내용은 파악하고 있으나, 세부적인 역할과 책임, 산업 트렌드에 대한 이해를 더욱 심화할 필요가 있습니다.' :
                       '직무에 대한 기본적인 이해부터 시작해야 합니다. 주요 역할과 책임, 산업 동향에 대한 학습이 필요합니다.')}
                 </p>
-                {analysisData?.job_understanding?.details && (
-                  <div style={{ marginTop: '16px', padding: '12px 0', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-                    <h6 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>상세 분석</h6>
-                    <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
-                      <li>역할 명확성: {analysisData.job_understanding.details.role_clarity}점</li>
-                      <li>산업 트렌드: {analysisData.job_understanding.details.industry_trends}점</li>
-                      <li>회사 제품 이해: {analysisData.job_understanding.details.company_products}점</li>
-                    </ul>
-                  </div>
-                )}
+                                 {analysisData?.job_understanding?.details && (
+                   <div style={{ marginTop: '16px', padding: '12px 0', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                     <h6 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>상세 분석</h6>
+                     <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
+                       <li>역할 명확성: {analysisData.job_understanding.details.role_clarity || 'N/A'}점</li>
+                       <li>산업 트렌드: {analysisData.job_understanding.details.industry_trends || 'N/A'}점</li>
+                       <li>회사 제품 이해: {analysisData.job_understanding.details.company_products || 'N/A'}점</li>
+                     </ul>
+                   </div>
+                 )}
               </div>
             )}
             {selectedCategory === 'growth_potential' && (
@@ -729,16 +748,16 @@ const CoverLetterAnalysis = ({ analysisData }) => {
                       '기본적인 성장 가능성은 있으나, 새로운 기술 학습이나 변화 적응에서 더 적극적인 태도가 필요합니다.' :
                       '성장을 위한 적극적인 노력이 필요합니다. 새로운 기술 학습과 변화 적응, 자기 주도적 학습 태도 개발이 필요합니다.')}
                 </p>
-                {analysisData?.growth_potential?.details && (
-                  <div style={{ marginTop: '16px', padding: '12px 0', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-                    <h6 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>상세 분석</h6>
-                    <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
-                      <li>새 기술 학습: {analysisData.growth_potential.details.new_tech_learning}점</li>
-                      <li>적응력: {analysisData.growth_potential.details.adaptability}점</li>
-                      <li>자기 주도 학습: {analysisData.growth_potential.details.self_driven_learning}점</li>
-                    </ul>
-                  </div>
-                )}
+                                 {analysisData?.growth_potential?.details && (
+                   <div style={{ marginTop: '16px', padding: '12px 0', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                     <h6 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>상세 분석</h6>
+                     <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
+                       <li>새 기술 학습: {analysisData.growth_potential.details.new_tech_learning || 'N/A'}점</li>
+                       <li>적응력: {analysisData.growth_potential.details.adaptability || 'N/A'}점</li>
+                       <li>자기 주도 학습: {analysisData.growth_potential.details.self_driven_learning || 'N/A'}점</li>
+                     </ul>
+                   </div>
+                 )}
               </div>
             )}
             {selectedCategory === 'teamwork_communication' && (
@@ -760,16 +779,16 @@ const CoverLetterAnalysis = ({ analysisData }) => {
                       '기본적인 협업 능력은 갖추고 있으나, 갈등 해결이나 의사소통에서 더 나은 방법을 학습할 필요가 있습니다.' :
                       '팀워크와 커뮤니케이션 능력 향상이 필요합니다. 협업 경험 축적과 갈등 해결, 의사소통 능력 개발이 필요합니다.')}
                 </p>
-                {analysisData?.teamwork_communication?.details && (
-                  <div style={{ marginTop: '16px', padding: '12px 0', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-                    <h6 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>상세 분석</h6>
-                    <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
-                      <li>협업 경험: {analysisData.teamwork_communication.details.collaboration_experience}점</li>
-                      <li>갈등 해결: {analysisData.teamwork_communication.details.conflict_resolution}점</li>
-                      <li>의사소통 명확성: {analysisData.teamwork_communication.details.communication_clarity}점</li>
-                    </ul>
-                  </div>
-                )}
+                                 {analysisData?.teamwork_communication?.details && (
+                   <div style={{ marginTop: '16px', padding: '12px 0', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                     <h6 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>상세 분석</h6>
+                     <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
+                       <li>협업 경험: {analysisData.teamwork_communication.details.collaboration_experience || 'N/A'}점</li>
+                       <li>갈등 해결: {analysisData.teamwork_communication.details.conflict_resolution || 'N/A'}점</li>
+                       <li>의사소통 명확성: {analysisData.teamwork_communication.details.communication_clarity || 'N/A'}점</li>
+                     </ul>
+                   </div>
+                 )}
               </div>
             )}
             {selectedCategory === 'motivation_company_fit' && (
@@ -791,16 +810,16 @@ const CoverLetterAnalysis = ({ analysisData }) => {
                       '기본적인 지원 동기는 있으나, 회사의 미션/비전과의 일치성이나 장기적 기여 가능성에서 더 구체적인 비전이 필요합니다.' :
                       '지원 동기와 회사 가치관 부합도 향상이 필요합니다. 회사의 미션/비전에 대한 이해와 장기적 기여 방향에 대한 명확한 비전이 필요합니다.')}
                 </p>
-                {analysisData?.motivation_company_fit?.details && (
-                  <div style={{ marginTop: '16px', padding: '12px 0', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
-                    <h6 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>상세 분석</h6>
-                    <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
-                      <li>동기 진정성: {analysisData.motivation_company_fit.details.motivation_authenticity}점</li>
-                      <li>미션/비전 일치: {analysisData.motivation_company_fit.details.mission_vision_alignment}점</li>
-                      <li>장기적 기여: {analysisData.motivation_company_fit.details.long_term_contribution}점</li>
-                    </ul>
-                  </div>
-                )}
+                                 {analysisData?.motivation_company_fit?.details && (
+                   <div style={{ marginTop: '16px', padding: '12px 0', backgroundColor: '#f8f9fa', borderRadius: '8px' }}>
+                     <h6 style={{ fontSize: '16px', fontWeight: '600', marginBottom: '12px', color: '#333' }}>상세 분석</h6>
+                     <ul style={{ margin: 0, paddingLeft: '20px', lineHeight: '1.6' }}>
+                       <li>동기 진정성: {analysisData.motivation_company_fit.details.motivation_authenticity || 'N/A'}점</li>
+                       <li>미션/비전 일치: {analysisData.motivation_company_fit.details.mission_vision_alignment || 'N/A'}점</li>
+                       <li>장기적 기여: {analysisData.motivation_company_fit.details.long_term_contribution || 'N/A'}점</li>
+                     </ul>
+                   </div>
+                 )}
               </div>
             )}
           </DetailContent>

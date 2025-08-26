@@ -7,7 +7,7 @@ try:
     from langchain.retrievers import EnsembleRetriever
     from langchain_core.documents import Document
     from langchain_core.retrievers import BaseRetriever
-    from langchain_elasticsearch import ElasticsearchStore
+    # from langchain_elasticsearch import ElasticsearchStore  # Elasticsearch 비활성화
     from langchain_openai import OpenAIEmbeddings
     from langchain_pinecone import PineconeVectorStore
     LANGCHAIN_AVAILABLE = True
@@ -15,7 +15,7 @@ except ImportError as e:
     LANGCHAIN_AVAILABLE = False
     print(f"LangChain 라이브러리가 설치되지 않았습니다: {e}")
 
-from elasticsearch import Elasticsearch
+# from elasticsearch import Elasticsearch  # Elasticsearch 비활성화
 from pinecone import Pinecone
 
 
@@ -31,10 +31,11 @@ class LangChainHybridService:
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         self.pinecone_api_key = os.getenv("PINECONE_API_KEY")
         self.pinecone_index = os.getenv("PINECONE_INDEX_NAME", "resume-vectors")
-        self.es_host = os.getenv("ELASTICSEARCH_HOST", "http://localhost:9200")
-        self.es_index = os.getenv("ELASTICSEARCH_INDEX", "resume_search")
-        self.es_username = os.getenv("ELASTICSEARCH_USERNAME", "elastic")
-        self.es_password = os.getenv("ELASTICSEARCH_PASSWORD", "changeme123")
+        # Elasticsearch 설정 (비활성화됨)
+        self.es_host = None
+        self.es_index = None
+        self.es_username = None
+        self.es_password = None
 
         if not self.openai_api_key:
             raise Exception("OPENAI_API_KEY가 설정되지 않았습니다.")

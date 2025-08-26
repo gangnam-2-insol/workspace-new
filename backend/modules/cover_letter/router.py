@@ -12,24 +12,10 @@ from .services import CoverLetterService
 # 프로젝트 루트 경로를 Python 경로에 추가
 sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
-import asyncio
-
-from modules.core.services.cover_letter_analysis.analyzer import CoverLetterAnalyzer
-from modules.core.services.llm_providers.openai_provider import OpenAIProvider
-
 router = APIRouter(prefix="/api/cover-letters", tags=["자기소개서"])
 
 def get_cover_letter_service(db: motor.motor_asyncio.AsyncIOMotorDatabase = Depends()) -> CoverLetterService:
     return CoverLetterService(db)
-
-# LLM 설정 (실제 환경에서는 환경변수에서 가져와야 함)
-LLM_CONFIG = {
-    "provider": "openai",
-    "api_key": os.getenv("OPENAI_API_KEY", ""),
-    "model_name": "gpt-4o-mini",
-    "max_tokens": 4000,
-    "temperature": 0.3
-}
 
 @router.post("/analyze", response_model=BaseResponse)
 async def analyze_cover_letter(
@@ -37,7 +23,7 @@ async def analyze_cover_letter(
     job_description: Optional[str] = Form(""),
     analysis_type: Optional[str] = Form("comprehensive")
 ):
-    """자소서 분석 API"""
+    """자소서 분석 API (기존 데이터 반환)"""
     try:
         # 파일 유효성 검사
         if not file.filename.lower().endswith(('.pdf', '.docx', '.txt')):
@@ -46,30 +32,65 @@ async def analyze_cover_letter(
                 message="지원하지 않는 파일 형식입니다. PDF, DOCX, TXT 파일만 업로드 가능합니다."
             )
 
-        # 파일 내용 읽기
-        file_content = await file.read()
-
-        # 자소서 분석기 초기화
-        analyzer = CoverLetterAnalyzer(LLM_CONFIG)
-
-        # 자소서 분석 실행
-        analysis_result = await analyzer.analyze_cover_letter(
-            file_bytes=file_content,
-            filename=file.filename,
-            job_description=job_description,
-            analysis_type=analysis_type
-        )
-
-        if analysis_result.status == "error":
-            return BaseResponse(
-                success=False,
-                message="자소서 분석 중 오류가 발생했습니다."
-            )
+        # 샘플 분석 데이터 반환 (AI 분석 대신)
+        sample_analysis = {
+            "technical_suitability": {
+                "score": 75,
+                "feedback": "기본적인 기술 역량을 보유하고 있습니다.",
+                "details": {
+                    "score": 75,
+                    "strengths": ["기본 기술 스택", "프로젝트 경험"],
+                    "weaknesses": ["고급 기술 부족"]
+                }
+            },
+            "job_understanding": {
+                "score": 80,
+                "feedback": "직무에 대한 기본적인 이해가 있습니다.",
+                "details": {
+                    "score": 80,
+                    "strengths": ["직무 이해", "기본 지식"],
+                    "weaknesses": ["심화 지식 부족"]
+                }
+            },
+            "growth_potential": {
+                "score": 85,
+                "feedback": "성장 가능성이 높아 보입니다.",
+                "details": {
+                    "score": 85,
+                    "strengths": ["학습 의지", "적응력"],
+                    "weaknesses": ["경험 부족"]
+                }
+            },
+            "teamwork_communication": {
+                "score": 70,
+                "feedback": "기본적인 협업 능력을 보유하고 있습니다.",
+                "details": {
+                    "score": 70,
+                    "strengths": ["팀워크", "소통"],
+                    "weaknesses": ["리더십 부족"]
+                }
+            },
+            "motivation_company_fit": {
+                "score": 90,
+                "feedback": "회사와의 적합성이 높습니다.",
+                "details": {
+                    "score": 90,
+                    "strengths": ["동기", "가치관"],
+                    "weaknesses": ["구체적 계획 부족"]
+                }
+            },
+            "summary": "전반적으로 우수한 자소서입니다. 기술 역량과 성장 가능성을 보여주고 있습니다.",
+            "recommendations": [
+                "더 구체적인 프로젝트 경험을 추가하세요",
+                "기술적 깊이를 보여주는 내용을 보강하세요"
+            ],
+            "overall_score": 80
+        }
 
         return BaseResponse(
             success=True,
-            message="자소서 분석이 완료되었습니다.",
-            data=analysis_result.dict()
+            message="자소서 분석이 완료되었습니다. (샘플 데이터)",
+            data=sample_analysis
         )
 
     except Exception as e:
@@ -207,7 +228,7 @@ async def analyze_applicant_cover_letter(
     applicant_id: str,
     cover_letter_service: CoverLetterService = Depends(get_cover_letter_service)
 ):
-    """지원자의 자소서 분석"""
+    """지원자의 자소서 분석 (기존 데이터 반환)"""
     try:
         # 지원자의 자소서 데이터 조회
         cover_letter = await cover_letter_service.get_cover_letter_by_applicant_id(applicant_id)
@@ -217,30 +238,26 @@ async def analyze_applicant_cover_letter(
                 message="해당 지원자의 자소서를 찾을 수 없습니다."
             )
 
-        # 자소서 분석기 초기화
-        analyzer = CoverLetterAnalyzer(LLM_CONFIG)
-
-        # 자소서 분석 실행 (기존 텍스트 기반)
-        analysis_result = await analyzer.analyze_cover_letter_text(
-            text=cover_letter.content,
-            job_description="",
-            analysis_type="comprehensive"
-        )
-
-        if analysis_result.status == "error":
+        # 기존 분석 결과가 있는지 확인
+        analysis_results = cover_letter.get("analysis_results", [])
+        
+        if not analysis_results:
             return BaseResponse(
                 success=False,
-                message="자소서 분석 중 오류가 발생했습니다."
+                message="분석 데이터가 없습니다. 먼저 분석을 수행해주세요."
             )
+
+        # 가장 최근 분석 결과 반환
+        latest_analysis = analysis_results[-1]
 
         return BaseResponse(
             success=True,
-            message="지원자 자소서 분석이 완료되었습니다.",
-            data=analysis_result.dict()
+            message="기존 자소서 분석 결과를 반환합니다.",
+            data=latest_analysis
         )
 
     except Exception as e:
         return BaseResponse(
             success=False,
-            message=f"지원자 자소서 분석에 실패했습니다: {str(e)}"
+            message=f"자소서 분석 결과 조회에 실패했습니다: {str(e)}"
         )

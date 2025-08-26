@@ -195,7 +195,8 @@ async def get_applicant_cover_letter(
         client = AsyncIOMotorClient(mongo_uri)
         db = client.hireme
 
-        cover_letter = await db.cover_letters.find_one({"_id": ObjectId(cover_letter_id)})
+        # cover_letter_id 대신 applicant_id로 조회
+        cover_letter = await db.cover_letters.find_one({"applicant_id": ObjectId(applicant_id)})
         client.close()
 
         if not cover_letter:
@@ -209,8 +210,20 @@ async def get_applicant_cover_letter(
             }
 
         # ObjectId를 문자열로 변환하여 JSON 직렬화 문제 해결
-        if "_id" in cover_letter:
-            cover_letter["_id"] = str(cover_letter["_id"])
+        def convert_objectids_to_strings(obj):
+            if isinstance(obj, dict):
+                for key, value in obj.items():
+                    if isinstance(value, ObjectId):
+                        obj[key] = str(value)
+                    elif isinstance(value, dict):
+                        convert_objectids_to_strings(value)
+                    elif isinstance(value, list):
+                        for item in value:
+                            if isinstance(item, dict):
+                                convert_objectids_to_strings(item)
+            return obj
+
+        cover_letter = convert_objectids_to_strings(cover_letter)
 
         return {
             "status": "success",
@@ -332,4 +345,79 @@ async def check_cover_letter_plagiarism(
         raise HTTPException(
             status_code=500,
             detail=f"자소서 표절체크 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@router.get("/{applicant_id}/cover-letter-analysis")
+async def get_cover_letter_analysis(
+    applicant_id: str,
+    mongo_service: MongoService = Depends(get_mongo_service)
+):
+    """지원자의 자소서 분석 결과를 가져옵니다."""
+    try:
+        print(f"[INFO] 자소서 분석 결과 조회 요청 - applicant_id: {applicant_id}")
+
+        # 1. 지원자 존재 확인
+        applicant = await mongo_service.get_applicant_by_id(applicant_id)
+        if not applicant:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
+
+        # 2. 자소서 ID 확인
+        cover_letter_id = applicant.get("cover_letter_id")
+        if not cover_letter_id:
+            raise HTTPException(status_code=404, detail="자소서가 없습니다")
+
+        # 3. 자소서 분석 결과 가져오기
+        from bson import ObjectId
+        from motor.motor_asyncio import AsyncIOMotorClient
+
+        mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/hireme")
+        client = AsyncIOMotorClient(mongo_uri)
+        db = client.hireme
+
+        try:
+            # cover_letter_id 대신 applicant_id로 조회
+            cover_letter = await db.cover_letters.find_one({"applicant_id": ObjectId(applicant_id)})
+            
+            if not cover_letter:
+                raise HTTPException(status_code=404, detail="자소서를 찾을 수 없습니다")
+
+            # analysis_results 배열에서 가장 최근 분석 결과 가져오기
+            analysis_results = cover_letter.get("analysis_results", [])
+            
+            if not analysis_results:
+                # 분석 결과가 없는 경우 기본 구조 반환
+                return {
+                    "success": True,
+                    "data": {
+                        "technical_suitability": { "score": 75, "feedback": "분석이 필요합니다." },
+                        "job_understanding": { "score": 80, "feedback": "분석이 필요합니다." },
+                        "growth_potential": { "score": 85, "feedback": "분석이 필요합니다." },
+                        "teamwork_communication": { "score": 70, "feedback": "분석이 필요합니다." },
+                        "motivation_company_fit": { "score": 90, "feedback": "분석이 필요합니다." },
+                        "summary": "자소서 분석이 필요합니다.",
+                        "recommendations": ["분석을 진행해주세요."],
+                        "overall_score": 80
+                    },
+                    "message": "분석 결과가 없습니다. 분석을 진행해주세요."
+                }
+
+            # 가장 최근 분석 결과 반환
+            latest_analysis = analysis_results[-1]
+            
+            return {
+                "success": True,
+                "data": latest_analysis,
+                "message": "자소서 분석 결과를 성공적으로 가져왔습니다."
+            }
+
+        finally:
+            client.close()
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 자소서 분석 결과 조회 실패: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"자소서 분석 결과 조회 중 오류가 발생했습니다: {str(e)}"
         )

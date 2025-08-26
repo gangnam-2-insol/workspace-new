@@ -27,11 +27,11 @@ class Settings(BaseSettings):
     pinecone_environment: str = os.getenv("PINECONE_ENVIRONMENT", "us-west1-gcp")
     pinecone_dimension: int = int(os.getenv("PINECONE_DIMENSION", "1536"))
 
-    # Elasticsearch 설정
-    elasticsearch_host: str = os.getenv("ELASTICSEARCH_HOST", "localhost:9200")
-    elasticsearch_index: str = os.getenv("ELASTICSEARCH_INDEX", "resume_search")
-    elasticsearch_username: Optional[str] = os.getenv("ELASTICSEARCH_USERNAME")
-    elasticsearch_password: Optional[str] = os.getenv("ELASTICSEARCH_PASSWORD")
+    # Elasticsearch 설정 (비활성화됨)
+    elasticsearch_host: Optional[str] = None
+    elasticsearch_index: Optional[str] = None
+    elasticsearch_username: Optional[str] = None
+    elasticsearch_password: Optional[str] = None
     elasticsearch_ssl_verify: bool = os.getenv("ELASTICSEARCH_SSL_VERIFY", "false").lower() == "true"
     elasticsearch_timeout: int = int(os.getenv("ELASTICSEARCH_TIMEOUT", "30"))
 

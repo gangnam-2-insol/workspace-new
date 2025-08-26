@@ -123,6 +123,32 @@ class CoverLetterAnalysisApi {
   }
 
   /**
+   * 지원자의 자소서 분석 결과를 가져옵니다.
+   * @param {string} applicantId - 지원자 ID
+   * @returns {Promise<Object>} 자소서 분석 결과
+   */
+  static async getApplicantCoverLetterAnalysis(applicantId) {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/cover-letter-analysis`, {
+        method: 'GET',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      console.error('지원자 자소서 분석 결과 조회 API 호출 오류:', error);
+      throw error;
+    }
+  }
+
+  /**
    * 자소서 분석 상태를 확인합니다.
    * @param {string} analysisId - 분석 ID
    * @returns {Promise<Object>} 분석 상태

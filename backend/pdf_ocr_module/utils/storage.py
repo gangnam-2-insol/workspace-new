@@ -45,6 +45,18 @@ class MongoStorage:
         self.db = None
         self.collection = None
 
+        # MongoService 인스턴스 생성
+        try:
+            from modules.core.services.mongo_service import MongoService
+            self.mongo_service = MongoService(settings.mongodb_uri)
+            logger.info("MongoService 초기화 성공")
+        except ImportError as e:
+            logger.error(f"MongoService import 실패: {e}")
+            self.mongo_service = None
+        except Exception as e:
+            logger.error(f"MongoService 초기화 실패: {e}")
+            self.mongo_service = None
+
         if MONGODB_AVAILABLE:
             self._connect()
 
@@ -148,6 +160,187 @@ class MongoStorage:
         """연결을 종료합니다."""
         if self.client:
             self.client.close()
+
+    def save_resume_with_ocr(self, ocr_result: Dict[str, Any], applicant_data: Dict[str, Any], job_posting_id: str, file_path: str) -> Dict[str, Any]:
+        """
+        이력서 OCR 결과와 지원자 데이터를 저장합니다.
+        
+        Args:
+            ocr_result: OCR 처리 결과
+            applicant_data: 지원자 데이터
+            job_posting_id: 채용공고 ID
+            file_path: 파일 경로
+            
+        Returns:
+            저장 결과
+        """
+        try:
+            # 지원자 데이터 저장
+            applicant_collection = self.db["applicants"]
+            applicant_result = applicant_collection.insert_one(applicant_data)
+            applicant_id = str(applicant_result.inserted_id)
+            
+            # 이력서 데이터 저장
+            resume_data = {
+                "applicant_id": applicant_id,
+                "job_posting_id": job_posting_id,
+                "file_path": file_path,
+                "ocr_result": ocr_result,
+                "created_at": datetime.utcnow(),
+                "document_type": "resume"
+            }
+            
+            resume_collection = self.db["resumes"]
+            resume_result = resume_collection.insert_one(resume_data)
+            
+            return {
+                "success": True,
+                "message": "이력서 저장 완료",
+                "applicant": {
+                    "id": applicant_id,
+                    "name": applicant_data.get("name", ""),
+                    "email": applicant_data.get("email", ""),
+                    "phone": applicant_data.get("phone", "")
+                },
+                "resume_id": str(resume_result.inserted_id)
+            }
+            
+        except Exception as e:
+            logger.error(f"이력서 저장 실패: {str(e)}")
+            return {
+                "success": False,
+                "message": f"이력서 저장 실패: {str(e)}"
+            }
+
+    def save_cover_letter_with_ocr(self, ocr_result: Dict[str, Any], applicant_data: Dict[str, Any], job_posting_id: str, file_path: str) -> Dict[str, Any]:
+        """
+        자기소개서 OCR 결과를 저장합니다.
+        
+        Args:
+            ocr_result: OCR 처리 결과
+            applicant_data: 지원자 데이터 (기존 지원자에 연결하는 경우 None)
+            job_posting_id: 채용공고 ID
+            file_path: 파일 경로
+            
+        Returns:
+            저장 결과
+        """
+        try:
+            applicant_id = None
+            
+            if applicant_data:
+                # 새로운 지원자 데이터 저장
+                applicant_collection = self.db["applicants"]
+                applicant_result = applicant_collection.insert_one(applicant_data)
+                applicant_id = str(applicant_result.inserted_id)
+            
+            # 자기소개서 데이터 저장
+            cover_letter_data = {
+                "applicant_id": applicant_id,
+                "job_posting_id": job_posting_id,
+                "file_path": file_path,
+                "ocr_result": ocr_result,
+                "created_at": datetime.utcnow(),
+                "document_type": "cover_letter"
+            }
+            
+            cover_letter_collection = self.db["cover_letters"]
+            cover_letter_result = cover_letter_collection.insert_one(cover_letter_data)
+            
+            return {
+                "success": True,
+                "message": "자기소개서 저장 완료",
+                "applicant": {
+                    "id": applicant_id,
+                    "name": applicant_data.get("name", "") if applicant_data else "",
+                    "email": applicant_data.get("email", "") if applicant_data else "",
+                    "phone": applicant_data.get("phone", "") if applicant_data else ""
+                },
+                "cover_letter_id": str(cover_letter_result.inserted_id)
+            }
+            
+        except Exception as e:
+            logger.error(f"자기소개서 저장 실패: {str(e)}")
+            return {
+                "success": False,
+                "message": f"자기소개서 저장 실패: {str(e)}"
+            }
+
+    def save_portfolio_with_ocr(self, ocr_result: Dict[str, Any], applicant_data: Dict[str, Any], job_posting_id: str, file_path: str) -> Dict[str, Any]:
+        """
+        포트폴리오 OCR 결과를 저장합니다.
+        
+        Args:
+            ocr_result: OCR 처리 결과
+            applicant_data: 지원자 데이터
+            job_posting_id: 채용공고 ID
+            file_path: 파일 경로
+            
+        Returns:
+            저장 결과
+        """
+        try:
+            applicant_id = None
+            
+            if applicant_data:
+                # 새로운 지원자 데이터 저장
+                applicant_collection = self.db["applicants"]
+                applicant_result = applicant_collection.insert_one(applicant_data)
+                applicant_id = str(applicant_result.inserted_id)
+            
+            # 포트폴리오 데이터 저장
+            portfolio_data = {
+                "applicant_id": applicant_id,
+                "job_posting_id": job_posting_id,
+                "file_path": file_path,
+                "ocr_result": ocr_result,
+                "created_at": datetime.utcnow(),
+                "document_type": "portfolio"
+            }
+            
+            portfolio_collection = self.db["portfolios"]
+            portfolio_result = portfolio_collection.insert_one(portfolio_data)
+            
+            return {
+                "success": True,
+                "message": "포트폴리오 저장 완료",
+                "applicant": {
+                    "id": applicant_id,
+                    "name": applicant_data.get("name", "") if applicant_data else "",
+                    "email": applicant_data.get("email", "") if applicant_data else "",
+                    "phone": applicant_data.get("phone", "") if applicant_data else ""
+                },
+                "portfolio_id": str(portfolio_result.inserted_id)
+            }
+            
+        except Exception as e:
+            logger.error(f"포트폴리오 저장 실패: {str(e)}")
+            return {
+                "success": False,
+                "message": f"포트폴리오 저장 실패: {str(e)}"
+            }
+
+    def get_applicant_by_id(self, applicant_id: str) -> Optional[Dict[str, Any]]:
+        """
+        지원자 ID로 지원자 정보를 조회합니다.
+        
+        Args:
+            applicant_id: 지원자 ID
+            
+        Returns:
+            지원자 정보 또는 None
+        """
+        try:
+            if self.mongo_service:
+                # MongoService의 동기 메서드 사용
+                return self.mongo_service.get_applicant_by_id_sync(applicant_id)
+            else:
+                # 직접 MongoDB에서 조회
+                applicant_collection = self.db["applicants"]
+                return applicant_collection.find_one({"_id": applicant_id})
+        except Exception as e:
+            logger.error(f"지원자 조회 실패: {str(e)}")
+            return None
 
 
 class VectorStorage:

@@ -69,7 +69,7 @@ export const DocumentModalOverlay = styled(motion.div)`
   display: flex;
   align-items: center;
   justify-content: center;
-  z-index: 2000;
+  z-index: 1200;
   padding: 20px;
 `;
 
@@ -77,7 +77,7 @@ export const DocumentModalContent = styled(motion.div)`
   background: white;
   border-radius: 16px;
   padding: 32px;
-  max-width: 800px;
+  max-width: 1200px;
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;

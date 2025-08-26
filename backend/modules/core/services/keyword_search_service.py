@@ -17,6 +17,7 @@ except ImportError:
     Kiwi = None
     KIWI_AVAILABLE = False
 
+# Elasticsearch 활성화
 try:
     from elasticsearch import Elasticsearch
     from elasticsearch.exceptions import ConnectionError, NotFoundError
@@ -42,23 +43,17 @@ class KeywordSearchService:
         self.es_username = os.getenv("ELASTICSEARCH_USERNAME")
         self.es_password = os.getenv("ELASTICSEARCH_PASSWORD")
 
-        # 디버깅: 환경변수 값 확인
-        self.logger.info(f"ES_HOST: {self.es_host}")
-        self.logger.info(f"ES_USERNAME: {self.es_username}")
-        self.logger.info(f"ES_PASSWORD: {'*' * len(self.es_password) if self.es_password else None}")
-
         self.es_client = None
-
+        
         # Elasticsearch 연결 초기화
         if ELASTICSEARCH_AVAILABLE:
             try:
                 self._initialize_elasticsearch()
                 self.logger.info("Elasticsearch 연결 성공")
             except Exception as e:
-                self.logger.warning(f"Elasticsearch 연결 실패: {str(e)}. 키워드 검색 기능이 비활성화됩니다.")
-                self.es_client = None
+                self.logger.warning(f"Elasticsearch 연결 실패: {str(e)}. 키워드 검색은 MongoDB 기반으로 동작합니다.")
         else:
-            self.logger.warning("Elasticsearch가 설치되지 않았습니다. 키워드 검색 기능이 비활성화됩니다.")
+            self.logger.info("Elasticsearch 라이브러리가 설치되지 않았습니다. 키워드 검색은 MongoDB 기반으로 동작합니다.")
 
         # Kiwi 형태소 분석기 초기화
         if KIWI_AVAILABLE:

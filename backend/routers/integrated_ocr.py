@@ -380,8 +380,8 @@ async def upload_cover_letter_with_ocr(
             # 지원자 데이터 생성 (OCR 기반 자동 추출)
             applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
 
-            # MongoDB에 저장
-            result = await mongo_storage.save_cover_letter_with_ocr(
+            # MongoDB에 저장 (동기 함수이므로 await 제거)
+            result = mongo_storage.save_cover_letter_with_ocr(
                 ocr_result=enhanced_ocr_result,
                 applicant_data=applicant_data,
                 job_posting_id=job_posting_id,
@@ -445,8 +445,8 @@ async def upload_portfolio_with_ocr(
             # 지원자 데이터 생성 (OCR 기반 자동 추출)
             applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
 
-            # MongoDB에 저장
-            result = await mongo_storage.save_portfolio_with_ocr(
+            # MongoDB에 저장 (동기 함수이므로 await 제거)
+            result = mongo_storage.save_portfolio_with_ocr(
                 ocr_result=enhanced_ocr_result,
                 applicant_data=applicant_data,
                 job_posting_id=job_posting_id,
@@ -606,10 +606,21 @@ async def upload_multiple_documents(
     mongo_storage: MongoStorage = Depends(get_mongo_storage)
 ):
     """여러 문서를 한 번에 업로드하고 OCR 처리 후 하나의 지원자 레코드로 통합 저장합니다."""
+    
+    # 디버깅을 위한 파일 상태 로그
+    print(f"🔍 파일 업로드 상태 확인:")
+    print(f"   - resume_file: {resume_file}")
+    print(f"   - cover_letter_file: {cover_letter_file}")
+    print(f"   - portfolio_file: {portfolio_file}")
+    
+    # 최소 하나의 파일은 필요 (try 블록 밖에서 먼저 체크)
+    if not resume_file and not cover_letter_file and not portfolio_file:
+        print(f"❌ 파일이 업로드되지 않음 - 400 에러 발생")
+        raise HTTPException(status_code=400, detail="최소 하나의 문서 파일이 필요합니다")
+    
+    print(f"✅ 파일 업로드 확인됨 - 처리 시작")
+    
     try:
-        # 최소 하나의 파일은 필요
-        if not resume_file and not cover_letter_file and not portfolio_file:
-            raise HTTPException(status_code=400, detail="최소 하나의 문서 파일이 필요합니다")
 
         # job_posting_id 기본값 설정
         if not job_posting_id or job_posting_id == "default_job_posting":
@@ -635,11 +646,12 @@ async def upload_multiple_documents(
                 temp_files.append(temp_file_path)
 
             try:
-                # OCR 처리
-                print(f"🔍 이력서 OCR 처리 중...")
+                # 스마트 PDF 처리
+                print(f"🔍 이력서 스마트 처리 중...")
+                from backend.utils.smart_pdf_processor import SmartPDFProcessor
                 settings = Settings()
-                processor = PDFProcessor(settings)
-                ocr_result = processor.process_pdf(str(temp_file_path))
+                processor = SmartPDFProcessor(settings)
+                ocr_result = processor.process_pdf(str(temp_file_path))  # 동기 함수이므로 await 제거
 
                 # OCR 결과에 AI 분석 결과 추가
                 enhanced_ocr_result = {
@@ -655,8 +667,8 @@ async def upload_multiple_documents(
                 # 지원자 데이터 생성
                 applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
 
-                # MongoDB에 저장
-                result = await mongo_storage.save_resume_with_ocr(
+                # MongoDB에 저장 (동기 함수이므로 await 제거)
+                result = mongo_storage.save_resume_with_ocr(
                     ocr_result=enhanced_ocr_result,
                     applicant_data=applicant_data,
                     job_posting_id=job_posting_id,
@@ -707,11 +719,12 @@ async def upload_multiple_documents(
                 temp_files.append(temp_file_path)
 
             try:
-                # OCR 처리
-                print(f"🔍 자기소개서 OCR 처리 중...")
+                # 스마트 PDF 처리
+                print(f"🔍 자기소개서 스마트 처리 중...")
+                from backend.utils.smart_pdf_processor import SmartPDFProcessor
                 settings = Settings()
-                processor = PDFProcessor(settings)
-                ocr_result = processor.process_pdf(str(temp_file_path))
+                processor = SmartPDFProcessor(settings)
+                ocr_result = processor.process_pdf(str(temp_file_path))  # 동기 함수이므로 await 제거
 
                 # OCR 결과에 AI 분석 결과 추가
                 enhanced_ocr_result = {
@@ -724,34 +737,38 @@ async def upload_multiple_documents(
                     "pages": ocr_result.get("num_pages", 0)
                 }
 
-                # 기존 지원자 데이터 사용 또는 새로 생성
-                if applicant_id:
+                                # 기존 지원자 데이터 사용 또는 새로 생성
+                if applicant_id and mongo_storage.mongo_service:
                     # 기존 지원자 정보 가져오기
-                    existing_applicant = await mongo_storage.mongo_service.get_applicant_by_id(applicant_id)
-                    if existing_applicant:
-                        applicant_data = ApplicantCreate(
-                            name=existing_applicant.get("name", name),
-                            email=existing_applicant.get("email", email),
-                            phone=existing_applicant.get("phone", phone),
-                            position=existing_applicant.get("position", ""),
-                            department=existing_applicant.get("department", ""),
-                            experience=existing_applicant.get("experience", ""),
-                            skills=existing_applicant.get("skills", ""),
-                            growthBackground=existing_applicant.get("growthBackground", ""),
-                            motivation=existing_applicant.get("motivation", ""),
-                            careerHistory=existing_applicant.get("careerHistory", ""),
-                            analysisScore=existing_applicant.get("analysisScore", 0),
-                            analysisResult=existing_applicant.get("analysisResult", ""),
-                            status=existing_applicant.get("status", "pending"),
-                            job_posting_id=job_posting_id
-                        )
-                    else:
+                    try:
+                        existing_applicant = mongo_storage.mongo_service.get_applicant_by_id_sync(applicant_id)
+                        if existing_applicant:
+                            applicant_data = ApplicantCreate(
+                                name=existing_applicant.get("name", name),
+                                email=existing_applicant.get("email", email),
+                                phone=existing_applicant.get("phone", phone),
+                                position=existing_applicant.get("position", ""),
+                                department=existing_applicant.get("department", ""),
+                                experience=existing_applicant.get("experience", ""),
+                                skills=existing_applicant.get("skills", ""),
+                                growthBackground=existing_applicant.get("growthBackground", ""),
+                                motivation=existing_applicant.get("motivation", ""),
+                                careerHistory=existing_applicant.get("careerHistory", ""),
+                                analysisScore=existing_applicant.get("analysisScore", 0),
+                                analysisResult=existing_applicant.get("analysisResult", ""),
+                                status=existing_applicant.get("status", "pending"),
+                                job_posting_id=job_posting_id
+                            )
+                        else:
+                            applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
+                    except Exception as e:
+                        print(f"⚠️ 기존 지원자 정보 조회 실패: {e}")
                         applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
                 else:
                     applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
 
-                # MongoDB에 저장
-                result = await mongo_storage.save_cover_letter_with_ocr(
+                # MongoDB에 저장 (동기 함수이므로 await 제거)
+                result = mongo_storage.save_cover_letter_with_ocr(
                     ocr_result=enhanced_ocr_result,
                     applicant_data=applicant_data,
                     job_posting_id=job_posting_id,
@@ -790,11 +807,12 @@ async def upload_multiple_documents(
                 temp_files.append(temp_file_path)
 
             try:
-                # OCR 처리
-                print(f"🔍 포트폴리오 OCR 처리 중...")
+                # 스마트 PDF 처리
+                print(f"🔍 포트폴리오 스마트 처리 중...")
+                from backend.utils.smart_pdf_processor import SmartPDFProcessor
                 settings = Settings()
-                processor = PDFProcessor(settings)
-                ocr_result = processor.process_pdf(str(temp_file_path))
+                processor = SmartPDFProcessor(settings)
+                ocr_result = processor.process_pdf(str(temp_file_path))  # 동기 함수이므로 await 제거
 
                 # OCR 결과에 AI 분석 결과 추가
                 enhanced_ocr_result = {
@@ -808,33 +826,37 @@ async def upload_multiple_documents(
                 }
 
                 # 기존 지원자 데이터 사용 또는 새로 생성
-                if applicant_id:
+                if applicant_id and mongo_storage.mongo_service:
                     # 기존 지원자 정보 가져오기
-                    existing_applicant = await mongo_storage.mongo_service.get_applicant_by_id(applicant_id)
-                    if existing_applicant:
-                        applicant_data = ApplicantCreate(
-                            name=existing_applicant.get("name", name),
-                            email=existing_applicant.get("email", email),
-                            phone=existing_applicant.get("phone", phone),
-                            position=existing_applicant.get("position", ""),
-                            department=existing_applicant.get("department", ""),
-                            experience=existing_applicant.get("experience", ""),
-                            skills=existing_applicant.get("skills", ""),
-                            growthBackground=existing_applicant.get("growthBackground", ""),
-                            motivation=existing_applicant.get("motivation", ""),
-                            careerHistory=existing_applicant.get("careerHistory", ""),
-                            analysisScore=existing_applicant.get("analysisScore", 0),
-                            analysisResult=existing_applicant.get("analysisResult", ""),
-                            status=existing_applicant.get("status", "pending"),
-                            job_posting_id=job_posting_id
-                        )
-                    else:
+                    try:
+                        existing_applicant = mongo_storage.mongo_service.get_applicant_by_id_sync(applicant_id)
+                        if existing_applicant:
+                            applicant_data = ApplicantCreate(
+                                name=existing_applicant.get("name", name),
+                                email=existing_applicant.get("email", email),
+                                phone=existing_applicant.get("phone", phone),
+                                position=existing_applicant.get("position", ""),
+                                department=existing_applicant.get("department", ""),
+                                experience=existing_applicant.get("experience", ""),
+                                skills=existing_applicant.get("skills", ""),
+                                growthBackground=existing_applicant.get("growthBackground", ""),
+                                motivation=existing_applicant.get("motivation", ""),
+                                careerHistory=existing_applicant.get("careerHistory", ""),
+                                analysisScore=existing_applicant.get("analysisScore", 0),
+                                analysisResult=existing_applicant.get("analysisResult", ""),
+                                status=existing_applicant.get("status", "pending"),
+                                job_posting_id=job_posting_id
+                            )
+                        else:
+                            applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
+                    except Exception as e:
+                        print(f"⚠️ 기존 지원자 정보 조회 실패: {e}")
                         applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
                 else:
                     applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
 
-                # MongoDB에 저장
-                result = await mongo_storage.save_portfolio_with_ocr(
+                # MongoDB에 저장 (동기 함수이므로 await 제거)
+                result = mongo_storage.save_portfolio_with_ocr(
                     ocr_result=enhanced_ocr_result,
                     applicant_data=applicant_data,
                     job_posting_id=job_posting_id,
@@ -858,20 +880,25 @@ async def upload_multiple_documents(
                 raise HTTPException(status_code=500, detail=f"포트폴리오 처리 실패: {str(e)}\n\n상세 정보: {error_traceback}")
 
         # 임시 파일들 정리
-        print(f"🧹 임시 파일 정리 중... ({len(temp_files)}개 파일)")
-        for temp_file_path in temp_files:
-            if temp_file_path.exists():
-                temp_file_path.unlink()
+        if 'temp_files' in locals() and temp_files:
+            print(f"🧹 임시 파일 정리 중... ({len(temp_files)}개 파일)")
+            for temp_file_path in temp_files:
+                if temp_file_path.exists():
+                    temp_file_path.unlink()
 
         print(f"✅ 모든 문서 처리 완료! 지원자 ID: {applicant_id}")
         print(f"📊 업로드된 문서: {list(results.keys())}")
 
         # 최종 지원자 정보 가져오기
         final_applicant_info = None
-        if applicant_id:
-            final_applicant_info = await mongo_storage.mongo_service.get_applicant_by_id(applicant_id)
-            # ObjectId를 문자열로 직렬화
-            final_applicant_info = serialize_mongo_data(final_applicant_info)
+        if applicant_id and mongo_storage.mongo_service:
+            try:
+                final_applicant_info = mongo_storage.mongo_service.get_applicant_by_id_sync(applicant_id)
+                # ObjectId를 문자열로 직렬화
+                final_applicant_info = serialize_mongo_data(final_applicant_info)
+            except Exception as e:
+                print(f"⚠️ 최종 지원자 정보 조회 실패: {e}")
+                final_applicant_info = None
 
         # 최종 결과 반환
         return JSONResponse(content={
@@ -885,11 +912,15 @@ async def upload_multiple_documents(
             }
         })
 
+    except HTTPException:
+        # HTTPException은 그대로 다시 발생시킴 (FastAPI가 처리)
+        raise
     except Exception as e:
         # 임시 파일들 정리
-        for temp_file_path in temp_files:
-            if temp_file_path.exists():
-                temp_file_path.unlink()
+        if 'temp_files' in locals():
+            for temp_file_path in temp_files:
+                if temp_file_path.exists():
+                    temp_file_path.unlink()
 
         import traceback
         error_traceback = traceback.format_exc()
@@ -902,12 +933,15 @@ async def upload_multiple_documents(
         if hasattr(e, '__traceback__'):
             error_message += f"\n\n상세 정보: {error_traceback}"
 
+        # 클라이언트에 더 자세한 오류 정보 전달
         return JSONResponse(
             status_code=500,
             content={
                 "success": False,
                 "error": "문서 처리 실패",
                 "detail": error_message,
+                "error_type": type(e).__name__,
+                "error_traceback": error_traceback,
                 "timestamp": datetime.now().isoformat()
             }
         )
