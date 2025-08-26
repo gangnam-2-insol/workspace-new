@@ -10,7 +10,7 @@ from faker import Faker
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from motor.motor_asyncio import AsyncIOMotorClient
 
-router = APIRouter(prefix="/api/sample", tags=["샘플 데이터"])
+router = APIRouter(tags=["샘플 데이터"])
 
 # Faker 초기화 (한국어)
 fake = Faker('ko_KR')
@@ -394,18 +394,32 @@ async def generate_sample_cover_letters(
     data: Dict[str, Any],
     db: AsyncIOMotorClient = Depends(get_database)
 ):
-    """샘플 자소서 데이터 생성"""
+    """자소서가 없는 지원자들을 위한 샘플 자소서 데이터 생성"""
     try:
-        count = data.get('count', 50)
-
-        # 기존 지원자 ID 목록 가져오기
-        applicants = await db.applicants.find({}, {"_id": 1, "name": 1, "position": 1}).to_list(100)
+        # 기존 지원자 목록 조회
+        applicants = await db.applicants.find({}, {"_id": 1, "name": 1, "position": 1}).to_list(1000)
 
         if not applicants:
             raise HTTPException(
                 status_code=400,
                 detail="자소서를 생성하기 전에 먼저 지원자를 생성해주세요."
             )
+
+        # 자소서가 없는 지원자들만 필터링
+        applicants_without_cover_letters = []
+        for applicant in applicants:
+            existing_cover_letter = await db.cover_letters.find_one({"applicant_id": applicant["_id"]})
+            if not existing_cover_letter:
+                applicants_without_cover_letters.append(applicant)
+
+        if not applicants_without_cover_letters:
+            return {
+                "success": True,
+                "message": "모든 지원자에게 이미 자소서가 생성되어 있습니다.",
+                "generated_count": 0,
+                "total_applicants": len(applicants),
+                "applicants_without_cover_letters": 0
+            }
 
         # 자소서 템플릿 데이터
         cover_letter_templates = [
@@ -453,10 +467,9 @@ async def generate_sample_cover_letters(
             }
         ]
 
-                # 자소서 데이터 생성 (1인 1자소서 매칭)
+                # 자소서 데이터 생성 (자소서가 없는 지원자들만)
         cover_letters = []
-        for i in range(min(count, len(applicants))):
-            applicant = applicants[i]
+        for applicant in applicants_without_cover_letters:
 
             # 지원자의 직무에 맞게 템플릿 선택
             position = applicant.get("position", "개발자")
@@ -542,7 +555,13 @@ async def generate_sample_cover_letters(
                     {"$set": {"cover_letter_id": str(result.inserted_ids[i])}}
                 )
 
-        return {"message": f"{len(cover_letters)}개의 자소서 데이터가 성공적으로 생성되었습니다.", "count": len(cover_letters)}
+        return {
+            "success": True,
+            "message": f"{len(cover_letters)}개의 자소서가 성공적으로 생성되었습니다! (자소서가 없는 지원자 {len(applicants_without_cover_letters)}명 중)",
+            "generated_count": len(cover_letters),
+            "total_applicants": len(applicants),
+            "applicants_without_cover_letters": len(applicants_without_cover_letters)
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"자소서 데이터 생성 실패: {str(e)}")
@@ -642,3 +661,88 @@ async def get_sample_cover_letters():
             "success": False,
             "message": f"샘플 자소서 데이터 조회에 실패했습니다: {str(e)}"
         }
+
+@router.post("/create-single-applicant")
+async def create_single_applicant(
+    request: dict,
+    db: AsyncIOMotorClient = Depends(get_database)
+):
+    """개별 지원자를 생성합니다."""
+    try:
+        # 필수 필드 검증
+        required_fields = ["name", "email"]
+        for field in required_fields:
+            if not request.get(field):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"필수 필드가 누락되었습니다: {field}"
+                )
+
+        # 이메일 중복 확인
+        existing_applicant = await db.applicants.find_one({"email": request["email"]})
+        if existing_applicant:
+            raise HTTPException(
+                status_code=400,
+                detail=f"이미 존재하는 이메일입니다: {request['email']}"
+            )
+
+        # 기존 채용공고 확인
+        job_postings = await db.job_postings.find().to_list(1000)
+        if not job_postings:
+            raise HTTPException(
+                status_code=400,
+                detail="지원자를 생성하기 전에 먼저 채용공고를 생성해주세요."
+            )
+
+        # 랜덤 채용공고 선택
+        selected_job = random.choice(job_postings)
+
+        # 지원자 데이터 생성
+        applicant_data = {
+            "name": request["name"],
+            "email": request["email"],
+            "phone": request.get("phone", f"010-{random.randint(1000, 9999)}-{random.randint(1000, 9999)}"),
+            "position": selected_job.get("position", "개발자"),
+            "experience": f"{random.randint(1, 10)}년",
+            "skills": request.get("skills", "JavaScript, React, Node.js"),
+            "status": random.choice(["서류합격", "면접대기", "보류", "서류불합격"]),
+            "job_posting_id": str(selected_job["_id"]),
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+            "analysisScore": random.randint(60, 95),
+            "department": selected_job.get("department", "개발팀"),
+            "growthBackground": f"{request['name']}의 성장 배경 및 학습 경험",
+            "motivation": f"{selected_job.get('position', '개발자')} 직무에 대한 {request['name']}의 지원 동기",
+            "careerHistory": f"{random.randint(1, 10)}년 경력의 {request['name']}의 주요 업무 경험",
+            "resume_id": str(ObjectId()),
+            "cover_letter_id": str(ObjectId()),
+            "portfolio_id": str(ObjectId()),
+            "github_url": request.get("github_url", f"https://github.com/{request['name'].lower()}"),
+            "linkedin_url": f"https://linkedin.com/in/{request['name'].lower()}",
+            "portfolio_url": f"https://portfolio.example.com/{request['name'].lower()}",
+            "ranks": {
+                "resume": random.randint(70, 95),
+                "coverLetter": random.randint(65, 90),
+                "portfolio": random.randint(70, 95),
+                "total": random.randint(70, 90)
+            }
+        }
+
+        # MongoDB에 저장
+        result = await db.applicants.insert_one(applicant_data)
+
+        return {
+            "success": True,
+            "message": f"{request['name']} 지원자가 성공적으로 생성되었습니다!",
+            "applicant_id": str(result.inserted_id),
+            "job_posting": {
+                "title": selected_job.get("title"),
+                "position": selected_job.get("position"),
+                "company": selected_job.get("company")
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"개별 지원자 생성 중 오류가 발생했습니다: {str(e)}")
