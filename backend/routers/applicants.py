@@ -46,7 +46,7 @@ async def get_applicant(
     mongo_service: MongoService = Depends(get_mongo_service)
 ):
     """지원자를 조회합니다."""
-    applicant = mongo_service.get_applicant(applicant_id)
+    applicant = await mongo_service.get_applicant_by_id(applicant_id)
     if not applicant:
         raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
     return applicant
