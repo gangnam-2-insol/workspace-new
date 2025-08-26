@@ -201,3 +201,46 @@ async def delete_cover_letter(
             success=False,
             message=f"자기소개서 삭제에 실패했습니다: {str(e)}"
         )
+
+@router.post("/applicant/{applicant_id}/analysis", response_model=BaseResponse)
+async def analyze_applicant_cover_letter(
+    applicant_id: str,
+    cover_letter_service: CoverLetterService = Depends(get_cover_letter_service)
+):
+    """지원자의 자소서 분석"""
+    try:
+        # 지원자의 자소서 데이터 조회
+        cover_letter = await cover_letter_service.get_cover_letter_by_applicant_id(applicant_id)
+        if not cover_letter:
+            return BaseResponse(
+                success=False,
+                message="해당 지원자의 자소서를 찾을 수 없습니다."
+            )
+
+        # 자소서 분석기 초기화
+        analyzer = CoverLetterAnalyzer(LLM_CONFIG)
+
+        # 자소서 분석 실행 (기존 텍스트 기반)
+        analysis_result = await analyzer.analyze_cover_letter_text(
+            text=cover_letter.content,
+            job_description="",
+            analysis_type="comprehensive"
+        )
+
+        if analysis_result.status == "error":
+            return BaseResponse(
+                success=False,
+                message="자소서 분석 중 오류가 발생했습니다."
+            )
+
+        return BaseResponse(
+            success=True,
+            message="지원자 자소서 분석이 완료되었습니다.",
+            data=analysis_result.dict()
+        )
+
+    except Exception as e:
+        return BaseResponse(
+            success=False,
+            message=f"지원자 자소서 분석에 실패했습니다: {str(e)}"
+        )
