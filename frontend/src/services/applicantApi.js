@@ -197,7 +197,14 @@ export const documentApi = {
       if (!response.ok) {
         throw new Error('이력서 조회 실패');
       }
-      return await response.json();
+      const result = await response.json();
+      
+      // 백엔드 응답 구조에 맞게 데이터 추출
+      if (result.success && result.data) {
+        return result.data;
+      } else {
+        throw new Error(result.message || '이력서 데이터를 가져올 수 없습니다.');
+      }
     } catch (error) {
       console.error('이력서 조회 오류:', error);
       throw error;
@@ -211,7 +218,14 @@ export const documentApi = {
       if (!response.ok) {
         throw new Error('자기소개서 조회 실패');
       }
-      return await response.json();
+      const result = await response.json();
+      
+      // 백엔드 응답 구조에 맞게 데이터 추출
+      if (result.success && result.data) {
+        return result.data;
+      } else {
+        throw new Error(result.message || '자기소개서 데이터를 가져올 수 없습니다.');
+      }
     } catch (error) {
       console.error('자기소개서 조회 오류:', error);
       throw error;
@@ -245,7 +259,14 @@ export const documentApi = {
       if (!response.ok) {
         throw new Error('포트폴리오 조회 실패');
       }
-      return await response.json();
+      const result = await response.json();
+      
+      // 백엔드 응답 구조에 맞게 데이터 추출
+      if (result.success && result.data) {
+        return result.data;
+      } else {
+        throw new Error(result.message || '포트폴리오 데이터를 가져올 수 없습니다.');
+      }
     } catch (error) {
       console.error('포트폴리오 조회 오류:', error);
       throw error;
