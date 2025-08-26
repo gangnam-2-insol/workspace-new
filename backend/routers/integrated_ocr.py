@@ -316,7 +316,7 @@ async def upload_resume_with_ocr(
             applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
 
             # MongoDB에 저장
-            result = await mongo_saver.save_resume_with_ocr(
+            result = await mongo_storage.save_resume_with_ocr(
                 ocr_result=enhanced_ocr_result,
                 applicant_data=applicant_data,
                 job_posting_id=job_posting_id,
@@ -338,7 +338,7 @@ async def upload_resume_with_ocr(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"이력서 처리 실패: {str(e)}")
     finally:
-        mongo_saver.close()
+        mongo_storage.close()
 
 @router.post("/upload-cover-letter")
 async def upload_cover_letter_with_ocr(
@@ -381,7 +381,7 @@ async def upload_cover_letter_with_ocr(
             applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
 
             # MongoDB에 저장
-            result = await mongo_saver.save_cover_letter_with_ocr(
+            result = await mongo_storage.save_cover_letter_with_ocr(
                 ocr_result=enhanced_ocr_result,
                 applicant_data=applicant_data,
                 job_posting_id=job_posting_id,
@@ -403,7 +403,7 @@ async def upload_cover_letter_with_ocr(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"자기소개서 처리 실패: {str(e)}")
     finally:
-        mongo_saver.close()
+        mongo_storage.close()
 
 @router.post("/upload-portfolio")
 async def upload_portfolio_with_ocr(
@@ -446,7 +446,7 @@ async def upload_portfolio_with_ocr(
             applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
 
             # MongoDB에 저장
-            result = await mongo_saver.save_portfolio_with_ocr(
+            result = await mongo_storage.save_portfolio_with_ocr(
                 ocr_result=enhanced_ocr_result,
                 applicant_data=applicant_data,
                 job_posting_id=job_posting_id,
@@ -468,7 +468,7 @@ async def upload_portfolio_with_ocr(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"포트폴리오 처리 실패: {str(e)}")
     finally:
-        mongo_saver.close()
+        mongo_storage.close()
 
 @router.post("/upload-multiple")
 async def upload_multiple_documents(
@@ -505,7 +505,7 @@ async def upload_multiple_documents(
             ocr_result = processor.process_pdf(str(temp_file_path))
             if not applicant_data:
                 applicant_data = _build_applicant_data(name, email, phone, ocr_result, job_posting_id)
-            result = await mongo_saver.save_resume_with_ocr(
+            result = await mongo_storage.save_resume_with_ocr(
                 ocr_result=ocr_result,
                 applicant_data=applicant_data,
                 job_posting_id=job_posting_id,
@@ -529,7 +529,7 @@ async def upload_multiple_documents(
             ocr_result = processor.process_pdf(str(temp_file_path))
             if not applicant_data:
                 applicant_data = _build_applicant_data(name, email, phone, ocr_result, job_posting_id)
-            result = await mongo_saver.save_cover_letter_with_ocr(
+            result = await mongo_storage.save_cover_letter_with_ocr(
                 ocr_result=ocr_result,
                 applicant_data=applicant_data,
                 job_posting_id=job_posting_id,
@@ -553,7 +553,7 @@ async def upload_multiple_documents(
             ocr_result = processor.process_pdf(str(temp_file_path))
             if not applicant_data:
                 applicant_data = _build_applicant_data(name, email, phone, ocr_result, job_posting_id)
-            result = await mongo_saver.save_portfolio_with_ocr(
+            result = await mongo_storage.save_portfolio_with_ocr(
                 ocr_result=ocr_result,
                 applicant_data=applicant_data,
                 job_posting_id=job_posting_id,
@@ -592,7 +592,7 @@ async def upload_multiple_documents(
 
         raise HTTPException(status_code=500, detail=f"문서 처리 실패: {str(e)}")
     finally:
-        mongo_saver.close()
+        mongo_storage.close()
 
 @router.post("/upload-multiple-documents")
 async def upload_multiple_documents(
@@ -656,7 +656,7 @@ async def upload_multiple_documents(
                 applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
 
                 # MongoDB에 저장
-                result = mongo_saver.save_resume_with_ocr(
+                result = await mongo_storage.save_resume_with_ocr(
                     ocr_result=enhanced_ocr_result,
                     applicant_data=applicant_data,
                     job_posting_id=job_posting_id,
@@ -727,7 +727,7 @@ async def upload_multiple_documents(
                 # 기존 지원자 데이터 사용 또는 새로 생성
                 if applicant_id:
                     # 기존 지원자 정보 가져오기
-                    existing_applicant = mongo_saver.mongo_service.get_applicant_by_id_sync(applicant_id)
+                    existing_applicant = await mongo_storage.mongo_service.get_applicant_by_id(applicant_id)
                     if existing_applicant:
                         applicant_data = ApplicantCreate(
                             name=existing_applicant.get("name", name),
@@ -751,7 +751,7 @@ async def upload_multiple_documents(
                     applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
 
                 # MongoDB에 저장
-                result = mongo_saver.save_cover_letter_with_ocr(
+                result = await mongo_storage.save_cover_letter_with_ocr(
                     ocr_result=enhanced_ocr_result,
                     applicant_data=applicant_data,
                     job_posting_id=job_posting_id,
@@ -810,7 +810,7 @@ async def upload_multiple_documents(
                 # 기존 지원자 데이터 사용 또는 새로 생성
                 if applicant_id:
                     # 기존 지원자 정보 가져오기
-                    existing_applicant = mongo_saver.mongo_service.get_applicant_by_id_sync(applicant_id)
+                    existing_applicant = await mongo_storage.mongo_service.get_applicant_by_id(applicant_id)
                     if existing_applicant:
                         applicant_data = ApplicantCreate(
                             name=existing_applicant.get("name", name),
@@ -834,7 +834,7 @@ async def upload_multiple_documents(
                     applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
 
                 # MongoDB에 저장
-                result = mongo_saver.save_portfolio_with_ocr(
+                result = await mongo_storage.save_portfolio_with_ocr(
                     ocr_result=enhanced_ocr_result,
                     applicant_data=applicant_data,
                     job_posting_id=job_posting_id,
@@ -869,7 +869,7 @@ async def upload_multiple_documents(
         # 최종 지원자 정보 가져오기
         final_applicant_info = None
         if applicant_id:
-            final_applicant_info = mongo_saver.mongo_service.get_applicant_by_id_sync(applicant_id)
+            final_applicant_info = await mongo_storage.mongo_service.get_applicant_by_id(applicant_id)
             # ObjectId를 문자열로 직렬화
             final_applicant_info = serialize_mongo_data(final_applicant_info)
 
@@ -912,4 +912,4 @@ async def upload_multiple_documents(
             }
         )
     finally:
-        mongo_saver.close()
+        mongo_storage.close()
