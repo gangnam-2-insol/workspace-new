@@ -1,0 +1,270 @@
+/* 캘린더 뷰 스타일 */
+.calendar-view {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  margin-bottom: 24px;
+}
+
+.calendar-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 24px;
+  padding-bottom: 16px;
+  border-bottom: 2px solid #e2e8f0;
+}
+
+.calendar-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.calendar-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  margin-bottom: 1px;
+  background: #e2e8f0;
+  border-radius: 8px 8px 0 0;
+  overflow: hidden;
+}
+
+.weekday {
+  background: #f8fafc;
+  padding: 12px 8px;
+  text-align: center;
+  font-weight: 600;
+  color: #475569;
+  font-size: 14px;
+}
+
+.calendar-grid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 1px;
+  background: #e2e8f0;
+  border-radius: 0 0 8px 8px;
+  overflow: hidden;
+  min-height: 500px;
+}
+
+.calendar-day {
+  background: white;
+  min-height: 120px;
+  padding: 8px;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.calendar-day:hover {
+  background: #f8fafc;
+}
+
+.calendar-day.empty {
+  background: #f1f5f9;
+  cursor: default;
+}
+
+.calendar-day.empty:hover {
+  background: #f1f5f9;
+}
+
+.calendar-day.today {
+  background: #eff6ff;
+  border: 2px solid #3b82f6;
+}
+
+.calendar-day.today .day-number {
+  background: #3b82f6;
+  color: white;
+  border-radius: 50%;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+}
+
+.calendar-day.has-interviews {
+  background: #fef7f0;
+  border-left: 4px solid #f59e0b;
+}
+
+.calendar-day.has-interviews:hover {
+  background: #fef3e2;
+}
+
+.day-number {
+  font-size: 14px;
+  font-weight: 600;
+  color: #374151;
+  margin-bottom: 8px;
+  align-self: flex-start;
+}
+
+.interviews-summary {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+}
+
+.interview-count {
+  font-weight: 600;
+  color: #f59e0b;
+  background: #fef3e2;
+  padding: 2px 6px;
+  border-radius: 4px;
+  text-align: center;
+  margin-bottom: 4px;
+}
+
+.interview-names {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.interview-name {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  padding: 3px 4px;
+  background: white;
+  border-radius: 3px;
+  border-left: 2px solid #3b82f6;
+}
+
+.interview-name .time {
+  font-weight: 600;
+  color: #3b82f6;
+  font-size: 10px;
+}
+
+.interview-name .name {
+  font-weight: 500;
+  color: #1e293b;
+  font-size: 10px;
+}
+
+.interview-name .position {
+  color: #64748b;
+  font-size: 9px;
+}
+
+.more-interviews {
+  font-size: 10px;
+  color: #64748b;
+  font-style: italic;
+  text-align: center;
+  padding: 2px;
+}
+
+.add-interview-btn {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 20px;
+  height: 20px;
+  border: 1px solid #e2e8f0;
+  border-radius: 4px;
+  background: white;
+  color: #64748b;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: all 0.2s ease;
+  font-size: 12px;
+}
+
+.calendar-day:hover .add-interview-btn {
+  opacity: 1;
+}
+
+.add-interview-btn:hover {
+  background: #3b82f6;
+  color: white;
+  border-color: #3b82f6;
+  transform: scale(1.1);
+}
+
+/* 반응형 디자인 */
+@media (max-width: 992px) {
+  .calendar-grid {
+    min-height: 400px;
+  }
+
+  .calendar-day {
+    min-height: 80px;
+    padding: 6px;
+  }
+
+  .interview-name {
+    padding: 2px 3px;
+  }
+
+  .interview-name .time,
+  .interview-name .name {
+    font-size: 9px;
+  }
+
+  .interview-name .position {
+    font-size: 8px;
+  }
+}
+
+@media (max-width: 768px) {
+  /* 캘린더 모바일 대응 */
+  .calendar-view {
+    padding: 16px;
+  }
+
+  .calendar-title {
+    font-size: 20px;
+  }
+
+  .calendar-grid {
+    min-height: 350px;
+  }
+
+  .calendar-day {
+    min-height: 60px;
+    padding: 4px;
+  }
+
+  .day-number {
+    font-size: 12px;
+    margin-bottom: 4px;
+  }
+
+  .interview-count {
+    font-size: 9px;
+    padding: 1px 4px;
+  }
+
+  .interview-name .time,
+  .interview-name .name {
+    font-size: 8px;
+  }
+
+  .interview-name .position {
+    font-size: 7px;
+  }
+
+  .add-interview-btn {
+    width: 16px;
+    height: 16px;
+    font-size: 10px;
+  }
+}

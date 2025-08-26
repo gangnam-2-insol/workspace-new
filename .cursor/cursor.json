@@ -1,0 +1,54 @@
+{
+  "llm": {
+    "provider": "openai",
+    "apiBase": "http://localhost:11434/v1",
+    "apiKey": "dummy-key",
+    "model": "gpt-oss:20b"
+  },
+  "fine_tuning_rules": {
+    "progress_display": "모든 파인튜닝 작업에 대해 진행 과정을 실시간으로 보여줄 것",
+    "timeout_rule": "10초 이상 대기하게 될 경우 강제 종료하고 다른 방법으로 진행",
+    "error_handling": "에러 발생 시 즉시 다른 접근 방법 시도, 중단 없이 연속적으로 진행",
+    "comprehensive_testing": "모든 경우의 수를 고려한 완전한 테스트",
+    "current_performance": {
+      "success_rate": "92.9%",
+      "response_time": "0.000초",
+      "grade": "GREAT"
+    }
+  },
+  "global_execution_rules": {
+    "timeout_rule": "모든 코드 실행에서 10초 이상 대기하게 될 경우 강제 종료하고 다음 단계 또는 다른 방법으로 진행",
+    "no_waiting": "무한 대기 방지, 항상 다음 단계로 진행",
+    "continuous_execution": "중단 없이 연속적으로 모든 작업 수행"
+  },
+  "checklist": {
+    "pick_chatbot_autonomy": {
+      "question": "픽톡은 완전자율에이전트인가요?",
+      "auto_check": true,
+      "check_interval": "on_cursor_start",
+      "verification_methods": [
+        "import_dependency_check",
+        "external_module_scan", 
+        "self_contained_validation",
+        "autonomy_test"
+      ],
+      "last_check": null,
+      "status": "pending",
+      "notes": "커서 실행할 때마다 자동으로 픽톡의 자율성을 검증합니다"
+    }
+  },
+  "autonomy_monitoring": {
+    "enabled": true,
+    "check_on_startup": true,
+    "check_on_cursor_launch": true,
+    "check_on_code_change": true,
+    "check_on_session_start": true,
+    "alert_on_dependency_detected": true,
+    "log_autonomy_status": true,
+    "cursor_launch_triggers": [
+      "cursor_startup",
+      "new_window",
+      "workspace_open"
+    ]
+  }
+}

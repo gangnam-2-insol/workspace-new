@@ -1,0 +1,12 @@
+Traceback (most recent call last):
+  File "C:\Users\Drew\Documents\GitHub\workspace-new\backend\main.py", line 21, in <module>
+    from routers.pdf_ocr import router as pdf_ocr_router
+  File "C:\Users\Drew\Documents\GitHub\workspace-new\backend\routers\pdf_ocr.py", line 9, in <module>
+    from pdf_ocr_module.main import process_pdf
+  File "C:\Users\Drew\Documents\GitHub\workspace-new\backend\pdf_ocr_module\__init__.py", line 3, in <module>
+    from .main import process_pdf
+  File "C:\Users\Drew\Documents\GitHub\workspace-new\backend\pdf_ocr_module\main.py", line 8, in <module>
+    from .ai_analyzer import analyze_text, extract_keywords, summarize_text, extract_fields, clean_text
+  File "C:\Users\Drew\Documents\GitHub\workspace-new\backend\pdf_ocr_module\ai_analyzer.py", line 9, in <module>
+    from ..gemini_service import GeminiService
+ImportError: attempted relative import beyond top-level package
