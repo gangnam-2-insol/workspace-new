@@ -1382,36 +1382,7 @@ class SimilarityService:
 
             print(f"[SimilarityService] 벡터 검색 결과: {len(vector_results)}개")
 
-            # 4. 키워드 검색 수행 (이력서 내용 기반)
-            keyword_results = []
-            if keyword_query_text:
-                print(f"[SimilarityService] 키워드 검색 수행 (이력서 내용 기반)...")
-                # Elasticsearch 기반 BM25 검색 실행
-                es_result = await self.keyword_search_service.search_by_keywords(
-                    query=keyword_query_text,
-                    collection=applicants_collection,
-                    limit=limit * 2
-                )
-                # 융합 로직에서 기대하는 형식({_id, _score})으로 변환
-                if es_result and es_result.get("success"):
-                    for item in es_result.get("results", []):
-                        try:
-                            resume_doc = item.get("resume", {})
-                            resume_id = resume_doc.get("_id")
-                            bm25_score = item.get("bm25_score", 0)
-                            if resume_id:
-                                keyword_results.append({
-                                    "_id": resume_id,
-                                    "_score": bm25_score
-                                })
-                        except Exception:
-                            continue
-            else:
-                print(f"[SimilarityService] 키워드 검색 스킵 (이력서 내용 없음)")
-
-            print(f"[SimilarityService] 키워드 검색 결과: {len(keyword_results)}개")
-
-            # 5. LangChain 하이브리드 검색 시도 (우선)
+            # 4. LangChain 하이브리드 검색 시도 (우선 - 키워드 검색 포함)
             if self.langchain_hybrid and vector_query_text:
                 print(f"[SimilarityService] LangChain 하이브리드 검색 사용")
                 # 이력서 컬렉션 가져오기 (키워드 검색용)
@@ -1436,8 +1407,44 @@ class SimilarityService:
 
                 return langchain_result
 
-            # 6. 기존 방식 폴백 (LangChain 실패 시)
+            # 5. 기존 방식 폴백 (LangChain 실패 시) - 키워드 검색 수행
             print(f"[SimilarityService] 기존 하이브리드 검색 사용 (폴백)")
+            
+            # 폴백 시에만 키워드 검색 수행 (이력서 내용 기반)
+            keyword_results = []
+            if keyword_query_text:
+                print(f"[SimilarityService] 폴백: 키워드 검색 수행 (이력서 내용 기반)...")
+                
+                # 이력서 컬렉션에서 검색
+                from .mongo_service import MongoService
+                mongo_service = MongoService()
+                resumes_collection = mongo_service.db.resumes
+                
+                # Elasticsearch 기반 BM25 검색 실행 (이력서 컬렉션 대상)
+                es_result = await self.keyword_search_service.search_by_keywords(
+                    query=keyword_query_text,
+                    collection=resumes_collection,
+                    limit=limit * 2
+                )
+                # 융합 로직에서 기대하는 형식({_id, _score})으로 변환
+                if es_result and es_result.get("success"):
+                    for item in es_result.get("results", []):
+                        try:
+                            resume_doc = item.get("resume", {})
+                            resume_id = resume_doc.get("_id")
+                            bm25_score = item.get("bm25_score", 0)
+                            if resume_id:
+                                keyword_results.append({
+                                    "_id": resume_id,
+                                    "_score": bm25_score
+                                })
+                        except Exception:
+                            continue
+            else:
+                print(f"[SimilarityService] 폴백: 키워드 검색 스킵 (이력서 내용 없음)")
+
+            print(f"[SimilarityService] 폴백: 키워드 검색 결과: {len(keyword_results)}개")
+            
             return await self._fuse_applicant_search_results(
                 vector_results, keyword_results, applicants_collection,
                 target_applicant, vector_query_text, limit

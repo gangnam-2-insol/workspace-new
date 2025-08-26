@@ -1427,7 +1427,7 @@ const ApplicantManagement = () => {
     // 모달 먼저 열기
     setDocumentModal({ isOpen: true, type, applicant: applicantWithId, isOriginal: false, documentData: null, suspicionData: null, isLoadingSuspicion: type === 'coverLetter' });
     if (type === 'portfolio') {
-      setPortfolioView('select');
+      setPortfolioView('github');
     }
 
     // 각 문서 타입별로 해당 컬렉션에서 데이터 가져오기
@@ -2651,100 +2651,15 @@ const ApplicantManagement = () => {
               </DocumentModalHeader>
 
               <DocumentContent>
-                {/* 포트폴리오: 선택 화면 */}
-                {documentModal.type === 'portfolio' && portfolioView === 'select' && (
-                  <>
-                    <DocumentSection>
-                      <DocumentSectionTitle>포트폴리오 요약 방법 선택</DocumentSectionTitle>
-                      <SelectionGrid>
-                        <SelectionCard
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => setPortfolioView('github')}
-                        >
-                          <SelectionIcon className="github">
-                            <FiGitBranch />
-                          </SelectionIcon>
-                          <SelectionTitle>깃헙 요약</SelectionTitle>
-                          <SelectionDesc>GitHub URL/아이디로 레포 분석 요약 보기</SelectionDesc>
-                        </SelectionCard>
-                        <SelectionCard
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => {
-                            console.log('포트폴리오 버튼 클릭:', documentModal.applicant);
-                            if (documentModal.applicant && documentModal.applicant._id) {
-                              setPortfolioView('portfolio');
-                              loadPortfolioData(documentModal.applicant._id);
-                            } else {
-                              console.error('지원자 ID가 없습니다:', documentModal.applicant);
-                              alert('지원자 정보를 찾을 수 없습니다.');
-                            }
-                          }}
-                        >
-                          <SelectionIcon className="portfolio">
-                            <FiCode />
-                          </SelectionIcon>
-                          <SelectionTitle>포트폴리오 요약</SelectionTitle>
-                          <SelectionDesc>등록된 포트폴리오 정보 기반 요약 보기</SelectionDesc>
-                        </SelectionCard>
-                      </SelectionGrid>
-                    </DocumentSection>
-                  </>
-                )}
 
-                {/* 포트폴리오: 깃헙 요약 화면 */}
-                {documentModal.type === 'portfolio' && portfolioView === 'github' && (
+                {/* 포트폴리오: GitHub 요약 화면 */}
+                {documentModal.type === 'portfolio' && (
                   <>
                     <DocumentSection>
                       <DocumentSectionTitle>
-                        <button
-                          onClick={() => setPortfolioView('select')}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: 'pointer',
-                            marginRight: 8,
-                            color: 'var(--text-secondary)'
-                          }}
-                          aria-label="뒤로"
-                        >
-                          <FiArrowLeft />
-                        </button>
-                        깃헙 요약
-                      </DocumentSectionTitle>
-                      <GithubSummaryPanel />
-                    </DocumentSection>
-                  </>
-                )}
-
-                {/* 포트폴리오: 기존 포트폴리오 상세 */}
-                {documentModal.type === 'portfolio' && portfolioView === 'portfolio' && (
-                  <>
-                    <DocumentSection>
-                      <DocumentSectionTitle>
-                        <button
-                          onClick={() => setPortfolioView('select')}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: 'pointer',
-                            marginRight: 8,
-                            color: 'var(--text-secondary)'
-                          }}
-                          aria-label="뒤로"
-                        >
-                          <FiArrowLeft />
-                        </button>
                         포트폴리오
                       </DocumentSectionTitle>
-                      {isLoadingPortfolio ? (
-                        <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                          <div>포트폴리오 데이터를 불러오는 중...</div>
-                        </div>
-                      ) : (
-                        <PortfolioSummaryPanel portfolio={portfolioData} />
-                      )}
+                      <GithubSummaryPanel applicant={documentModal.applicant} />
                     </DocumentSection>
                   </>
                 )}

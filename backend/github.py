@@ -13,6 +13,7 @@ import pickle
 from collections import Counter
 import math
 from dotenv import load_dotenv
+from pymongo import MongoClient
 
 # .env 파일 로드
 load_dotenv()
@@ -26,7 +27,19 @@ from utils.github_hash_utils import (
     should_trigger_full_reanalysis
 )
 
+# GitHub 분석 서비스 import
+from services.github_analysis_service import GithubAnalysisService
+
 router = APIRouter()
+
+# MongoDB 연결 및 GitHub 분석 서비스 초기화
+try:
+    mongo_client = MongoClient(os.getenv('MONGODB_URL', 'mongodb://localhost:27017'))
+    github_analysis_service = GithubAnalysisService(mongo_client.hireme)
+    print("✅ GitHub 분석 서비스 초기화 성공")
+except Exception as e:
+    print(f"❌ GitHub 분석 서비스 초기화 실패: {e}")
+    github_analysis_service = None
 
 # 캐싱 시스템 추가
 class AnalysisCache:
@@ -1675,6 +1688,8 @@ analysis_cache = AnalysisCache()
 class GithubSummaryRequest(BaseModel):
     username: str
     repo_name: Optional[str] = None  # 특정 저장소 분석 시 사용
+    applicant_id: Optional[str] = None  # 지원자 ID (캐싱용)
+    force_reanalysis: Optional[bool] = False  # 강제 재분석 여부
 
 
 
@@ -1689,6 +1704,8 @@ class GithubSummaryResponse(BaseModel):
     language_total_bytes: Optional[int] = None
     original_language_stats: Optional[Dict[str, int]] = None  # 원본 언어 통계
     token_usage: Optional[Dict[str, int]] = None  # 토큰 사용량 추가
+    content_changed: Optional[bool] = False  # 콘텐츠 변경 여부
+    changes_detected: Optional[List[str]] = None  # 감지된 변경 사항들
 
 class LanguageChartResponse(BaseModel):
     language_stats: Dict[str, int]  # 언어별 통계
@@ -1696,7 +1713,7 @@ class LanguageChartResponse(BaseModel):
     original_stats: Optional[Dict[str, int]] = None  # 원본 통계 (기타 분류 전)
 
 def process_language_stats(language_stats: Dict[str, int], total_bytes: int) -> Dict[str, int]:
-    """언어 통계를 처리하여 정확한 비율로 분류 (정확도 개선)"""
+    """언어 통계를 처리하여 차트에서 글자 겹침을 방지하는 정교한 분류"""
     if not language_stats:
         return language_stats
     
@@ -1708,34 +1725,41 @@ def process_language_stats(language_stats: Dict[str, int], total_bytes: int) -> 
         percentage = (value / total_bytes) * 100
         language_percentages[name] = percentage
     
-    # 2% 이하인 언어들을 찾기 (더 엄격한 기준)
-    small_languages = [(name, value) for name, value in entries if language_percentages[name] <= 2]
+    # 차트 최적화를 위한 설정
+    MIN_PERCENTAGE = 5  # 5% 미만은 기타로 분류
+    MAX_VISIBLE_ITEMS = 6  # 최대 6개 항목만 표시
     
-    # 7개 이상이거나 2% 이하인 언어가 여러 개인 경우 처리 (더 엄격한 기준)
-    if len(entries) > 7 or len(small_languages) > 1:
-        # 2% 이상인 언어들을 선택
-        significant_languages = [(name, value) for name, value in entries if language_percentages[name] > 2]
-        top_languages = significant_languages[:6]  # 상위 6개로 제한
+    # 기타로 분류할 언어들 찾기
+    others = []
+    significant_languages = []
+    
+    for name, value in entries:
+        percentage = language_percentages[name]
         
-        # 나머지 언어들을 '기타'로 분류
-        others = []
-        for name, value in entries:
-            percentage = language_percentages[name]
-            if percentage <= 2 or not any(top_name == name for top_name, _ in top_languages):
-                others.append((name, value))
-        
-        # 결과 구성 - 기타를 맨 마지막에 배치
-        result = {}
-        for name, value in top_languages:
-            result[name] = value
-        if others:
+        # 조건 1: 5% 미만인 경우 기타로 분류
+        # 조건 2: 6개 이상의 항목이 있는 경우 작은 것들을 기타로 분류
+        if percentage < MIN_PERCENTAGE or len(significant_languages) >= MAX_VISIBLE_ITEMS:
+            others.append((name, value))
+        else:
+            significant_languages.append((name, value))
+    
+    # 결과 구성
+    result = {}
+    for name, value in significant_languages:
+        result[name] = value
+    
+    # 기타 항목이 있으면 추가 (단, 기타로 분류되는 항목이 하나뿐이면 기타로 분류하지 않음)
+    if others:
+        if len(others) > 1:
+            # 기타로 분류되는 항목이 2개 이상이면 기타로 분류
             others_sum = sum(value for _, value in others)
             result['기타'] = others_sum
-        
-        return result
-    else:
-        # 기존 로직: 상위 6개만 표시
-        return dict(entries[:6])
+        else:
+            # 기타로 분류되는 항목이 하나뿐이면 원래 언어명으로 표시
+            single_language_name, single_language_value = others[0]
+            result[single_language_name] = single_language_value
+    
+    return result
 
 class RepositoryAnalysis(BaseModel):
     project_overview: Dict
@@ -3597,7 +3621,7 @@ async def generate_repo_language_chart(username: str, repo_name: str, token: Opt
 
 @router.post("/github/summary", response_model=GithubSummaryResponse)
 async def github_summary(request: GithubSummaryRequest):
-    """GitHub 사용자 요약 - 캐싱 및 에러 처리 강화"""
+    """GitHub 사용자 요약 - MongoDB 캐싱 및 에러 처리 강화"""
     # 토큰 사용량 초기화
     reset_token_usage()
     
@@ -3605,10 +3629,13 @@ async def github_summary(request: GithubSummaryRequest):
         print(f"=== GitHub 검색 요청 시작 ===")
         print(f"원본 입력: {request.username}")
         print(f"원본 repo_name: {request.repo_name}")
+        print(f"지원자 ID: {request.applicant_id}")
+        print(f"강제 재분석: {request.force_reanalysis}")
         
         # 통일된 파싱 로직: URL과 유저이름 모두 동일한 방식으로 처리
         username = None
         repo_name = request.repo_name
+        github_url = request.username
         
         if request.username.startswith('https://github.com/'):
             # GitHub URL 파싱
@@ -3627,13 +3654,55 @@ async def github_summary(request: GithubSummaryRequest):
             username = resolve_username(request.username)
             if not username:
                 raise HTTPException(status_code=400, detail="username이 필요합니다.")
+            github_url = f"https://github.com/{username}"
             print(f"유저이름 파싱 결과 - username: {username}, repo_name: {repo_name}")
         
         # 최종 검증: username이 동일한지 확인
         print(f"최종 검증 - username: {username}, repo_name: {repo_name}")
         
-        # MongoDB에서 기존 분석 결과 확인 및 증분 업데이트 로직
-        print(f"MongoDB에서 기존 분석 확인: {username}/{repo_name or 'profile'}")
+        # MongoDB 캐싱 시스템 확인
+        if github_analysis_service and request.applicant_id and not request.force_reanalysis:
+            print(f"MongoDB에서 기존 분석 확인: {request.applicant_id}/{github_url}")
+            
+            # 캐시된 분석 결과 조회
+            cached_analysis = github_analysis_service.get_cached_analysis(request.applicant_id, github_url)
+            
+            if cached_analysis:
+                print(f"캐시된 분석 결과 발견: {cached_analysis.id}")
+                
+                # 콘텐츠 변경 여부 확인
+                has_changes, old_analysis, changes_detected = github_analysis_service.check_content_changes(
+                    request.applicant_id, github_url, cached_analysis.analysis_data
+                )
+                
+                if not has_changes:
+                    print("콘텐츠 변경 없음 - 캐시된 결과 반환")
+                    return GithubSummaryResponse(
+                        profileUrl=cached_analysis.analysis_data.get('profileUrl', f"https://github.com/{username}"),
+                        profileApiUrl=cached_analysis.analysis_data.get('profileApiUrl', f"https://api.github.com/users/{username}"),
+                        source="cached",
+                        summary=cached_analysis.analysis_data.get('summary', ''),
+                        detailed_analysis=cached_analysis.analysis_data.get('detailed_analysis'),
+                        language_stats=cached_analysis.analysis_data.get('language_stats'),
+                        language_total_bytes=cached_analysis.analysis_data.get('language_total_bytes'),
+                        original_language_stats=cached_analysis.analysis_data.get('original_language_stats'),
+                        token_usage=cached_analysis.analysis_data.get('token_usage', {}),
+                        content_changed=False,
+                        changes_detected=None
+                    )
+                else:
+                    print("콘텐츠 변경 감지 - 재분석 필요")
+                    # 변경 알림을 위한 플래그 설정
+                    content_changed = True
+            else:
+                print("캐시된 분석 결과 없음 - 새로 분석 진행")
+                content_changed = False
+        else:
+            print("MongoDB 캐싱 시스템 사용 안함 또는 강제 재분석")
+            content_changed = False
+        
+        # 기존 캐싱 시스템 (백업용)
+        print(f"기존 캐싱 시스템 확인: {username}/{repo_name or 'profile'}")
         
         # 1. 저장된 분석이 최근 것인지 확인 (24시간 이내)
         cached_result = await github_storage_service.get_cached_analysis_if_fresh(username, repo_name, max_age_hours=24)
@@ -3959,7 +4028,8 @@ async def github_summary(request: GithubSummaryRequest):
                 'qualification_results': qualification_result
             }
             
-            return GithubSummaryResponse(
+            # 분석 결과 생성
+            result = GithubSummaryResponse(
                 profileUrl=profile_url,
                 profileApiUrl=profile_api_url,
                 source='repos_meta',
@@ -3968,8 +4038,79 @@ async def github_summary(request: GithubSummaryRequest):
                 language_stats=language_stats,
                 language_total_bytes=language_total_bytes,
                 original_language_stats=chart_response.original_stats,
-                token_usage=get_token_usage()
+                token_usage=get_token_usage(),
+                content_changed=content_changed if 'content_changed' in locals() else False,
+                changes_detected=changes_detected if 'changes_detected' in locals() else None
             )
+            
+            # MongoDB에 분석 결과 저장
+            if github_analysis_service and request.applicant_id:
+                try:
+                    # 분석 데이터 준비
+                    analysis_data = {
+                        'profileUrl': result.profileUrl,
+                        'profileApiUrl': result.profileApiUrl,
+                        'source': result.source,
+                        'summary': result.summary,
+                        'detailed_analysis': result.detailed_analysis,
+                        'language_stats': result.language_stats,
+                        'language_total_bytes': result.language_total_bytes,
+                        'original_language_stats': result.original_language_stats,
+                        'token_usage': result.token_usage,
+                        'total_repos': len(analyses) if 'analyses' in locals() else None,
+                        'total_stars': sum(repo.get('stargazers_count', 0) for repo in analyses) if 'analyses' in locals() else None,
+                        'total_forks': sum(repo.get('forks_count', 0) for repo in analyses) if 'analyses' in locals() else None,
+                        'main_languages': list(language_stats.keys())[:5] if language_stats else None
+                    }
+                    
+                    # GitHub 분석 서비스에 저장
+                    saved_analysis = github_analysis_service.save_analysis(
+                        request.applicant_id, 
+                        github_url, 
+                        analysis_data
+                    )
+                    print(f"분석 결과 MongoDB 저장 완료: {saved_analysis.id}")
+                    
+                    # 파일 해시 저장 (github_file_hashes 컬렉션)
+                    # 개별 레포지토리 분석인 경우에만 파일 해시 저장
+                    if request.repo_name:
+                        try:
+                            print(f"파일 해시 생성 중: {username}/{request.repo_name}")
+                            current_file_hashes = await generate_file_hashes_from_github(username, request.repo_name, github_token)
+                            if current_file_hashes:
+                                await github_storage_service.save_analysis(
+                                    username, 
+                                    request.repo_name, 
+                                    analysis_data, 
+                                    current_file_hashes
+                                )
+                                print(f"파일 해시 저장 완료: {username}/{request.repo_name} ({len(current_file_hashes)}개 파일)")
+                        except Exception as e:
+                            print(f"파일 해시 저장 중 오류: {e}")
+                    # 사용자 전체 분석인 경우 각 레포지토리의 파일 해시 저장
+                    elif 'analyses' in locals() and analyses:
+                        try:
+                            # 각 레포지토리의 파일 해시 생성 및 저장
+                            for repo in analyses:
+                                repo_name = repo.get('name')
+                                if repo_name:
+                                    print(f"파일 해시 생성 중: {username}/{repo_name}")
+                                    current_file_hashes = await generate_file_hashes_from_github(username, repo_name, github_token)
+                                    if current_file_hashes:
+                                        await github_storage_service.save_analysis(
+                                            username, 
+                                            repo_name, 
+                                            analysis_data, 
+                                            current_file_hashes
+                                        )
+                                        print(f"파일 해시 저장 완료: {username}/{repo_name} ({len(current_file_hashes)}개 파일)")
+                        except Exception as e:
+                            print(f"파일 해시 저장 중 오류: {e}")
+                    
+                except Exception as e:
+                    print(f"MongoDB 저장 중 오류: {e}")
+            
+            return result
             
         except HTTPException:
             raise
