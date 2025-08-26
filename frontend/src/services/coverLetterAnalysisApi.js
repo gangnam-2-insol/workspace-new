@@ -71,7 +71,7 @@ class CoverLetterAnalysisApi {
    */
   static async analyzeApplicantCoverLetter(applicantId, analysisRequest = {}) {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/cover-letter/analysis`, {
+      const response = await fetch(`${API_BASE_URL}/api/cover-letters/applicant/${applicantId}/analysis`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

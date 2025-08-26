@@ -72,9 +72,17 @@ class LLMService:
         """
         try:
             print(f"[LLMService] === 표절 의심도 분석 시작 ===")
-            # 자소서의 경우 basic_info_names 필드에서 이름 가져오기
+            
+            # 자소서의 경우 applicant_id로 지원자 이름을 조회해야 함
             if document_type == "자소서":
-                original_name = original_resume.get('basic_info_names') or original_resume.get('name', 'Unknown')
+                original_name = original_resume.get('basic_info_names') or original_resume.get('name')
+                if not original_name:
+                    # applicant_id가 있으면 해당 지원자의 이름을 표시
+                    applicant_id = original_resume.get('applicant_id')
+                    if applicant_id:
+                        original_name = f"지원자ID_{applicant_id}"
+                    else:
+                        original_name = "Unknown"
             else:
                 original_name = original_resume.get('name', 'Unknown')
             print(f"[LLMService] 원본 {document_type}: {original_name}")

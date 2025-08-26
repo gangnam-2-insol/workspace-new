@@ -1,4 +1,4 @@
-   import React, { useState } from 'react';
+   import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { 
@@ -28,6 +28,7 @@ import DetailModal, {
   DetailValue,
   DetailText
 } from '../../components/DetailModal/DetailModal';
+import { applicantApi } from '../../services/applicantApi';
 
 const CoverLetterContainer = styled.div`
   padding: 16px 0;
@@ -605,6 +606,8 @@ const CoverLetterValidation = () => {
     setIsFilterOpen(false);
   };
 
+
+
   const handleJobToggle = (job) => {
     setSelectedJobs(prev => 
       prev.includes(job) 
@@ -1135,17 +1138,6 @@ const CoverLetterValidation = () => {
               </KeywordSection>
             </DetailSection>
 
-            <DetailSection>
-              <SectionTitle>표절 의심도 분석 결과</SectionTitle>
-              <PlagiarismSection score={selectedCoverLetter.plagiarismDetails.score}>
-                <PlagiarismScore score={selectedCoverLetter.plagiarismDetails.score}>
-                  {selectedCoverLetter.plagiarismDetails.score}% - {selectedCoverLetter.plagiarismDetails.status}
-                </PlagiarismScore>
-                <PlagiarismDetail>
-                  {selectedCoverLetter.plagiarismDetails.description}
-                </PlagiarismDetail>
-              </PlagiarismSection>
-            </DetailSection>
 
             <DetailSection>
               <SectionTitle>분석 결과</SectionTitle>
