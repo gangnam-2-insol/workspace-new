@@ -11,6 +11,7 @@
 - **Pinecone 벡터 검색**: ✅ 성공
 - **하이브리드 검색**: ✅ 성공
 - **MongoDB 연동**: ✅ 성공
+- **임베딩 폴백 시스템**: ✅ 성공 (OpenAI → SentenceTransformer 자동 전환)
 - **결과**: 완전한 하이브리드 검색 시스템 구축 완료
 
 #### 2. **Elasticsearch** - 100% 성공
@@ -110,9 +111,11 @@
 ### **하이브리드 검색 시스템** (담당: 박주랑)
 ```
 Elasticsearch (키워드 검색) + Pinecone (벡터 검색) + MongoDB (데이터 저장)
+OpenAI text-embedding-3-small (1536차원) + SentenceTransformer 폴백 (384차원)
 ```
 - **키워드 검색**: 한국어 형태소 분석, 정확한 매칭
 - **벡터 검색**: 의미적 유사도 검색
+- **임베딩 폴백**: OpenAI API 장애 시 SentenceTransformer 자동 전환
 - **통합 검색**: 키워드 + 벡터 결과 병합 및 랭킹
 
 ### **PDF 처리 시스템** (담당: 전근우)
@@ -183,12 +186,20 @@ GitHub API → 레포지토리 분석 → AI 분석 → 기술 스택 평가
 - **프론트엔드 UI**: 표절 검증 상세 분석 UI 완전 구현
 - **배치 처리**: 다중 문서 동시 검사 API 구현 완료
 
+### **임베딩 폴백 테스트 결과**
+- **주 임베딩 모델**: OpenAI text-embedding-3-small (1536차원)
+- **폴백 모델**: SentenceTransformer paraphrase-multilingual-MiniLM-L12-v2 (384차원)
+- **폴백 모델 로드**: ✅ 정상 초기화 및 임베딩 생성 확인
+- **자동 전환**: ✅ OpenAI API 실패 시 자동으로 폴백 모델 사용
+- **전처리 기능**: ✅ 쿼리/문서 타입별 전처리 정상 작동
+- **고가용성**: API 장애 상황에서도 서비스 지속 가능
+
 ## 🛠️ **사용된 기술 스택**
 
 ### **백엔드**
 - **Python**: FastAPI, asyncio
 - **데이터베이스**: MongoDB, Elasticsearch, Pinecone
-- **AI/ML**: OpenAI API, LangChain, LangGraph
+- **AI/ML**: OpenAI API, LangChain, LangGraph, SentenceTransformers
 - **PDF 처리**: PyMuPDF, pdfplumber, PyPDF2
 - **OCR**: OCR.Space API, pytesseract
 - **GitHub API**: REST API, Personal Access Token
@@ -237,8 +248,9 @@ workspace-new_merge/
 
 ### **4. 시스템 안정성**
 - Docker 기반 배포
-- 에러 처리 및 fallback
+- 에러 처리 및 fallback (임베딩 서비스 폴백 포함)
 - 로깅 및 모니터링
+- **임베딩 고가용성**: OpenAI API 장애 시 자동 SentenceTransformer 폴백
 
 ### **5. GitHub 포트폴리오 분석** (담당: 허예찬)
 - GitHub REST API 연동
@@ -293,6 +305,11 @@ workspace-new_merge/
 - **문제**: Pick Chatbot 제목 생성 API에서 필수 필드 누락
 - **해결**: `form_data`와 `content` 필드 포함하도록 테스트 데이터 수정
 - **영향**: 제목 생성 API 정상 작동
+
+#### **임베딩 서비스 폴백 시스템 구현**
+- **문제**: OpenAI API 장애 시 서비스 중단 위험
+- **해결**: SentenceTransformer 폴백 모델 추가 및 자동 전환 로직 구현
+- **영향**: API 장애 상황에서도 임베딩 서비스 지속 가능
 
 ## 🚀 **다음 단계**
 

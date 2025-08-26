@@ -1,4 +1,5 @@
 import os
+from sentence_transformers import SentenceTransformer
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 from enum import Enum
@@ -19,6 +20,8 @@ class EmbeddingService:
         # OpenAI 클라이언트 초기화
         self.client = openai.OpenAI(api_key=self.openai_api_key)
         
+        # 백업용 SentenceTransformer 모델 (OpenAI 실패 시 사용)
+        self.fallback_model = SentenceTransformer('paraphrase-multilingual-MiniLM-L12-v2')
         print("OpenAI text-embedding-3-small 모델 초기화 완료 (1536차원, 한국어 지원)")
     
     async def create_embedding(self, text: str, embedding_type: EmbeddingType = EmbeddingType.DOCUMENT) -> Optional[List[float]]:
@@ -57,8 +60,17 @@ class EmbeddingService:
                 return embedding
                 
             except Exception as openai_error:
-                print(f"[EmbeddingService] OpenAI 임베딩 실패: {openai_error}")
-                raise openai_error
+                print(f"[EmbeddingService] OpenAI 임베딩 실패, 백업 모델 사용: {openai_error}")
+                
+                # 백업 모델 사용 (SentenceTransformer)
+                embedding = self.fallback_model.encode(processed_text)
+                
+                print(f"[EmbeddingService] 백업 임베딩 생성 성공!")
+                print(f"[EmbeddingService] 임베딩 차원: {len(embedding)}")
+                print(f"[EmbeddingService] 임베딩 값 미리보기: {embedding[:5].tolist()}...")
+                print(f"[EmbeddingService] === 백업 임베딩 생성 완료 ===")
+                
+                return embedding.tolist()  # numpy array를 list로 변환
         except Exception as e:
             print(f"[EmbeddingService] === 임베딩 생성 실패 ====")
             print(f"[EmbeddingService] 오류 메시지: {e}")
@@ -100,4 +112,4 @@ class EmbeddingService:
     
     def get_embedding_dimension(self) -> int:
         """임베딩 벡터의 차원을 반환합니다."""
-        return 384  # paraphrase-multilingual-MiniLM-L12-v2도 384차원
+        return 1536  # OpenAI text-embedding-3-small은 1536차원, 폴백 모델은 384차원
