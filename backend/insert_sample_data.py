@@ -7,7 +7,7 @@ def insert_sample_data_batch():
     
     # JSON 파일에서 데이터 로드
     try:
-        with open('sample_applicants.json', 'r', encoding='utf-8') as f:
+        with open('backend/sample_applicants.json', 'r', encoding='utf-8') as f:
             applicants = json.load(f)
         print(f"JSON 파일에서 {len(applicants)}개 지원자 데이터를 로드했습니다.")
     except FileNotFoundError:

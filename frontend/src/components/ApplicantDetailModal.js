@@ -467,11 +467,11 @@ const RecommendationGrid = styled.div`
   grid-template-columns: repeat(3, 1fr);
   gap: 16px;
   margin-top: 20px;
-  
+
   @media (max-width: 1200px) {
     grid-template-columns: repeat(2, 1fr);
   }
-  
+
   @media (max-width: 768px) {
     grid-template-columns: 1fr;
   }
@@ -599,7 +599,7 @@ const AIReasonText = styled.div`
   color: #334155;
   font-size: 13px;
   line-height: 1.4;
-  
+
   strong {
     font-weight: 600;
     color: #1e293b;
@@ -630,7 +630,7 @@ const LoadingSpinner = styled.div`
   padding: 40px;
   color: #64748b;
   font-size: 14px;
-  
+
   &::before {
     content: '';
     width: 20px;
@@ -641,7 +641,7 @@ const LoadingSpinner = styled.div`
     animation: spin 1s linear infinite;
     margin-right: 12px;
   }
-  
+
   @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
@@ -659,11 +659,60 @@ const ErrorMessage = styled.div`
   border: 1px solid #fecaca;
 `;
 
-const ApplicantDetailModal = ({ 
-  applicant, 
-  onClose, 
-  onResumeClick, 
-  onDocumentClick, 
+// 디버그 토글 버튼
+const DebugToggleButton = styled.button`
+  background: #4a5568;
+  color: white;
+  padding: 8px 12px;
+  border-radius: 8px;
+  border: none;
+  font-size: 12px;
+  cursor: pointer;
+  transition: all 0.2s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  &:hover {
+    background: #374151;
+    transform: translateY(-1px);
+  }
+`;
+
+// 디버그 패널
+const DebugPanel = styled.div`
+  background: #1a202c;
+  color: #e2e8f0;
+  padding: 16px;
+  border-radius: 12px;
+  margin-bottom: 24px;
+  max-height: 300px;
+  overflow-y: auto;
+  border: 1px solid #374151;
+  font-family: 'Courier New', monospace;
+  font-size: 12px;
+  line-height: 1.4;
+`;
+
+// 디버그 로그 아이템
+const DebugLogItem = styled.div`
+  margin-bottom: 8px;
+  padding: 4px 0;
+  border-bottom: 1px solid #2d3748;
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+
+  &:last-child {
+    border-bottom: none;
+  }
+`;
+
+const ApplicantDetailModal = ({
+  applicant,
+  onClose,
+  onResumeClick,
+  onDocumentClick,
   onDelete,
   onStatusUpdate,
   onCoverLetterAnalysis,
@@ -673,56 +722,108 @@ const ApplicantDetailModal = ({
   const [recommendationsLoading, setRecommendationsLoading] = useState(false);
   const [recommendationsError, setRecommendationsError] = useState(null);
   const [recommendationsLoaded, setRecommendationsLoaded] = useState(false); // 한 번 로드했는지 추적
+  const [showDebug, setShowDebug] = useState(false); // 디버그 패널 표시 여부
+  const [debugLogs, setDebugLogs] = useState([]); // 디버그 로그 저장
+
+  // 디버그 로그 추가 함수
+  const addDebugLog = (message, type = 'info') => {
+    const timestamp = new Date().toLocaleTimeString();
+    const logEntry = {
+      timestamp,
+      message,
+      type,
+      id: Date.now() + Math.random()
+    };
+    setDebugLogs(prev => [...prev, logEntry]);
+  };
+
+  // 디버그 로그 초기화
+  const clearDebugLogs = () => {
+    setDebugLogs([]);
+  };
 
   // 유사인재 추천 API 호출
   const fetchRecommendations = async () => {
-    if (!applicant || (!applicant._id && !applicant.id)) return;
-    
-    // 이미 로드했거나 로딩 중이면 다시 로드하지 않음
-    if (recommendationsLoaded || recommendationsLoading) {
-      console.log('유사인재 추천 이미 로드됨 또는 로딩 중 - 스킵');
+    if (!applicant || (!applicant._id && !applicant.id)) {
+      addDebugLog('지원자 정보 없음 - API 호출 스킵', 'warning');
       return;
     }
-    
+
+    // 이미 로드했거나 로딩 중이면 다시 로드하지 않음
+    if (recommendationsLoaded || recommendationsLoading) {
+      addDebugLog('이미 로드됨 또는 로딩 중 - 스킵', 'info');
+      return;
+    }
+
+    addDebugLog('유사인재 추천 API 호출 시작', 'info');
+    addDebugLog(`지원자 ID: ${applicant._id || applicant.id}`, 'info');
+    addDebugLog(`지원자 이름: ${applicant.name}`, 'info');
+    addDebugLog(`지원자 직무: ${applicant.position}`, 'info');
+
     setRecommendationsLoading(true);
     setRecommendationsError(null);
-    
+
     try {
       const applicantId = applicant._id || applicant.id;
-      const response = await fetch(`/api/applicants/${applicantId}/recommendations`, {
+      const apiUrl = `/api/applicants/${applicantId}/recommendations`;
+
+      addDebugLog(`API 요청 시작: ${apiUrl}`, 'info');
+
+      const startTime = Date.now();
+      const response = await fetch(apiUrl, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         },
       });
 
+      const endTime = Date.now();
+      const responseTime = endTime - startTime;
+
+      addDebugLog(`API 응답 완료 (${responseTime}ms)`, 'success');
+      addDebugLog(`응답 상태: ${response.status} ${response.statusText}`, 'info');
+
       if (!response.ok) {
-        throw new Error('유사인재 추천을 가져오는데 실패했습니다.');
+        const errorText = await response.text();
+        addDebugLog(`API 오류: ${response.status} - ${errorText}`, 'error');
+        throw new Error(`유사인재 추천을 가져오는데 실패했습니다. (${response.status}: ${errorText})`);
       }
 
       const data = await response.json();
-      
+      addDebugLog('API 응답 데이터 파싱 완료', 'success');
+
       // 백엔드 응답 구조에 맞춰 데이터 처리
       if (data.status === 'success' && data.recommendations) {
+        addDebugLog('응답 데이터 처리 시작', 'info');
+
         const recommendationData = data.recommendations.data || data.recommendations;
+
         if (recommendationData && recommendationData.results) {
           const results = recommendationData.results.slice(0, 5); // 최대 5개
-          
+          addDebugLog(`추천 결과 ${results.length}개 발견`, 'success');
+
+          // 각 추천 결과 상세 로깅
+          results.forEach((result, index) => {
+            addDebugLog(`추천 #${index + 1}: ${result.applicant?.name} (점수: ${(result.final_score * 100).toFixed(1)}%)`, 'info');
+          });
+
           // LLM 분석 결과 파싱 및 결합
           if (recommendationData.llm_analysis && recommendationData.llm_analysis.success) {
-            console.log('LLM 분석 원본:', recommendationData.llm_analysis);
+            addDebugLog('LLM 분석 결과 처리 시작', 'info');
+
             const llmAnalysisText = recommendationData.llm_analysis.analysis;
             const parsedAnalysis = parseLLMAnalysis(llmAnalysisText);
-            console.log('파싱된 LLM 분석:', parsedAnalysis);
-            
+
+            addDebugLog(`LLM 분석 파싱 완료: ${Object.keys(parsedAnalysis).length}개 지원자`, 'success');
+
             // LLM 분석 결과를 각 지원자와 매칭
             results.forEach((result, index) => {
               const applicantName = result.applicant.name;
-              
+
               // 정확한 매칭 시도
               if (parsedAnalysis[applicantName]) {
                 result.llm_analysis = parsedAnalysis[applicantName];
-                console.log(`${applicantName}에게 LLM 분석 결과 할당:`, parsedAnalysis[applicantName]);
+                addDebugLog(`${applicantName} LLM 분석 매칭 성공`, 'success');
               } else {
                 // 정확한 매칭이 안 되면 유사한 이름 찾기 (공백, 대소문자 무시)
                 const normalizedApplicantName = applicantName.trim().replace(/\s+/g, '');
@@ -730,33 +831,38 @@ const ApplicantDetailModal = ({
                   const normalizedKey = key.trim().replace(/\s+/g, '');
                   return normalizedKey === normalizedApplicantName;
                 });
-                
+
                 if (matchingKey) {
                   result.llm_analysis = parsedAnalysis[matchingKey];
-                  console.log(`${applicantName}에게 LLM 분석 결과 할당 (유사 매칭: ${matchingKey}):`, parsedAnalysis[matchingKey]);
+                  addDebugLog(`${applicantName} LLM 분석 유사 매칭 성공 (${matchingKey})`, 'success');
                 } else {
-                  console.log(`${applicantName}에 대한 LLM 분석 결과 없음. 사용 가능한 키들:`, Object.keys(parsedAnalysis));
+                  addDebugLog(`${applicantName} LLM 분석 매칭 실패`, 'warning');
                 }
               }
             });
           } else {
-            console.log('LLM 분석 결과 없음 또는 실패');
+            addDebugLog('LLM 분석 결과 없음 또는 실패', 'warning');
           }
-          
+
           setRecommendations(results);
+          addDebugLog('최종 추천 결과 설정 완료', 'success');
         } else {
+          addDebugLog('추천 결과 없음', 'warning');
           setRecommendations([]);
         }
       } else {
+        addDebugLog(`API 응답이 성공이 아님: ${data.status} - ${data.message}`, 'error');
         setRecommendations([]);
       }
     } catch (error) {
+      addDebugLog(`오류 발생: ${error.message}`, 'error');
       console.error('유사인재 추천 오류:', error);
       setRecommendationsError(error.message);
       setRecommendations([]);
     } finally {
       setRecommendationsLoading(false);
       setRecommendationsLoaded(true); // 성공/실패 관계없이 한 번 시도했음을 표시
+      addDebugLog('API 호출 완료', 'info');
     }
   };
 
@@ -766,17 +872,17 @@ const ApplicantDetailModal = ({
       // 새로운 지원자인 경우에만 캐시 리셋
       const currentApplicantId = applicant._id || applicant.id;
       const isNewApplicant = !recommendationsLoaded || recommendations.length === 0;
-      
+
       if (isNewApplicant) {
         setRecommendationsLoaded(false);
         setRecommendations([]);
         setRecommendationsError(null);
-        
+
         // 약간의 딜레이를 두어 중복 호출 방지
         const timer = setTimeout(() => {
           fetchRecommendations();
         }, 100);
-        
+
         return () => clearTimeout(timer);
       }
     }
@@ -791,72 +897,72 @@ const ApplicantDetailModal = ({
   // LLM 분석 결과 파싱 함수
   const parseLLMAnalysis = (analysisText) => {
     const parsed = {};
-    
+
     try {
       // "### 3. 각 유사 지원자별 상세 분석" 섹션 찾기
       const analysisSection = analysisText.split('### 3. 각 유사 지원자별 상세 분석')[1];
       if (!analysisSection) return parsed;
-      
+
       // 각 지원자별 분석 블록으로 분할
       const applicantBlocks = analysisSection.split(/- \*\*([^*]+)\*\*/).filter(block => block.trim());
-      
+
       for (let i = 0; i < applicantBlocks.length; i += 2) {
         let name = applicantBlocks[i]?.trim();
         const content = applicantBlocks[i + 1];
-        
+
         if (name && content) {
           // 대괄호 제거 (예: [박지우] → 박지우)
           name = name.replace(/^\[|\]$/g, '').trim();
-          
+
           // 각 항목 파싱 - 여러 줄에 걸친 내용도 처리
           const coreCommon = content.match(/🔍 \*\*핵심 공통점\*\*: ([^\n]+)/)?.[1]?.trim();
           const mainFeature = content.match(/💡 \*\*주요 특징\*\*: ([^\n]+)/)?.[1]?.trim();
-          
+
           // 추천 이유 파싱 (이제 간결한 한 줄로 작성됨)
           const recommendReasonMatch = content.match(/⭐ \*\*추천 이유\*\*: ([^🎯]+)/);
           let recommendReason = recommendReasonMatch?.[1]?.trim();
           if (recommendReason) {
             // 기준 설명 부분 제거 (괄호로 둘러싸인 부분)
             recommendReason = recommendReason.replace(/\s*\(기준:.*?\)/g, '').trim();
-            
+
             // 따옴표 제거 (앞뒤 따옴표)
             recommendReason = recommendReason.replace(/^["']|["']$/g, '').trim();
-            
+
             // 끝에 있는 대시(-) 제거
             recommendReason = recommendReason.replace(/\s*-\s*$/, '').trim();
-            
+
             // 남은 텍스트에서 불필요한 공백/줄바꿈 정리
             recommendReason = recommendReason.replace(/\s+/g, ' ').trim();
-            
+
             // 템플릿 텍스트 제거
             if (recommendReason.startsWith('[') && recommendReason.endsWith(']')) {
               recommendReason = '추천 근거를 분석 중입니다...';
             }
           }
-          
+
           const similarityFactor = content.match(/🎯 \*\*유사성 요인\*\*: ([^\n]+)/)?.[1]?.trim();
-          
+
           parsed[name] = {
             coreCommon: coreCommon || '분석 중...',
             mainFeature: mainFeature || '분석 중...',
             recommendReason: recommendReason || '분석 중...',
             similarityFactor: similarityFactor || '분석 중...'
           };
-          
+
           console.log(`파싱된 지원자: "${name}"`, parsed[name]);
         }
       }
     } catch (error) {
       console.error('LLM 분석 파싱 오류:', error);
     }
-    
+
     return parsed;
   };
 
   // AI 추천 이유 생성 함수
   const generateAIReasons = (recommendation, targetApplicant) => {
     console.log('generateAIReasons 호출:', recommendation);
-    
+
     // LLM 분석 결과가 있으면 우선 사용
     if (recommendation.llm_analysis) {
       console.log('LLM 분석 결과 사용:', recommendation.llm_analysis);
@@ -888,13 +994,13 @@ const ApplicantDetailModal = ({
     // 폴백: 기존 클라이언트 사이드 생성 로직
     const recommended = recommendation.applicant;
     const targetPosition = targetApplicant.position || '';
-    const targetSkills = Array.isArray(targetApplicant.skills) ? targetApplicant.skills : 
+    const targetSkills = Array.isArray(targetApplicant.skills) ? targetApplicant.skills :
                         typeof targetApplicant.skills === 'string' ? targetApplicant.skills.split(',') : [];
-    const recommendedSkills = Array.isArray(recommended.skills) ? recommended.skills : 
+    const recommendedSkills = Array.isArray(recommended.skills) ? recommended.skills :
                              typeof recommended.skills === 'string' ? recommended.skills.split(',') : [];
-    
+
     // 공통 기술스택 찾기
-    const commonSkills = targetSkills.filter(skill => 
+    const commonSkills = targetSkills.filter(skill =>
       recommendedSkills.some(recSkill => recSkill.trim().toLowerCase().includes(skill.trim().toLowerCase()))
     );
 
@@ -902,7 +1008,7 @@ const ApplicantDetailModal = ({
     const score = recommendation.final_score || 0;
     const vectorScore = recommendation.vector_score || 0;
     const keywordScore = recommendation.keyword_score || 0;
-    
+
     const reasons = [];
 
     // 핵심 공통점
@@ -1035,7 +1141,7 @@ const ApplicantDetailModal = ({
                 즐겨찾기
               </ActionButton>
             </HeaderActions>
-            
+
             <Title>지원자 상세 정보</Title>
             <Subtitle>
               <span>{applicant.name || '이름 없음'}</span>
@@ -1065,7 +1171,7 @@ const ApplicantDetailModal = ({
                       <InfoValue>{applicant.name || '이름 없음'}</InfoValue>
                     </InfoContent>
                   </InfoItem>
-                  
+
                   <InfoItem>
                     <InfoIcon>
                       <FiTrendingUp size={16} />
@@ -1075,7 +1181,7 @@ const ApplicantDetailModal = ({
                       <InfoValue>{applicant.experience || '경력 정보 없음'}</InfoValue>
                     </InfoContent>
                   </InfoItem>
-                  
+
                   <InfoItem>
                     <InfoIcon>
                       <FiTarget size={16} />
@@ -1085,7 +1191,7 @@ const ApplicantDetailModal = ({
                       <InfoValue>{applicant.position || '직무 미지정'}</InfoValue>
                     </InfoContent>
                   </InfoItem>
-                  
+
                   <InfoItem>
                     <InfoIcon>
                       <FiCalendar size={16} />
@@ -1100,7 +1206,7 @@ const ApplicantDetailModal = ({
                       </InfoValue>
                     </InfoContent>
                   </InfoItem>
-                  
+
                   {applicant.email && (
                     <InfoItem>
                       <InfoIcon>
@@ -1112,7 +1218,7 @@ const ApplicantDetailModal = ({
                       </InfoContent>
                     </InfoItem>
                   )}
-                  
+
                   {applicant.phone && (
                     <InfoItem>
                       <InfoIcon>
@@ -1204,7 +1310,7 @@ const ApplicantDetailModal = ({
               {!recommendationsLoading && !recommendationsError && recommendations.length > 0 && (
                 <RecommendationGrid>
                   {recommendations.map((recommendation, index) => (
-                    <RecommendationCard 
+                    <RecommendationCard
                       key={recommendation.applicant._id || index}
                       onClick={() => handleRecommendationClick(recommendation.applicant)}
                     >
@@ -1219,7 +1325,7 @@ const ApplicantDetailModal = ({
                           {Math.round((recommendation.final_score || 0) * 100)}%
                         </RecommendationScore>
                       </RecommendationCardHeader>
-                      
+
                       <RecommendationCardInfo>
                         <ExperienceSkillsRow>
                           <div>
@@ -1228,25 +1334,25 @@ const ApplicantDetailModal = ({
                               {recommendation.applicant.experience || '정보 없음'}
                             </RecommendationCardValue>
                           </div>
-                          
+
                           {recommendation.applicant.skills && (
                             <div>
                               <RecommendationCardLabel>주요 기술</RecommendationCardLabel>
                               <RecommendationCardValue>
-                                {Array.isArray(recommendation.applicant.skills) 
+                                {Array.isArray(recommendation.applicant.skills)
                                   ? recommendation.applicant.skills.slice(0, 2).join(', ')
                                   : typeof recommendation.applicant.skills === 'string'
                                   ? recommendation.applicant.skills.split(',').slice(0, 2).join(', ')
                                   : '기술스택 정보 없음'
                                 }
                                 {((Array.isArray(recommendation.applicant.skills) && recommendation.applicant.skills.length > 2) ||
-                                  (typeof recommendation.applicant.skills === 'string' && recommendation.applicant.skills.split(',').length > 2)) && 
+                                  (typeof recommendation.applicant.skills === 'string' && recommendation.applicant.skills.split(',').length > 2)) &&
                                   ' 외'}
                               </RecommendationCardValue>
                             </div>
                           )}
                         </ExperienceSkillsRow>
-                        
+
                       </RecommendationCardInfo>
 
                       {/* AI 추천 이유 섹션 */}
@@ -1270,9 +1376,9 @@ const ApplicantDetailModal = ({
               )}
 
               {!recommendationsLoading && !recommendationsError && recommendations.length === 0 && (
-                <div style={{ 
-                  padding: '40px', 
-                  textAlign: 'center', 
+                <div style={{
+                  padding: '40px',
+                  textAlign: 'center',
                   color: '#64748b',
                   background: 'white',
                   borderRadius: '12px',

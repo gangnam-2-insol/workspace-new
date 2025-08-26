@@ -1170,38 +1170,48 @@ async def check_coverletter_similarity(
         # 1. 지원자 존재 확인
         applicant = await mongo_service.get_applicant_by_id(applicant_id)
         if not applicant:
+            print(f"[ERROR] 지원자를 찾을 수 없음 - applicant_id: {applicant_id}")
             raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
+
+        print(f"[INFO] 지원자 정보 확인 - applicant: {applicant}")
+        print(f"[INFO] 지원자 필드들: {list(applicant.keys())}")
 
         # 2. 자소서 존재 확인
         cover_letter_id = applicant.get("cover_letter_id")
+        print(f"[INFO] 자소서 ID 확인 - cover_letter_id: {cover_letter_id}")
+
         if not cover_letter_id:
+            print(f"[ERROR] 자소서 ID가 없음 - applicant_id: {applicant_id}")
             raise HTTPException(status_code=404, detail="자소서가 없습니다")
 
         # 3. 자소서 내용 가져오기
+        from bson import ObjectId
+        from motor.motor_asyncio import AsyncIOMotorClient
+
+        mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/hireme")
+        client = AsyncIOMotorClient(mongo_uri)
+        db = client.hireme
+
         try:
-            from bson import ObjectId
-            from motor.motor_asyncio import AsyncIOMotorClient
-
-            mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/hireme")
-            client = AsyncIOMotorClient(mongo_uri)
-            db = client.hireme
-
             # ObjectId 변환 시도
             try:
                 object_id = ObjectId(cover_letter_id)
             except Exception as e:
                 print(f"[ERROR] 잘못된 ObjectId 형식: {cover_letter_id}")
-                client.close()
                 raise HTTPException(status_code=400, detail="잘못된 자소서 ID 형식입니다")
 
             cover_letter = await db.cover_letters.find_one({"_id": object_id})
-            client.close()
 
             if not cover_letter:
                 raise HTTPException(status_code=404, detail="자소서를 찾을 수 없습니다")
 
             # 자소서 내용 추출 (content 또는 extracted_text 필드에서)
             cover_letter_text = cover_letter.get("content", "") or cover_letter.get("extracted_text", "")
+            
+            # 자소서 데이터에 extracted_text 필드가 없으면 content를 사용
+            if not cover_letter.get("extracted_text"):
+                cover_letter["extracted_text"] = cover_letter_text
+            
             if not cover_letter_text:
                 print(f"[WARNING] 자소서 내용이 비어있음 - applicant_id: {applicant_id}")
                 return {
@@ -1217,24 +1227,48 @@ async def check_coverletter_similarity(
                 }
 
             print(f"[INFO] 자소서 내용 발견 - 길이: {len(cover_letter_text)}자")
+            print(f"[INFO] 자소서 필드들: {list(cover_letter.keys())}")
+
+            # 4. 유사도 서비스 초기화
+            similarity_service = get_similarity_service()
+
+            # 5. 자소서 표절체크 수행 (청킹 기반 유사도 검색 사용)
+            # 자소서 데이터를 직접 전달하여 청킹 처리
+            result = await similarity_service.find_similar_documents_by_chunks(
+                document_id=cover_letter_id,
+                collection=db.cover_letters,
+                document_type="cover_letter",
+                limit=10
+            )
 
         except HTTPException:
             raise
         except Exception as e:
             print(f"[ERROR] 자소서 조회 실패: {str(e)}")
             raise HTTPException(status_code=500, detail="자소서 조회 중 오류가 발생했습니다")
+        finally:
+            client.close()
 
-        # 4. 유사도 서비스 초기화
-        similarity_service = get_similarity_service()
-
-        # 5. 자소서 표절체크 수행 (청킹 기반 유사도 검색 사용)
-        # cover_letter_id를 사용하여 cover_letters 컬렉션에서 검색
-        result = await similarity_service.find_similar_documents_by_chunks(
-            document_id=cover_letter_id,
-            collection=db.cover_letters,
-            document_type="cover_letter",
-            limit=10
-        )
+        # 결과 검증 및 폴백 처리
+        if not result or not result.get("success"):
+            print(f"[WARNING] 자소서 표절체크 결과가 비어있음 - 폴백 응답 생성")
+            return {
+                "status": "success",
+                "applicant_id": applicant_id,
+                "plagiarism_result": {
+                    "status": "no_similar_documents",
+                    "message": "유사한 자소서를 찾을 수 없어 표절 검사를 수행할 수 없습니다.",
+                    "similar_count": 0,
+                    "suspicion_level": "UNKNOWN",
+                    "debug_info": {
+                        "cover_letter_id": cover_letter_id,
+                        "content_length": len(cover_letter_text),
+                        "has_extracted_text": bool(cover_letter.get("extracted_text")),
+                        "cover_letter_fields": list(cover_letter.keys())
+                    }
+                },
+                "message": "자소서 표절체크 완료 (유사 문서 없음)"
+            }
 
         return {
             "status": "success",
@@ -1252,88 +1286,7 @@ async def check_coverletter_similarity(
             detail=f"자소서 표절체크 중 오류가 발생했습니다: {str(e)}"
         )
 
-# 커버레터 표절 의심도 체크 엔드포인트
-@app.post("/api/coverletter/similarity-check/{applicant_id}")
-async def check_coverletter_similarity(
-    applicant_id: str,
-    mongo_service: MongoService = Depends(get_mongo_service),
-    similarity_service: SimilarityService = Depends(get_similarity_service)
-):
-    """자기소개서 표절 의심도 검사"""
-    try:
-        print(f"[INFO] 자소서 표절 의심도 검사 요청 - applicant_id: {applicant_id}")
 
-        # 1. 지원자 존재 확인
-        applicant = await mongo_service.get_applicant_by_id(applicant_id)
-        if not applicant:
-            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
-
-        # 2. 자소서 존재 확인
-        cover_letter_id = applicant.get("cover_letter_id")
-        if not cover_letter_id:
-            raise HTTPException(status_code=404, detail="자소서가 없습니다")
-
-        # 3. 자소서 내용 가져오기
-        try:
-            # ObjectId 변환 시도
-            try:
-                object_id = ObjectId(cover_letter_id)
-            except Exception as e:
-                print(f"[ERROR] 잘못된 ObjectId 형식: {cover_letter_id}")
-                raise HTTPException(status_code=400, detail="잘못된 자소서 ID 형식입니다")
-
-            cover_letter = await db.cover_letters.find_one({"_id": object_id})
-
-            if not cover_letter:
-                raise HTTPException(status_code=404, detail="자소서를 찾을 수 없습니다")
-
-            # 자소서 내용 추출
-            cover_letter_text = cover_letter.get("content", "") or cover_letter.get("extracted_text", "")
-            if not cover_letter_text:
-                print(f"[WARNING] 자소서 내용이 비어있음 - applicant_id: {applicant_id}")
-                return {
-                    "status": "success",
-                    "applicant_id": applicant_id,
-                    "plagiarism_result": {
-                        "status": "no_content",
-                        "message": "자소서 내용이 없어 표절 의심도 검사를 수행할 수 없습니다.",
-                        "similar_count": 0,
-                        "suspicion_level": "UNKNOWN"
-                    },
-                    "message": "자소서 내용이 없습니다"
-                }
-
-            print(f"[INFO] 자소서 내용 발견 - 길이: {len(cover_letter_text)}자")
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            print(f"[ERROR] 자소서 조회 실패: {str(e)}")
-            raise HTTPException(status_code=500, detail="자소서 조회 중 오류가 발생했습니다")
-
-        # 4. 자소서 표절 의심도 검사 수행
-        result = await similarity_service.find_similar_documents_by_chunks(
-            document_id=cover_letter_id,
-            collection=db.cover_letters,
-            document_type="cover_letter",
-            limit=10
-        )
-
-        return {
-            "status": "success",
-            "applicant_id": applicant_id,
-            "plagiarism_result": result,
-            "message": "자소서 표절 의심도 검사 완료"
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"[ERROR] 자소서 표절 의심도 검사 실패: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"자소서 표절 의심도 검사 중 오류가 발생했습니다: {str(e)}"
-        )
 
 # 메일 템플릿 및 설정 관련 엔드포인트
 @app.get("/api/mail-templates")
