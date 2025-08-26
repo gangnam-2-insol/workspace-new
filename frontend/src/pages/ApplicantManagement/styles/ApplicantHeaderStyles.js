@@ -16,17 +16,18 @@ export const HeaderRow = styled.div`
 `;
 
 export const HeaderRowBoard = styled.div`
-  display: grid;
-  grid-template-columns: 40px 2fr 1fr 1fr 1fr 1fr 120px 100px;
-  gap: 16px;
-  padding: 16px 20px;
-  background: var(--background-secondary);
-  border-radius: 8px 8px 0 0;
-  font-weight: 600;
-  color: var(--text-primary);
-  font-size: 14px;
+  display: flex;
   align-items: center;
-  border-bottom: 2px solid var(--border-color);
+  padding: 8px 16px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+  margin-bottom: 12px;
+  font-weight: 600;
+  font-size: 11px;
+  color: var(--text-secondary);
+  border: 1px solid var(--border-color);
+  height: 36px;
+  gap: 16px;
 `;
 
 export const ApplicantCheckbox = styled.div`
@@ -127,47 +128,83 @@ export const HeaderAvatar = styled.div`
 `;
 
 export const HeaderName = styled.div`
-  font-weight: 600;
-  color: var(--text-primary);
+  min-width: 120px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
 `;
 
 export const HeaderPosition = styled.div`
-  font-weight: 500;
-  color: var(--text-secondary);
+  min-width: 120px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
 `;
 
 export const HeaderDate = styled.div`
+  min-width: 90px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
   font-size: 12px;
-  color: var(--text-secondary);
 `;
 
 export const HeaderEmail = styled.div`
+  min-width: 180px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 12px;
-  color: var(--text-secondary);
 `;
 
 export const HeaderPhone = styled.div`
+  min-width: 120px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 12px;
-  color: var(--text-secondary);
 `;
 
 export const HeaderSkills = styled.div`
+  min-width: 120px;
+  flex-shrink: 0;
   display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
 `;
 
 export const HeaderActions = styled.div`
+  min-width: 100px;
+  flex-shrink: 0;
+  text-align: center;
   display: flex;
-  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
 `;
 
 export const HeaderScore = styled.div`
-  font-weight: 600;
-  color: var(--primary-color);
+  min-width: 80px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 12px;
 `;
 
 export const HeaderCheckbox = styled.div`
+  min-width: 32px;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: center;

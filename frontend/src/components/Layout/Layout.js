@@ -192,12 +192,12 @@ const navigationItems = [
       { name: '인재상 관리', path: '/company-culture', icon: FiUsers }
     ]
   },
-  {
-    title: '개발 도구',
-    items: [
-      { name: 'GitHub 테스트', path: '/github-test', icon: FiGitBranch }
-    ]
-  }
+  // {
+  //   title: '개발 도구',
+  //   items: [
+  //     { name: 'GitHub 테스트', path: '/github-test', icon: FiGitBranch }
+  //   ]
+  // }
 ];
 
 const Layout = ({ children }) => {
