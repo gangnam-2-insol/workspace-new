@@ -43,27 +43,17 @@ class MongoService:
                         if hasattr(applicant[field], '__str__'):
                             applicant[field] = str(applicant[field])
 
-                # personal_info에서 기본 정보 추출
-                personal_info = applicant.get("personal_info", {})
-                applicant["name"] = personal_info.get("name", "이름 없음")
-                applicant["email"] = personal_info.get("email", "이메일 없음")
-                applicant["phone"] = personal_info.get("phone", "전화번호 없음")
-
-                # desired_position을 position으로 매핑
-                applicant["position"] = applicant.get("desired_position", "직무 없음")
-
-                # application_status를 status로 매핑
-                applicant["status"] = applicant.get("application_status", "상태 없음")
+                # DB 구조에 맞게 필드 매핑 (personal_info 없이 직접 필드 사용)
+                applicant["name"] = applicant.get("name", "이름 없음")
+                applicant["email"] = applicant.get("email", "이메일 없음")
+                applicant["phone"] = applicant.get("phone", "전화번호 없음")
+                applicant["position"] = applicant.get("position", "직무 없음")
+                applicant["status"] = applicant.get("status", "상태 없음")
 
                 # 채용공고 정보 가져오기 (job_posting_id가 있는 경우)
                 if applicant.get("job_posting_id"):
                     try:
-                        # 안전한 ObjectId 변환
-                        if isinstance(applicant["job_posting_id"], ObjectId):
-                            job_posting_id = applicant["job_posting_id"]
-                        else:
-                            job_posting_id = ObjectId(applicant["job_posting_id"])
-
+                        job_posting_id = ObjectId(applicant["job_posting_id"])
                         job_posting = await self.db.job_postings.find_one({"_id": job_posting_id})
                         if job_posting:
                             applicant["job_posting_info"] = {
@@ -79,12 +69,7 @@ class MongoService:
                 # 자소서 내용 가져오기 (cover_letter_id가 있는 경우)
                 if applicant.get("cover_letter_id"):
                     try:
-                        # 안전한 ObjectId 변환
-                        if isinstance(applicant["cover_letter_id"], ObjectId):
-                            cover_letter_id = applicant["cover_letter_id"]
-                        else:
-                            cover_letter_id = ObjectId(applicant["cover_letter_id"])
-
+                        cover_letter_id = ObjectId(applicant["cover_letter_id"])
                         cover_letter = await self.db.cover_letters.find_one({"_id": cover_letter_id})
                         if cover_letter:
                             applicant["cover_letter_content"] = cover_letter.get("content", cover_letter.get("extracted_text", "자소서 내용을 불러올 수 없습니다."))
@@ -94,12 +79,7 @@ class MongoService:
                 # 이력서 내용 가져오기 (resume_id가 있는 경우)
                 if applicant.get("resume_id"):
                     try:
-                        # 안전한 ObjectId 변환
-                        if isinstance(applicant["resume_id"], ObjectId):
-                            resume_id = applicant["resume_id"]
-                        else:
-                            resume_id = ObjectId(applicant["resume_id"])
-
+                        resume_id = ObjectId(applicant["resume_id"])
                         resume = await self.db.resumes.find_one({"_id": resume_id})
                         if resume:
                             applicant["resume_content"] = resume.get("content", resume.get("extracted_text", "이력서 내용을 불러올 수 없습니다."))
@@ -142,20 +122,19 @@ class MongoService:
     async def get_applicants(self, skip: int = 0, limit: int = 20, status: str = None, position: str = None) -> Dict[str, Any]:
         """지원자 목록 조회 (필터링 포함)"""
         try:
-            # 필터 조건 구성 - 실제 필드명으로 매핑
+            # 필터 조건 구성 - 실제 DB 필드명 사용
             filter_query = {}
             if status:
-                filter_query["application_status"] = status  # application_status 필드 사용
+                filter_query["status"] = status
             if position:
-                filter_query["desired_position"] = position  # desired_position 필드 사용
+                filter_query["position"] = position
 
             total_count = await self.db.applicants.count_documents(filter_query)
             applicants = await self.db.applicants.find(filter_query).skip(skip).limit(limit).to_list(limit)
 
-            # MongoDB의 _id를 문자열로 변환 (id 필드 추가)
+            # MongoDB의 _id를 문자열로 변환
             for applicant in applicants:
                 applicant["id"] = str(applicant["_id"])
-                # _id도 문자열로 변환하여 유지
                 applicant["_id"] = str(applicant["_id"])
 
                 # ObjectId 필드들을 문자열로 변환
@@ -164,17 +143,13 @@ class MongoService:
                         if hasattr(applicant[field], '__str__'):
                             applicant[field] = str(applicant[field])
 
-                # personal_info에서 기본 정보 추출
-                personal_info = applicant.get("personal_info", {})
-                applicant["name"] = personal_info.get("name", "이름 없음")
-                applicant["email"] = personal_info.get("email", "이메일 없음")
-                applicant["phone"] = personal_info.get("phone", "전화번호 없음")
-
-                # desired_position을 position으로 매핑
-                applicant["position"] = applicant.get("desired_position", "직무 없음")
-
-                # application_status를 status로 매핑
-                applicant["status"] = applicant.get("application_status", "상태 없음")
+                # DB 구조에 맞게 필드 매핑 (personal_info 없이 직접 필드 사용)
+                # name, email, phone, position, status는 이미 올바른 필드명
+                applicant["name"] = applicant.get("name", "이름 없음")
+                applicant["email"] = applicant.get("email", "이메일 없음")
+                applicant["phone"] = applicant.get("phone", "전화번호 없음")
+                applicant["position"] = applicant.get("position", "직무 없음")
+                applicant["status"] = applicant.get("status", "상태 없음")
 
                 # 채용공고 정보 가져오기 (job_posting_id가 있는 경우)
                 if applicant.get("job_posting_id"):

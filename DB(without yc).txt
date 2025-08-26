@@ -1,0 +1,154 @@
+
+# 🗄️ 데이터베이스 개요
+- **DB 명:** hireme
+- **연결:** mongodb://localhost:27017/hireme
+- **주요 컬렉션:** applicants, resumes, cover_letters, portfolios, job_postings, applicant_rankings
+
+# 📚 컬렉션 스키마 (통합/최신)
+
+## 1) applicants (지원자)
+{
+  "_id": "ObjectId",
+  "name": "String",
+  "email": "String",               // 유니크
+  "phone": "String",
+  "position": "String",
+  "department": "String",
+  "experience": "String|Number",
+  "skills": "String|Array<String>",
+  "growthBackground": "String",
+  "motivation": "String",
+  "careerHistory": "String",
+  "analysisScore": "Number(0-100)",
+  "analysisResult": "String",
+  "status": "String",              // pending/reviewing/passed/rejected/interview_scheduled 등
+  "resume_id": "ObjectId",
+  "cover_letter_id": "ObjectId",
+  "portfolio_id": "ObjectId",
+  "job_posting_id": "ObjectId",
+  "ranks": {
+    "resume": "Number",
+    "coverLetter": "Number",
+    "portfolio": "Number",
+    "total": "Number"
+  },
+  "created_at": "Date",
+  "updated_at": "Date"
+}
+
+## 2) resumes (이력서)
+{
+  "_id": "ObjectId",
+  "applicant_id": "ObjectId",
+  "extracted_text": "String",
+  "summary": "String",
+  "keywords": ["String"],
+  "document_type": "resume",
+  "basic_info": {
+    "emails": ["String"],
+    "phones": ["String"],
+    "names": ["String"],
+    "urls": ["String"]
+  },
+  "file_metadata": {
+    "filename": "String",
+    "size": "Number",
+    "mime": "String",
+    "hash": "String",
+    "created_at": "Date",
+    "modified_at": "Date"
+  },
+  "created_at": "Date"
+}
+
+## 3) cover_letters (자기소개서)
+{
+  "_id": "ObjectId",
+  "applicant_id": "ObjectId",
+  "extracted_text": "String",
+  "summary": "String",
+  "keywords": ["String"],
+  "document_type": "cover_letter",
+  "growthBackground": "String",
+  "motivation": "String",
+  "careerHistory": "String",
+  "basic_info": { ... },
+  "file_metadata": { ... },
+  "created_at": "Date",
+  "updated_at": "Date"
+}
+
+## 4) portfolios (포트폴리오, 단일 파일 + 버전 관리)
+{
+  "_id": "ObjectId",
+  "applicant_id": "ObjectId",
+  "extracted_text": "String",
+  "summary": "String",
+  "keywords": ["String"],
+  "document_type": "portfolio",
+  "file_metadata": {
+    "filename": "String",
+    "size": "Number",
+    "mime": "String",
+    "hash": "String",
+    "created_at": "Date",
+    "modified_at": "Date"
+  },
+  "analysis_score": "Number(0-100, default 0.0)",
+  "status": "active|inactive",
+  "version": "Number(>=1)",
+  "created_at": "Date",
+  "updated_at": "Date"
+}
+
+## 5) job_postings (채용공고)
+{
+  "_id": "ObjectId",
+  "title": "String",
+  "company": "String",
+  "location": "String",
+  "department": "String",
+  "position": "String",
+  "type": "String",                  // full-time|part-time|contract|internship
+  "salary": "String",
+  "experience": "String",
+  "education": "String",
+  "description": "String",
+  "requirements": "String",
+  "required_skills": ["String"],
+  "preferred_skills": ["String"],
+  "required_documents": ["resume","cover_letter","portfolio"],
+  "status": "draft|published|closed|expired",
+  "applicants": "Number",
+  "views": "Number",
+  "bookmarks": "Number",
+  "shares": "Number",
+  "deadline": "Date",
+  "created_at": "Date",
+  "updated_at": "Date"
+}
+
+## 6) applicant_rankings (랭킹)
+{
+  "_id": "ObjectId",
+  "category": "resume|coverLetter|portfolio|total",
+  "applicant_id": "ObjectId",
+  "name": "String",
+  "score": "Number",
+  "rank": "Number",
+  "created_at": "Date"
+}
+
+# 🔗 컬렉션 관계
+- applicants (1) ↔ (1) resumes
+- applicants (1) ↔ (1) cover_letters
+- applicants (1) ↔ (1) portfolios (단일 파일, version으로 이력 관리)
+- applicants (N) ↔ (1) job_postings
+- applicants (1) ↔ (N) applicant_rankings
+
+# 🛠️ 인덱스 및 제약
+- applicants.email: unique
+- applicants.status, applicants.job_posting_id, applicants.created_at 인덱스 권장
+- portfolios: applicant_id + version unique
+- analysis_score: 0~100, version >= 1
+- status: enum 값 제한
