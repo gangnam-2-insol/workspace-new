@@ -14,12 +14,12 @@ class EmbeddingService:
         # OpenAI API 키 설정
         self.openai_api_key = os.getenv("OPENAI_API_KEY")
         if not self.openai_api_key:
-            print("Warning: OPENAI_API_KEY가 설정되지 않았습니다. 임베딩 기능이 제한됩니다.")
-            self.client = None
-        else:
-            # OpenAI 클라이언트 초기화
-            self.client = openai.OpenAI(api_key=self.openai_api_key)
-            print("OpenAI text-embedding-3-small 모델 초기화 완료 (1536차원, 한국어 지원)")
+            raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
+        
+        # OpenAI 클라이언트 초기화
+        self.client = openai.OpenAI(api_key=self.openai_api_key)
+        
+        print("OpenAI text-embedding-3-small 모델 초기화 완료 (1536차원, 한국어 지원)")
     
     async def create_embedding(self, text: str, embedding_type: EmbeddingType = EmbeddingType.DOCUMENT) -> Optional[List[float]]:
         """
@@ -32,10 +32,6 @@ class EmbeddingService:
         Returns:
             Optional[List[float]]: 임베딩 벡터 (실패 시 None)
         """
-        if self.client is None:
-            print("[EmbeddingService] OpenAI 클라이언트가 초기화되지 않았습니다.")
-            return None
-            
         try:
             print(f"[EmbeddingService] === 임베딩 생성 시작 ===")
             print(f"[EmbeddingService] 임베딩 타입: {embedding_type.value}")
@@ -46,19 +42,23 @@ class EmbeddingService:
             processed_text = self._preprocess_text(text, embedding_type)
             
             # OpenAI API를 사용한 임베딩 생성
-            response = self.client.embeddings.create(
-                model="text-embedding-3-small",
-                input=processed_text
-            )
-            embedding = response.data[0].embedding
-            
-            print(f"[EmbeddingService] OpenAI 임베딩 생성 성공!")
-            print(f"[EmbeddingService] 임베딩 차원: {len(embedding)}")
-            print(f"[EmbeddingService] 임베딩 값 미리보기: {embedding[:5]}...")
-            print(f"[EmbeddingService] === 임베딩 생성 완료 ===")
-            
-            return embedding
+            try:
+                response = self.client.embeddings.create(
+                    model="text-embedding-3-small",
+                    input=processed_text
+                )
+                embedding = response.data[0].embedding
                 
+                print(f"[EmbeddingService] OpenAI 임베딩 생성 성공!")
+                print(f"[EmbeddingService] 임베딩 차원: {len(embedding)}")
+                print(f"[EmbeddingService] 임베딩 값 미리보기: {embedding[:5]}...")
+                print(f"[EmbeddingService] === 임베딩 생성 완료 ===")
+                
+                return embedding
+                
+            except Exception as openai_error:
+                print(f"[EmbeddingService] OpenAI 임베딩 실패: {openai_error}")
+                raise openai_error
         except Exception as e:
             print(f"[EmbeddingService] === 임베딩 생성 실패 ====")
             print(f"[EmbeddingService] 오류 메시지: {e}")
@@ -100,4 +100,4 @@ class EmbeddingService:
     
     def get_embedding_dimension(self) -> int:
         """임베딩 벡터의 차원을 반환합니다."""
-        return 1536  # OpenAI text-embedding-3-small의 차원
+        return 384  # paraphrase-multilingual-MiniLM-L12-v2도 384차원

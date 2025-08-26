@@ -9,7 +9,9 @@ import {
   FiDownload,
   FiFilter,
   FiSearch,
-  FiCheckCircle
+  FiCheckCircle,
+  FiZap,
+  FiX
 } from 'react-icons/fi';
 import DetailModal, {
   DetailSection,
@@ -207,6 +209,7 @@ const RecommendationReason = styled.div`
   border-left: 4px solid var(--primary-color);
   font-size: 12px;
   color: var(--text-secondary);
+  line-height: 1.4;
 `;
 
 const TalentActions = styled.div`
@@ -239,6 +242,109 @@ const ActionButton = styled.button`
   }
 `;
 
+// AI 추천 이유 모달 스타일
+const AIRecommendationModal = styled(motion.div)`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 20px;
+`;
+
+const ModalContent = styled(motion.div)`
+  background: white;
+  border-radius: var(--border-radius);
+  width: 100%;
+  max-width: 600px;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+`;
+
+const ModalHeader = styled.div`
+  padding: 24px;
+  border-bottom: 1px solid var(--border-color);
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+`;
+
+const ModalTitle = styled.h2`
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const CloseButton = styled.button`
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 8px;
+  border-radius: 4px;
+  color: var(--text-secondary);
+  transition: var(--transition);
+  
+  &:hover {
+    background: var(--background-secondary);
+    color: var(--text-primary);
+  }
+`;
+
+const ModalBody = styled.div`
+  padding: 24px;
+`;
+
+const LoadingSpinner = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 40px;
+  
+  &::after {
+    content: '';
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border-color);
+    border-top-color: var(--primary-color);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    to { transform: rotate(360deg); }
+  }
+`;
+
+const RecommendationSection = styled.div`
+  margin-bottom: 24px;
+`;
+
+const SectionHeader = styled.h3`
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 12px;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--primary-color);
+`;
+
+const RecommendationText = styled.div`
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  white-space: pre-line;
+`;
+
 // 샘플 데이터
 const talents = [
   {
@@ -250,7 +356,7 @@ const talents = [
     location: '서울',
     matchScore: 95,
     skills: ['React', 'TypeScript', 'Next.js', 'Tailwind CSS', 'Redux'],
-    recommendationReason: '요구사항과 높은 일치도를 보이며, 프로젝트 경험이 풍부합니다.',
+    recommendationReason: '• 모던 React 생태계 전문\n• 풍부한 프로젝트 경험\n• 높은 기술 스택 일치도',
     lastActive: '2024-01-15',
     portfolioScore: 92,
     interviewScore: 88
@@ -264,7 +370,7 @@ const talents = [
     location: '경기',
     matchScore: 88,
     skills: ['Node.js', 'Python', 'Django', 'PostgreSQL', 'Docker'],
-    recommendationReason: '시스템 설계 경험이 뛰어나고, 성능 최적화 능력이 우수합니다.',
+    recommendationReason: '• 우수한 시스템 설계 능력\n• 성능 최적화 전문\n• 다양한 백엔드 기술 보유',
     lastActive: '2024-01-14',
     portfolioScore: 89,
     interviewScore: 92
@@ -278,7 +384,7 @@ const talents = [
     location: '서울',
     matchScore: 82,
     skills: ['Figma', 'Adobe XD', 'Sketch', 'InVision', 'Principle'],
-    recommendationReason: '창의적인 디자인 감각을 보유하고 있으며, 사용자 중심 사고가 뛰어납니다.',
+    recommendationReason: '• 창의적 디자인 감각\n• 사용자 중심 UX 사고\n• 프로토타이핑 전문 도구 활용',
     lastActive: '2024-01-13',
     portfolioScore: 85,
     interviewScore: 78
@@ -292,7 +398,7 @@ const talents = [
     location: '부산',
     matchScore: 90,
     skills: ['Python', 'Spark', 'Hadoop', 'Airflow', 'Kubernetes'],
-    recommendationReason: '대용량 데이터 처리 경험이 풍부하고, ML 파이프라인 구축 능력이 우수합니다.',
+    recommendationReason: '• 대용량 데이터 처리 전문\n• ML 파이프라인 구축 능력\n• 클라우드 인프라 운영 경험',
     lastActive: '2024-01-12',
     portfolioScore: 94,
     interviewScore: 91
@@ -302,6 +408,55 @@ const talents = [
 const TalentRecommendation = () => {
   const [selectedTalent, setSelectedTalent] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
+  const [isAIRecommendationModalOpen, setIsAIRecommendationModalOpen] = useState(false);
+  const [aiRecommendationData, setAIRecommendationData] = useState(null);
+  const [isLoadingAIRecommendation, setIsLoadingAIRecommendation] = useState(false);
+
+  // LLM API를 통해 AI 추천 이유 생성
+  const generateAIRecommendation = async (talent) => {
+    try {
+      const response = await fetch('/api/llm/generate-recommendation', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          talent: talent,
+          baseCandidate: null // 기준 지원자 정보 (필요시 추가)
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error('AI 추천 이유 생성에 실패했습니다.');
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('AI 추천 이유 생성 오류:', error);
+      throw error;
+    }
+  };
+
+  // AI 추천 이유 버튼 클릭 핸들러
+  const handleAIRecommendationClick = async (talent) => {
+    setSelectedTalent(talent);
+    setIsAIRecommendationModalOpen(true);
+    setIsLoadingAIRecommendation(true);
+    setAIRecommendationData(null);
+
+    try {
+      const recommendation = await generateAIRecommendation(talent);
+      setAIRecommendationData(recommendation);
+    } catch (error) {
+      setAIRecommendationData({
+        error: true,
+        message: 'AI 추천 이유를 생성하는데 실패했습니다. 다시 시도해주세요.'
+      });
+    } finally {
+      setIsLoadingAIRecommendation(false);
+    }
+  };
 
   return (
     <TalentContainer>
@@ -380,13 +535,6 @@ const TalentRecommendation = () => {
               ))}
             </SkillsList>
 
-            <RecommendationReason>
-              <div style={{ fontWeight: '600', marginBottom: '4px', color: 'var(--text-primary)' }}>
-                추천 이유:
-              </div>
-              {talent.recommendationReason}
-            </RecommendationReason>
-
             <TalentActions>
               <ActionButton className="primary">
                 <FiMessageSquare />
@@ -398,6 +546,10 @@ const TalentRecommendation = () => {
               }}>
                 <FiEye />
                 상세보기
+              </ActionButton>
+              <ActionButton onClick={() => handleAIRecommendationClick(talent)}>
+                <FiZap />
+                AI 추천 이유
               </ActionButton>
               <ActionButton>
                 <FiDownload />
@@ -498,6 +650,92 @@ const TalentRecommendation = () => {
           </>
         )}
       </DetailModal>
+
+      {/* AI 추천 이유 모달 */}
+      {isAIRecommendationModalOpen && (
+        <AIRecommendationModal
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={(e) => {
+            if (e.target === e.currentTarget) {
+              setIsAIRecommendationModalOpen(false);
+              setAIRecommendationData(null);
+              setSelectedTalent(null);
+            }
+          }}
+        >
+          <ModalContent
+            initial={{ scale: 0.9, opacity: 0 }}
+            animate={{ scale: 1, opacity: 1 }}
+            exit={{ scale: 0.9, opacity: 0 }}
+            transition={{ type: "spring", duration: 0.3 }}
+          >
+            <ModalHeader>
+              <ModalTitle>
+                <FiZap />
+                AI 추천 이유
+                {selectedTalent && ` - ${selectedTalent.name}`}
+              </ModalTitle>
+              <CloseButton
+                onClick={() => {
+                  setIsAIRecommendationModalOpen(false);
+                  setAIRecommendationData(null);
+                  setSelectedTalent(null);
+                }}
+              >
+                <FiX />
+              </CloseButton>
+            </ModalHeader>
+            
+            <ModalBody>
+              {isLoadingAIRecommendation ? (
+                <LoadingSpinner />
+              ) : aiRecommendationData?.error ? (
+                <div style={{ 
+                  color: '#dc2626', 
+                  textAlign: 'center', 
+                  padding: '20px',
+                  fontSize: '14px'
+                }}>
+                  {aiRecommendationData.message}
+                </div>
+              ) : aiRecommendationData ? (
+                <>
+                  <RecommendationSection>
+                    <SectionHeader>핵심 특징</SectionHeader>
+                    <RecommendationText>
+                      {aiRecommendationData.keyFeatures || '이 인재의 주요 특징을 분석하고 있습니다.'}
+                    </RecommendationText>
+                  </RecommendationSection>
+                  
+                  <RecommendationSection>
+                    <SectionHeader>추천 이유</SectionHeader>
+                    <RecommendationText>
+                      {aiRecommendationData.recommendationReason || '추천 이유를 생성하고 있습니다.'}
+                    </RecommendationText>
+                  </RecommendationSection>
+                  
+                  <RecommendationSection>
+                    <SectionHeader>적합성 분석</SectionHeader>
+                    <RecommendationText>
+                      {aiRecommendationData.fitAnalysis || '적합성을 분석하고 있습니다.'}
+                    </RecommendationText>
+                  </RecommendationSection>
+                </>
+              ) : (
+                <div style={{ 
+                  textAlign: 'center', 
+                  padding: '20px',
+                  color: 'var(--text-secondary)'
+                }}>
+                  AI가 추천 이유를 생성 중입니다...
+                </div>
+              )}
+            </ModalBody>
+          </ModalContent>
+        </AIRecommendationModal>
+      )}
     </TalentContainer>
   );
 };

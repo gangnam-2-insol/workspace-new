@@ -243,13 +243,16 @@ class LangChainHybridService:
                                     vector_score = max(0, (len(vector_docs) - v_i) / len(vector_docs))
                                     break
 
-                            # 키워드 결과에서 점수 찾기
+                            # 키워드 결과에서 점수 찾기 (BM25 점수 기반)
                             for k_i, k_doc in enumerate(keyword_docs):
                                 k_resume_id = None
                                 if hasattr(k_doc, 'metadata') and k_doc.metadata:
                                     k_resume_id = k_doc.metadata.get('resume_id') or k_doc.metadata.get('document_id')
                                 if k_resume_id == resume_id:
-                                    keyword_score = max(0, (len(keyword_docs) - k_i) / len(keyword_docs))
+                                    # BM25 점수를 0-1 범위로 정규화 (일반적으로 BM25는 0-10 범위)
+                                    bm25_score = k_doc.metadata.get('bm25_score', 0)
+                                    keyword_score = min(1.0, max(0.0, bm25_score / 10.0))  # 10으로 나누어 정규화
+                                    print(f"[LangChainHybridService] 키워드 점수 계산: BM25={bm25_score}, 정규화={keyword_score:.3f}")
                                     break
 
                             if applicant_id not in applicant_scores or hybrid_score > applicant_scores[applicant_id]['final_score']:
@@ -430,29 +433,44 @@ class LangChainHybridService:
         docs = []
         try:
             if keyword_result.get("success") and keyword_result.get("results"):
+                print(f"[LangChainHybridService] 키워드 검색 결과 변환 시작: {len(keyword_result['results'])}개")
                 for result in keyword_result["results"]:
                     resume = result.get("resume", {})
-                    resume_id = resume.get("_id")
+                    resume_id = resume.get("_id") or resume.get("resume_id")
 
                     if resume_id:
-                        # Document 생성
-                        content = result.get("highlight", "") or resume.get("name", "")
+                        # 더 많은 정보로 Document 생성
+                        content_parts = []
+                        if result.get("highlight"):
+                            content_parts.append(result["highlight"])
+                        if resume.get("basic_info_names"):
+                            content_parts.append(f"이름: {resume['basic_info_names']}")
+                        if resume.get("summary"):
+                            content_parts.append(resume["summary"])
+                        
+                        content = " ".join(content_parts) or f"이력서 ID: {resume_id}"
+                        
                         doc = Document(
                             page_content=content,
                             metadata={
                                 "resume_id": resume_id,
                                 "document_id": resume_id,
                                 "bm25_score": result.get("bm25_score", 0),
-                                "document_type": "resume"
+                                "document_type": "resume",
+                                "name": resume.get("basic_info_names", ""),
+                                "applicant_id": resume.get("applicant_id", "")
                             }
                         )
                         docs.append(doc)
+                        print(f"[LangChainHybridService] 키워드 문서 변환 완료: {resume_id}, BM25: {result.get('bm25_score', 0)}")
 
             print(f"[LangChainHybridService] 키워드 결과 변환: {len(docs)}개 문서")
             return docs
 
         except Exception as e:
             print(f"[LangChainHybridService] 키워드 결과 변환 실패: {e}")
+            import traceback
+            traceback.print_exc()
             return []
 
     async def search_resumes_langchain_hybrid(self,

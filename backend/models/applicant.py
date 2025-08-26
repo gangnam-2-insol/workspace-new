@@ -11,6 +11,7 @@ class ApplicantBase(BaseModel):
 
 class ApplicantCreate(ApplicantBase):
     position: Optional[str] = Field(None, description="지원 직무")
+    department: Optional[str] = Field(None, description="부서")
     experience: Optional[Union[str, int]] = Field(None, description="경력")
     skills: Optional[Union[str, List[str]]] = Field(None, description="기술 스택")
     growthBackground: Optional[str] = Field(None, description="성장 배경")
@@ -19,8 +20,8 @@ class ApplicantCreate(ApplicantBase):
     analysisScore: Optional[int] = Field(None, ge=0, le=100, description="분석 점수 (0-100)")
     analysisResult: Optional[str] = Field(None, description="분석 결과")
     status: Optional[str] = Field(default="pending", description="상태")
-    
-    # 연결 필드들
+
+    # 직접 연결 필드들
     job_posting_id: Optional[str] = Field(None, description="채용공고 ID")
     resume_id: Optional[str] = Field(None, description="이력서 ID")
     cover_letter_id: Optional[str] = Field(None, description="자기소개서 ID")
@@ -29,6 +30,7 @@ class ApplicantCreate(ApplicantBase):
 class Applicant(ApplicantBase):
     id: str = Field(alias="_id", description="지원자 ID")
     position: Optional[str] = Field(None, description="지원 직무")
+    department: Optional[str] = Field(None, description="부서")
     experience: Optional[Union[str, int]] = Field(None, description="경력")
     skills: Optional[Union[str, List[str]]] = Field(None, description="기술 스택")
     growthBackground: Optional[str] = Field(None, description="성장 배경")
@@ -37,28 +39,22 @@ class Applicant(ApplicantBase):
     analysisScore: Optional[int] = Field(None, ge=0, le=100, description="분석 점수 (0-100)")
     analysisResult: Optional[str] = Field(None, description="분석 결과")
     status: Optional[str] = Field(default="pending", description="상태")
-    
-    # 연결 필드들
+
+    # 직접 연결 필드들
     job_posting_id: Optional[str] = Field(None, description="채용공고 ID")
     resume_id: Optional[str] = Field(None, description="이력서 ID")
     cover_letter_id: Optional[str] = Field(None, description="자기소개서 ID")
     portfolio_id: Optional[str] = Field(None, description="포트폴리오 ID")
 
-    # 회사 인재상 점수 필드
-    culture_scores: Optional[Dict[str, Any]] = Field(
+    # 랭킹 정보
+    ranks: Optional[Dict[str, int]] = Field(
         default={},
-        description="회사 인재상별 평가 점수"
+        description="랭킹 정보 (resume, coverLetter, portfolio, total)"
     )
 
     created_at: datetime = Field(default_factory=datetime.utcnow, description="생성일시")
+    updated_at: datetime = Field(default_factory=datetime.utcnow, description="수정일시")
 
-    
-    # 랭킹 정보
-    ranks: Optional[dict] = Field(None, description="랭킹 정보")
-    
-    created_at: Optional[datetime] = Field(None, description="생성일시")
-    updated_at: Optional[datetime] = Field(None, description="수정일시")
-    
     class Config:
         populate_by_name = True
         json_schema_extra = {

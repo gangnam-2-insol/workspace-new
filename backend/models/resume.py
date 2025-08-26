@@ -19,7 +19,7 @@ class Resume(ResumeBase):
     basic_info: Optional[dict] = Field(None, description="기본 정보")
     file_metadata: Optional[dict] = Field(None, description="파일 메타데이터")
     created_at: Optional[datetime] = Field(None, description="생성일시")
-    
+
     class Config:
         populate_by_name = True
         json_schema_extra = {

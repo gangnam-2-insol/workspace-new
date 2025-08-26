@@ -54,174 +54,13 @@ class LLMService:
             print(f"[LLMService] === Chat Completion 오류 ===")
             print(f"[LLMService] 오류: {str(e)}")
             return f"죄송합니다. 응답 생성 중 오류가 발생했습니다: {str(e)}"
-        
-    async def analyze_similarity_reasoning(self, 
-                                         original_resume: Dict[str, Any], 
-                                         similar_resume: Dict[str, Any],
-                                         similarity_score: float,
-                                         chunk_details: Optional[Dict] = None,
-                                         document_type: str = "이력서") -> Dict[str, Any]:
-        """
-        두 문서 간의 유사성을 분석하고 어떤 부분이 유사한지 설명합니다.
-        
-        Args:
-            original_resume (Dict[str, Any]): 원본 문서
-            similar_resume (Dict[str, Any]): 유사한 문서
-            similarity_score (float): 유사도 점수
-            chunk_details (Optional[Dict]): 청크별 세부 정보
-            document_type (str): 문서 타입 ("이력서" 또는 "자소서")
-            
-        Returns:
-            Dict[str, Any]: 유사성 분석 결과
-        """
-        try:
-            print(f"[LLMService] === 유사성 분석 시작 ===")
-            print(f"[LLMService] 원본 {document_type}: {original_resume.get('name', 'Unknown')}")
-            print(f"[LLMService] 유사 {document_type}: {similar_resume.get('name', 'Unknown')}")
-            print(f"[LLMService] 유사도 점수: {similarity_score:.3f}")
-            
-            # 이력서에서 주요 정보 추출
-            original_info = self._extract_resume_info(original_resume)
-            similar_info = self._extract_resume_info(similar_resume)
-            print(f"[LLMService] {document_type} 정보 추출 완료")
-            
-            # 프롬프트 구성
-            prompt = self._build_similarity_analysis_prompt(
-                original_info, 
-                similar_info, 
-                similarity_score,
-                chunk_details
-            )
-            print(f"[LLMService] 프롬프트 생성 완료 (길이: {len(prompt)})")
-            
-            # OpenAI API 호출
-            system_prompt = f"당신은 {document_type} 유사성 분석 전문가입니다. 두 {document_type}를 비교하여 구체적으로 어떤 부분이 유사한지 간결하고 명확하게 설명해주세요."
-            print(f"[LLMService] OpenAI API 호출 시작...")
-            
-            response = self.client.chat.completions.create(
-                model=self.model_name,
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": prompt}
-                ],
-                max_tokens=800,
-                temperature=0.3
-            )
-            
-            print(f"[LLMService] OpenAI API 응답 수신 완료")
-            analysis_result = response.choices[0].message.content
-            print(f"[LLMService] 분석 결과 길이: {len(analysis_result) if analysis_result else 0}")
-            print(f"[LLMService] 분석 결과 미리보기: {analysis_result[:100] if analysis_result else 'None'}...")
-            
-            print(f"[LLMService] === 유사성 분석 완료 ===")
-            return {
-                "success": True,
-                "analysis": analysis_result,
-                "similarity_score": similarity_score,
-                "analyzed_at": datetime.now().isoformat()
-            }
-            
-        except Exception as e:
-            print(f"[LLMService] === 유사성 분석 중 오류 발생 ===")
-            print(f"[LLMService] 오류 타입: {type(e).__name__}")
-            print(f"[LLMService] 오류 메시지: {str(e)}")
-            import traceback
-            print(f"[LLMService] 스택 트레이스: {traceback.format_exc()}")
-            return {
-                "success": False,
-                "error": str(e),
-                "analysis": "유사성 분석에 실패했습니다.",
-                "similarity_score": similarity_score,
-                "analyzed_at": datetime.now().isoformat()
-            }
     
-    def _extract_resume_info(self, resume: Dict[str, Any]) -> Dict[str, str]:
-        """
-        이력서에서 주요 정보를 추출합니다.
-        
-        Args:
-            resume (Dict[str, Any]): 이력서 데이터
-            
-        Returns:
-            Dict[str, str]: 추출된 정보
-        """
-        return {
-            "name": resume.get("name", "Unknown"),
-            "position": resume.get("position", ""),
-            "department": resume.get("department", ""),
-            "growth_background": resume.get("growthBackground", ""),
-            "motivation": resume.get("motivation", ""),
-            "career_history": resume.get("careerHistory", ""),
-            "experience": resume.get("experience", ""),
-            "skills": resume.get("skills", "")
-        }
-    
-    def _build_similarity_analysis_prompt(self, 
-                                        original_info: Dict[str, str], 
-                                        similar_info: Dict[str, str],
-                                        similarity_score: float,
-                                        chunk_details: Optional[Dict] = None) -> str:
-        """
-        유사성 분석을 위한 프롬프트를 구성합니다.
-        
-        Args:
-            original_info (Dict[str, str]): 원본 이력서 정보
-            similar_info (Dict[str, str]): 유사한 이력서 정보
-            similarity_score (float): 유사도 점수
-            chunk_details (Optional[Dict]): 청크별 세부 정보
-            
-        Returns:
-            str: 구성된 프롬프트
-        """
-        
-        # 청크 매칭 정보 구성
-        chunk_info = ""
-        if chunk_details:
-            chunk_matches = []
-            for key, detail in chunk_details.items():
-                chunk_matches.append(f"- {detail['query_chunk']} → {detail['match_chunk']} ({detail['score']:.1%})")
-            chunk_info = "\n".join(chunk_matches)
-        else:
-            chunk_info = "청크 매칭 정보 없음"
-        
-        prompt = f"""역할: 너는 유사성 판정 보조자다. 외부지식 절대 금지.
-입력: 이력서 A/B의 섹션 텍스트가 주어진다.
-엄격한 규칙:
-- 아래 텍스트에 실제로 있는 단어만 사용
-- 창작, 추측, 해석 절대 금지
-- 없으면 반드시 '없음'이라고 적어라
-- 4줄만 출력, 각 줄 40자 이내
-
-## 이력서 A ({original_info['name']})
-성장배경: {original_info['growth_background'][:200]}
-지원동기: {original_info['motivation'][:200]}
-경력사항: {original_info['career_history'][:200]}
-
-## 이력서 B ({similar_info['name']})
-성장배경: {similar_info['growth_background'][:200]}
-지원동기: {similar_info['motivation'][:200]}
-경력사항: {similar_info['career_history'][:200]}
-
-출력 형식 (반드시 각 줄 사이에 공백 줄):
-
-1) 유사부분: {{위 텍스트에서 실제 유사한 섹션만}}
-
-2) 키워드: {{위 텍스트에 실제 나타난 단어만}}
-
-3) 요약: {{실제 텍스트 기반으로만}}
-
-4) 섹션키워드: 성장배경={{실제단어}}|지원동기={{실제단어}}|경력사항={{실제단어}}
-
-**경고: 위 텍스트에 없는 단어는 절대 사용하지 마라.**"""
-        
-        return prompt
-    
-    async def analyze_plagiarism_risk(self, 
+    async def analyze_plagiarism_suspicion(self, 
                                     original_resume: Dict[str, Any], 
                                     similar_resumes: List[Dict[str, Any]],
-                                    document_type: str = "이력서") -> Dict[str, Any]:
+                                    document_type: str = "자소서") -> Dict[str, Any]:
         """
-        표절 위험도를 분석합니다.
+        표절 의심도를 분석합니다.
         
         Args:
             original_resume (Dict[str, Any]): 원본 문서
@@ -229,20 +68,26 @@ class LLMService:
             document_type (str): 문서 타입 ("이력서" 또는 "자소서")
             
         Returns:
-            Dict[str, Any]: 표절 위험도 분석 결과
+            Dict[str, Any]: 표절 의심도 분석 결과
         """
         try:
-            print(f"[LLMService] === 표절 위험도 분석 시작 ===")
-            print(f"[LLMService] 원본 {document_type}: {original_resume.get('name', 'Unknown')}")
+            print(f"[LLMService] === 표절 의심도 분석 시작 ===")
+            # 자소서의 경우 basic_info_names 필드에서 이름 가져오기
+            if document_type == "자소서":
+                original_name = original_resume.get('basic_info_names') or original_resume.get('name', 'Unknown')
+            else:
+                original_name = original_resume.get('name', 'Unknown')
+            print(f"[LLMService] 원본 {document_type}: {original_name}")
             print(f"[LLMService] 유사한 {document_type} 수: {len(similar_resumes)}")
             
             if not similar_resumes:
-                print(f"[LLMService] 유사한 {document_type}가 없음 - LOW 위험도 반환")
+                print(f"[LLMService] 유사한 {document_type}가 없음 - LOW 의심도 반환")
                 return {
                     "success": True,
-                    "risk_level": "LOW",
-                    "risk_score": 0.0,
-                    "analysis": f"유사한 {document_type}가 발견되지 않았습니다.",
+                    "suspicion_level": "LOW",
+                    "suspicion_score": 0.0,
+                    "suspicion_score_percent": 0,
+                    "analysis": f"유사한 {document_type}가 발견되지 않았습니다. 표절 의심도가 낮습니다.",
                     "recommendations": []
                 }
             
@@ -260,30 +105,31 @@ class LLMService:
             max_similarity = max(similarities) if similarities else 0.0
             print(f"[LLMService] 최고 유사도 점수: {max_similarity:.3f}")
             
-            # 위험도 레벨 결정
+            # 의심도 레벨 결정
             if max_similarity >= 0.8:
-                risk_level = "HIGH"
-                risk_score = max_similarity
-                analysis = f"매우 높은 유사도({max_similarity:.1%})의 {document_type}가 발견되었습니다. 표절 가능성이 높습니다."
-                recommendations = []
+                suspicion_level = "HIGH"
             elif max_similarity >= 0.6:
-                risk_level = "MEDIUM"
-                risk_score = max_similarity
-                analysis = f"높은 유사도({max_similarity:.1%})의 {document_type}가 발견되었습니다. 주의가 필요합니다."
-                recommendations = []
+                suspicion_level = "MEDIUM"
             else:
-                risk_level = "LOW"
-                risk_score = max_similarity
-                analysis = f"적정 수준의 유사도({max_similarity:.1%})입니다. 표절 위험은 낮습니다."
-                recommendations = []
+                suspicion_level = "LOW"
             
-            print(f"[LLMService] 위험도 결정 완료: {risk_level} (점수: {risk_score:.3f})")
-            print(f"[LLMService] === 표절 위험도 분석 완료 ===")
+            suspicion_score = max_similarity
+            
+            # LLM을 사용하여 상세한 분석 생성
+            analysis = await self._generate_plagiarism_analysis(
+                max_similarity, suspicion_level, len(similar_resumes), document_type, similar_resumes
+            )
+            
+            recommendations = []
+            
+            print(f"[LLMService] 의심도 결정 완료: {suspicion_level} (점수: {suspicion_score:.3f})")
+            print(f"[LLMService] === 표절 의심도 분석 완료 ===")
             
             return {
                 "success": True,
-                "risk_level": risk_level,
-                "risk_score": risk_score,
+                "suspicion_level": suspicion_level,
+                "suspicion_score": suspicion_score,
+                "suspicion_score_percent": int(suspicion_score * 100),
                 "analysis": analysis,
                 "recommendations": recommendations,
                 "similar_count": len(similar_resumes),
@@ -291,7 +137,7 @@ class LLMService:
             }
             
         except Exception as e:
-            print(f"[LLMService] === 표절 위험도 분석 중 오류 발생 ===")
+            print(f"[LLMService] === 표절 의심도 분석 중 오류 발생 ===")
             print(f"[LLMService] 오류 타입: {type(e).__name__}")
             print(f"[LLMService] 오류 메시지: {str(e)}")
             import traceback
@@ -299,9 +145,10 @@ class LLMService:
             return {
                 "success": False,
                 "error": str(e),
-                "risk_level": "UNKNOWN",
-                "risk_score": 0.0,
-                "analysis": "표절 위험도 분석에 실패했습니다.",
+                "suspicion_level": "UNKNOWN",
+                "suspicion_score": 0.0,
+                "suspicion_score_percent": 0,
+                "analysis": "표절 의심도 분석에 실패했습니다.",
                 "analyzed_at": datetime.now().isoformat()
             }
 
@@ -335,16 +182,19 @@ class LLMService:
             response = self.client.chat.completions.create(
                 model=self.model_name,
                 messages=[
-                    {"role": "system", "content": "당신은 인재 채용 전문가입니다. 유사한 지원자들을 분석하여 왜 유사한지, 어떤 특성이 비슷한지 구체적으로 설명해주세요."},
+                    {"role": "system", "content": "당신은 인재 채용 전문가입니다. 반드시 요청된 정확한 형식을 따라 응답해주세요. 특히 '### 3. 각 유사 지원자별 상세 분석' 섹션에서 각 지원자마다 🔍 핵심 공통점, 💡 주요 특징, ⭐ 추천 이유, 🎯 유사성 요인을 모두 포함해야 합니다."},
                     {"role": "user", "content": prompt}
                 ],
-                temperature=0.3,
+                temperature=0.1,  # 더 일관된 응답을 위해 낮춤
                 max_tokens=1000
             )
             
             analysis_text = response.choices[0].message.content.strip()
             
             print(f"[LLMService] LLM 분석 완료")
+            print(f"[LLMService] === LLM 분석 결과 ===")
+            print(analysis_text[:500] + "..." if len(analysis_text) > 500 else analysis_text)
+            print(f"[LLMService] === LLM 분석 결과 끝 ===")
             
             return {
                 "success": True,
@@ -393,13 +243,121 @@ class LLMService:
         
         prompt += """
 
-**분석 요청:**
-1. 기준 지원자와 각 유사 지원자 간의 공통점을 구체적으로 설명해주세요.
-2. 어떤 특성(직무, 경력, 기술스택, 부서 등)이 유사성에 가장 큰 영향을 미쳤는지 분석해주세요.
-3. 각 지원자별로 간단한 특징과 추천 이유를 제시해주세요.
-4. 전체적인 인재 풀의 특성과 트렌드를 요약해주세요.
+**중요: 반드시 아래 정확한 형식을 따라 응답해주세요.**
 
-한국어로 자세하고 전문적으로 분석해주세요.
+### 1. 기준 지원자와 각 유사 지원자 간의 공통점
+
+### 2. 유사성에 가장 큰 영향을 미친 특성 분석
+
+### 3. 각 유사 지원자별 상세 분석
+
+- **[지원자명]**
+  - 🔍 **핵심 공통점**: [기준 지원자와의 주요 공통점 1줄]
+  - 💡 **주요 특징**: [핵심 역량이나 경력 요약 1줄]  
+  - ⭐ **추천 이유**: [구체적인 추천 근거]
+  - 🎯 **유사성 요인**: [유사성에 가장 큰 영향을 미친 특성]
+
+**필수 준수사항:**
+1. 반드시 "### 3. 각 유사 지원자별 상세 분석" 섹션을 포함하세요
+2. 각 지원자마다 🔍, 💡, ⭐, 🎯 네 가지 항목을 모두 작성하세요
+3. 지원자 이름은 **[지원자명]** 형식으로 작성하세요
+4. 위 형식을 정확히 따르지 않으면 시스템에서 파싱이 실패합니다
 """
         
         return prompt
+
+    async def _generate_plagiarism_analysis(self, 
+                                          similarity_score: float, 
+                                          suspicion_level: str, 
+                                          similar_count: int, 
+                                          document_type: str,
+                                          similar_documents: List[Dict[str, Any]]) -> str:
+        """
+        LLM을 사용하여 표절 의심도 분석 결과를 생성합니다.
+        
+        Args:
+            similarity_score (float): 최고 유사도 점수 (0.0 ~ 1.0)
+            suspicion_level (str): 위험도 레벨 (HIGH/MEDIUM/LOW)
+            similar_count (int): 유사한 문서 개수
+            document_type (str): 문서 타입
+            similar_documents (List[Dict]): 유사한 문서들의 상세 정보
+            
+        Returns:
+            str: LLM이 생성한 상세 분석 텍스트
+        """
+        try:
+            print(f"[LLMService] LLM 기반 표절 의심도 분석 시작...")
+            
+            # 유사도 점수들을 수집
+            similarity_details = []
+            for doc in similar_documents[:3]:  # 상위 3개만 분석에 포함
+                score = doc.get("similarity_score", doc.get("overall_similarity", 0.0))
+                name = doc.get("basic_info_names", doc.get("name", "Unknown"))
+                similarity_details.append(f"- {name}: {score:.1%} 유사도")
+            
+            similarity_details_text = "\n".join(similarity_details)
+            
+            # LLM 프롬프트 구성
+            prompt = f"""다음 정보를 바탕으로 {document_type} 표절 의심도를 분석해주세요:
+
+[역할]  
+당신은 자기소개서의 의미 기반 유사성을 평가하는 검토 보조자입니다.  
+기준 자소서의 일부 문장에서 의미 중복이 감지된 경우, 표현 구조나 흐름 중심으로 평가를 제공합니다.
+
+[입력 데이터]  
+- 기준 자소서 문장 중 유사도가 높은 문장 1~2개  
+- 각 문장에 대한 유사도 레벨 (HIGH / MEDIUM / LOW)  
+- 각 문장에 대해 유사 판단된 이유 (표현 구조, 흐름, 키워드 등)
+
+[작성 목표]  
+- 유사도 수치나 유사 자소서 개수는 **말하지 마세요**  
+- 기준 자소서 내 **유사 문장**과 그에 대한 **유사 이유**만 간결하게 제시  
+- 마지막 줄에는 중립적 LLM 평가 문장을 넣으세요 ("검토 권장" 등)
+
+[출력 예시]
+
+“‘고객 중심 사고를 바탕으로 문제를 해결했습니다.’ 문장은 표현 구조와 핵심 단어가 반복되어 HIGH 등급의 유사성이 관측되었습니다.  
+또한 ‘협업을 통해 어려움을 극복하며 성장했습니다.’ 문장도 유사한 흐름으로 구성되어 MEDIUM 등급으로 분류되었습니다.  
+일부 문장에서 의미적 중복이 나타나므로, 표절 여부에 대한 검토가 권장됩니다.”
+
+
+"""
+
+            # OpenAI API 호출
+            response = self.client.chat.completions.create(
+                model=self.model_name,
+                messages=[
+                    {
+                        "role": "system", 
+                        "content": "당신은 문서 표절 분석 전문가입니다. 임베딩 유사도 점수를 바탕으로 정확하고 전문적인 표절 의심도 분석을 제공해주세요."
+                    },
+                    {
+                        "role": "user", 
+                        "content": prompt
+                    }
+                ],
+                temperature=0.3,  # 일관성 있는 분석을 위해 낮은 temperature 사용
+                max_tokens=200
+            )
+            
+            analysis_text = response.choices[0].message.content.strip()
+            
+            # 3줄 제한 처리
+            lines = analysis_text.split('\n')
+            if len(lines) > 3:
+                analysis_text = '\n'.join(lines[:3])
+                print(f"[LLMService] LLM 응답이 {len(lines)}줄이므로 3줄로 제한됨")
+            
+            print(f"[LLMService] LLM 기반 표절 분석 완료 (길이: {len(analysis_text)})")
+            
+            return analysis_text
+            
+        except Exception as e:
+            print(f"[LLMService] LLM 기반 분석 생성 실패: {str(e)}")
+            # 폴백: 기본 규칙 기반 분석
+            if suspicion_level == "HIGH":
+                return f"매우 높은 유사도({similarity_score:.1%})의 {document_type}가 {similar_count}개 발견되었습니다. 표절 의심도가 높아 추가 검토가 필요합니다."
+            elif suspicion_level == "MEDIUM":
+                return f"높은 유사도({similarity_score:.1%})의 {document_type}가 {similar_count}개 발견되었습니다. 표절 의심도가 보통 수준이므로 주의가 필요합니다."
+            else:
+                return f"적정 수준의 유사도({similarity_score:.1%})입니다. 유사한 {document_type} {similar_count}개가 발견되었으나 표절 의심도가 낮습니다."

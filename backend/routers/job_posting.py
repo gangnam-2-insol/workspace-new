@@ -86,6 +86,38 @@ async def get_job_postings(
                 elif status_value not in ["draft", "published", "closed", "expired"]:
                     job["status"] = "draft"
             
+            # benefits 필드 처리 (리스트를 문자열로 변환)
+            if "benefits" in job and isinstance(job["benefits"], list):
+                job["benefits"] = ", ".join(job["benefits"])
+            
+            # required_skills 필드 처리 (문자열을 리스트로 변환)
+            if "required_skills" in job and isinstance(job["required_skills"], str):
+                job["required_skills"] = [skill.strip() for skill in job["required_skills"].split(",") if skill.strip()]
+            elif "required_skills" not in job:
+                job["required_skills"] = []
+            
+            # preferred_skills 필드 처리
+            if "preferred_skills" in job and isinstance(job["preferred_skills"], str):
+                job["preferred_skills"] = [skill.strip() for skill in job["preferred_skills"].split(",") if skill.strip()]
+            elif "preferred_skills" not in job:
+                job["preferred_skills"] = []
+            
+            # job_keywords 필드 처리
+            if "job_keywords" not in job:
+                job["job_keywords"] = []
+            
+            # required_documents 필드 처리
+            if "required_documents" not in job:
+                job["required_documents"] = ["resume"]
+            
+            # skill_weights 필드 처리
+            if "skill_weights" not in job:
+                job["skill_weights"] = {}
+            
+            # culture_requirements 필드 처리
+            if "culture_requirements" not in job:
+                job["culture_requirements"] = []
+            
             try:
                 result_jobs.append(JobPosting(**job))
             except Exception as validation_error:
