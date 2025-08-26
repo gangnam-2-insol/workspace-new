@@ -30,8 +30,7 @@ from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel
 # applicants 라우터를 조건부로 import
 try:
-    from routers.applicants import get_mongo_service, get_similarity_service
-    from routers.applicants import router as applicants_router
+    from routers.applicants import router as applicants_router, get_mongo_service, get_similarity_service
     APPLICANTS_ROUTER_AVAILABLE = True
     print("✅ 지원자 라우터 import 성공")
 except ImportError as e:
@@ -97,6 +96,8 @@ from modules.core.services.embedding_service import EmbeddingService
 from modules.core.services.mongo_service import MongoService
 from modules.core.services.similarity_service import SimilarityService
 from modules.core.services.vector_service import VectorService
+
+
 
 # Python 환경 인코딩 설정
 # 시스템 기본 인코딩을 UTF-8로 설정
@@ -190,31 +191,14 @@ async def add_charset_header(request, call_next):
 
     return response
 
-# 라우터 등록
-if github_router:
-    app.include_router(github_router, prefix="/api", tags=["github"])
-    print("✅ GitHub 라우터 등록 완료")
+# 라우터 등록 (더 구체적인 경로를 가진 라우터들을 먼저 등록)
+if applicants_router:
+    app.include_router(applicants_router, prefix="/api/applicants", tags=["applicants"])
+    print("✅ 지원자 라우터 등록 완료")
 else:
-    print("❌ GitHub 라우터 등록 실패")
-app.include_router(upload_router, tags=["upload"])
-app.include_router(pick_chatbot_router, prefix="/api/pick-chatbot", tags=["pick-chatbot"])
-app.include_router(integrated_ocr_router, prefix="/api/integrated-ocr", tags=["integrated-ocr"])
-app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
-app.include_router(job_posting_router, tags=["job-postings"])
-app.include_router(applicants_router, tags=["applicants"])
-app.include_router(sample_data_router, tags=["sample-data"])
-app.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
+    print("❌ 지원자 라우터 등록 실패 - 라우터가 None입니다")
 
-# 회사 인재상 라우터 등록
-if company_culture_router:
-    app.include_router(company_culture_router, tags=["company-culture"])
-    print("✅ 회사 인재상 라우터 등록 완료")
-else:
-    print("❌ 회사 인재상 라우터 등록 실패")
-
-# 모듈화된 라우터 등록
-print("\n🔧 모듈화된 라우터 등록 시작...")
-
+# 모듈화된 라우터 등록 (구체적인 경로 우선)
 if resume_router:
     app.include_router(resume_router, prefix="/api/resume", tags=["resume"])
     print("✅ 이력서 라우터 등록 완료")
@@ -239,14 +223,35 @@ if hybrid_router:
 else:
     print("❌ 하이브리드 라우터 등록 실패")
 
-# AI 유사도 분석 모듈화된 라우터 등록
+if github_router:
+    app.include_router(github_router, prefix="/api/github", tags=["github"])
+    print("✅ GitHub 라우터 등록 완료")
+else:
+    print("❌ GitHub 라우터 등록 실패")
+
 if similarity_router:
-    app.include_router(similarity_router, prefix="/api", tags=["similarity"])
+    app.include_router(similarity_router, prefix="/api/similarity", tags=["similarity"])
     print("✅ 유사도 분석 라우터 등록 완료")
 else:
     print("❌ 유사도 분석 라우터 등록 실패")
 
-print("🔧 모듈화된 라우터 등록 완료\n")
+# 기타 라우터 등록
+app.include_router(upload_router, tags=["upload"])
+app.include_router(pick_chatbot_router, prefix="/api/pick-chatbot", tags=["pick-chatbot"])
+app.include_router(integrated_ocr_router, prefix="/api/integrated-ocr", tags=["integrated-ocr"])
+app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
+app.include_router(job_posting_router, tags=["job-postings"])
+app.include_router(sample_data_router, tags=["sample-data"])
+app.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
+
+# 회사 인재상 라우터 등록
+if company_culture_router:
+    app.include_router(company_culture_router, tags=["company-culture"])
+    print("✅ 회사 인재상 라우터 등록 완료")
+else:
+    print("❌ 회사 인재상 라우터 등록 실패")
+
+print("🔧 라우터 등록 완료\n")
 
 
 # MongoDB 연결 최적화

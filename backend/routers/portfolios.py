@@ -1,6 +1,6 @@
 from fastapi import APIRouter, HTTPException, Depends
 from typing import Optional
-from services.mongo_service import MongoService
+from modules.core.services.mongo_service import MongoService
 import os
 
 router = APIRouter(prefix="/api/portfolios", tags=["portfolios"])

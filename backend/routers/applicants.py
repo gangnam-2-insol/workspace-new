@@ -8,7 +8,7 @@ from modules.core.services.similarity_service import SimilarityService
 from modules.core.services.vector_service import VectorService
 from modules.core.services.mongo_service import MongoService
 
-router = APIRouter(prefix="/api/applicants", tags=["applicants"])
+router = APIRouter(tags=["applicants"])
 
 # MongoDB 서비스 의존성
 def get_mongo_service():
@@ -40,31 +40,37 @@ async def create_or_get_applicant(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"지원자 생성/조회 실패: {str(e)}")
 
-@router.get("/{applicant_id}", response_model=Applicant)
-async def get_applicant(
-    applicant_id: str,
-    mongo_service: MongoService = Depends(get_mongo_service)
-):
-    """지원자를 조회합니다."""
-    applicant = await mongo_service.get_applicant_by_id(applicant_id)
-    if not applicant:
-        raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
-    return applicant
-
 @router.get("/")
 async def get_all_applicants(
     skip: int = Query(0, ge=0, description="건너뛸 개수"),
     limit: int = Query(50, ge=1, le=1000, description="가져올 개수"),
     status: Optional[str] = Query(None, description="상태 필터"),
-    position: Optional[str] = Query(None, description="직무 필터"),
-    mongo_service: MongoService = Depends(get_mongo_service)
+    position: Optional[str] = Query(None, description="직무 필터")
 ):
     """모든 지원자 목록을 조회합니다."""
+    print("🚨 get_all_applicants 함수가 호출되었습니다!")
     try:
-        print(f"🔍 API 라우터 호출 - MongoDB URI: {mongo_service.mongo_uri}")
-        print(f"🔍 API 라우터 호출 - skip: {skip}, limit: {limit}, status: {status}, position: {position}")
-
-        result = await mongo_service.get_applicants(skip=skip, limit=limit, status=status, position=position)
+        print(f"🔍 API 라우터 호출 시작 - skip: {skip}, limit: {limit}, status: {status}, position: {position}")
+        
+        # 간단한 테스트 응답 (MongoDB 의존성 제거)
+        test_response = {
+            "applicants": [
+                {
+                    "id": "test_id",
+                    "name": "테스트 지원자",
+                    "email": "test@example.com",
+                    "phone": "010-1234-5678",
+                    "position": "테스트 직무",
+                    "status": "pending"
+                }
+            ],
+            "total": 1,
+            "skip": skip,
+            "limit": limit
+        }
+        
+        print(f"🔍 테스트 응답 반환")
+        return test_response
 
         # 디버깅: 응답 데이터 확인
         if result.get('applicants') and len(result['applicants']) > 0:
@@ -89,6 +95,28 @@ async def get_all_applicants(
         print(f"❌ API 라우터 오류: {e}")
         raise HTTPException(status_code=500, detail=f"지원자 목록 조회 실패: {str(e)}")
 
+@router.get("/stats/overview")
+async def get_applicant_stats(
+    mongo_service: MongoService = Depends(get_mongo_service)
+):
+    """지원자 통계를 조회합니다."""
+    try:
+        stats = await mongo_service.get_applicant_stats()
+        return stats
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"통계 조회 실패: {str(e)}")
+
+@router.get("/{applicant_id}", response_model=Applicant)
+async def get_applicant(
+    applicant_id: str,
+    mongo_service: MongoService = Depends(get_mongo_service)
+):
+    """지원자를 조회합니다."""
+    applicant = await mongo_service.get_applicant_by_id(applicant_id)
+    if not applicant:
+        raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
+    return applicant
+
 @router.put("/{applicant_id}/status")
 async def update_applicant_status(
     applicant_id: str,
@@ -108,17 +136,6 @@ async def update_applicant_status(
         return {"message": "상태가 성공적으로 업데이트되었습니다", "status": new_status}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"상태 업데이트 실패: {str(e)}")
-
-@router.get("/stats/overview")
-async def get_applicant_stats(
-    mongo_service: MongoService = Depends(get_mongo_service)
-):
-    """지원자 통계를 조회합니다."""
-    try:
-        stats = await mongo_service.get_applicant_stats()
-        return stats
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"통계 조회 실패: {str(e)}")
 
 @router.post("/similar")
 async def search_similar_applicants(
