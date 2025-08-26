@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { FiX, FiEye, FiFileText, FiStar, FiTrendingUp, FiTrendingDown, FiCheck, FiAlertCircle, FiXCircle, FiBarChart2 } from 'react-icons/fi';
+import { FiX, FiEye, FiFileText, FiStar, FiTrendingUp, FiTrendingDown, FiCheck, FiAlertCircle, FiXCircle, FiBarChart2, FiShield } from 'react-icons/fi';
+import { useSuspicion } from '../contexts/SuspicionContext';
 import {
   Chart as ChartJS,
   RadialLinearScale,
@@ -308,6 +309,119 @@ const JsonViewer = styled.div`
   overflow-y: auto;
 `;
 
+// 표절 의심도 섹션 스타일
+const SuspicionSection = styled(motion.div)`
+  margin-top: 32px;
+  padding: 24px;
+  background: #f8fafc;
+  border-radius: 12px;
+  border: 2px solid #e2e8f0;
+`;
+
+const SuspicionHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+`;
+
+const SuspicionTitle = styled.h3`
+  font-size: 20px;
+  font-weight: 700;
+  color: #1f2937;
+  margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const SuspicionContent = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+`;
+
+const SuspicionResult = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 20px;
+  background: ${props => {
+    const level = props.level;
+    if (level === 'HIGH') return '#fef2f2';
+    if (level === 'MEDIUM') return '#fffbeb';
+    return '#f0fdf4';
+  }};
+  border: 2px solid ${props => {
+    const level = props.level;
+    if (level === 'HIGH') return '#dc2626';
+    if (level === 'MEDIUM') return '#f59e0b';
+    return '#16a34a';
+  }};
+  border-radius: 12px;
+`;
+
+const SuspicionLevel = styled.div`
+  font-size: 24px;
+  font-weight: 700;
+  color: ${props => {
+    const level = props.level;
+    if (level === 'HIGH') return '#dc2626';
+    if (level === 'MEDIUM') return '#f59e0b';
+    return '#16a34a';
+  }};
+`;
+
+const SuspicionScore = styled.div`
+  font-size: 18px;
+  font-weight: 600;
+  color: #6b7280;
+`;
+
+const SuspicionAnalysis = styled.div`
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  font-size: 14px;
+  line-height: 1.6;
+  color: #374151;
+`;
+
+const LoadingSpinner = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 40px;
+  font-size: 14px;
+  color: #6b7280;
+  
+  &::before {
+    content: '';
+    width: 24px;
+    height: 24px;
+    border: 3px solid #f3f3f3;
+    border-top: 3px solid #3b82f6;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+  }
+  
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+
+const ErrorMessage = styled.div`
+  padding: 16px;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 8px;
+  color: #dc2626;
+  font-size: 14px;
+`;
+
 const ToggleButton = styled.button`
   background: #6c757d;
   color: white;
@@ -385,6 +499,9 @@ const CoverLetterAnalysisModal = ({
 }) => {
   const [showJson, setShowJson] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
+  
+  // 전역 표절 의심도 상태
+  const { getSuspicionData, getLoadingState } = useSuspicion();
 
   // 분석 데이터 처리
   const processedData = useMemo(() => {
@@ -542,114 +659,118 @@ const CoverLetterAnalysisModal = ({
 
           <Header>
             <HeaderBackground />
-            <Title>자소서 상세 분석</Title>
-            <Subtitle>{applicantName}님의 자소서 분석 결과</Subtitle>
+            <Title>자소서 표절 의심도 검사</Title>
+            <Subtitle>{applicantName}님의 자소서 표절 의심도 결과</Subtitle>
           </Header>
 
           <Content>
-            {/* 전체 점수 섹션 */}
-            <OverallScore>
-              <ScoreCircle score={overallScore}>
-                {overallScore}
-              </ScoreCircle>
-              <ScoreInfo>
-                <ScoreLabel>전체 평가 점수</ScoreLabel>
-                <ScoreValue>{overallScore}/10점</ScoreValue>
-                <ScoreDescription>
-                  {scoreGrade.grade} 등급 - {scoreGrade.grade === '우수' ? '매우 우수한 자소서입니다' :
-                    scoreGrade.grade === '양호' ? '양호한 자소서입니다' :
-                    scoreGrade.grade === '보통' ? '개선이 필요한 부분이 있습니다' :
-                    '전반적인 개선이 필요합니다'}
-                </ScoreDescription>
-              </ScoreInfo>
-            </OverallScore>
 
-            {/* 레이더 차트 섹션 */}
-            {chartData && (
-              <ChartContainer>
-                <ChartTitle>9개 평가 항목 분석</ChartTitle>
-                <ChartDescription>
-                  지원 동기부터 문장 가독성까지 9개 항목을 종합적으로 분석한 결과입니다.
-                </ChartDescription>
-                <ChartWrapper>
-                  <Radar data={chartData} options={chartOptions} height={400} />
-                </ChartWrapper>
-              </ChartContainer>
-            )}
-
-            {/* 상세 분석 항목 */}
-            {processedData && (
-              <AnalysisGrid
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-              >
-                {Object.entries(processedData).map(([key, value], index) => {
-                  if (!value || typeof value !== 'object' || !('score' in value)) return null;
-
-                  const score = value.score;
-                  const grade = getScoreGrade(score);
-
+            {/* 표절 의심도 분석 결과 섹션 */}
+            <SuspicionSection
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.5 }}
+            >
+              <SuspicionHeader>
+                <FiShield size={24} color="#3b82f6" />
+                <SuspicionTitle>
+                  🤖 AI 분석 결과 - 표절 의심도 검사
+                </SuspicionTitle>
+              </SuspicionHeader>
+              
+              <SuspicionContent>
+                {(() => {
+                  const suspicionResult = getSuspicionData(applicantId);
+                  const isLoading = getLoadingState(applicantId);
+                  
+                  // 디버깅 로그 추가
+                  console.log('🔍 [CoverLetterAnalysisModal] 표절 의심도 상태 확인:');
+                  console.log('- applicantId:', applicantId);
+                  console.log('- suspicionResult:', suspicionResult);
+                  console.log('- isLoading:', isLoading);
+                  
+                  if (isLoading) {
+                    return (
+                      <LoadingSpinner>
+                        다른 자소서들과의 표절 의심도를 분석 중입니다...
+                      </LoadingSpinner>
+                    );
+                  }
+                  
+                  if (!suspicionResult) {
+                    return (
+                      <div style={{ 
+                        padding: '20px', 
+                        textAlign: 'center', 
+                        color: '#6b7280',
+                        backgroundColor: '#f9fafb',
+                        borderRadius: '8px',
+                        border: '1px dashed #d1d5db'
+                      }}>
+                        <div style={{ fontSize: '18px', marginBottom: '8px' }}>🔄</div>
+                        <div>표절 의심도 검사를 준비 중입니다...</div>
+                        <div style={{ fontSize: '12px', color: '#9ca3af', marginTop: '8px' }}>
+                          자소서 모달을 열면 자동으로 검사가 시작됩니다.
+                        </div>
+                      </div>
+                    );
+                  }
+                  
+                  if (suspicionResult.status === 'error') {
+                    return (
+                      <ErrorMessage>
+                        ❌ {suspicionResult.message}
+                      </ErrorMessage>
+                    );
+                  }
+                  
+                  // API 응답 구조 파싱
+                  let analysisData = suspicionResult;
+                  if (suspicionResult.plagiarism_result?.data?.suspicion_analysis) {
+                    analysisData = suspicionResult.plagiarism_result.data.suspicion_analysis;
+                  } else if (suspicionResult.data?.suspicion_analysis) {
+                    analysisData = suspicionResult.data.suspicion_analysis;
+                  } else if (suspicionResult.data) {
+                    analysisData = suspicionResult.data;
+                  }
+                  
+                  const suspicionLevel = analysisData.suspicion_level || 'UNKNOWN';
+                  const suspicionScore = analysisData.suspicion_score_percent || (analysisData.suspicion_score * 100) || 0;
+                  const analysis = analysisData.analysis || '분석 결과 없음';
+                  const similarCount = analysisData.similar_count || 0;
+                  
                   return (
-                    <AnalysisItem
-                      key={key}
-                      score={score}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.5, delay: index * 0.1 }}
-                    >
-                      <ItemHeader>
-                        <ItemTitle>
-                          {getCoverLetterAnalysisLabel(key)}
-                        </ItemTitle>
-                        <ItemScore>
-                          <ScoreNumber score={score}>{score}</ScoreNumber>
-                          <ScoreMax>/10</ScoreMax>
-                          <StatusIcon score={score}>
-                            {grade.icon}
-                          </StatusIcon>
-                        </ItemScore>
-                      </ItemHeader>
-                      <ItemDescription>
-                        {value.description || value.reason || '분석 결과가 없습니다.'}
-                      </ItemDescription>
-                    </AnalysisItem>
+                    <>
+                      <SuspicionResult level={suspicionLevel}>
+                        <div>
+                          <SuspicionLevel level={suspicionLevel}>
+                            표절 의심도: {suspicionLevel}
+                          </SuspicionLevel>
+                          {similarCount > 0 && (
+                            <div style={{
+                              fontSize: '14px',
+                              color: '#dc2626',
+                              fontWeight: '600',
+                              marginTop: '4px'
+                            }}>
+                              📋 유사한 자소서 {similarCount}개 발견
+                            </div>
+                          )}
+                        </div>
+                        <SuspicionScore>
+                          {suspicionScore.toFixed(1)}%
+                        </SuspicionScore>
+                      </SuspicionResult>
+                      
+                      <SuspicionAnalysis>
+                        <strong>분석 내용:</strong><br />
+                        {analysis}
+                      </SuspicionAnalysis>
+                    </>
                   );
-                })}
-              </AnalysisGrid>
-            )}
-
-            {/* 분석 수행 버튼 */}
-            {onPerformAnalysis && applicantId && (
-              <AnalyzeButton
-                onClick={handlePerformAnalysis}
-                disabled={isAnalyzing}
-              >
-                {isAnalyzing ? (
-                  <>
-                    <FiTrendingUp />
-                    분석 중...
-                  </>
-                ) : (
-                  <>
-                    <FiBarChart2 />
-                    자소서 분석 수행
-                  </>
-                )}
-              </AnalyzeButton>
-            )}
-
-            {/* JSON 원본 데이터 보기 */}
-            <ToggleButton onClick={() => setShowJson(!showJson)}>
-              <FiEye />
-              {showJson ? 'JSON 숨기기' : 'JSON 원본 데이터 보기'}
-            </ToggleButton>
-
-            {showJson && (
-              <JsonViewer>
-                <pre>{JSON.stringify(analysisData, null, 2)}</pre>
-              </JsonViewer>
-            )}
+                })()}
+              </SuspicionContent>
+            </SuspicionSection>
           </Content>
         </ModalContent>
       </ModalOverlay>
