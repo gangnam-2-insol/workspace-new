@@ -13,60 +13,7 @@ import {
 import CoverLetterSummary from '../CoverLetterSummary';
 import { getStatusText } from '../../utils/analysisHelpers';
 
-// 스타일 컴포넌트들
-const ApplicantCard = styled(motion.div)`
-  background: white;
-  border-radius: 12px;
-  padding: 20px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  border: 1px solid var(--border-color);
-  cursor: pointer;
-  transition: all 0.2s;
-  position: relative;
-  overflow: hidden;
-
-  &:hover {
-    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
-    transform: translateY(-2px);
-  }
-`;
-
-const TopRankBadge = styled.div`
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: bold;
-  font-size: 14px;
-  color: white;
-  background: ${props => {
-    switch (props.rank) {
-      case 1: return '#FFD700'; // 금
-      case 2: return '#C0C0C0'; // 은
-      case 3: return '#CD7F32'; // 동
-      default: return '#666';
-    }
-  }};
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
-  z-index: 1;
-`;
-
-const CardHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16px;
-`;
-
-const ApplicantInfo = styled.div`
-  flex: 1;
-`;
-
+// 스타일 컴포넌트들 - 순서 중요!
 const ApplicantName = styled.h3`
   font-size: 18px;
   font-weight: 600;
@@ -80,6 +27,80 @@ const ApplicantPosition = styled.div`
   font-weight: 500;
 `;
 
+const ApplicantCard = styled(motion.div)`
+  background: white;
+  border-radius: 12px;
+  padding: 20px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+  border: 1px solid var(--border-color);
+  cursor: pointer;
+  transition: all 0.2s;
+  position: relative;
+  overflow: visible;
+
+  &:hover {
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+    
+    /* hover 시에도 이름과 직무는 기본 색상 유지 */
+    ${ApplicantName} {
+      color: var(--text-primary);
+    }
+    
+    ${ApplicantPosition} {
+      color: var(--text-secondary);
+    }
+  }
+`;
+
+const TopRankBadge = styled.div`
+  position: absolute;
+  top: -12px;
+  left: -12px;
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 16px;
+  color: white;
+  background: ${props => {
+    switch (props.rank) {
+      case 1: return '#ef4444'; // 빨간색 (1위)
+      case 2: return '#f59e0b'; // 주황색 (2위)
+      case 3: return '#10b981'; // 초록색 (3위)
+      default: return '#666';
+    }
+  }};
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.3);
+  z-index: 10;
+  border: 3px solid white;
+
+  &::before {
+    content: '${props => {
+      switch (props.rank) {
+        case 1: return '🥇';
+        case 2: return '🥈';
+        case 3: return '🥉';
+        default: return props.rank.toString();
+      }
+    }}';
+  }
+`;
+
+const CardHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 16px;
+`;
+
+const ApplicantInfo = styled.div`
+  flex: 1;
+`;
+
 const StatusBadge = styled.span`
   padding: 4px 12px;
   border-radius: 20px;
@@ -91,28 +112,17 @@ const StatusBadge = styled.span`
     switch (props.status) {
       case '서류합격':
       case '최종합격':
-        return 'var(--success-light)';
+        return '#10b981';
       case '서류불합격':
-        return 'var(--error-light)';
+        return '#ef4444';
       case '보류':
-        return 'var(--warning-light)';
+        return '#f59e0b';
       default:
-        return 'var(--gray-light)';
+        return '#6b7280';
     }
   }};
-  color: ${props => {
-    switch (props.status) {
-      case '서류합격':
-      case '최종합격':
-        return 'var(--success)';
-      case '서류불합격':
-        return 'var(--error)';
-      case '보류':
-        return 'var(--warning)';
-      default:
-        return 'var(--text-secondary)';
-    }
-  }};
+  color: white;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
 `;
 
 const CardContent = styled.div`
@@ -139,7 +149,7 @@ const CardActions = styled.div`
   gap: 8px;
 `;
 
-const ActionButton = styled.button`
+const PassButton = styled.button`
   flex: 1;
   display: flex;
   align-items: center;
@@ -152,11 +162,11 @@ const ActionButton = styled.button`
   font-weight: 600;
   cursor: pointer;
   transition: all 0.2s;
-  background: ${props => props.active ? props.activeColor : 'var(--gray-light)'};
+  background: ${props => props.active ? '#10b981' : 'var(--gray-light)'};
   color: ${props => props.active ? 'white' : 'var(--text-secondary)'};
 
   &:hover {
-    background: ${props => props.activeColor};
+    background: #10b981;
     color: white;
     transform: translateY(-1px);
   }
@@ -166,16 +176,58 @@ const ActionButton = styled.button`
   }
 `;
 
-const PassButton = styled(ActionButton)`
-  activeColor: var(--success);
+const PendingButton = styled.button`
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: ${props => props.active ? '#f59e0b' : 'var(--gray-light)'};
+  color: ${props => props.active ? 'white' : 'var(--text-secondary)'};
+
+  &:hover {
+    background: #f59e0b;
+    color: white;
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
 `;
 
-const PendingButton = styled(ActionButton)`
-  activeColor: var(--warning);
-`;
+const RejectButton = styled.button`
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+  background: ${props => props.active ? '#ef4444' : 'var(--gray-light)'};
+  color: ${props => props.active ? 'white' : 'var(--text-secondary)'};
 
-const RejectButton = styled(ActionButton)`
-  activeColor: var(--error);
+  &:hover {
+    background: #ef4444;
+    color: white;
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
 `;
 
 // 메모이제이션된 지원자 카드 컴포넌트
@@ -214,6 +266,7 @@ const MemoizedApplicantCard = React.memo(({
       onClick={() => onCardClick(applicant)}
       whileHover={{ scale: 1.02 }}
       whileTap={{ scale: 0.98 }}
+      status={applicant.status}
     >
       {/* 상위 3명에게만 메달 표시 (채용공고가 선택된 경우에만) */}
       {rank && rank <= 3 && selectedJobPostingId && (

@@ -198,18 +198,25 @@ class LangChainHybridService:
 
                     if hasattr(doc, 'metadata') and doc.metadata:
                         chunk_type = doc.metadata.get('chunk_type')
+                        print(f"[DEBUG] Doc {i}: chunk_type={chunk_type}, metadata={doc.metadata}")
 
                         if chunk_type == 'applicant':
                             # 지원자 벡터의 경우: document_id가 applicant_id임
                             applicant_id = doc.metadata.get('document_id')
+                            print(f"[DEBUG] Applicant chunk: applicant_id={applicant_id}, target_id={target_applicant.get('_id')}")
                             if applicant_id and applicant_id != str(target_applicant.get('_id')):
                                 from bson import ObjectId
                                 applicant = await applicants_collection.find_one({"_id": ObjectId(applicant_id)})
+                                print(f"[DEBUG] Found applicant: {applicant.get('name', 'Unknown') if applicant else 'None'}")
                         else:
                             # 이력서/키워드 검색 결과의 경우: resume_id 기준
                             resume_id = doc.metadata.get('resume_id') or doc.metadata.get('document_id')
+                            print(f"[DEBUG] Resume chunk: resume_id={resume_id}, target_resume_id={target_resume_id}")
                             if resume_id and resume_id != target_resume_id:
                                 applicant = await applicants_collection.find_one({"resume_id": resume_id})
+                                print(f"[DEBUG] Found applicant by resume_id: {applicant.get('name', 'Unknown') if applicant else 'None'}")
+                    else:
+                        print(f"[DEBUG] Doc {i}: No metadata or invalid document")
                         if applicant:
                             applicant_id = str(applicant["_id"])
 

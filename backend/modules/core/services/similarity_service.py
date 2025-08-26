@@ -257,24 +257,11 @@ class SimilarityService:
                         if "created_at" in document_detail:
                             document_detail["created_at"] = document_detail["created_at"].isoformat()
 
-                        # LLM을 통한 유사성 분석 추가 (표절 의심도 분석 사용)
-                        try:
-                            llm_analysis = await self.llm_service.analyze_plagiarism_suspicion(
-                                similarity_score=score_data["similarity_score"],
-                                similar_documents=[{
-                                    "similarity_score": score_data["similarity_score"],
-                                    "name": document_detail.get("name", "Unknown"),
-                                    "basic_info_names": document_detail.get("name", "Unknown")
-                                }],
-                                document_type=document_type
-                            )
-                        except Exception as llm_error:
-                            print(f"[SimilarityService] LLM 분석 실패: {str(llm_error)}")
-                            llm_analysis = {
-                                "success": False,
-                                "error": str(llm_error),
-                                "analysis": "LLM 분석을 수행할 수 없습니다."
-                            }
+                        # 개별 문서별 LLM 분석은 제거 (전체 결과에서 한 번만 수행)
+                        llm_analysis = {
+                            "success": True,
+                            "analysis": "전체 결과에서 분석됩니다."
+                        }
 
                         results.append({
                             "similarity_score": score_data["similarity_score"],

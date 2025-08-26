@@ -1106,25 +1106,27 @@ async def check_resume_similarity(resume_id: str):
         # 유사도 높은 순으로 정렬
         similarity_results.sort(key=lambda x: x["overall_similarity"], reverse=True)
 
-        # 전체 표절 위험도 분석 추가
+        # 전체 표절 의심도 분석 추가
         plagiarism_analysis = None
         high_similarity_results = [r for r in similarity_results if r["overall_similarity"] >= 0.3]
 
         if high_similarity_results:
             try:
-                print(f"[API] 표절 위험도 분석 시작")
-                plagiarism_analysis = await similarity_service.llm_service.analyze_plagiarism_risk(
+                print(f"[API] 표절 의심도 분석 시작")
+                plagiarism_analysis = await similarity_service.llm_service.analyze_plagiarism_suspicion(
                     original_resume=current_resume,
                     similar_resumes=high_similarity_results
                 )
-                print(f"[API] 표절 위험도 분석 완료")
+                print(f"[API] 표절 의심도 분석 완료")
             except Exception as plag_error:
-                print(f"[API] 표절 위험도 분석 중 오류: {plag_error}")
+                print(f"[API] 표절 의심도 분석 중 오류: {plag_error}")
                 plagiarism_analysis = {
                     "success": False,
                     "error": str(plag_error),
-                    "risk_level": "UNKNOWN",
-                    "analysis": "표절 위험도 분석에 실패했습니다."
+                    "suspicion_level": "UNKNOWN",
+                    "suspicion_score": 0.0,
+                    "suspicion_score_percent": 0,
+                    "analysis": "표절 의심도 분석에 실패했습니다."
                 }
 
         # 통계 정보
@@ -1248,6 +1250,89 @@ async def check_coverletter_similarity(
         raise HTTPException(
             status_code=500,
             detail=f"자소서 표절체크 중 오류가 발생했습니다: {str(e)}"
+        )
+
+# 커버레터 표절 의심도 체크 엔드포인트
+@app.post("/api/coverletter/similarity-check/{applicant_id}")
+async def check_coverletter_similarity(
+    applicant_id: str,
+    mongo_service: MongoService = Depends(get_mongo_service),
+    similarity_service: SimilarityService = Depends(get_similarity_service)
+):
+    """자기소개서 표절 의심도 검사"""
+    try:
+        print(f"[INFO] 자소서 표절 의심도 검사 요청 - applicant_id: {applicant_id}")
+
+        # 1. 지원자 존재 확인
+        applicant = await mongo_service.get_applicant_by_id(applicant_id)
+        if not applicant:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
+
+        # 2. 자소서 존재 확인
+        cover_letter_id = applicant.get("cover_letter_id")
+        if not cover_letter_id:
+            raise HTTPException(status_code=404, detail="자소서가 없습니다")
+
+        # 3. 자소서 내용 가져오기
+        try:
+            # ObjectId 변환 시도
+            try:
+                object_id = ObjectId(cover_letter_id)
+            except Exception as e:
+                print(f"[ERROR] 잘못된 ObjectId 형식: {cover_letter_id}")
+                raise HTTPException(status_code=400, detail="잘못된 자소서 ID 형식입니다")
+
+            cover_letter = await db.cover_letters.find_one({"_id": object_id})
+
+            if not cover_letter:
+                raise HTTPException(status_code=404, detail="자소서를 찾을 수 없습니다")
+
+            # 자소서 내용 추출
+            cover_letter_text = cover_letter.get("content", "") or cover_letter.get("extracted_text", "")
+            if not cover_letter_text:
+                print(f"[WARNING] 자소서 내용이 비어있음 - applicant_id: {applicant_id}")
+                return {
+                    "status": "success",
+                    "applicant_id": applicant_id,
+                    "plagiarism_result": {
+                        "status": "no_content",
+                        "message": "자소서 내용이 없어 표절 의심도 검사를 수행할 수 없습니다.",
+                        "similar_count": 0,
+                        "suspicion_level": "UNKNOWN"
+                    },
+                    "message": "자소서 내용이 없습니다"
+                }
+
+            print(f"[INFO] 자소서 내용 발견 - 길이: {len(cover_letter_text)}자")
+
+        except HTTPException:
+            raise
+        except Exception as e:
+            print(f"[ERROR] 자소서 조회 실패: {str(e)}")
+            raise HTTPException(status_code=500, detail="자소서 조회 중 오류가 발생했습니다")
+
+        # 4. 자소서 표절 의심도 검사 수행
+        result = await similarity_service.find_similar_documents_by_chunks(
+            document_id=cover_letter_id,
+            collection=db.cover_letters,
+            document_type="cover_letter",
+            limit=10
+        )
+
+        return {
+            "status": "success",
+            "applicant_id": applicant_id,
+            "plagiarism_result": result,
+            "message": "자소서 표절 의심도 검사 완료"
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 자소서 표절 의심도 검사 실패: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"자소서 표절 의심도 검사 중 오류가 발생했습니다: {str(e)}"
         )
 
 # 메일 템플릿 및 설정 관련 엔드포인트

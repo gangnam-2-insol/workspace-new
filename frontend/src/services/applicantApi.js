@@ -133,6 +133,58 @@ export const applicantApi = {
       console.error('지원자 상세 정보 조회 오류:', error);
       throw error;
     }
+  },
+
+  // 자기소개서 표절 의심도 검사
+  checkCoverLetterSuspicion: async (applicantId) => {
+    try {
+      console.log(`[API] 자기소개서 표절 의심도 검사 요청 - applicantId: ${applicantId}`);
+      const response = await fetch(`${API_BASE_URL}/api/coverletter/similarity-check/${applicantId}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ 자기소개서 표절 의심도 검사 API 오류:', errorText);
+        throw new Error(`자기소개서 표절 의심도 검사 실패: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('✅ 자기소개서 표절 의심도 검사 성공:', data);
+      return data;
+    } catch (error) {
+      console.error('자기소개서 표절 의심도 검사 오류:', error);
+      throw error;
+    }
+  },
+
+  // 유사인재 추천
+  getTalentRecommendations: async (applicantId) => {
+    try {
+      console.log(`[API] 유사인재 추천 요청 - applicantId: ${applicantId}`);
+      const response = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/recommendations`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+      
+      if (!response.ok) {
+        const errorText = await response.text();
+        console.error('❌ 유사인재 추천 API 오류:', errorText);
+        throw new Error(`유사인재 추천 실패: ${response.status} ${response.statusText}`);
+      }
+      
+      const data = await response.json();
+      console.log('✅ 유사인재 추천 성공:', data);
+      return data;
+    } catch (error) {
+      console.error('유사인재 추천 오류:', error);
+      throw error;
+    }
   }
 };
 
@@ -169,7 +221,7 @@ export const documentApi = {
   // 자기소개서 분석 조회
   getCoverLetterAnalysis: async (applicantId) => {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/cover-letter/analysis`, {
+      const response = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/cover-letter`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',
@@ -178,7 +230,8 @@ export const documentApi = {
       if (!response.ok) {
         throw new Error('자기소개서 분석 조회 실패');
       }
-      return await response.json();
+      const data = await response.json();
+      return data.analysis || data;
     } catch (error) {
       console.error('자기소개서 분석 조회 오류:', error);
       throw error;
