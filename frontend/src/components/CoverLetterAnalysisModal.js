@@ -296,6 +296,31 @@ const StatusIcon = styled.div`
   }};
 `;
 
+const LoadingSpinner = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #666;
+  font-size: 16px;
+  gap: 16px;
+`;
+
+const Spinner = styled.div`
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #667eea;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+
 const JsonViewer = styled.div`
   background: #f8f9fa;
   border: 1px solid #e9ecef;
@@ -388,30 +413,7 @@ const SuspicionAnalysis = styled.div`
   color: #374151;
 `;
 
-const LoadingSpinner = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 40px;
-  font-size: 14px;
-  color: #6b7280;
-  
-  &::before {
-    content: '';
-    width: 24px;
-    height: 24px;
-    border: 3px solid #f3f3f3;
-    border-top: 3px solid #3b82f6;
-    border-radius: 50%;
-    animation: spin 1s linear infinite;
-  }
-  
-  @keyframes spin {
-    0% { transform: rotate(0deg); }
-    100% { transform: rotate(360deg); }
-  }
-`;
+
 
 const ErrorMessage = styled.div`
   padding: 16px;
@@ -495,13 +497,16 @@ const CoverLetterAnalysisModal = ({
   analysisData,
   applicantName = '지원자',
   onPerformAnalysis,
-  applicantId
+  applicantId,
+  isLoading = false
 }) => {
   const [showJson, setShowJson] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   
   // 전역 표절 의심도 상태
   const { getSuspicionData, getLoadingState } = useSuspicion();
+
+
 
   // 분석 데이터 처리
   const processedData = useMemo(() => {
@@ -664,9 +669,19 @@ const CoverLetterAnalysisModal = ({
           </Header>
 
           <Content>
+            {/* 데이터 로딩 중일 때 */}
+            {isLoading && (
+              <LoadingSpinner>
+                <Spinner />
+                <div>자소서 분석 데이터를 불러오는 중...</div>
+              </LoadingSpinner>
+            )}
 
-            {/* 표절 의심도 분석 결과 섹션 */}
-            <SuspicionSection
+            {/* 데이터가 로드되었을 때만 표시 */}
+            {!isLoading && (
+              <>
+                {/* 표절 의심도 분석 결과 섹션 */}
+                <SuspicionSection
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.5 }}
@@ -771,6 +786,8 @@ const CoverLetterAnalysisModal = ({
                 })()}
               </SuspicionContent>
             </SuspicionSection>
+              </>
+            )}
           </Content>
         </ModalContent>
       </ModalOverlay>

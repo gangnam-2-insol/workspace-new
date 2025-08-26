@@ -376,6 +376,7 @@ const CoverLetterAnalysisPage = () => {
             <CoverLetterAnalysis
               analysisData={analysisResult}
               onAnalysisComplete={handleAnalysisComplete}
+              isLoading={isAnalyzing}
             />
           )}
         </Content>

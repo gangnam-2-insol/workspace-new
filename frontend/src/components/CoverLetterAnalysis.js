@@ -260,7 +260,32 @@ const NoDataMessage = styled.div`
   font-size: 16px;
 `;
 
-const CoverLetterAnalysis = ({ analysisData }) => {
+const LoadingSpinner = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+  color: #666;
+  font-size: 16px;
+  gap: 16px;
+`;
+
+const Spinner = styled.div`
+  width: 40px;
+  height: 40px;
+  border: 4px solid #f3f3f3;
+  border-top: 4px solid #3b82f6;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+
+const CoverLetterAnalysis = ({ analysisData, isLoading = false }) => {
   const [selectedCategory, setSelectedCategory] = useState(null);
 
   // 자소서 분석 카테고리 정의
@@ -325,9 +350,10 @@ const CoverLetterAnalysis = ({ analysisData }) => {
                        analysisData?.overall_score ||
                        Math.round(Object.values(data).reduce((sum, score) => sum + score, 0) / Object.values(data).length);
 
-  // 분석 요약 가져오기
-  const summary = analysisData?.cover_letter?.summary || 
+  // 분석 요약 가져오기 (우선순위 변경: analysis_results의 summary가 1순위)
+  const summary = analysisData?.cover_letter?.analysis_results?.[0]?.summary || 
                   analysisData?.summary || 
+                  analysisData?.cover_letter?.summary || 
                   '자소서 분석 결과를 확인할 수 있습니다.';
 
   // 개선 권장사항 가져오기 (항상 최대 2개로 제한)
@@ -447,6 +473,19 @@ const CoverLetterAnalysis = ({ analysisData }) => {
   console.log('CoverLetterAnalysis - summary:', summary);
   console.log('=== 디버깅 끝 ===');
 
+  // 로딩 중일 때
+  if (isLoading) {
+    return (
+      <Container>
+        <LoadingSpinner>
+          <Spinner />
+          <div>자소서 분석 데이터를 불러오는 중...</div>
+        </LoadingSpinner>
+      </Container>
+    );
+  }
+
+  // 데이터가 없을 때
   if (!hasValidData) {
     return (
       <Container>

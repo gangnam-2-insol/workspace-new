@@ -1301,9 +1301,12 @@ const ApplicantManagement = () => {
   };
 
   // 자소서 분석 모달 관련 함수들
+  const [isCoverLetterDataLoading, setIsCoverLetterDataLoading] = useState(false);
+  
   const handleCoverLetterAnalysisModalOpen = async (applicant) => {
     setSelectedApplicantForCoverLetter(applicant);
     setIsCoverLetterAnalysisModalOpen(true);
+    setIsCoverLetterDataLoading(true);
 
     // applicant 객체에 _id가 없으면 id를 _id로 설정
     const applicantWithId = {
@@ -1395,6 +1398,7 @@ const ApplicantManagement = () => {
       });
     } finally {
       setLoadingState(applicantWithId._id, false);
+      setIsCoverLetterDataLoading(false);
       console.log('🏁 표절 의심도 검사 완료 - 로딩 상태 해제');
     }
   };
@@ -1430,8 +1434,8 @@ const ApplicantManagement = () => {
       _id: applicant._id || applicant.id
     };
 
-    // 모달 먼저 열기
-    setDocumentModal({ isOpen: true, type, applicant: applicantWithId, isOriginal: false, documentData: null, suspicionData: null, isLoadingSuspicion: type === 'coverLetter' });
+    // 모달 먼저 열기 (로딩 상태로 시작)
+    setDocumentModal({ isOpen: true, type, applicant: applicantWithId, isOriginal: false, documentData: null, suspicionData: null, isLoadingSuspicion: type === 'coverLetter', isLoading: true });
     if (type === 'portfolio') {
       setPortfolioView('select');
     }
@@ -1479,16 +1483,28 @@ const ApplicantManagement = () => {
           break;
       }
 
-      // 문서 데이터를 모달 상태에 저장
+      // 문서 데이터를 모달 상태에 저장 (로딩 완료)
       if (documentData) {
         setDocumentModal(prev => ({
           ...prev,
-          documentData
+          documentData,
+          isLoading: false
+        }));
+      } else {
+        // 데이터가 없는 경우에도 로딩 상태 해제
+        setDocumentModal(prev => ({
+          ...prev,
+          isLoading: false
         }));
       }
 
     } catch (error) {
       console.error('❌ 문서 데이터 로드 오류:', error);
+      // 에러 발생 시에도 로딩 상태 해제
+      setDocumentModal(prev => ({
+        ...prev,
+        isLoading: false
+      }));
     }
 
     // 자소서 타입일 때만 표절 의심도 검사 자동 실행 (전역 상태에 저장)
@@ -1534,7 +1550,7 @@ const ApplicantManagement = () => {
   };
 
   const handleCloseDocumentModal = () => {
-    setDocumentModal({ isOpen: false, type: '', applicant: null, isOriginal: false, documentData: null, suspicionData: null, isLoadingSuspicion: false });
+    setDocumentModal({ isOpen: false, type: '', applicant: null, isOriginal: false, documentData: null, suspicionData: null, isLoadingSuspicion: false, isLoading: false });
     setPortfolioView('select');
     setPortfolioData(null);
   };
@@ -1572,7 +1588,7 @@ const ApplicantManagement = () => {
         const currentModalType = documentModal.type;
 
         // 현재 모달을 닫고 새로운 모달을 열기
-    setDocumentModal({ isOpen: false, type: '', applicant: null, isOriginal: false, documentData: null, suspicionData: null, isLoadingSuspicion: false });
+    setDocumentModal({ isOpen: false, type: '', applicant: null, isOriginal: false, documentData: null, suspicionData: null, isLoadingSuspicion: false, isLoading: false });
 
         // 약간의 딜레이 후에 새로운 모달 열기 (부드러운 전환을 위해)
         setTimeout(() => {
@@ -1583,7 +1599,8 @@ const ApplicantManagement = () => {
             isOriginal: true,
             documentData: null,
             suspicionData: null,
-            isLoadingSuspicion: false
+            isLoadingSuspicion: false,
+            isLoading: true
           });
         }, 100);
     } catch (error) {
@@ -2987,6 +3004,7 @@ const ApplicantManagement = () => {
                           teamwork_communication: { score: 70, feedback: '팀워크 및 커뮤니케이션에 대한 분석이 필요합니다.' },
                           motivation_company_fit: { score: 90, feedback: '지원동기/회사 가치관 부합도에 대한 분석이 필요합니다.' }
                         }}
+                        isLoading={documentModal.isLoading}
                       />
                     </DocumentSection>
 
@@ -3067,6 +3085,7 @@ const ApplicantManagement = () => {
         applicantName={selectedApplicantForCoverLetter?.name || '지원자'}
         onPerformAnalysis={handlePerformCoverLetterAnalysis}
         applicantId={selectedApplicantForCoverLetter?._id || selectedApplicantForCoverLetter?.id}
+        isLoading={isCoverLetterDataLoading}
       />
 
       {/* 문서 미리보기 모달 */}

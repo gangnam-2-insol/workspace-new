@@ -96,7 +96,8 @@ export const useDocumentModal = () => {
     isOriginal: false,
     similarityData: null,
     isLoadingSimilarity: false,
-    documentData: null
+    documentData: null,
+    isLoading: false
   });
 
   return {
