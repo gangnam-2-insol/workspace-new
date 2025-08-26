@@ -3,34 +3,38 @@ import { motion } from 'framer-motion';
 
 // 보드 뷰 스타일
 export const BoardContainer = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   padding: 20px 0;
 `;
 
-export const BoardApplicantCard = styled(motion.div)`
+export const BoardApplicantCard = styled(motion.div).attrs({
+  id: 'applicant-management-applicant-card-board'
+})`
   background: white;
   border-radius: 12px;
-  padding: 20px;
+  padding: 16px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   border: 1px solid var(--border-color);
   cursor: pointer;
-  transition: all 0.2s ease;
-  position: relative;
+  transition: all 0.2s;
+  height: 56px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
 
   &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-    border-color: var(--primary-color);
+    transform: translateY(-2px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
   }
 `;
 
 export const BoardCardHeader = styled.div`
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 16px;
+  gap: 16px;
 `;
 
 export const CardCheckbox = styled.div`
@@ -39,90 +43,119 @@ export const CardCheckbox = styled.div`
 `;
 
 export const CardAvatar = styled.div`
-  width: 60px;
-  height: 60px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--primary-color), #00a844);
   display: flex;
   align-items: center;
   justify-content: center;
   color: white;
-  font-weight: 700;
-  font-size: 20px;
-  margin: 0 auto 16px;
+  font-weight: 600;
+  font-size: 14px;
 `;
 
 export const BoardCardContent = styled.div`
-  text-align: center;
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex: 1;
+  min-width: 0;
 `;
 
-export const CardName = styled.h3`
-  font-size: 18px;
+export const CardName = styled.div`
+  min-width: 120px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
   font-weight: 600;
   color: var(--text-primary);
-  margin-bottom: 4px;
 `;
 
 export const CardPosition = styled.div`
-  background: linear-gradient(135deg, var(--primary-color), #00a844);
-  color: white;
-  padding: 4px 12px;
-  border-radius: 12px;
+  min-width: 120px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 12px;
-  font-weight: 500;
-  display: inline-block;
-  margin-bottom: 4px;
+  color: var(--text-secondary);
 `;
 
 export const CardDepartment = styled.div`
+  min-width: 120px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-size: 12px;
   color: var(--text-secondary);
-  margin-bottom: 12px;
 `;
 
 export const CardContact = styled.div`
+  min-width: 180px;
+  flex-shrink: 0;
   display: flex;
-  flex-direction: column;
-  gap: 4px;
-  margin-bottom: 12px;
   align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-secondary);
 `;
 
 export const CardSkills = styled.div`
-  margin-bottom: 12px;
+  min-width: 120px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-secondary);
 `;
 
 export const CardScore = styled.div`
-  margin-bottom: 8px;
+  min-width: 80px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-secondary);
 `;
 
 export const CardDate = styled.div`
-  font-size: 11px;
-  color: var(--text-light);
-  margin-bottom: 16px;
+  min-width: 90px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  color: var(--text-secondary);
 `;
 
 export const BoardCardActions = styled.div`
+  min-width: 100px;
+  flex-shrink: 0;
   display: flex;
+  align-items: center;
   justify-content: center;
   gap: 8px;
-  padding-top: 16px;
-  border-top: 1px solid var(--border-color);
 `;
 
 export const CardActionButton = styled.button`
-  padding: 8px;
+  padding: 4px 8px;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: 4px;
   background: white;
   color: var(--text-secondary);
+  font-size: 10px;
   cursor: pointer;
   transition: all 0.2s ease;
 
   &:hover {
     border-color: var(--primary-color);
     color: var(--primary-color);
-    transform: translateY(-1px);
   }
 `;
 
@@ -200,40 +233,116 @@ export const SuitabilityValueBoard = styled.div`
   }};
 `;
 
-// 보드 뷰 순위 배지
-export const BoardRankBadge = styled.span`
-  display: inline-flex;
+// 추가적인 보드 뷰 스타일들
+export const AiSuitabilityAvatarBoard = styled.div`
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: ${props => {
+    if (props.percentage >= 90) return 'linear-gradient(135deg, #22c55e, #16a34a)';
+    if (props.percentage >= 80) return 'linear-gradient(135deg, #eab308, #ca8a04)';
+    return 'linear-gradient(135deg, #ef4444, #dc2626)';
+  }};
+  display: flex;
   align-items: center;
   justify-content: center;
-  width: 20px;
-  height: 20px;
-  border-radius: 50%;
-  font-size: 12px;
-  font-weight: 700;
   color: white;
-  margin-right: 8px;
-  background: ${props => {
-    if (props.rank === 1) return '#ef4444'; // 빨간색 (1위)
-    if (props.rank === 2) return '#f59e0b'; // 주황색 (2위)
-    if (props.rank === 3) return '#10b981'; // 초록색 (3위)
-    if (props.rank <= 10) return '#3b82f6'; // 파란색 (4-10위)
-    return '#6b7280'; // 회색 (11위 이상)
-  }};
-
-  &::before {
-    content: '${props => {
-      if (props.rank === 1) return '🥇';
-      if (props.rank === 2) return '🥈';
-      if (props.rank === 3) return '🥉';
-      return props.rank.toString();
-    }}';
-  }
+  font-weight: 600;
+  font-size: 10px;
+  text-align: center;
+  line-height: 1;
 `;
 
-// 보드 뷰 아바타
+export const ApplicantDetailsBoard = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 0;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+`;
+
+export const ApplicantNameBoard = styled.h3`
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  min-width: 120px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+export const ApplicantPositionBoard = styled.p`
+  color: var(--text-secondary);
+  font-size: 12px;
+  min-width: 120px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+`;
+
+export const ApplicantDateBoard = styled.p`
+  color: var(--text-light);
+  font-size: 11px;
+  min-width: 90px;
+  text-align: center;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  white-space: nowrap;
+`;
+
+export const ApplicantEmailBoard = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 180px;
+  flex-shrink: 0;
+`;
+
+export const ApplicantPhoneBoard = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 120px;
+  flex-shrink: 0;
+`;
+
+export const ApplicantSkillsBoard = styled.div`
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 120px;
+  flex-shrink: 0;
+`;
+
+export const BoardRankBadge = styled.div`
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  background: ${props => {
+    if (props.rank === 1) return 'linear-gradient(135deg, #ffd700, #ffed4e)';
+    if (props.rank === 2) return 'linear-gradient(135deg, #c0c0c0, #e5e5e5)';
+    if (props.rank === 3) return 'linear-gradient(135deg, #cd7f32, #daa520)';
+    return 'linear-gradient(135deg, #6b7280, #9ca3af)';
+  }};
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 10px;
+  font-weight: 700;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+`;
+
 export const BoardAvatar = styled.div`
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   background: linear-gradient(135deg, var(--primary-color), #00a844);
   display: flex;
@@ -242,66 +351,54 @@ export const BoardAvatar = styled.div`
   color: white;
   font-weight: 600;
   font-size: 14px;
-  margin-right: 12px;
 `;
 
-// 보드 뷰 고정 액션 버튼들
 export const FixedPassButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background: #22c55e;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
+  padding: 4px 8px;
+  border: 1px solid #28a745;
+  border-radius: 4px;
+  background: ${props => props.active ? '#28a745' : 'white'};
+  color: ${props => props.active ? 'white' : '#28a745'};
+  font-size: 10px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
 
   &:hover {
-    background: #16a34a;
-    transform: translateY(-1px);
+    background: ${props => props.active ? '#218838' : '#28a745'};
+    color: white;
   }
 `;
 
 export const FixedPendingButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background: #f59e0b;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
+  padding: 4px 8px;
+  border: 1px solid #ffc107;
+  border-radius: 4px;
+  background: ${props => props.active ? '#ffc107' : 'white'};
+  color: ${props => props.active ? '#212529' : '#ffc107'};
+  font-size: 10px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
 
   &:hover {
-    background: #d97706;
-    transform: translateY(-1px);
+    background: ${props => props.active ? '#e0a800' : '#ffc107'};
+    color: ${props => props.active ? '#212529' : '#212529'};
   }
 `;
 
 export const FixedRejectButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 8px 12px;
-  background: #ef4444;
-  color: white;
-  border: none;
-  border-radius: 6px;
-  font-size: 12px;
-  font-weight: 600;
+  padding: 4px 8px;
+  border: 1px solid #dc3545;
+  border-radius: 4px;
+  background: ${props => props.active ? '#dc3545' : 'white'};
+  color: ${props => props.active ? 'white' : '#dc3545'};
+  font-size: 10px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s;
 
   &:hover {
-    background: #dc2626;
-    transform: translateY(-1px);
+    background: ${props => props.active ? '#c82333' : '#dc3545'};
+    color: white;
   }
 `;
+
+

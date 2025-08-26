@@ -290,7 +290,7 @@ const logError = (message, error = null) => {
 
 const ApplicantManagement = () => {
   log('컴포넌트 초기화 시작');
-  
+
   // 전역 표절 의심도 상태
   const { updateSuspicionData, setLoadingState, getSuspicionData, getLoadingState } = useSuspicion();
 
@@ -1302,7 +1302,7 @@ const ApplicantManagement = () => {
   const handleCardClick = async (applicant) => {
     setSelectedApplicant(applicant);
     setIsModalOpen(true);
-    
+
     // 유사인재 추천 API 호출
     try {
       console.log('🚀 [ApplicantManagement] 유사인재 추천 API 호출 시작', applicant.id);
@@ -1361,20 +1361,20 @@ const ApplicantManagement = () => {
     console.log('🚀 [ApplicantManagement] 자소서 분석 모달 열림 - 표절 의심도 검사 시작');
     console.log('- applicantId:', applicantWithId._id);
     console.log('- applicantName:', applicantWithId.name);
-    
+
     setLoadingState(applicantWithId._id, true);
-    
+
     try {
       console.log('🔍 자소서 표절 의심도 검사 시작...');
       console.log('- API 요청 URL:', `http://localhost:8000/api/coverletter/similarity-check/${applicantWithId._id}`);
-      
+
       const suspicionResult = await applicantApi.checkCoverLetterSuspicion(applicantWithId._id);
       console.log('✅ 자소서 표절 의심도 검사 완료:', suspicionResult);
       console.log('- 응답 데이터 구조:', JSON.stringify(suspicionResult, null, 2));
-      
+
       updateSuspicionData(applicantWithId._id, suspicionResult);
       console.log('💾 전역 상태에 표절 의심도 결과 저장 완료');
-      
+
       // 저장된 데이터 검증
       const storedData = getSuspicionData(applicantWithId._id);
       console.log('📋 저장된 데이터 확인:', storedData);
@@ -1490,20 +1490,20 @@ const ApplicantManagement = () => {
       console.log('🚀 [ApplicantManagement] 자소서 모달 열림 - 표절 의심도 검사 시작');
       console.log('- applicantId:', applicantWithId._id);
       console.log('- applicantName:', applicantWithId.name);
-      
+
       setLoadingState(applicantWithId._id, true);
-      
+
       try {
         console.log('🔍 자소서 표절 의심도 검사 시작...');
         console.log('- API 요청 URL:', `http://localhost:8000/api/coverletter/similarity-check/${applicantWithId._id}`);
-        
+
         const suspicionResult = await applicantApi.checkCoverLetterSuspicion(applicantWithId._id);
         console.log('✅ 자소서 표절 의심도 검사 완료:', suspicionResult);
         console.log('- 응답 데이터 구조:', JSON.stringify(suspicionResult, null, 2));
-        
+
         updateSuspicionData(applicantWithId._id, suspicionResult);
         console.log('💾 전역 상태에 표절 의심도 결과 저장 완료');
-        
+
         // 저장된 데이터 검증
         const storedData = getSuspicionData(applicantWithId._id);
         console.log('📋 저장된 데이터 확인:', storedData);
@@ -2430,7 +2430,7 @@ const ApplicantManagement = () => {
         </Wrapper>
       ) : (
         <Wrapper>
-          <ApplicantsBoard>
+          <BoardContainer>
             {paginatedApplicants.length > 0 ? (
               paginatedApplicants.map((applicant, index) => {
                 // filteredApplicants에서 해당 지원자의 순위 가져오기
@@ -2447,7 +2447,7 @@ const ApplicantManagement = () => {
                   onMouseEnter={() => setHoveredApplicant(applicant.id)}
                   onMouseLeave={() => setHoveredApplicant(null)}
                 >
-                  <ApplicantHeader>
+                  <BoardCardHeader>
                     <ApplicantCheckbox onClick={(e) => e.stopPropagation()}>
                       <CheckboxInput
                         type="checkbox"
@@ -2458,80 +2458,72 @@ const ApplicantManagement = () => {
                         }}
                       />
                     </ApplicantCheckbox>
-                    <ApplicantName>
-                      {rank && rank <= 3 && selectedJobPostingId && (
-                        <BoardRankBadge rank={rank} />
-                      )}
-                      {applicant.name}
-                    </ApplicantName>
-                    <ApplicantPosition>{applicant.position}</ApplicantPosition>
-                    <ApplicantEmail>
-                      <ContactItem>
+                    <BoardCardContent>
+                      <CardAvatar>
+                        {rank && rank <= 3 && selectedJobPostingId && (
+                          <BoardRankBadge rank={rank} />
+                        )}
+                        {applicant.name?.charAt(0) || '?'}
+                      </CardAvatar>
+                      <CardName>{applicant.name}</CardName>
+                      <CardPosition>{applicant.position}</CardPosition>
+                      <CardContact>
                         <FiMail size={10} />
                         {applicant.email}
-                      </ContactItem>
-                    </ApplicantEmail>
-                    <ApplicantPhone>
-                      <ContactItem>
-                        <FiPhone size={10} />
-                        {applicant.phone}
-                      </ContactItem>
-                    </ApplicantPhone>
-                    <ApplicantSkills>
-                      {applicant.skills ? (
-                        <>
-                          {Array.isArray(applicant.skills)
-                            ? applicant.skills.slice(0, 2).map((skill, skillIndex) => (
-                                <SkillTag key={skillIndex}>
-                                  {skill}
-                                </SkillTag>
-                              ))
-                            : applicant.skills.split(',').slice(0, 2).map((skill, skillIndex) => (
-                                <SkillTag key={skillIndex}>
-                                  {skill.trim()}
-                                </SkillTag>
-                              ))
-                          }
-                          {Array.isArray(applicant.skills)
-                            ? applicant.skills.length > 2 && (
-                              <SkillTag>+{applicant.skills.length - 2}</SkillTag>
-                            )
-                            : applicant.skills.split(',').length > 2 && (
-                              <SkillTag>+{applicant.skills.split(',').length - 2}</SkillTag>
-                            )
-                          }
-                        </>
-                      ) : (
-                        <SkillTag>기술스택 없음</SkillTag>
-                      )}
-                    </ApplicantSkills>
-                    <ApplicantDate>
-                      {applicant.appliedDate || applicant.created_at
-                        ? new Date(applicant.appliedDate || applicant.created_at).toLocaleDateString('ko-KR', {
-                            year: 'numeric',
-                            month: '2-digit',
-                            day: '2-digit'
-                          }).replace(/\. /g, '.').replace(' ', '')
-                        : '날짜 없음'
-                      }
-                    </ApplicantDate>
-                    <ApplicantScoreBoard>
-                      <ScoreBadge score={applicant.ranks?.total || 0}>
-                        {applicant.ranks?.total || 0}점
-                      </ScoreBadge>
-                    </ApplicantScoreBoard>
-                    <StatusColumnWrapper>
-                      <StatusBadge
-                        status={applicant.status}
-                        small
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.08, ease: "easeOut" }}
+                      </CardContact>
+                      <CardSkills>
+                        {applicant.skills ? (
+                          Array.isArray(applicant.skills)
+                            ? applicant.skills.slice(0, 1).join(', ')
+                            : applicant.skills.split(',').slice(0, 1).join(', ')
+                        ) : (
+                          '기술스택 없음'
+                        )}
+                      </CardSkills>
+                      <CardDate>
+                        {applicant.appliedDate || applicant.created_at
+                          ? new Date(applicant.appliedDate || applicant.created_at).toLocaleDateString('ko-KR', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit'
+                            }).replace(/\. /g, '.').replace(' ', '')
+                          : '날짜 없음'
+                        }
+                      </CardDate>
+                      <CardScore>
+                        {applicant.analysisScore || 0}점
+                      </CardScore>
+                    </BoardCardContent>
+                    <BoardCardActions>
+                      <FixedPassButton
+                        active={applicant.status === '서류합격'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUpdateStatus(applicant.id, '서류합격');
+                        }}
                       >
-                        {getStatusText(applicant.status)}
-                      </StatusBadge>
-                    </StatusColumnWrapper>
-                  </ApplicantHeader>
+                        합격
+                      </FixedPassButton>
+                      <FixedPendingButton
+                        active={applicant.status === '보류'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUpdateStatus(applicant.id, '보류');
+                        }}
+                      >
+                        보류
+                      </FixedPendingButton>
+                      <FixedRejectButton
+                        active={applicant.status === '서류불합격'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUpdateStatus(applicant.id, '서류불합격');
+                        }}
+                      >
+                        불합격
+                      </FixedRejectButton>
+                    </BoardCardActions>
+                  </BoardCardHeader>
                 </BoardApplicantCard>
               );
             })          ) : (
@@ -2541,7 +2533,7 @@ const ApplicantManagement = () => {
                 <p>다른 검색어나 필터 조건을 시도해보세요.</p>
               </EmptyState>
             )}
-          </ApplicantsBoard>
+          </BoardContainer>
 
           {/* 페이지네이션 (보드 뷰) */}
           {totalPages > 0 && (
