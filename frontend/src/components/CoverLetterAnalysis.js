@@ -284,6 +284,18 @@ const CoverLetterAnalysis = ({ analysisData }) => {
       };
     }
 
+    // cover_letter.analysis_results[0] 구조 처리
+    if (analysisData.cover_letter?.analysis_results?.[0]) {
+      const analysisResult = analysisData.cover_letter.analysis_results[0];
+      return {
+        technical_suitability: analysisResult.technical_suitability?.score || 75,
+        job_understanding: analysisResult.job_understanding?.score || 80,
+        growth_potential: analysisResult.growth_potential?.score || 85,
+        teamwork_communication: analysisResult.teamwork_communication?.score || 70,
+        motivation_company_fit: analysisResult.motivation_company_fit?.score || 90
+      };
+    }
+
     // DB에서 가져온 analysis_results 구조 처리
     if (analysisData.technical_suitability && typeof analysisData.technical_suitability.score === 'number') {
       return {
@@ -309,14 +321,19 @@ const CoverLetterAnalysis = ({ analysisData }) => {
   const data = extractScores(analysisData);
 
   // 전체 점수 계산
-  const overallScore = analysisData?.overall_score ||
-    Math.round(Object.values(data).reduce((sum, score) => sum + score, 0) / Object.values(data).length);
+  const overallScore = analysisData?.cover_letter?.analysis_results?.[0]?.overall_score ||
+                       analysisData?.overall_score ||
+                       Math.round(Object.values(data).reduce((sum, score) => sum + score, 0) / Object.values(data).length);
 
   // 분석 요약 가져오기
-  const summary = analysisData?.summary || '자소서 분석 결과를 확인할 수 있습니다.';
+  const summary = analysisData?.cover_letter?.summary || 
+                  analysisData?.summary || 
+                  '자소서 분석 결과를 확인할 수 있습니다.';
 
   // 개선 권장사항 가져오기 (항상 최대 2개로 제한)
-  const allRecommendations = analysisData?.recommendations || ['지속적인 성장과 발전을 권장합니다.'];
+  const allRecommendations = analysisData?.cover_letter?.analysis_results?.[0]?.recommendations ||
+                             analysisData?.recommendations || 
+                             ['지속적인 성장과 발전을 권장합니다.'];
   // slice(0, 2)를 사용하여 항상 최대 2개만 표시
   const recommendations = allRecommendations.slice(0, 2);
   
@@ -326,8 +343,14 @@ const CoverLetterAnalysis = ({ analysisData }) => {
   }
 
   // 분석 시간 가져오기
-  const analyzedAt = analysisData?.analyzed_at ? new Date(analysisData.analyzed_at).toLocaleString('ko-KR') : 
-                    analysisData?.created_at ? new Date(analysisData.created_at).toLocaleString('ko-KR') : null;
+  const analyzedAt = analysisData?.cover_letter?.analysis_results?.[0]?.analyzed_at ? 
+                     new Date(analysisData.cover_letter.analysis_results[0].analyzed_at).toLocaleString('ko-KR') :
+                     analysisData?.cover_letter?.analysis_results?.[0]?.created_at ? 
+                     new Date(analysisData.cover_letter.analysis_results[0].created_at).toLocaleString('ko-KR') :
+                     analysisData?.analyzed_at ? 
+                     new Date(analysisData.analyzed_at).toLocaleString('ko-KR') : 
+                     analysisData?.created_at ? 
+                     new Date(analysisData.created_at).toLocaleString('ko-KR') : null;
 
   // 레이더차트 데이터 생성
   const generateRadarData = () => {
@@ -406,15 +429,23 @@ const CoverLetterAnalysis = ({ analysisData }) => {
   const axes = generateAxes();
 
   // 분석 데이터가 있는지 체크
-  // 디버깅을 위한 로그 추가
-  console.log('CoverLetterAnalysis - analysisData:', analysisData);
-  console.log('CoverLetterAnalysis - analysisData type:', typeof analysisData);
-  console.log('CoverLetterAnalysis - analysisData keys:', analysisData ? Object.keys(analysisData) : 'null');
-  console.log('CoverLetterAnalysis - technical_suitability:', analysisData?.technical_suitability);
-  
   const hasValidData = analysisData &&
     typeof analysisData === 'object' &&
     Object.keys(analysisData).length > 0;
+
+  // 디버깅을 위한 로그 추가
+  console.log('=== CoverLetterAnalysis 디버깅 ===');
+  console.log('CoverLetterAnalysis - analysisData:', analysisData);
+  console.log('CoverLetterAnalysis - analysisData type:', typeof analysisData);
+  console.log('CoverLetterAnalysis - analysisData keys:', analysisData ? Object.keys(analysisData) : 'null');
+  console.log('CoverLetterAnalysis - cover_letter:', analysisData?.cover_letter);
+  console.log('CoverLetterAnalysis - analysis_results:', analysisData?.cover_letter?.analysis_results);
+  console.log('CoverLetterAnalysis - technical_suitability:', analysisData?.technical_suitability);
+  console.log('CoverLetterAnalysis - hasValidData:', hasValidData);
+  console.log('CoverLetterAnalysis - data:', data);
+  console.log('CoverLetterAnalysis - overallScore:', overallScore);
+  console.log('CoverLetterAnalysis - summary:', summary);
+  console.log('=== 디버깅 끝 ===');
 
   if (!hasValidData) {
     return (

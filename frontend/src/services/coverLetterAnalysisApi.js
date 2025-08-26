@@ -129,7 +129,7 @@ class CoverLetterAnalysisApi {
    */
   static async getApplicantCoverLetterAnalysis(applicantId) {
     try {
-      const response = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/cover-letter-analysis`, {
+      const response = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/cover-letter`, {
         method: 'GET',
         headers: {
           'Content-Type': 'application/json',

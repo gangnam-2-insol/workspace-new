@@ -1314,11 +1314,28 @@ const ApplicantManagement = () => {
     try {
       // 지원자의 자소서 분석 결과를 API에서 가져오기
       const applicantId = applicantWithId._id;
+      console.log('🔍 자소서 분석 데이터 요청 시작:', applicantId);
+      
       const analysisResult = await CoverLetterAnalysisApi.getApplicantCoverLetterAnalysis(applicantId);
+      console.log('📊 자소서 분석 API 응답:', analysisResult);
 
-      if (analysisResult && analysisResult.success) {
-        setSelectedCoverLetterData(analysisResult.data);
+      if (analysisResult && analysisResult.success && analysisResult.cover_letter && analysisResult.cover_letter.analysis_results) {
+        console.log('✅ 자소서 분석 데이터 성공:', analysisResult.cover_letter.analysis_results[0]);
+        setSelectedCoverLetterData(analysisResult.cover_letter.analysis_results[0]);
+      } else if (analysisResult && analysisResult.success && !analysisResult.has_cover_letter) {
+        console.log('⚠️ 자소서가 없습니다');
+        setSelectedCoverLetterData({
+          technical_suitability: { score: 0, feedback: '자소서가 없습니다.' },
+          job_understanding: { score: 0, feedback: '자소서가 없습니다.' },
+          growth_potential: { score: 0, feedback: '자소서가 없습니다.' },
+          teamwork_communication: { score: 0, feedback: '자소서가 없습니다.' },
+          motivation_company_fit: { score: 0, feedback: '자소서가 없습니다.' },
+          summary: '자소서가 업로드되지 않았습니다.',
+          recommendations: ['자소서를 업로드해주세요.'],
+          overall_score: 0
+        });
       } else {
+        console.log('⚠️ 자소서 분석 데이터 실패, 기본 데이터 사용');
         // API에서 데이터를 가져올 수 없는 경우 기본 데이터 사용
         setSelectedCoverLetterData({
           technical_suitability: { score: 75, feedback: '분석이 필요합니다.' },
@@ -1332,7 +1349,7 @@ const ApplicantManagement = () => {
         });
       }
     } catch (error) {
-      console.error('자소서 분석 데이터 로드 오류:', error);
+      console.error('❌ 자소서 분석 데이터 로드 오류:', error);
       // 에러 발생 시 기본 데이터 사용
       setSelectedCoverLetterData({
         technical_suitability: { score: 75, feedback: '분석이 필요합니다.' },
