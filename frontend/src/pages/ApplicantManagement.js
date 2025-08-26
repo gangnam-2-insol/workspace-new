@@ -29,6 +29,7 @@ import RankingSection from './ApplicantManagement/components/RankingSection';
 import DetailedAnalysisModal from '../components/DetailedAnalysisModal';
 import ResumeModal from '../components/ResumeModal';
 import CoverLetterSummary from '../components/CoverLetterSummary';
+import ApplicantDetailModal from '../components/ApplicantDetailModal';
 import CoverLetterAnalysis from '../components/CoverLetterAnalysis';
 import CoverLetterAnalysisModal from '../components/CoverLetterAnalysisModal';
 import GithubSummaryPanel from './PortfolioSummary/GithubSummaryPanel';
@@ -2585,129 +2586,18 @@ const ApplicantManagement = () => {
 
 
       {/* 지원자 상세 모달 */}
-      <AnimatePresence>
-        {isModalOpen && selectedApplicant && (
-          <ModalOverlay
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
-            onClick={handleCloseModal}
-          >
-            <ModalContent
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              <ModalHeader>
-                <ModalTitle>지원자 상세 정보</ModalTitle>
-                <CloseButton onClick={handleCloseModal}>&times;</CloseButton>
-              </ModalHeader>
-
-              <ProfileSection>
-                <SectionTitle>
-                  <FiUser size={20} />
-                  기본 정보
-                </SectionTitle>
-                <ProfileGrid>
-                  <ProfileItem>
-                    <ProfileLabel>이름</ProfileLabel>
-                    <ProfileValue>{selectedApplicant.name}</ProfileValue>
-                  </ProfileItem>
-                  <ProfileItem>
-                    <ProfileLabel>경력</ProfileLabel>
-                    <ProfileValue>{selectedApplicant.experience}</ProfileValue>
-                  </ProfileItem>
-                  <ProfileItem>
-                    <ProfileLabel>희망직책</ProfileLabel>
-                    <ProfileValue>{selectedApplicant.position}</ProfileValue>
-                  </ProfileItem>
-                </ProfileGrid>
-              </ProfileSection>
-
-              <SkillsSection>
-                <SkillsTitle>
-                  <FiCode size={20} />
-                  기술스택
-                </SkillsTitle>
-                <SkillsGrid>
-                  {Array.isArray(selectedApplicant.skills)
-                    ? selectedApplicant.skills.map((skill, index) => (
-                        <SkillTag key={index}>
-                          {skill}
-                        </SkillTag>
-                      ))
-                    : typeof selectedApplicant.skills === 'string'
-                    ? selectedApplicant.skills.split(',').map((skill, index) => (
-                        <SkillTag key={index}>
-                          {skill.trim()}
-                        </SkillTag>
-                      ))
-                    : null
-                  }
-                </SkillsGrid>
-              </SkillsSection>
-
-              <SummarySection>
-                <SummaryTitle>
-                  <FiFile size={20} />
-                  AI 분석 요약
-                </SummaryTitle>
-
-                {selectedApplicant.analysisScore && (
-                  <AnalysisScoreDisplay>
-                    <AnalysisScoreCircle>
-                      {selectedApplicant.analysisScore}
-                    </AnalysisScoreCircle>
-                    <AnalysisScoreInfo>
-                      <AnalysisScoreLabel>AI 분석 점수</AnalysisScoreLabel>
-                      <AnalysisScoreValue>{selectedApplicant.analysisScore}점</AnalysisScoreValue>
-                    </AnalysisScoreInfo>
-                  </AnalysisScoreDisplay>
-                )}
-
-                <SummaryText>
-                  {selectedApplicant.summary}
-                </SummaryText>
-              </SummarySection>
-
-              <DocumentButtons>
-                <ResumeButton onClick={() => handleResumeModalOpen(selectedApplicant)}>
-                  <FiFileText size={16} />
-                  이력서
-                </ResumeButton>
-                <DocumentButton onClick={() => handleDocumentClick('coverLetter', selectedApplicant)}>
-                  <FiMessageSquare size={16} />
-                  자소서
-                </DocumentButton>
-                <DocumentButton
-                  onClick={() => handleCoverLetterAnalysisModalOpen(selectedApplicant)}
-                  style={{ backgroundColor: '#667eea' }}
-                >
-                  <FiBarChart2 size={16} />
-                  자소서 분석
-                </DocumentButton>
-                <DocumentButton
-                  onClick={() => setShowDetailedAnalysis(true)}
-                  style={{ backgroundColor: '#764ba2' }}
-                >
-                  <FiStar size={16} />
-                  통합 분석
-                </DocumentButton>
-                <DocumentButton onClick={() => handleDocumentClick('portfolio', selectedApplicant)}>
-                  <FiCode size={16} />
-                  포트폴리오
-                </DocumentButton>
-              </DocumentButtons>
-
-              <DeleteButton onClick={() => handleDeleteApplicant(selectedApplicant.id)}>
-                <FiX size={16} />
-                지원자 삭제
-              </DeleteButton>
-            </ModalContent>
-          </ModalOverlay>
+              {isModalOpen && selectedApplicant && (
+          <ApplicantDetailModal
+            applicant={selectedApplicant}
+            onClose={handleCloseModal}
+            onResumeClick={handleResumeModalOpen}
+            onDocumentClick={handleDocumentClick}
+            onDelete={handleDeleteApplicant}
+            onStatusUpdate={handleUpdateStatus}
+            onCoverLetterAnalysis={handleCoverLetterAnalysisModalOpen}
+            onDetailedAnalysis={() => setShowDetailedAnalysis(true)}
+          />
         )}
-      </AnimatePresence>
 
       {/* 문서 모달 */}
       <AnimatePresence>
