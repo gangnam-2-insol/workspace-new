@@ -588,6 +588,50 @@ const SampleDataManagement = () => {
     }
   };
 
+  // 샘플 이력서 데이터 생성 (이력서가 없는 지원자들만)
+  const generateSampleResumes = async () => {
+    // 먼저 기존 지원자 확인
+    if (applicants.length === 0) {
+      setMessage({
+        type: 'error',
+        text: '이력서를 생성하기 전에 먼저 지원자를 생성해주세요. 이력서는 반드시 지원자에 소속되어야 합니다.'
+      });
+      return;
+    }
+
+    setLoading(true);
+    setProgress(0);
+    setCurrentOperation('이력서 샘플 데이터 생성 중...');
+    setMessage({ type: 'info', text: '이력서가 없는 지원자들을 위한 이력서 데이터를 생성하고 있습니다...' });
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/sample/resumes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ count: 50 }) // 최대 50개까지 생성
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setMessage({ type: 'success', text: result.message });
+        setProgress(100);
+        loadCurrentStats(); // 통계 새로고침
+        loadApplicants(); // 지원자 목록 새로고침
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '이력서 데이터 생성 실패');
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || '이력서 샘플 데이터 생성에 실패했습니다.' });
+      console.error('이력서 생성 오류:', error);
+    } finally {
+      setLoading(false);
+      setCurrentOperation('');
+    }
+  };
+
   // 샘플 채용공고 데이터 생성
   const generateSampleJobPostings = async (count = 10) => {
     setLoading(true);
@@ -1554,7 +1598,7 @@ const SampleDataManagement = () => {
             <InfoCard>
               <InfoTitle>
                 <FiUsers />
-                현재 지원자 및 자소서 현황
+                현재 지원자 및 문서 현황
               </InfoTitle>
               <InfoList>
                 <InfoItem>
@@ -1564,6 +1608,10 @@ const SampleDataManagement = () => {
                 <InfoItem>
                   <span>자소서 생성 대상</span>
                   <span>{applicants.length > 0 ? '자소서가 없는 지원자들' : '불가능 (지원자 필요)'}</span>
+                </InfoItem>
+                <InfoItem>
+                  <span>이력서 생성 대상</span>
+                  <span>{applicants.length > 0 ? '이력서가 없는 지원자들' : '불가능 (지원자 필요)'}</span>
                 </InfoItem>
               </InfoList>
             </InfoCard>
@@ -1688,6 +1736,20 @@ const SampleDataManagement = () => {
               >
                 <FiFileText />
                 자소서가 없는 지원자들을 위한 자소서 생성
+                {applicants.length === 0 && ' (지원자 필요)'}
+              </Button>
+
+              {/* 구분선 */}
+              <div style={{ width: '100%', height: '1px', background: '#dee2e6', margin: '16px 0' }} />
+
+              {/* 이력서 생성 버튼 */}
+              <Button
+                onClick={generateSampleResumes}
+                disabled={loading || applicants.length === 0}
+                variant={applicants.length === 0 ? 'danger' : 'primary'}
+              >
+                <FiUser />
+                이력서가 없는 지원자들을 위한 이력서 생성
                 {applicants.length === 0 && ' (지원자 필요)'}
               </Button>
             </ButtonGroup>
