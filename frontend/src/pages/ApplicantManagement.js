@@ -1304,9 +1304,15 @@ const ApplicantManagement = () => {
     setSelectedApplicantForCoverLetter(applicant);
     setIsCoverLetterAnalysisModalOpen(true);
 
+    // applicant 객체에 _id가 없으면 id를 _id로 설정
+    const applicantWithId = {
+      ...applicant,
+      _id: applicant._id || applicant.id
+    };
+
     try {
       // 지원자의 자소서 데이터를 API에서 가져오기
-      const applicantId = applicant._id || applicant.id;
+      const applicantId = applicantWithId._id;
       const coverLetterData = await CoverLetterAnalysisApi.getApplicantCoverLetter(applicantId);
 
       if (coverLetterData && coverLetterData.success) {
@@ -1319,6 +1325,41 @@ const ApplicantManagement = () => {
       console.error('자소서 데이터 로드 오류:', error);
       // 에러 발생 시 기존 데이터 사용
       setSelectedCoverLetterData(applicant.cover_letter_analysis || applicant.analysis_result?.cover_letter_analysis);
+    }
+
+    // 자소서 분석 모달 열림 - 표절 의심도 검사 자동 시작
+    console.log('🚀 [ApplicantManagement] 자소서 분석 모달 열림 - 표절 의심도 검사 시작');
+    console.log('- applicantId:', applicantWithId._id);
+    console.log('- applicantName:', applicantWithId.name);
+    
+    setLoadingState(applicantWithId._id, true);
+    
+    try {
+      console.log('🔍 자소서 표절 의심도 검사 시작...');
+      console.log('- API 요청 URL:', `http://localhost:8000/api/coverletter/similarity-check/${applicantWithId._id}`);
+      
+      const suspicionResult = await applicantApi.checkCoverLetterSuspicion(applicantWithId._id);
+      console.log('✅ 자소서 표절 의심도 검사 완료:', suspicionResult);
+      console.log('- 응답 데이터 구조:', JSON.stringify(suspicionResult, null, 2));
+      
+      updateSuspicionData(applicantWithId._id, suspicionResult);
+      console.log('💾 전역 상태에 표절 의심도 결과 저장 완료');
+      
+      // 저장된 데이터 검증
+      const storedData = getSuspicionData(applicantWithId._id);
+      console.log('📋 저장된 데이터 확인:', storedData);
+    } catch (error) {
+      console.error('❌ 자소서 표절 의심도 검사 실패:', error);
+      console.error('- 에러 상세:', error.stack);
+      updateSuspicionData(applicantWithId._id, {
+        status: 'error',
+        message: '표절 의심도 검사 중 오류가 발생했습니다: ' + error.message,
+        error: error.message,
+        fullError: error.stack
+      });
+    } finally {
+      setLoadingState(applicantWithId._id, false);
+      console.log('🏁 표절 의심도 검사 완료 - 로딩 상태 해제');
     }
   };
 

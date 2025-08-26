@@ -5197,26 +5197,26 @@ const ApplicantManagement = () => {
                             </DocumentGrid>
                           </DocumentCard>
 
-                          {/* 표절 위험도 분석 */}
+                          {/* 표절 의심도 분석 */}
                           {documentModal.similarityData.plagiarism_analysis && documentModal.similarityData.plagiarism_analysis.success && (
                             <DocumentCard>
-                              <DocumentCardTitle>⚠️ 표절 위험도 분석</DocumentCardTitle>
+                              <DocumentCardTitle>⚠️ 표절 의심도 분석</DocumentCardTitle>
                               <div style={{
                                 padding: '12px',
                                 borderRadius: '8px',
-                                backgroundColor: documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#fff5f5' :
-                                                documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#fffbf0' : '#f0fff4',
-                                border: `2px solid ${documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#ff4757' :
-                                                   documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#ffa502' : '#2ed573'}`
+                                backgroundColor: documentModal.similarityData.plagiarism_analysis.suspicion_level === 'HIGH' ? '#fff5f5' :
+                                                documentModal.similarityData.plagiarism_analysis.suspicion_level === 'MEDIUM' ? '#fffbf0' : '#f0fff4',
+                                border: `2px solid ${documentModal.similarityData.plagiarism_analysis.suspicion_level === 'HIGH' ? '#ff4757' :
+                                                   documentModal.similarityData.plagiarism_analysis.suspicion_level === 'MEDIUM' ? '#ffa502' : '#2ed573'}`
                               }}>
                                 <div style={{
                                   fontWeight: 'bold',
                                   marginBottom: '8px',
-                                  color: documentModal.similarityData.plagiarism_analysis.risk_level === 'HIGH' ? '#ff4757' :
-                                        documentModal.similarityData.plagiarism_analysis.risk_level === 'MEDIUM' ? '#ffa502' : '#2ed573'
+                                  color: documentModal.similarityData.plagiarism_analysis.suspicion_level === 'HIGH' ? '#ff4757' :
+                                        documentModal.similarityData.plagiarism_analysis.suspicion_level === 'MEDIUM' ? '#ffa502' : '#2ed573'
                                 }}>
-                                  위험도: {documentModal.similarityData.plagiarism_analysis.risk_level}
-                                  ({(documentModal.similarityData.plagiarism_analysis.risk_score * 100).toFixed(1)}%)
+                                  의심도: {documentModal.similarityData.plagiarism_analysis.suspicion_level}
+                                  ({(documentModal.similarityData.plagiarism_analysis.suspicion_score * 100).toFixed(1)}%)
                                 </div>
                                 <div style={{fontSize: '14px', color: '#333', marginBottom: '8px', whiteSpace: 'pre-line'}}>
                                   {documentModal.similarityData.plagiarism_analysis.analysis}
