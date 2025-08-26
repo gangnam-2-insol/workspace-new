@@ -1,11 +1,11 @@
 import React, { useState, useEffect, useRef } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  FiMessageCircle, 
-  FiX, 
-  FiSend, 
-  FiMinimize2, 
+import {
+  FiMessageCircle,
+  FiX,
+  FiSend,
+  FiMinimize2,
   FiMaximize2,
   FiTrash2,
   FiRefreshCw,
@@ -25,6 +25,18 @@ const ChatbotContainer = styled(motion.div)`
   display: flex;
   flex-direction: column;
   align-items: flex-end;
+`;
+
+// 배경 오버레이 추가
+const BackgroundOverlay = styled(motion.div)`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.1);
+  z-index: 999;
+  cursor: pointer;
 `;
 
 const ChatWindow = styled(motion.div)`
@@ -131,7 +143,7 @@ const Message = styled(motion.div)`
   word-wrap: break-word;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
-  
+
   ${props => props.$isUser ? `
     background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
     color: white;
@@ -284,7 +296,7 @@ const PageActionMessage = styled.div`
   gap: 8px;
   font-size: 14px;
   font-weight: 500;
-  
+
   span {
     font-size: 16px;
   }
@@ -348,7 +360,7 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
         console.log('저장된 메시지 파싱 실패, 기본 메시지 사용');
       }
     }
-    
+
     return [
       {
         id: 1,
@@ -358,7 +370,10 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
         quickActions: [
           { title: "채용공고 등록", action: "navigate", target: "/job-posting", icon: "📝" },
           { title: "지원자 관리", action: "navigate", target: "/applicants", icon: "👥" },
-          { title: "면접 관리", action: "navigate", target: "/interview", icon: "📅" }
+          { title: "면접 관리", action: "navigate", target: "/interview", icon: "📅" },
+          { title: "채용공고 조회", action: "chat", message: "채용공고 목록을 보여주세요", icon: "📋" },
+          { title: "지원자 통계", action: "chat", message: "지원자 통계를 보여주세요", icon: "📊" },
+          { title: "메일 발송", action: "chat", message: "메일 템플릿을 보여주세요", icon: "📧" }
         ]
       }
     ];
@@ -416,7 +431,7 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
       // API 호출
       const response = await pickChatbotApi.chat(textToSend);
       console.log('🔍 [DEBUG] API 응답 받음:', response);
-      
+
       const botMessage = {
         id: Date.now() + 1,
         text: response.response,
@@ -426,31 +441,31 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
         quickActions: response.quick_actions || [],
         pageAction: response.page_action || null
       };
-      
+
       console.log('🔍 [DEBUG] 봇 메시지 생성:', botMessage);
-      
+
       setMessages(prev => [...prev, botMessage]);
-      
+
       // 페이지 액션이 있으면 자동 처리
       if (botMessage.pageAction) {
         console.log('🔍 [DEBUG] 페이지 액션 감지:', botMessage.pageAction);
-        
+
         // 페이지 액션 우선순위 처리
         const handlePageAction = () => {
           if (botMessage.pageAction.action === 'navigate') {
             // 새로운 페이지 네비게이션 처리
             const pageAction = botMessage.pageAction;
             console.log('🎯 [페이지 네비게이션] 처리:', pageAction);
-            
+
             // 챗창 상태를 유지하면서 페이지 이동
             sessionStorage.setItem('pickChatbotIsOpen', 'true');
-            
+
             // React Router를 사용한 페이지 이동
             if (window.handlePageAction) {
               // App.js의 handlePageAction 함수 호출
               console.log('🎯 [페이지 네비게이션] handlePageAction 호출:', `changePage:${pageAction.path.replace('/', '')}`);
               window.handlePageAction(`changePage:${pageAction.path.replace('/', '')}`);
-              
+
               // 완전자율에이전트: 페이지 이동 후 자동 액션 실행 (더 긴 지연 시간)
               console.log('🤖 [완전자율에이전트] 자동 액션 예약:', pageAction);
               setTimeout(() => {
@@ -462,11 +477,11 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
               console.log('🎯 [페이지 네비게이션] fallback URL 변경:', pageAction.path);
               window.location.href = pageAction.path;
             }
-            
+
           } else if (botMessage.pageAction.action === 'openAIJobRegistration') {
             // AI 채용공고 등록 페이지로 이동 (자동입력 데이터 포함)
             sessionStorage.setItem('pickChatbotIsOpen', 'true');
-            
+
             // 자동입력 데이터가 있으면 URL 파라미터로 전달
             if (botMessage.pageAction.auto_fill_data) {
               const autoFillParam = encodeURIComponent(JSON.stringify(botMessage.pageAction.auto_fill_data));
@@ -492,9 +507,9 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
               "현재 페이지에서 계속하기"
             ]
           };
-          
+
           setMessages(prev => [...prev, navigationMessage]);
-          
+
           // 자동 이동은 5초 후로 연장 (사용자 선택 시간 확보)
           setTimeout(() => {
             // 사용자가 아직 선택하지 않았다면 자동 이동
@@ -511,7 +526,7 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
       }
     } catch (error) {
       console.error('🔍 [DEBUG] 챗봇 API 오류:', error);
-      
+
       const errorMessage = {
         id: Date.now() + 1,
         text: "죄송합니다. 일시적인 오류가 발생했습니다. 잠시 후 다시 시도해주세요.",
@@ -520,7 +535,7 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
         suggestions: ["다시 시도하기", "다른 질문하기"],
         quickActions: []
       };
-      
+
       setMessages(prev => [...prev, errorMessage]);
     } finally {
       setIsLoading(false);
@@ -546,13 +561,13 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
       const currentMessage = messages[messages.length - 1];
       if (currentMessage && currentMessage.isNavigationPrompt && currentMessage.pageAction) {
         const pageAction = currentMessage.pageAction;
-        
+
         if (pageAction.action === 'navigate') {
           sessionStorage.setItem('pickChatbotIsOpen', 'true');
           window.location.href = pageAction.target;
         } else if (pageAction.action === 'openAIJobRegistration') {
           sessionStorage.setItem('pickChatbotIsOpen', 'true');
-          
+
           if (pageAction.auto_fill_data) {
             const autoFillParam = encodeURIComponent(JSON.stringify(pageAction.auto_fill_data));
             window.location.href = `/job-posting?autoFill=${autoFillParam}`;
@@ -573,7 +588,7 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
       setMessages(prev => [...prev, continueMessage]);
       return;
     }
-    
+
     // 기존 제안 처리 로직
     handleSendMessage(suggestion);
   };
@@ -581,15 +596,15 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
         // 완전자율에이전트: 자동 액션 실행 함수
   const executeAutoActions = (pageAction) => {
     console.log('🤖 [완전자율에이전트] 자동 액션 실행:', pageAction);
-    
+
     const { path, additional_data } = pageAction;
-    
+
     // 페이지별 자동 액션 매핑
     const autoActions = {
       '/github-test': () => {
         if (additional_data?.username) {
           console.log('🤖 [완전자율에이전트] GitHub 분석 자동 실행:', additional_data.username);
-          
+
           // 더 정확한 입력 필드 찾기
           const usernameInput = document.querySelector('input[placeholder*="GitHub"], input[name="username"], #username, input[type="text"]');
           if (usernameInput) {
@@ -597,7 +612,7 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
             usernameInput.value = additional_data.username;
             usernameInput.dispatchEvent(new Event('input', { bubbles: true }));
             usernameInput.dispatchEvent(new Event('change', { bubbles: true }));
-            
+
             // 분석 버튼 찾기 및 클릭 (더 정확한 선택자)
             setTimeout(() => {
               const analyzeButton = document.querySelector('button[type="submit"], button:contains("분석"), button:contains("Analyze"), button:contains("Submit"), button:contains("확인")');
@@ -626,7 +641,7 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
         }
       }
     };
-    
+
     // 해당 페이지의 자동 액션 실행
     if (autoActions[path]) {
       console.log('🤖 [완전자율에이전트] 페이지 액션 실행:', path);
@@ -647,7 +662,7 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
     } else if (action.action === 'openAIJobRegistration') {
       // AI 채용공고 등록 페이지로 이동
       sessionStorage.setItem('pickChatbotIsOpen', 'true');
-      
+
       // 자동입력 데이터가 있으면 URL 파라미터로 전달
       if (action.auto_fill_data) {
         const autoFillParam = encodeURIComponent(JSON.stringify(action.auto_fill_data));
@@ -664,10 +679,10 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
 
     // 1️⃣ 이모지 리스트 (섹션 구분용)
     const EMOJIS = ["📋", "💡", "🎯", "🔍", "📊", "🤝", "💼", "📝", "🚀", "💻"];
-    
+
     // 2️⃣ 숫자 항목 정규식 (숫자. 뒤에 한 칸만 남김)
     const NUM_LIST_RE = /\b(\d+)\.\s+/g;
-    
+
     // 3️⃣ 이모지 찾기
     const EMOJI_RE = new RegExp('(' + EMOJIS.map(emoji => emoji.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|') + ')', 'g');
 
@@ -700,10 +715,10 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
   // 강제 새로고침 감지 및 초기화 (수정)
   useEffect(() => {
     // 페이지 로드 시 강제 새로고침 감지
-    const isHardRefresh = performance.navigation.type === 1 || 
-                         (performance.getEntriesByType('navigation')[0] && 
+    const isHardRefresh = performance.navigation.type === 1 ||
+                         (performance.getEntriesByType('navigation')[0] &&
                           performance.getEntriesByType('navigation')[0].type === 'reload');
-    
+
     // Ctrl+F5 또는 F5로 강제 새로고침된 경우에만 초기화
     if (isHardRefresh) {
       console.log('🔍 강제 새로고침 감지됨 - 세션 초기화');
@@ -712,7 +727,7 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
       sessionStorage.removeItem('pickChatbotShouldReset');
       // 챗창 상태는 유지 (제거하지 않음)
       // sessionStorage.removeItem('pickChatbotIsOpen'); // 이 줄 제거
-      
+
       // 컴포넌트 상태를 기본값으로 리셋
       const defaultMessage = {
         id: Date.now(),
@@ -773,36 +788,50 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
     // 챗창 상태는 그대로 유지
   };
 
+  // 배경 클릭 핸들러 추가
+  const handleBackgroundClick = (e) => {
+    // 배경 오버레이 클릭 시에만 최소화
+    if (e.target === e.currentTarget) {
+      onOpenChange('floating');
+      sessionStorage.setItem('pickChatbotIsOpen', 'floating');
+    }
+  };
+
   return (
     <>
-      {/* 플로팅 버튼 상태 */}
-      <AnimatePresence>
-        {isOpen === 'floating' && (
-          <FloatingButton
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0, scale: 0.8 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-            onClick={() => {
-              onOpenChange(true);
-              sessionStorage.setItem('helpChatbotIsOpen', 'true');
-            }}
-            title="픽톡 열기"
-          >
-            💬
-          </FloatingButton>
-        )}
-      </AnimatePresence>
+      {/* 플로팅 버튼 - 항상 표시 */}
+      <FloatingButton
+        initial={{ opacity: 0, scale: 0.8 }}
+        animate={{ opacity: 1, scale: 1 }}
+        transition={{ duration: 0.3, ease: "easeOut" }}
+        onClick={() => {
+          onOpenChange(true);
+          sessionStorage.setItem('pickChatbotIsOpen', 'true');
+        }}
+        title="픽톡 열기"
+        style={{ display: isOpen === true ? 'none' : 'flex' }}
+      >
+        💬
+      </FloatingButton>
 
       {/* 채팅창 상태 */}
       <AnimatePresence>
         {isOpen === true && (
-          <ChatbotContainer
-            initial={{ opacity: 0, scale: 0.8, y: 20 }}
-            animate={{ opacity: 1, scale: 1, y: 0 }}
-            exit={{ opacity: 0, scale: 0.8, y: 20 }}
-            transition={{ duration: 0.3, ease: "easeOut" }}
-          >
+          <>
+            {/* 배경 오버레이 */}
+            <BackgroundOverlay
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              onClick={handleBackgroundClick}
+            />
+            <ChatbotContainer
+              initial={{ opacity: 0, scale: 0.8, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.8, y: 20 }}
+              transition={{ duration: 0.3, ease: "easeOut" }}
+            >
           <ChatWindow>
             <ChatHeader>
               <HeaderInfo>
@@ -841,7 +870,7 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
                       {message.isUser ? message.text : formatResponseText(message.text)}
                     </Message>
                   </MessageContainer>
-                  
+
                   {/* 추천 질문 (최초 1회만 노출) */}
                   {!message.isUser && message.suggestions && message.suggestions.length > 0 && message.id === 1 && (
                     <SuggestionsContainer>
@@ -855,7 +884,7 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
                       ))}
                     </SuggestionsContainer>
                   )}
-                  
+
                   {/* 빠른 액션 */}
                   {!message.isUser && message.quickActions && message.quickActions.length > 0 && (
                     <QuickActionsContainer>
@@ -871,11 +900,11 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
                       ))}
                     </QuickActionsContainer>
                   )}
-                  
+
 
                 </div>
               ))}
-              
+
               {isLoading && (
                 <MessageContainer $isUser={false}>
                   <LoadingDots>
@@ -906,7 +935,7 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
                 placeholder="메시지를 입력하세요..."
                 disabled={isLoading}
               />
-              <SendButton 
+              <SendButton
                 onClick={() => handleSendMessage()}
                 disabled={!inputValue.trim() || isLoading}
               >
@@ -915,6 +944,7 @@ const NewPickChatbot = ({ isOpen, onOpenChange }) => {
             </ChatInput>
           </ChatWindow>
         </ChatbotContainer>
+            </>
         )}
       </AnimatePresence>
     </>

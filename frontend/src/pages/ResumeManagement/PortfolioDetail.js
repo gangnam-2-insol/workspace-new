@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
+import {
   FaArrowLeft,
   FaUser,
   FaCode,
@@ -40,7 +40,7 @@ const BackButton = styled.button`
   cursor: pointer;
   transition: var(--transition);
   font-weight: 500;
-  
+
   &:hover {
     background: var(--background-secondary);
     border-color: var(--primary-color);
@@ -211,7 +211,7 @@ const LinkButton = styled.a`
   font-size: 11px;
   color: var(--text-primary);
   transition: var(--transition);
-  
+
   &:hover {
     background: var(--background-secondary);
     border-color: var(--primary-color);
@@ -237,12 +237,12 @@ const ActionButton = styled.button`
   align-items: center;
   justify-content: center;
   gap: 8px;
-  
+
   &:hover {
     background: var(--background-secondary);
     border-color: var(--primary-color);
   }
-  
+
   &.primary {
     background: var(--primary-color);
     color: white;
@@ -353,7 +353,7 @@ const PortfolioDetail = () => {
       try {
         // 실제 API 호출 시도
         const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/portfolios/${id}`);
-        
+
         if (response.ok) {
           const data = await response.json();
           setPortfolio(data);
@@ -437,7 +437,7 @@ const PortfolioDetail = () => {
                 <InfoValue>{portfolio.updatedAt}</InfoValue>
               </InfoItem>
             </InfoGrid>
-            
+
             <div style={{ marginTop: '16px', padding: '16px', background: 'var(--background-secondary)', borderRadius: 'var(--border-radius)' }}>
               <div style={{ fontSize: '13px', color: 'var(--text-secondary)', lineHeight: '1.5' }}>
                 {portfolio.description}
@@ -599,4 +599,4 @@ const PortfolioDetail = () => {
   );
 };
 
-export default PortfolioDetail; 
+export default PortfolioDetail;

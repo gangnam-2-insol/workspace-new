@@ -7,6 +7,7 @@ import TitleRecommendationModal from '../../components/TitleRecommendationModal'
 // import TestAutoFillButton from '../../components/TestAutoFillButton';
 import './TextBasedRegistration.css';
 import { FiX, FiArrowLeft, FiArrowRight, FiCheck, FiFileText, FiClock, FiMapPin, FiDollarSign, FiUsers, FiMail, FiCalendar, FiFolder, FiSettings } from 'react-icons/fi';
+import companyCultureApi from '../../services/companyCultureApi';
 
 // Styled Components
 const Overlay = styled(motion.div)`
@@ -34,7 +35,7 @@ const Modal = styled(motion.div)`
   margin-left: 2%;
   margin-right: auto;
   transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  
+
   ${props => !props.aiActive && `
     width: 90%;
     max-width: 85%;
@@ -85,7 +86,7 @@ const Content = styled.div`
   max-height: calc(95vh - 120px);
   overflow-y: auto;
   transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
-  
+
   ${props => !props.aiActive && `
     padding-right: 32px;
   `}
@@ -180,15 +181,18 @@ const AINotice = styled.div`
   font-weight: 600;
 `;
 
-const TextBasedRegistration = ({ 
-  isOpen, 
-  onClose, 
+const TextBasedRegistration = ({
+  isOpen,
+  onClose,
   onComplete,
   organizationData = { departments: [] },
   autoFillData = null
 }) => {
+  const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
+    title: '',
     department: '',
+    position: '',
     experience: '신입',
     experienceYears: '',
     headcount: '',
@@ -198,8 +202,65 @@ const TextBasedRegistration = ({
     locationCity: '',
     salary: '',
     contactEmail: '',
-    deadline: ''
+    deadline: '',
+    requirements: '',
+    benefits: '',
+    // 인재상 선택 필드 추가
+    selected_culture_id: null
   });
+
+  // 인재상 관련 상태
+  const [cultures, setCultures] = useState([]);
+  const [defaultCulture, setDefaultCulture] = useState(null);
+  const [loadingCultures, setLoadingCultures] = useState(false);
+
+  // 인재상 데이터 로드
+  useEffect(() => {
+    loadCultures();
+  }, []);
+
+  const loadCultures = async () => {
+    try {
+      setLoadingCultures(true);
+
+      // 모든 인재상 데이터 로드
+      const culturesData = await companyCultureApi.getAllCultures(true);
+      setCultures(culturesData);
+
+      // 기본 인재상 데이터 로드 (에러 처리 포함)
+      let defaultCultureData = null;
+      try {
+        defaultCultureData = await companyCultureApi.getDefaultCulture();
+        setDefaultCulture(defaultCultureData);
+      } catch (error) {
+        console.log('기본 인재상이 설정되지 않았습니다:', error.message);
+        setDefaultCulture(null);
+      }
+
+      // 기본 인재상이 있으면 formData에 설정
+      if (defaultCultureData) {
+        setFormData(prev => ({
+          ...prev,
+          selected_culture_id: defaultCultureData.id
+        }));
+        console.log('기본 인재상이 formData에 설정됨:', defaultCultureData.id);
+      } else {
+        // 기본 인재상이 없으면 첫 번째 활성 인재상을 기본값으로 설정
+        if (culturesData && culturesData.length > 0) {
+          const firstCulture = culturesData[0];
+          setFormData(prev => ({
+            ...prev,
+            selected_culture_id: firstCulture.id
+          }));
+          console.log('첫 번째 인재상이 formData에 설정됨:', firstCulture.id);
+        }
+      }
+    } catch (error) {
+      console.error('인재상 로드 실패:', error);
+    } finally {
+      setLoadingCultures(false);
+    }
+  };
 
   const [aiChatbot, setAiChatbot] = useState({
     isActive: false,
@@ -221,7 +282,7 @@ const TextBasedRegistration = ({
   const callLangGraphAgent = async (message) => {
     try {
       console.log('🤖 랭그래프 Agent 호출:', message);
-      
+
       const response = await fetch('/api/langgraph-agent', {
         method: 'POST',
         headers: {
@@ -244,7 +305,7 @@ const TextBasedRegistration = ({
       // 추출된 필드 정보가 있으면 폼에 자동 적용
       if (result.extracted_fields && Object.keys(result.extracted_fields).length > 0) {
         console.log('✅ 추출된 필드 정보:', result.extracted_fields);
-        
+
         setFormData(prev => {
           const newFormData = { ...prev, ...result.extracted_fields };
           console.log('📝 폼 데이터 업데이트:', newFormData);
@@ -274,7 +335,7 @@ const TextBasedRegistration = ({
       "서울에서 마케팅팀 1명 채용하려고 해",
       "신입 개발자 3명 모집, 9 to 6 근무"
     ];
-    
+
     const randomMessage = testMessages[Math.floor(Math.random() * testMessages.length)];
     callLangGraphAgent(randomMessage);
   };
@@ -283,7 +344,7 @@ const TextBasedRegistration = ({
   useEffect(() => {
     if (isOpen) {
       console.log('=== TextBasedRegistration 모달 열림 - AI 도우미 자동 시작 ===');
-      
+
       // 자동입력 데이터가 있으면 폼에 적용
       if (autoFillData) {
         console.log('자동입력 데이터 적용:', autoFillData);
@@ -292,7 +353,7 @@ const TextBasedRegistration = ({
           ...autoFillData
         }));
       }
-      
+
       // 먼저 모달을 AI 어시스턴트 크기로 설정
       setTimeout(() => {
         setAiChatbot({
@@ -331,7 +392,7 @@ const TextBasedRegistration = ({
     const handleLangGraphFieldUpdate = (event) => {
       const extractedFields = event.detail.extracted_fields;
       console.log('🎯 랭그래프 Agent 이벤트 수신:', extractedFields);
-      
+
       if (extractedFields && Object.keys(extractedFields).length > 0) {
         // 필드명 매핑 (백엔드 필드명 → 폼 필드명)
         const mappedFields = {};
@@ -356,9 +417,9 @@ const TextBasedRegistration = ({
               break;
           }
         });
-        
+
         console.log('🔄 필드 매핑 결과:', mappedFields);
-        
+
         setFormData(prev => {
           const newFormData = { ...prev, ...mappedFields };
           console.log('📝 폼 데이터 업데이트:', newFormData);
@@ -368,7 +429,7 @@ const TextBasedRegistration = ({
         // 성공 알림
         const fieldNames = Object.keys(mappedFields).join(', ');
         console.log(`✅ 랭그래프 Agent에서 추출한 정보가 폼에 자동 입력되었습니다! (${fieldNames})`);
-        
+
         // 시각적 피드백 (임시 알림)
         const notification = document.createElement('div');
         notification.style.cssText = `
@@ -386,21 +447,21 @@ const TextBasedRegistration = ({
         `;
         notification.textContent = `🎯 ${fieldNames} 필드가 자동으로 입력되었습니다!`;
         document.body.appendChild(notification);
-        
+
         // 3초 후 알림 제거
         setTimeout(() => {
           if (notification.parentNode) {
             notification.parentNode.removeChild(notification);
           }
         }, 3000);
-        
+
       } else {
         console.log('⚠️ 추출된 필드가 없습니다.');
       }
     };
 
         window.addEventListener('langGraphDataUpdate', handleLangGraphFieldUpdate);
-    
+
     return () => {
       window.removeEventListener('langGraphDataUpdate', handleLangGraphFieldUpdate);
     };
@@ -413,7 +474,7 @@ const TextBasedRegistration = ({
       console.log('=== TextBasedRegistration - 폼 필드 업데이트 이벤트 수신 ===');
       console.log('필드:', field);
       console.log('값:', value);
-      
+
       setFormData(prev => {
         const newFormData = { ...prev, [field]: value };
         console.log('업데이트 후 formData:', newFormData);
@@ -505,7 +566,7 @@ const TextBasedRegistration = ({
 
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    
+
     // 급여 필드에 대한 특별 처리
     if (name === 'salary') {
       // 입력값에서 숫자만 추출 (콤마, 하이픈, 틸드 포함)
@@ -515,21 +576,21 @@ const TextBasedRegistration = ({
       setFormData(prev => ({ ...prev, [name]: value }));
     }
   };
-  
+
   // 급여를 표시용으로 포맷하는 함수
   const formatSalaryDisplay = (salaryValue) => {
     if (!salaryValue) return '';
-    
+
     // 이미 "만원"이 포함되어 있으면 그대로 반환
     if (salaryValue.includes('만원') || salaryValue.includes('협의') || salaryValue.includes('면접')) {
       return salaryValue;
     }
-    
+
     // 숫자만 있는 경우 "만원" 추가
     if (/^\d+([,\d~\-]*)?$/.test(salaryValue.trim())) {
       return `${salaryValue}만원`;
     }
-    
+
     return salaryValue;
   };
 
@@ -555,13 +616,13 @@ const TextBasedRegistration = ({
       ...titleRecommendationModal.finalFormData,
       title: selectedTitle
     };
-    
+
     // 제목 추천 모달 닫기
     setTitleRecommendationModal({
       isOpen: false,
       finalFormData: null
     });
-    
+
     // 최종 등록 완료
     onComplete(finalData);
   };
@@ -573,13 +634,13 @@ const TextBasedRegistration = ({
       ...titleRecommendationModal.finalFormData,
       title: customTitle
     };
-    
+
     // 제목 추천 모달 닫기
     setTitleRecommendationModal({
       isOpen: false,
       finalFormData: null
     });
-    
+
     // 최종 등록 완료
     onComplete(finalData);
   };
@@ -595,7 +656,7 @@ const TextBasedRegistration = ({
   // 모달 완전 초기화 함수
   const resetModalState = () => {
     console.log('=== TextBasedRegistration 상태 초기화 ===');
-    
+
     // 폼 데이터 초기화
     setFormData({
       department: '',
@@ -637,7 +698,7 @@ const TextBasedRegistration = ({
   // 테스트 자동입력 처리
   const handleTestAutoFill = (sampleData) => {
     console.log('테스트 자동입력 시작:', sampleData);
-    
+
     // 하드코딩된 테스트 값들 (모든 필드 포함)
     const testData = {
       department: '개발팀',
@@ -655,9 +716,9 @@ const TextBasedRegistration = ({
 
     // 폼 데이터 일괄 업데이트
     setFormData(prev => ({ ...prev, ...testData }));
-    
+
     console.log('테스트 자동입력 완료:', testData);
-    
+
     // 사용자에게 알림
     alert('🧪 테스트 데이터가 자동으로 입력되었습니다!\n\n📋 입력된 정보:\n• 부서: 개발팀\n• 경력: 2년이상 (2년)\n• 모집인원: 2명\n• 주요업무: 웹개발, 프론트엔드 개발\n• 근무시간: 09:00-18:00\n• 근무일: 주중 (월-금)\n• 근무위치: 서울 강남구\n• 연봉: 4,000만원-6,000만원\n• 연락처: hr@company.com\n• 마감일: 2024년 9월 30일');
   };
@@ -734,8 +795,8 @@ const TextBasedRegistration = ({
                     <label className="custom-label">구인 부서</label>
                     <input
                       type="text"
-                      name="department" 
-                      value={formData.department || ''} 
+                      name="department"
+                      value={formData.department || ''}
                       onChange={handleInputChange}
                       placeholder="예: 개발팀, 기획팀, 마케팅팀"
                       required
@@ -746,9 +807,9 @@ const TextBasedRegistration = ({
                       }}
                     />
                     {formData.department && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
+                      <div style={{
+                        fontSize: '0.8em',
+                        color: '#667eea',
                         marginTop: '4px',
                         fontWeight: 'bold'
                       }}>
@@ -760,11 +821,11 @@ const TextBasedRegistration = ({
                     <label className="custom-label">구인 인원수</label>
                     <input
                       type="text"
-                      name="headcount" 
-                      value={formData.headcount || ''} 
-                      onChange={handleInputChange} 
+                      name="headcount"
+                      value={formData.headcount || ''}
+                      onChange={handleInputChange}
                       placeholder="예: 1명, 2명, 3명"
-                      required 
+                      required
                       className="custom-input"
                       style={{
                         borderColor: formData.headcount ? '#667eea' : '#cbd5e0',
@@ -772,9 +833,9 @@ const TextBasedRegistration = ({
                       }}
                     />
                     {formData.headcount && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
+                      <div style={{
+                        fontSize: '0.8em',
+                        color: '#667eea',
                         marginTop: '4px',
                         fontWeight: 'bold'
                       }}>
@@ -797,9 +858,9 @@ const TextBasedRegistration = ({
                       }}
                     />
                     {formData.mainDuties && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
+                      <div style={{
+                        fontSize: '0.8em',
+                        color: '#667eea',
                         marginTop: '4px',
                         fontWeight: 'bold'
                       }}>
@@ -811,11 +872,11 @@ const TextBasedRegistration = ({
                     <label className="custom-label">근무 시간</label>
                     <input
                       type="text"
-                      name="workHours" 
-                      value={formData.workHours || ''} 
-                      onChange={handleInputChange} 
+                      name="workHours"
+                      value={formData.workHours || ''}
+                      onChange={handleInputChange}
                       placeholder="예: 09:00 ~ 18:00, 유연근무제"
-                      required 
+                      required
                       className="custom-input"
                       style={{
                         borderColor: formData.workHours ? '#667eea' : '#cbd5e0',
@@ -823,9 +884,9 @@ const TextBasedRegistration = ({
                       }}
                     />
                     {formData.workHours && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
+                      <div style={{
+                        fontSize: '0.8em',
+                        color: '#667eea',
                         marginTop: '4px',
                         fontWeight: 'bold'
                       }}>
@@ -837,11 +898,11 @@ const TextBasedRegistration = ({
                     <label className="custom-label">근무 요일</label>
                     <input
                       type="text"
-                      name="workDays" 
-                      value={formData.workDays || ''} 
-                      onChange={handleInputChange} 
+                      name="workDays"
+                      value={formData.workDays || ''}
+                      onChange={handleInputChange}
                       placeholder="예: 월~금, 월~토, 유연근무"
-                      required 
+                      required
                       className="custom-input"
                       style={{
                         borderColor: formData.workDays ? '#667eea' : '#cbd5e0',
@@ -849,9 +910,9 @@ const TextBasedRegistration = ({
                       }}
                     />
                     {formData.workDays && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
+                      <div style={{
+                        fontSize: '0.8em',
+                        color: '#667eea',
                         marginTop: '4px',
                         fontWeight: 'bold'
                       }}>
@@ -891,9 +952,9 @@ const TextBasedRegistration = ({
                       )}
                     </div>
                     {formData.salary && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
+                      <div style={{
+                        fontSize: '0.8em',
+                        color: '#667eea',
                         marginTop: '4px',
                         fontWeight: 'bold'
                       }}>
@@ -917,13 +978,53 @@ const TextBasedRegistration = ({
                       }}
                     />
                     {formData.contactEmail && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
+                      <div style={{
+                        fontSize: '0.8em',
+                        color: '#667eea',
                         marginTop: '4px',
                         fontWeight: 'bold'
                       }}>
                         ✅ 입력됨: {formData.contactEmail}
+                      </div>
+                    )}
+                  </div>
+                  <div className="custom-form-group">
+                    <label className="custom-label">회사 인재상</label>
+                    <select
+                      name="selected_culture_id"
+                      value={formData.selected_culture_id || ''}
+                      onChange={handleInputChange}
+                      className="custom-input"
+                      style={{
+                        borderColor: formData.selected_culture_id ? '#667eea' : '#cbd5e0',
+                        boxShadow: formData.selected_culture_id ? '0 0 0 3px rgba(102, 126, 234, 0.2)' : 'none'
+                      }}
+                    >
+                      <option value="">기본 인재상 사용</option>
+                      {cultures.map(culture => (
+                        <option key={culture.id} value={culture.id}>
+                          {culture.name} {culture.is_default ? '(기본)' : ''}
+                        </option>
+                      ))}
+                    </select>
+                    {formData.selected_culture_id && (
+                      <div style={{
+                        fontSize: '0.8em',
+                        color: '#667eea',
+                        marginTop: '4px',
+                        fontWeight: 'bold'
+                      }}>
+                        ✅ 선택됨: {cultures.find(c => c.id === formData.selected_culture_id)?.name}
+                      </div>
+                    )}
+                    {!formData.selected_culture_id && defaultCulture && (
+                      <div style={{
+                        fontSize: '0.8em',
+                        color: '#28a745',
+                        marginTop: '4px',
+                        fontWeight: 'bold'
+                      }}>
+                        ✅ 기본 인재상: {defaultCulture.name}
                       </div>
                     )}
                   </div>
@@ -942,9 +1043,9 @@ const TextBasedRegistration = ({
                       }}
                     />
                     {formData.deadline && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
+                      <div style={{
+                        fontSize: '0.8em',
+                        color: '#667eea',
                         marginTop: '4px',
                         fontWeight: 'bold'
                       }}>
@@ -967,9 +1068,9 @@ const TextBasedRegistration = ({
                       }}
                     />
                     {formData.experience && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
+                      <div style={{
+                        fontSize: '0.8em',
+                        color: '#667eea',
                         marginTop: '4px',
                         fontWeight: 'bold'
                       }}>
@@ -991,18 +1092,18 @@ const TextBasedRegistration = ({
                       }}
                     />
                     {formData.additionalInfo && (
-                      <div style={{ 
-                        fontSize: '0.8em', 
-                        color: '#667eea', 
+                      <div style={{
+                        fontSize: '0.8em',
+                        color: '#667eea',
                         marginTop: '4px',
                         fontWeight: 'bold'
                       }}>
                         ✅ 입력됨: {formData.additionalInfo.length}자
                       </div>
                     )}
-                    <div style={{ 
-                      fontSize: '0.75em', 
-                      color: '#666', 
+                    <div style={{
+                      fontSize: '0.75em',
+                      color: '#666',
                       marginTop: '8px',
                       fontStyle: 'italic'
                     }}>
@@ -1024,8 +1125,8 @@ const TextBasedRegistration = ({
                 <Button className="ai" onClick={startAIChatbot}>
                   🤖 AI 도우미 재시작
                     </Button>
-                <Button 
-                  className="ai" 
+                <Button
+                  className="ai"
                   onClick={testLangGraphAgent}
                   style={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}
                 >
@@ -1055,4 +1156,4 @@ const TextBasedRegistration = ({
   );
 };
 
-export default TextBasedRegistration; 
+export default TextBasedRegistration;

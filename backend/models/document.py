@@ -54,7 +54,7 @@ class ResumeCreate(DocumentBase):
 class ResumeDocument(DocumentBase):
     id: str = Field(alias="_id", description="이력서 ID")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="생성일시")
-    
+
     class Config:
         populate_by_name = True
 
@@ -67,27 +67,26 @@ class CoverLetterCreate(DocumentBase):
 class CoverLetterDocument(DocumentBase):
     id: str = Field(alias="_id", description="자기소개서 ID")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="생성일시")
-    
+
     class Config:
         populate_by_name = True
 
-# 포트폴리오 모델 (OCR 기반)
+# 포트폴리오 모델 (OCR 기반) - DB(without yc).txt 구조에 맞춤
 class PortfolioCreate(DocumentBase):
-    items: List[PortfolioItem] = Field(..., description="포트폴리오 아이템들")
-    analysis_score: Optional[float] = Field(None, description="분석 점수 (0-100)")
-    status: str = Field(default="active", description="포트폴리오 상태")
+    analysis_score: Optional[float] = Field(None, ge=0, le=100, description="분석 점수 (0-100, default 0.0)")
+    status: str = Field(default="active", description="포트폴리오 상태 (active|inactive)")
+    version: int = Field(default=1, ge=1, description="버전 (>=1)")
 
 class PortfolioDocument(PortfolioCreate):
     id: str = Field(alias="_id", description="포트폴리오 ID")
-    version: int = Field(default=1, description="버전")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="생성일시")
     updated_at: datetime = Field(default_factory=datetime.utcnow, description="수정일시")
-    
+
     @validator('analysis_score')
     def validate_analysis_score(cls, v):
         if v is not None and (v < 0 or v > 100):
             raise ValueError('분석 점수는 0-100 사이여야 합니다')
         return v
-    
+
     class Config:
         populate_by_name = True

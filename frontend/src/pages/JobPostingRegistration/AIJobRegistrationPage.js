@@ -2,20 +2,22 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
-import { 
-  FiArrowLeft, 
-  FiCheck, 
-  FiFileText, 
-  FiClock, 
-  FiMapPin, 
-  FiDollarSign, 
-  FiUsers, 
-  FiMail, 
-  FiCalendar, 
-  FiSettings
+import {
+  FiArrowLeft,
+  FiCheck,
+  FiFileText,
+  FiClock,
+  FiMapPin,
+  FiDollarSign,
+  FiUsers,
+  FiMail,
+  FiCalendar,
+  FiSettings,
+  FiPlus, FiEdit3, FiTrash2, FiEye, FiBriefcase
 } from 'react-icons/fi';
 import TitleRecommendationModal from '../../components/TitleRecommendationModal';
 import jobPostingApi from '../../services/jobPostingApi';
+import companyCultureApi from '../../services/companyCultureApi';
 
 // Styled Components
 const PageContainer = styled.div`
@@ -132,7 +134,7 @@ const Input = styled.input`
   border-radius: 8px;
   font-size: 16px;
   transition: all 0.3s ease;
-  
+
   &:focus {
     outline: none;
     border-color: #667eea;
@@ -154,7 +156,7 @@ const TextArea = styled.textarea`
   min-height: 100px;
   resize: vertical;
   transition: all 0.3s ease;
-  
+
   &:focus {
     outline: none;
     border-color: #667eea;
@@ -175,7 +177,7 @@ const Select = styled.select`
   font-size: 16px;
   background: white;
   transition: all 0.3s ease;
-  
+
   &:focus {
     outline: none;
     border-color: #667eea;
@@ -295,12 +297,12 @@ const SampleButton = styled.button`
   font-weight: 600;
   cursor: pointer;
   transition: all 0.3s ease;
-  
+
   &:hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 25px rgba(240, 147, 251, 0.3);
   }
-  
+
   &:active {
     transform: translateY(0);
   }
@@ -308,9 +310,15 @@ const SampleButton = styled.button`
 
 const AIJobRegistrationPage = () => {
   const navigate = useNavigate();
-  
+
   // 개발/테스트 환경 여부 확인 (실제 운영에서는 false로 설정)
   const isDevelopment = process.env.NODE_ENV === 'development' || process.env.REACT_APP_SHOW_TEST_SECTION === 'true';
+
+  // 인재상 관련 상태
+  const [cultures, setCultures] = useState([]);
+  const [defaultCulture, setDefaultCulture] = useState(null);
+  const [loadingCultures, setLoadingCultures] = useState(false);
+
   const [formData, setFormData] = useState({
     // 기본 정보
     department: '',
@@ -318,18 +326,18 @@ const AIJobRegistrationPage = () => {
     experience: '신입',
     experienceYears: '',
     headcount: '',
-    
+
     // 업무 정보
     mainDuties: '',
     workHours: '',
     workDays: '',
     locationCity: '',
-    
+
     // 조건 정보
     salary: '',
     contactEmail: '',
     deadline: '',
-    
+
     // 분석을 위한 추가 필드들
     jobKeywords: [], // 직무 키워드
     industry: '', // 산업 분야
@@ -337,6 +345,9 @@ const AIJobRegistrationPage = () => {
     experienceLevel: '신입', // 경력 수준
     experienceMinYears: null, // 최소 경력
     experienceMaxYears: null, // 최대 경력
+
+    // 인재상 선택 필드 추가
+    selected_culture_id: null
   });
 
   const [titleRecommendationModal, setTitleRecommendationModal] = useState({
@@ -349,7 +360,7 @@ const AIJobRegistrationPage = () => {
     const handleFormFieldUpdate = (event) => {
       const { field, value } = event.detail;
       console.log('AI 필드 업데이트:', field, value);
-      
+
       setFormData(prev => ({
         ...prev,
         [field]: value
@@ -370,7 +381,7 @@ const AIJobRegistrationPage = () => {
     };
 
     window.addEventListener('updateFormField', handleFormFieldUpdate);
-    
+
     Object.entries(fieldEvents).forEach(([eventName, fieldName]) => {
       const handler = (event) => {
         const { value } = event.detail;
@@ -387,9 +398,57 @@ const AIJobRegistrationPage = () => {
     };
   }, []);
 
+  // 인재상 데이터 로드
+  useEffect(() => {
+    loadCultures();
+  }, []);
+
+  const loadCultures = async () => {
+    try {
+      setLoadingCultures(true);
+
+      // 모든 인재상 데이터 로드
+      const culturesData = await companyCultureApi.getAllCultures(true);
+      setCultures(culturesData);
+
+      // 기본 인재상 데이터 로드 (에러 처리 포함)
+      let defaultCultureData = null;
+      try {
+        defaultCultureData = await companyCultureApi.getDefaultCulture();
+        setDefaultCulture(defaultCultureData);
+      } catch (error) {
+        console.log('기본 인재상이 설정되지 않았습니다:', error.message);
+        setDefaultCulture(null);
+      }
+
+      // 기본 인재상이 있으면 formData에 설정
+      if (defaultCultureData) {
+        setFormData(prev => ({
+          ...prev,
+          selected_culture_id: defaultCultureData.id
+        }));
+        console.log('기본 인재상이 formData에 설정됨:', defaultCultureData.id);
+      } else {
+        // 기본 인재상이 없으면 첫 번째 활성 인재상을 기본값으로 설정
+        if (culturesData && culturesData.length > 0) {
+          const firstCulture = culturesData[0];
+          setFormData(prev => ({
+            ...prev,
+            selected_culture_id: firstCulture.id
+          }));
+          console.log('첫 번째 인재상이 formData에 설정됨:', firstCulture.id);
+        }
+      }
+    } catch (error) {
+      console.error('인재상 로드 실패:', error);
+    } finally {
+      setLoadingCultures(false);
+    }
+  };
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    
+
     // 급여 필드에 대한 특별 처리
     if (name === 'salary') {
       const numericValue = value.replace(/[^\d,~\-]/g, '');
@@ -402,15 +461,15 @@ const AIJobRegistrationPage = () => {
   // 급여를 표시용으로 포맷하는 함수
   const formatSalaryDisplay = (salaryValue) => {
     if (!salaryValue) return '';
-    
+
     if (salaryValue.includes('만원') || salaryValue.includes('협의') || salaryValue.includes('면접')) {
       return salaryValue;
     }
-    
+
     if (/^\d+([,\d~\-]*)?$/.test(salaryValue.trim())) {
       return `${salaryValue}만원`;
     }
-    
+
     return salaryValue;
   };
 
@@ -428,7 +487,7 @@ const AIJobRegistrationPage = () => {
       ...titleRecommendationModal.finalFormData,
       title: selectedTitle
     };
-    
+
     try {
       // 채용공고 데이터 준비
       const jobData = {
@@ -447,7 +506,7 @@ const AIJobRegistrationPage = () => {
         work_type: finalData.mainDuties || '',
         work_hours: finalData.workHours || '',
         contact_email: finalData.contactEmail || '',
-        
+
         // 분석용 필드들
         position: finalData.position || '',
         experience_min_years: finalData.experienceMinYears || null,
@@ -456,7 +515,10 @@ const AIJobRegistrationPage = () => {
         main_duties: finalData.mainDuties || '',
         industry: finalData.industry || '',
         job_category: finalData.jobCategory || '',
-        
+
+        // 인재상 선택 필드
+        selected_culture_id: finalData.selected_culture_id || null,
+
         // 기본 요구사항
         required_documents: ['resume'],
         required_skills: [],
@@ -467,21 +529,21 @@ const AIJobRegistrationPage = () => {
         require_motivation: false,
         require_career_history: false
       };
-      
+
       console.log('생성할 채용공고 데이터:', jobData);
-      
+
       // API 호출하여 DB에 저장
       const newJob = await jobPostingApi.createJobPosting(jobData);
       console.log('채용공고 생성 성공:', newJob);
-      
+
       setTitleRecommendationModal({
         isOpen: false,
         finalFormData: null
       });
-      
+
       // 성공 메시지
       alert('채용공고가 성공적으로 등록되었습니다!');
-      
+
       // 완료 후 job-posting 페이지로 이동
       navigate('/job-posting');
     } catch (error) {
@@ -496,7 +558,7 @@ const AIJobRegistrationPage = () => {
       ...titleRecommendationModal.finalFormData,
       title: customTitle
     };
-    
+
     try {
       // 채용공고 데이터 준비
       const jobData = {
@@ -515,7 +577,7 @@ const AIJobRegistrationPage = () => {
         work_type: finalData.mainDuties || '',
         work_hours: finalData.workHours || '',
         contact_email: finalData.contactEmail || '',
-        
+
         // 분석용 필드들
         position: finalData.position || '',
         experience_min_years: finalData.experienceMinYears || null,
@@ -524,7 +586,10 @@ const AIJobRegistrationPage = () => {
         main_duties: finalData.mainDuties || '',
         industry: finalData.industry || '',
         job_category: finalData.jobCategory || '',
-        
+
+        // 인재상 선택 필드
+        selected_culture_id: finalData.selected_culture_id || null,
+
         // 기본 요구사항
         required_documents: ['resume'],
         required_skills: [],
@@ -535,21 +600,21 @@ const AIJobRegistrationPage = () => {
         require_motivation: false,
         require_career_history: false
       };
-      
+
       console.log('생성할 채용공고 데이터:', jobData);
-      
+
       // API 호출하여 DB에 저장
       const newJob = await jobPostingApi.createJobPosting(jobData);
       console.log('채용공고 생성 성공:', newJob);
-      
+
       setTitleRecommendationModal({
         isOpen: false,
         finalFormData: null
       });
-      
+
       // 성공 메시지
       alert('채용공고가 성공적으로 등록되었습니다!');
-      
+
       // 완료 후 job-posting 페이지로 이동
       navigate('/job-posting');
     } catch (error) {
@@ -704,7 +769,7 @@ const AIJobRegistrationPage = () => {
         ...prev,
         ...selectedData
       }));
-      
+
       // 성공 알림 (상세 정보 포함)
       alert(`🧪 ${selectedData.position} 샘플 데이터가 자동으로 입력되었습니다!\n\n📋 입력된 정보:\n• 부서: ${selectedData.department}\n• 직무: ${selectedData.position}\n• 경력: ${selectedData.experience} (${selectedData.experienceYears}년)\n• 모집인원: ${selectedData.headcount}\n• 주요업무: ${selectedData.mainDuties}\n• 근무시간: ${selectedData.workHours}\n• 근무일: ${selectedData.workDays}\n• 근무위치: ${selectedData.locationCity}\n• 연봉: ${selectedData.salary}\n• 연락처: ${selectedData.contactEmail}\n• 마감일: ${selectedData.deadline}`);
     }
@@ -739,8 +804,8 @@ const AIJobRegistrationPage = () => {
                  </Label>
                  <Input
                    type="text"
-                   name="department" 
-                   value={formData.department || ''} 
+                   name="department"
+                   value={formData.department || ''}
                    onChange={handleInputChange}
                    placeholder="예: 개발팀, 기획팀, 마케팅팀"
                    required
@@ -760,8 +825,8 @@ const AIJobRegistrationPage = () => {
                  </Label>
                  <Input
                    type="text"
-                   name="position" 
-                   value={formData.position || ''} 
+                   name="position"
+                   value={formData.position || ''}
                    onChange={handleInputChange}
                    placeholder="예: 프론트엔드 개발자, 백엔드 개발자"
                    required
@@ -781,11 +846,11 @@ const AIJobRegistrationPage = () => {
                  </Label>
                 <Input
                   type="text"
-                  name="headcount" 
-                  value={formData.headcount || ''} 
-                  onChange={handleInputChange} 
+                  name="headcount"
+                  value={formData.headcount || ''}
+                  onChange={handleInputChange}
                   placeholder="예: 1명, 2명, 3명"
-                  required 
+                  required
                   className={formData.headcount ? 'filled' : ''}
                 />
                 {formData.headcount && (
@@ -822,11 +887,11 @@ const AIJobRegistrationPage = () => {
                  </Label>
                 <Input
                   type="text"
-                  name="workHours" 
-                  value={formData.workHours || ''} 
-                  onChange={handleInputChange} 
+                  name="workHours"
+                  value={formData.workHours || ''}
+                  onChange={handleInputChange}
                   placeholder="예: 09:00 ~ 18:00, 유연근무제"
-                  required 
+                  required
                   className={formData.workHours ? 'filled' : ''}
                 />
                 {formData.workHours && (
@@ -843,11 +908,11 @@ const AIJobRegistrationPage = () => {
                  </Label>
                 <Input
                   type="text"
-                  name="workDays" 
-                  value={formData.workDays || ''} 
-                  onChange={handleInputChange} 
+                  name="workDays"
+                  value={formData.workDays || ''}
+                  onChange={handleInputChange}
                   placeholder="예: 월~금, 월~토, 유연근무"
-                  required 
+                  required
                   className={formData.workDays ? 'filled' : ''}
                 />
                 {formData.workDays && (
@@ -911,6 +976,36 @@ const AIJobRegistrationPage = () => {
                 {formData.contactEmail && (
                   <FilledIndicator>
                     ✅ 입력됨: {formData.contactEmail}
+                  </FilledIndicator>
+                )}
+              </FormGroup>
+
+                             <FormGroup>
+                 <Label>
+                   🏢
+                   회사 인재상
+                 </Label>
+                <Select
+                  name="selected_culture_id"
+                  value={formData.selected_culture_id || ''}
+                  onChange={handleInputChange}
+                  className={formData.selected_culture_id ? 'filled' : ''}
+                >
+                  <option value="">기본 인재상 사용</option>
+                  {cultures.map(culture => (
+                    <option key={culture.id} value={culture.id}>
+                      {culture.name} {culture.is_default ? '(기본)' : ''}
+                    </option>
+                  ))}
+                </Select>
+                {formData.selected_culture_id && (
+                  <FilledIndicator>
+                    ✅ 선택됨: {cultures.find(c => c.id === formData.selected_culture_id)?.name}
+                  </FilledIndicator>
+                )}
+                {!formData.selected_culture_id && defaultCulture && (
+                  <FilledIndicator style={{ color: '#28a745' }}>
+                    ✅ 기본 인재상: {defaultCulture.name}
                   </FilledIndicator>
                 )}
               </FormGroup>

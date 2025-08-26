@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
-import { 
-  FiFileText, 
-  FiDownload, 
-  FiSmartphone, 
-  FiEye, 
+import {
+  FiFileText,
+  FiDownload,
+  FiSmartphone,
+  FiEye,
   FiSearch,
   FiFilter,
   FiPlus,
@@ -62,7 +62,7 @@ const ViewModeButton = styled.button`
   cursor: pointer;
   transition: var(--transition);
   font-size: 10px;
-  
+
   &:hover {
     background: ${props => props.active ? 'var(--primary-color)' : 'var(--background-light)'};
   }
@@ -79,18 +79,18 @@ const Button = styled.button`
   align-items: center;
   gap: 6px;
   font-size: 14px;
-  
+
   &.primary {
     background: var(--primary-color);
     color: white;
   }
-  
+
   &.secondary {
     background: white;
     color: var(--text-primary);
     border: 2px solid var(--border-color);
   }
-  
+
   &:hover {
     transform: translateY(-1px);
     box-shadow: var(--shadow-light);
@@ -110,7 +110,7 @@ const SearchInput = styled.input`
   border: 2px solid var(--border-color);
   border-radius: var(--border-radius);
   font-size: 14px;
-  
+
   &:focus {
     outline: none;
     border-color: var(--primary-color);
@@ -128,7 +128,7 @@ const FilterButton = styled.button`
   gap: 6px;
   transition: var(--transition);
   font-size: 14px;
-  
+
   &:hover {
     border-color: var(--primary-color);
   }
@@ -157,7 +157,7 @@ const ResumeBoardCard = styled(motion.div)`
   align-items: center;
   justify-content: space-between;
   height: 60px;
-  
+
   &:hover {
     transform: translateY(-1px);
     box-shadow: var(--shadow-medium);
@@ -183,7 +183,7 @@ const ResumeCard = styled(motion.div)`
   box-shadow: var(--shadow-light);
   transition: var(--transition);
   border: 2px solid var(--border-color);
-  
+
   &:hover {
     transform: translateY(-3px);
     box-shadow: var(--shadow-medium);
@@ -246,7 +246,7 @@ const ActionButton = styled.button`
   display: flex;
   align-items: center;
   gap: 6px;
-  
+
   &:hover {
     background: var(--background-secondary);
     border-color: var(--primary-color);
@@ -311,25 +311,25 @@ const CustomStatusBadge = styled.span`
   text-transform: uppercase;
   letter-spacing: 0.05em;
 
-  &.approved {
+  &.approved, &.최종합격, &.interview_scheduled {
     background-color: #dcfce7;
     color: #166534;
     border: 2px solid #22c55e;
   }
 
-  &.pending {
+  &.pending, &.보류, &.reviewing {
     background-color: #fef3c7;
     color: #92400e;
     border: 2px solid #f59e0b;
   }
 
-  &.rejected {
+  &.rejected, &.서류불합격 {
     background-color: #fee2e2;
     color: #dc2626;
     border: 2px solid #ef4444;
   }
 
-  &.reviewed {
+  &.reviewed, &.서류합격, &.passed {
     background-color: #dbeafe;
     color: #1e40af;
     border: 2px solid #3b82f6;
@@ -340,12 +340,12 @@ const CustomStatusBadge = styled.span`
 
 const getStatusText = (status) => {
   const statusMap = {
-    pending: '검토 대기',
-    reviewed: '검토 완료',
-    approved: '승인',
-    rejected: '거절'
+    pending: '보류',
+    reviewed: '서류합격',
+    approved: '최종합격',
+    rejected: '서류불합격'
   };
-  return statusMap[status] || status;
+  return statusMap[status] || '보류';
 };
 
 const ResumeManagement = () => {
@@ -357,7 +357,7 @@ const ResumeManagement = () => {
   const [resumes, setResumes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  
+
   // 필터 상태 추가
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [selectedJobs, setSelectedJobs] = useState([]);
@@ -395,39 +395,39 @@ const ResumeManagement = () => {
   };
 
   const handleJobToggle = (job) => {
-    setSelectedJobs(prev => 
-      prev.includes(job) 
+    setSelectedJobs(prev =>
+      prev.includes(job)
         ? prev.filter(j => j !== job)
         : [...prev, job]
     );
   };
 
   const handleExperienceToggle = (exp) => {
-    setSelectedExperience(prev => 
-      prev.includes(exp) 
+    setSelectedExperience(prev =>
+      prev.includes(exp)
         ? prev.filter(e => e !== exp)
         : [...prev, exp]
     );
   };
 
   const handleScoreRangeToggle = (range) => {
-    setSelectedScoreRanges(prev => 
-      prev.includes(range) 
+    setSelectedScoreRanges(prev =>
+      prev.includes(range)
         ? prev.filter(r => r !== range)
         : [...prev, range]
     );
   };
 
   const filteredResumes = resumes.filter(resume => {
-    const matchesSearch = resume.name.toLowerCase().includes(searchTerm.toLowerCase()) || 
+    const matchesSearch = resume.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          resume.position.toLowerCase().includes(searchTerm.toLowerCase()) ||
                          resume.department.toLowerCase().includes(searchTerm.toLowerCase());
-    
+
     // 직무 필터링
-    const matchesJob = selectedJobs.length === 0 || selectedJobs.some(job => 
+    const matchesJob = selectedJobs.length === 0 || selectedJobs.some(job =>
       resume.position.toLowerCase().includes(job.toLowerCase())
     );
-    
+
     // 경력 필터링
     const resumeExp = parseInt(resume.experience);
     const matchesExperience = selectedExperience.length === 0 || selectedExperience.some(exp => {
@@ -436,7 +436,7 @@ const ResumeManagement = () => {
       if (exp === '5년이상') return resumeExp >= 5;
       return false;
     });
-    
+
     return matchesSearch && matchesJob && matchesExperience;
   });
 
@@ -453,25 +453,25 @@ const ResumeManagement = () => {
       <Header>
         <Title>이력서 관리</Title>
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-          <span style={{ 
-            fontSize: '14px', 
-            color: 'var(--text-secondary)', 
-            backgroundColor: 'var(--background-light)', 
-            padding: '4px 8px', 
-            borderRadius: '4px' 
+          <span style={{
+            fontSize: '14px',
+            color: 'var(--text-secondary)',
+            backgroundColor: 'var(--background-light)',
+            padding: '4px 8px',
+            borderRadius: '4px'
           }}>
             AI 적합도 순 정렬
           </span>
           <ActionButtons>
             <ViewModeButtons>
-              <ViewModeButton 
-                active={viewMode === 'grid'} 
+              <ViewModeButton
+                active={viewMode === 'grid'}
                 onClick={() => setViewMode('grid')}
               >
                 그리드
               </ViewModeButton>
-              <ViewModeButton 
-                active={viewMode === 'board'} 
+              <ViewModeButton
+                active={viewMode === 'board'}
                 onClick={() => setViewMode('board')}
               >
                 게시판
@@ -587,8 +587,8 @@ const ResumeManagement = () => {
 
             {/* 적용 버튼 */}
             <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', alignItems: 'flex-end', minWidth: '100px', height: '100%' }}>
-              <Button 
-                className="primary" 
+              <Button
+                className="primary"
                 onClick={handleFilterApply}
                 style={{ fontSize: '14px', padding: '12px 24px', marginTop: 'auto' }}
               >
@@ -738,4 +738,4 @@ const ResumeManagement = () => {
   );
 };
 
-export default ResumeManagement; 
+export default ResumeManagement;

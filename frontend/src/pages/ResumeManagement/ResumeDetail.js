@@ -2,11 +2,11 @@ import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
-import { 
+import {
   FaArrowLeft,
-  FaFileAlt, 
-  FaEnvelope, 
-  FaFolder, 
+  FaFileAlt,
+  FaEnvelope,
+  FaFolder,
   FaUserTie,
   FaGraduationCap,
   FaBriefcase,
@@ -144,9 +144,17 @@ const StatusBadge = styled.div`
   font-size: 0.9rem;
   background: ${props => {
     switch(props.status) {
-      case 'approved': return 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)';
+      case '서류합격':
+      case 'passed':
+      case 'reviewed': return 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)';
+      case '서류불합격':
       case 'rejected': return 'linear-gradient(135deg, #fa709a 0%, #fee140 100%)';
-      case 'reviewed': return 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)';
+      case '최종합격':
+      case 'approved':
+      case 'interview_scheduled': return 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)';
+      case '보류':
+      case 'pending':
+      case 'reviewing': return 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)';
       default: return 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)';
     }
   }};
@@ -242,119 +250,21 @@ const ResumeDetail = () => {
   useEffect(() => {
     const fetchResumeDetail = async () => {
       try {
-        // 실제 API 호출 시도
-        const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/applications/${id}`);
-        
+        // 실제 API 호출 시도 - 올바른 엔드포인트 사용
+        const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/applicants/${id}`);
+
         if (response.ok) {
           const data = await response.json();
+          console.log('받은 데이터:', data); // 디버깅용 로그
           setResume(data);
         } else {
-          // API 호출 실패 시 샘플 데이터 사용
-          const sampleResume = {
-            id: id,
-            name: '김개발',
-            title: '프론트엔드 개발자',
-            type: 'resume',
-            experience: '3년',
-            date: '2024-01-15',
-            status: 'approved',
-            skills: ['React', 'TypeScript', 'Node.js', 'AWS'],
-            summary: '3년간의 프론트엔드 개발 경험을 바탕으로 사용자 중심의 웹 애플리케이션을 개발해왔습니다. React와 TypeScript를 주로 사용하며, 최신 웹 기술에 대한 깊은 이해를 가지고 있습니다.',
-            contact: {
-              email: 'kim.dev@example.com',
-              phone: '010-1234-5678',
-              address: '서울시 강남구',
-              linkedin: 'linkedin.com/in/kimdev',
-              github: 'github.com/kimdev'
-            },
-            education: {
-              degree: '컴퓨터공학 학사',
-              school: '서울대학교',
-              graduation: '2021년'
-            },
-            experience: [
-              {
-                company: '테크스타트업',
-                position: '프론트엔드 개발자',
-                period: '2021-2024',
-                description: 'React 기반 웹 애플리케이션 개발 및 유지보수'
-              },
-              {
-                company: 'IT 컨설팅',
-                position: '웹 개발자 인턴',
-                period: '2020-2021',
-                description: 'JavaScript, HTML, CSS를 활용한 웹사이트 개발'
-              }
-            ],
-            projects: [
-              {
-                name: '이커머스 플랫폼',
-                description: 'React와 Node.js를 활용한 온라인 쇼핑몰 개발',
-                technologies: ['React', 'Node.js', 'MongoDB']
-              },
-              {
-                name: '관리자 대시보드',
-                description: 'TypeScript와 Material-UI를 활용한 관리자 페이지 개발',
-                technologies: ['TypeScript', 'Material-UI', 'Redux']
-              }
-            ]
-          };
-          setResume(sampleResume);
+          console.error('API 응답 오류:', response.status, response.statusText);
+          setResume(null);
         }
         setLoading(false);
       } catch (error) {
         console.error('지원서 상세 정보 로드 실패:', error);
-        // 에러 발생 시에도 샘플 데이터 사용
-        const sampleResume = {
-          id: id,
-          name: '김개발',
-          title: '프론트엔드 개발자',
-          type: 'resume',
-          experience: '3년',
-          date: '2024-01-15',
-          status: 'approved',
-          skills: ['React', 'TypeScript', 'Node.js', 'AWS'],
-          summary: '3년간의 프론트엔드 개발 경험을 바탕으로 사용자 중심의 웹 애플리케이션을 개발해왔습니다. React와 TypeScript를 주로 사용하며, 최신 웹 기술에 대한 깊은 이해를 가지고 있습니다.',
-          contact: {
-            email: 'kim.dev@example.com',
-            phone: '010-1234-5678',
-            address: '서울시 강남구',
-            linkedin: 'linkedin.com/in/kimdev',
-            github: 'github.com/kimdev'
-          },
-          education: {
-            degree: '컴퓨터공학 학사',
-            school: '서울대학교',
-            graduation: '2021년'
-          },
-          experience: [
-            {
-              company: '테크스타트업',
-              position: '프론트엔드 개발자',
-              period: '2021-2024',
-              description: 'React 기반 웹 애플리케이션 개발 및 유지보수'
-            },
-            {
-              company: 'IT 컨설팅',
-              position: '웹 개발자 인턴',
-              period: '2020-2021',
-              description: 'JavaScript, HTML, CSS를 활용한 웹사이트 개발'
-            }
-          ],
-          projects: [
-            {
-              name: '이커머스 플랫폼',
-              description: 'React와 Node.js를 활용한 온라인 쇼핑몰 개발',
-              technologies: ['React', 'Node.js', 'MongoDB']
-            },
-            {
-              name: '관리자 대시보드',
-              description: 'TypeScript와 Material-UI를 활용한 관리자 페이지 개발',
-              technologies: ['TypeScript', 'Material-UI', 'Redux']
-            }
-          ]
-        };
-        setResume(sampleResume);
+        setResume(null);
         setLoading(false);
       }
     };
@@ -382,11 +292,18 @@ const ResumeDetail = () => {
 
   const getStatusLabel = (status) => {
     switch(status) {
-      case 'pending': return '검토 대기';
-      case 'reviewed': return '검토 완료';
-      case 'approved': return '승인';
-      case 'rejected': return '거절';
-      default: return '대기';
+      case 'pending': return '보류';
+      case 'reviewed': return '서류합격';
+      case 'reviewing': return '보류';
+      case 'approved': return '최종합격';
+      case 'rejected': return '서류불합격';
+      case 'passed': return '서류합격';
+      case 'interview_scheduled': return '최종합격';
+      case '서류합격': return '서류합격';
+      case '서류불합격': return '서류불합격';
+      case '최종합격': return '최종합격';
+      case '보류': return '보류';
+      default: return '보류';
     }
   };
 
@@ -437,7 +354,7 @@ const ResumeDetail = () => {
             <FaUserTie />
             기본 정보
           </CardTitle>
-          
+
           <InfoGrid>
             <InfoItem>
               <InfoLabel>이름:</InfoLabel>
@@ -445,7 +362,11 @@ const ResumeDetail = () => {
             </InfoItem>
             <InfoItem>
               <InfoLabel>직무:</InfoLabel>
-              <InfoValue>{resume.title}</InfoValue>
+              <InfoValue>{resume.position}</InfoValue>
+            </InfoItem>
+            <InfoItem>
+              <InfoLabel>부서:</InfoLabel>
+              <InfoValue>{resume.department}</InfoValue>
             </InfoItem>
             <InfoItem>
               <InfoLabel>경력:</InfoLabel>
@@ -453,7 +374,16 @@ const ResumeDetail = () => {
             </InfoItem>
             <InfoItem>
               <InfoLabel>등록일:</InfoLabel>
-              <InfoValue>{resume.date}</InfoValue>
+              <InfoValue>
+                {resume.created_at
+                  ? new Date(resume.created_at).toLocaleDateString('ko-KR', {
+                      year: 'numeric',
+                      month: '2-digit',
+                      day: '2-digit'
+                    }).replace(/\. /g, '.').replace(' ', '')
+                  : '정보 없음'
+                }
+              </InfoValue>
             </InfoItem>
             <InfoItem>
               <InfoLabel>상태:</InfoLabel>
@@ -476,18 +406,26 @@ const ResumeDetail = () => {
             기술 스택
           </SectionTitle>
           <SkillsContainer>
-            {Array.isArray(resume.skills) ? resume.skills.map((skill, index) => (
-              <SkillTag key={index}>{skill}</SkillTag>
-            )) : (
+            {resume.skills ? (
+              resume.skills.split(', ').map((skill, index) => (
+                <SkillTag key={index}>{skill.trim()}</SkillTag>
+              ))
+            ) : (
               <span style={{ color: '#7f8c8d' }}>기술 스택 정보가 없습니다.</span>
             )}
           </SkillsContainer>
 
           <SectionTitle>
             <FaBriefcase />
-            자기소개
+            분석 결과
           </SectionTitle>
-          <ContentText>{resume.summary}</ContentText>
+          <ContentText>{resume.analysisResult || '분석 결과가 없습니다.'}</ContentText>
+
+          <SectionTitle>
+            <FaStar />
+            분석 점수
+          </SectionTitle>
+          <ContentText>{resume.analysisScore || 0}점</ContentText>
 
           <ActionButtons>
             <ActionButton
@@ -535,23 +473,23 @@ const ResumeDetail = () => {
             <InfoGrid>
               <InfoItem>
                 <FaEmail />
-                <InfoValue>{resume.contact?.email || '이메일 정보 없음'}</InfoValue>
+                <InfoValue>{resume.email || '이메일 정보 없음'}</InfoValue>
               </InfoItem>
               <InfoItem>
                 <FaPhone />
-                <InfoValue>{resume.contact?.phone || '전화번호 정보 없음'}</InfoValue>
+                <InfoValue>{resume.phone || '전화번호 정보 없음'}</InfoValue>
               </InfoItem>
               <InfoItem>
                 <FaMapMarkerAlt />
-                <InfoValue>{resume.contact?.address || '주소 정보 없음'}</InfoValue>
+                <InfoValue>{resume.department || '부서 정보 없음'}</InfoValue>
               </InfoItem>
               <InfoItem>
-                <FaLinkedin />
-                <InfoValue>{resume.contact?.linkedin || 'LinkedIn 정보 없음'}</InfoValue>
+                <FaStar />
+                <InfoValue>분석 점수: {resume.analysisScore || 0}점</InfoValue>
               </InfoItem>
               <InfoItem>
-                <FaGithub />
-                <InfoValue>{resume.contact?.github || 'GitHub 정보 없음'}</InfoValue>
+                <FaCheckCircle />
+                <InfoValue>상태: {resume.status || '대기'}</InfoValue>
               </InfoItem>
             </InfoGrid>
           </ContentSection>
@@ -559,22 +497,17 @@ const ResumeDetail = () => {
           <ContentSection>
             <SectionTitle>
               <FaGraduationCap />
-              학력
+              성장 배경
             </SectionTitle>
-            <InfoGrid>
-              <InfoItem>
-                <InfoLabel>학위:</InfoLabel>
-                <InfoValue>{resume.education?.degree || '학위 정보 없음'}</InfoValue>
-              </InfoItem>
-              <InfoItem>
-                <InfoLabel>학교:</InfoLabel>
-                <InfoValue>{resume.education?.school || '학교 정보 없음'}</InfoValue>
-              </InfoItem>
-              <InfoItem>
-                <InfoLabel>졸업:</InfoLabel>
-                <InfoValue>{resume.education?.graduation || '졸업 정보 없음'}</InfoValue>
-              </InfoItem>
-            </InfoGrid>
+            <ContentText>{resume.growthBackground || '성장 배경 정보가 없습니다.'}</ContentText>
+          </ContentSection>
+
+          <ContentSection>
+            <SectionTitle>
+              <FaEnvelope />
+              지원 동기
+            </SectionTitle>
+            <ContentText>{resume.motivation || '지원 동기 정보가 없습니다.'}</ContentText>
           </ContentSection>
 
           <ContentSection>
@@ -582,56 +515,14 @@ const ResumeDetail = () => {
               <FaBriefcase />
               경력 사항
             </SectionTitle>
-            {Array.isArray(resume.experience) ? resume.experience.map((exp, index) => (
-              <div key={index} style={{ marginBottom: '15px', padding: '15px', background: 'rgba(236, 240, 241, 0.5)', borderRadius: '12px' }}>
-                <div style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>
-                  {exp.company} - {exp.position}
-                </div>
-                <div style={{ fontSize: '0.9rem', color: '#7f8c8d', marginBottom: '5px' }}>
-                  {exp.period}
-                </div>
-                <div style={{ fontSize: '0.9rem', color: '#2c3e50' }}>
-                  {exp.description}
-                </div>
-              </div>
-            )) : (
-              <div style={{ padding: '15px', background: 'rgba(236, 240, 241, 0.5)', borderRadius: '12px', color: '#7f8c8d' }}>
-                경력 정보가 없습니다.
-              </div>
-            )}
+            <ContentText>{resume.careerHistory || '경력 사항 정보가 없습니다.'}</ContentText>
           </ContentSection>
 
-          <ContentSection>
-            <SectionTitle>
-              <FaFolder />
-              프로젝트
-            </SectionTitle>
-            {Array.isArray(resume.projects) ? resume.projects.map((project, index) => (
-              <div key={index} style={{ marginBottom: '15px', padding: '15px', background: 'rgba(236, 240, 241, 0.5)', borderRadius: '12px' }}>
-                <div style={{ fontWeight: '600', color: '#2c3e50', marginBottom: '5px' }}>
-                  {project.name}
-                </div>
-                <div style={{ fontSize: '0.9rem', color: '#2c3e50', marginBottom: '10px' }}>
-                  {project.description}
-                </div>
-                <SkillsContainer>
-                  {Array.isArray(project.technologies) ? project.technologies.map((tech, techIndex) => (
-                    <SkillTag key={techIndex}>{tech}</SkillTag>
-                  )) : (
-                    <span style={{ color: '#7f8c8d' }}>기술 정보가 없습니다.</span>
-                  )}
-                </SkillsContainer>
-              </div>
-            )) : (
-              <div style={{ padding: '15px', background: 'rgba(236, 240, 241, 0.5)', borderRadius: '12px', color: '#7f8c8d' }}>
-                프로젝트 정보가 없습니다.
-              </div>
-            )}
-          </ContentSection>
+
         </Card>
       </ContentGrid>
     </Container>
   );
 };
 
-export default ResumeDetail; 
+export default ResumeDetail;

@@ -32,15 +32,15 @@ class PickChatbotApi {
       sessionId,
       url: `${this.baseUrl}/chat`
     });
-    
+
     try {
       const requestBody = {
         message: message,
         session_id: sessionId,
       };
-      
+
       console.log('🔍 [DEBUG] 요청 본문:', requestBody);
-      
+
       const response = await fetch(`${this.baseUrl}/chat`, {
         method: 'POST',
         headers: {
@@ -70,7 +70,7 @@ class PickChatbotApi {
   async getSession(sessionId) {
     try {
       const response = await fetch(`${this.baseUrl}/session/${sessionId}`);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
@@ -104,7 +104,7 @@ class PickChatbotApi {
   async listSessions() {
     try {
       const response = await fetch(`${this.baseUrl}/sessions`);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }

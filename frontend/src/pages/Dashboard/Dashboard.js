@@ -1,18 +1,18 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
-import { 
-  FiUsers, 
-  FiFileText, 
-  FiVideo, 
-  FiCheckCircle, 
+import {
+  FiUsers,
+  FiFileText,
+  FiVideo,
+  FiCheckCircle,
   FiTrendingUp,
   FiClock,
   FiAlertCircle,
   FiStar
 } from 'react-icons/fi';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
-// LangGraphChatbot 컴포넌트 제거됨
+import dashboardApi from '../../services/dashboardApi';
 
 const DashboardContainer = styled.div`
   padding: 24px 0;
@@ -31,7 +31,7 @@ const HeroTitle = styled.h1`
   font-size: 48px;
   font-weight: 700;
   margin-bottom: 16px;
-  
+
   @media (max-width: 768px) {
     font-size: 32px;
   }
@@ -48,9 +48,21 @@ const HeroSubtitle = styled.p`
 
 const StatsGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 20px;
   margin-bottom: 32px;
+
+  @media (min-width: 1200px) {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
+  @media (max-width: 1199px) and (min-width: 768px) {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  @media (max-width: 767px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const StatCard = styled(motion.div)`
@@ -59,7 +71,7 @@ const StatCard = styled(motion.div)`
   padding: 24px;
   box-shadow: var(--shadow-light);
   transition: var(--transition);
-  
+
   &:hover {
     transform: translateY(-4px);
     box-shadow: var(--shadow-medium);
@@ -122,7 +134,7 @@ const ChartGrid = styled.div`
   grid-template-columns: 1fr 1fr;
   gap: 24px;
   margin-bottom: 32px;
-  
+
   @media (max-width: 768px) {
     grid-template-columns: 1fr;
   }
@@ -148,7 +160,7 @@ const ActivityItem = styled.div`
   gap: 16px;
   padding: 16px 0;
   border-bottom: 1px solid var(--border-color);
-  
+
   &:last-child {
     border-bottom: none;
   }
@@ -180,86 +192,205 @@ const ActivityTime = styled.div`
   color: var(--text-light);
 `;
 
-// 샘플 데이터
-const chartData = [
-  { name: '1월', 지원자: 120, 합격: 15 },
-  { name: '2월', 지원자: 150, 합격: 20 },
-  { name: '3월', 지원자: 180, 합격: 25 },
-  { name: '4월', 지원자: 200, 합격: 30 },
-  { name: '5월', 지원자: 220, 합격: 35 },
-  { name: '6월', 지원자: 250, 합격: 40 },
-];
-
-const pieData = [
-  { name: '서류 접수', value: 45, color: '#00c851' },
-  { name: '면접 진행', value: 30, color: '#007bff' },
-  { name: '최종 합격', value: 15, color: '#ff6b35' },
-  { name: '불합격', value: 10, color: '#6c757d' },
-];
-
-const stats = [
-  {
-    title: '총 지원자',
-    value: '1,247',
-    change: '+12%',
-    isPositive: true,
-    icon: FiUsers,
-    color: '#00c851'
-  },
-  {
-    title: '서류 접수',
-    value: '892',
-    change: '+8%',
-    isPositive: true,
-    icon: FiFileText,
-    color: '#007bff'
-  },
-  {
-    title: '면접 진행',
-    value: '156',
-    change: '+15%',
-    isPositive: true,
-    icon: FiVideo,
-    color: '#ff6b35'
-  },
-  {
-    title: '최종 합격',
-    value: '89',
-    change: '+23%',
-    isPositive: true,
-    icon: FiCheckCircle,
-    color: '#28a745'
-  }
-];
-
-const activities = [
-  {
-    title: '새로운 지원자가 등록되었습니다',
-    time: '5분 전',
-    icon: FiUsers,
-    color: '#00c851'
-  },
-  {
-    title: 'AI 면접 분석이 완료되었습니다',
-    time: '15분 전',
-    icon: FiVideo,
-    color: '#007bff'
-  },
-  {
-    title: '포트폴리오 분석 결과가 업데이트되었습니다',
-    time: '1시간 전',
-    icon: FiStar,
-    color: '#ff6b35'
-  },
-  {
-    title: '자소서 검증이 완료되었습니다',
-    time: '2시간 전',
-    icon: FiFileText,
-    color: '#28a745'
-  }
-];
-
 const Dashboard = () => {
+  const [stats, setStats] = useState([]);
+  const [chartData, setChartData] = useState([]);
+  const [pieData, setPieData] = useState([]);
+  const [activities, setActivities] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  // 아이콘 매핑
+  const iconMap = {
+    FiUsers,
+    FiFileText,
+    FiVideo,
+    FiCheckCircle,
+    FiStar
+  };
+
+  // 데이터 로딩
+  useEffect(() => {
+    const loadDashboardData = async () => {
+      try {
+        setLoading(true);
+
+        // 1. 지원자 통계 조회
+        const applicantStats = await dashboardApi.getApplicantStats();
+
+        // 2. 채용공고 통계 조회
+        const jobPostingStats = await dashboardApi.getJobPostingStats();
+
+        // 3. 최근 지원자 조회
+        const recentApplicants = await dashboardApi.getRecentApplicants(10);
+
+        // 3. 통계 카드 데이터 생성
+        const statsData = [
+          {
+            title: '총 지원자',
+            value: applicantStats.total_applicants.toLocaleString(),
+            change: '+12%',
+            isPositive: true,
+            icon: FiUsers,
+            color: '#00c851'
+          },
+          {
+            title: '서류 검토중',
+            value: (applicantStats.status_distribution?.pending || 0).toLocaleString(),
+            change: '+8%',
+            isPositive: true,
+            icon: FiFileText,
+            color: '#007bff'
+          },
+          {
+            title: '면접 예정',
+            value: (applicantStats.status_distribution?.interview_scheduled || 0).toLocaleString(),
+            change: '+15%',
+            isPositive: true,
+            icon: FiVideo,
+            color: '#ff6b35'
+          },
+          {
+            title: '최종 합격',
+            value: (applicantStats.status_distribution?.passed || 0).toLocaleString(),
+            change: '+23%',
+            isPositive: true,
+            icon: FiCheckCircle,
+            color: '#28a745'
+          },
+          {
+            title: '채용공고',
+            value: jobPostingStats.total_job_postings.toLocaleString(),
+            change: '+5%',
+            isPositive: true,
+            icon: FiStar,
+            color: '#9c27b0'
+          },
+          {
+            title: '전체 공고',
+            value: jobPostingStats.total_job_postings.toLocaleString(),
+            change: '+3%',
+            isPositive: true,
+            icon: FiClock,
+            color: '#ff9800'
+          }
+        ];
+
+        // 4. 차트 데이터 생성
+        const monthlyData = dashboardApi.generateMonthlyTrendData(recentApplicants);
+        const statusData = dashboardApi.generateStatusDistributionData(applicantStats);
+
+        // 5. 최근 활동 데이터 생성
+        const activityData = dashboardApi.generateRecentActivities(recentApplicants);
+
+        setStats(statsData);
+        setChartData(monthlyData);
+        setPieData(statusData);
+        setActivities(activityData);
+
+      } catch (error) {
+        console.error('대시보드 데이터 로딩 실패:', error);
+
+        // 에러 시 기본 데이터 설정
+        setStats([
+          {
+            title: '총 지원자',
+            value: '0',
+            change: '+0%',
+            isPositive: true,
+            icon: FiUsers,
+            color: '#00c851'
+          },
+          {
+            title: '서류 검토중',
+            value: '0',
+            change: '+0%',
+            isPositive: true,
+            icon: FiFileText,
+            color: '#007bff'
+          },
+          {
+            title: '면접 예정',
+            value: '0',
+            change: '+0%',
+            isPositive: true,
+            icon: FiVideo,
+            color: '#ff6b35'
+          },
+          {
+            title: '최종 합격',
+            value: '0',
+            change: '+0%',
+            isPositive: true,
+            icon: FiCheckCircle,
+            color: '#28a745'
+          },
+          {
+            title: '채용공고',
+            value: '0',
+            change: '+0%',
+            isPositive: true,
+            icon: FiStar,
+            color: '#9c27b0'
+          },
+          {
+            title: '전체 공고',
+            value: '0',
+            change: '+0%',
+            isPositive: true,
+            icon: FiClock,
+            color: '#ff9800'
+          }
+        ]);
+
+        setChartData([
+          { name: '1월', 지원자: 0, 합격: 0 },
+          { name: '2월', 지원자: 0, 합격: 0 },
+          { name: '3월', 지원자: 0, 합격: 0 },
+          { name: '4월', 지원자: 0, 합격: 0 },
+          { name: '5월', 지원자: 0, 합격: 0 },
+          { name: '6월', 지원자: 0, 합격: 0 }
+        ]);
+
+        setPieData([
+          { name: '서류 접수', value: 0, color: '#00c851' },
+          { name: '면접 진행', value: 0, color: '#007bff' },
+          { name: '최종 합격', value: 0, color: '#ff6b35' },
+          { name: '불합격', value: 0, color: '#6c757d' }
+        ]);
+
+        setActivities([
+          {
+            title: '데이터를 불러올 수 없습니다',
+            time: '방금 전',
+            icon: FiAlertCircle,
+            color: '#ff6b35'
+          }
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadDashboardData();
+  }, []);
+
+  if (loading) {
+    return (
+      <DashboardContainer>
+        <div style={{
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          height: '400px',
+          fontSize: '18px',
+          color: '#666'
+        }}>
+          대시보드 데이터를 불러오는 중...
+        </div>
+      </DashboardContainer>
+    );
+  }
+
   return (
     <DashboardContainer>
       <HeroSection
@@ -269,10 +400,9 @@ const Dashboard = () => {
       >
         <HeroTitle>AI 채용 관리 시스템</HeroTitle>
         <HeroSubtitle>
-          인공지능이 지원하는 스마트한 채용 프로세스로 
+          인공지능이 지원하는 스마트한 채용 프로세스로
           최고의 인재를 찾아보세요
         </HeroSubtitle>
-        {/* LangGraphChatbot 컴포넌트 제거됨 */}
       </HeroSection>
 
       <StatsGrid>
@@ -344,7 +474,7 @@ const Dashboard = () => {
         <SectionTitle>최근 활동</SectionTitle>
         <RecentActivity>
           {activities.map((activity, index) => {
-            const Icon = activity.icon;
+            const Icon = iconMap[activity.icon] || FiUsers;
             return (
               <ActivityItem key={index}>
                 <ActivityIcon style={{ background: activity.color }}>
@@ -363,4 +493,4 @@ const Dashboard = () => {
   );
 };
 
-export default Dashboard; 
+export default Dashboard;

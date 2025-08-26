@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
+import {
   FaArrowLeft,
   FaUser,
   FaCalendar,
@@ -40,7 +40,7 @@ const BackButton = styled.button`
   cursor: pointer;
   transition: var(--transition);
   font-weight: 500;
-  
+
   &:hover {
     background: var(--background-secondary);
     border-color: var(--primary-color);
@@ -170,7 +170,7 @@ const EvaluationItem = styled.div`
   align-items: center;
   padding: 12px 0;
   border-bottom: 1px solid var(--border-color);
-  
+
   &:last-child {
     border-bottom: none;
   }
@@ -252,12 +252,12 @@ const ActionButton = styled.button`
   align-items: center;
   justify-content: center;
   gap: 8px;
-  
+
   &:hover {
     background: var(--background-secondary);
     border-color: var(--primary-color);
   }
-  
+
   &.primary {
     background: var(--primary-color);
     color: white;
@@ -329,23 +329,23 @@ const InterviewDetail = () => {
       try {
         console.log('=== 면접 상세 정보 로드 시작 ===');
         console.log('요청할 면접 ID:', id);
-        
+
         // 실제 API 호출 시도
         const response = await fetch(`${process.env.REACT_APP_API_URL || 'http://localhost:8000'}/api/interviews/${id}`);
-        
+
         if (response.ok) {
           const data = await response.json();
           console.log('백엔드에서 받은 면접 데이터:', data);
-          
+
           // 백엔드 데이터를 프론트엔드 형식으로 변환
           const transformedInterview = {
             id: data.id || data._id,
             candidateName: data.company || data.candidateName || '지원자',
             position: data.position,
             date: data.date ? (typeof data.date === 'string' ? data.date.split('T')[0] : data.date.toISOString().split('T')[0]) : '2024-01-15',
-            time: data.date ? new Date(data.date).toLocaleTimeString('ko-KR', { 
-              hour: '2-digit', 
-              minute: '2-digit' 
+            time: data.date ? new Date(data.date).toLocaleTimeString('ko-KR', {
+              hour: '2-digit',
+              minute: '2-digit'
             }) : '14:00',
             duration: '60분',
             location: data.location || '회의실',
@@ -381,7 +381,7 @@ const InterviewDetail = () => {
             ],
             recommendation: '전반적으로 우수한 지원자입니다. 추가 면접을 통해 더 자세히 평가할 수 있습니다.'
           };
-          
+
           console.log('변환된 면접 데이터:', transformedInterview);
           setInterview(transformedInterview);
         } else {
@@ -580,7 +580,7 @@ const InterviewDetail = () => {
               <FaFileAlt />
               평가 요약
             </SectionTitle>
-            
+
             <div style={{ marginBottom: '20px' }}>
               <div style={{ fontSize: '14px', fontWeight: '600', color: 'var(--text-primary)', marginBottom: '8px' }}>
                 <FaCheckCircle style={{ color: '#27ae60', marginRight: '8px' }} />
@@ -626,7 +626,7 @@ const InterviewDetail = () => {
           >
             <SectionTitle>액션</SectionTitle>
             <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-              <ActionButton 
+              <ActionButton
                 className="primary"
                 onClick={() => {
                   // 지원자 프로필 보기 기능 (향후 구현)
@@ -671,4 +671,4 @@ const InterviewDetail = () => {
   );
 };
 
-export default InterviewDetail; 
+export default InterviewDetail;

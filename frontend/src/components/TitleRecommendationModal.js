@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 
-const TitleRecommendationModal = ({ 
-  isOpen, 
-  onClose, 
-  formData, 
+const TitleRecommendationModal = ({
+  isOpen,
+  onClose,
+  formData,
   onTitleSelect,
-  onDirectInput 
+  onDirectInput
 }) => {
   const [recommendations, setRecommendations] = useState([]);
   const [selectedTitle, setSelectedTitle] = useState('');
@@ -69,7 +69,7 @@ const TitleRecommendationModal = ({
       }
     } catch (error) {
       console.error('[TitleRecommendationModal] 제목 추천 오류:', error);
-      
+
       // 오류 메시지 개선
       let errorMessage = '제목 추천 중 오류가 발생했습니다.';
       if (error.message.includes('Failed to fetch')) {
@@ -79,35 +79,35 @@ const TitleRecommendationModal = ({
       } else if (error.message.includes('404')) {
         errorMessage = '제목 추천 서비스를 찾을 수 없습니다.';
       }
-      
+
       setError(errorMessage);
-      
+
       // 오류 시 기본 제목들 제공 (4가지 컨셉)
       const defaultTitles = [
-        { 
-          concept: "신입친화형", 
+        {
+          concept: "신입친화형",
           title: `함께 성장할 ${formData.position || formData.department || '직무'} 신입을 찾습니다`,
           description: "신입 지원자들이 매력적으로 느낄 수 있는 제목"
         },
-        { 
-          concept: "전문가형", 
+        {
+          concept: "전문가형",
           title: `전문성을 발휘할 ${formData.position || formData.department || '직무'} 인재 모집`,
           description: "경력자들이 전문성을 발휘할 수 있다고 느끼는 제목"
         },
-        { 
-          concept: "일반형", 
+        {
+          concept: "일반형",
           title: `${formData.department || '부서'} ${formData.position || '직무'} 채용`,
           description: "일반적인 채용공고 제목"
         },
-        { 
-          concept: "창의형", 
+        {
+          concept: "창의형",
           title: `혁신을 이끌 ${formData.position || formData.department || '인재'}를 찾습니다`,
           description: "독특하고 눈에 띄는 제목"
         }
       ];
-      
+
       setRecommendations(defaultTitles);
-      
+
       // 사용자에게 오류 상황 안내
       console.log('[TitleRecommendationModal] 기본 제목으로 대체됨');
     } finally {
@@ -128,7 +128,7 @@ const TitleRecommendationModal = ({
 
   const handleConfirm = () => {
     const finalTitle = customTitle.trim() || selectedTitle;
-    
+
     if (!finalTitle) {
       alert('제목을 선택하거나 직접 입력해주세요.');
       return;
@@ -224,9 +224,9 @@ const TitleRecommendationModal = ({
         {/* 콘텐츠 */}
         <div style={{ padding: '32px' }}>
           <div style={{ marginBottom: '24px' }}>
-            <p style={{ 
-              margin: '0 0 16px 0', 
-              color: '#64748b', 
+            <p style={{
+              margin: '0 0 16px 0',
+              color: '#64748b',
               fontSize: '14px',
               lineHeight: '1.5'
             }}>
@@ -238,13 +238,13 @@ const TitleRecommendationModal = ({
 
           {/* 로딩 상태 */}
           {isLoading && (
-            <div style={{ 
-              textAlign: 'center', 
+            <div style={{
+              textAlign: 'center',
               padding: '40px 0',
               color: '#667eea'
             }}>
               <div style={{ marginBottom: '16px' }}>
-                <div style={{ 
+                <div style={{
                   display: 'inline-block',
                   width: '40px',
                   height: '40px',
@@ -279,9 +279,9 @@ const TitleRecommendationModal = ({
                     제목 추천 서비스 일시적 오류
                   </div>
                   <div>{error}</div>
-                  <div style={{ 
-                    marginTop: '8px', 
-                    fontSize: '13px', 
+                  <div style={{
+                    marginTop: '8px',
+                    fontSize: '13px',
                     color: '#6b7280',
                     fontStyle: 'italic'
                   }}>
@@ -295,64 +295,64 @@ const TitleRecommendationModal = ({
           {/* AI 추천 제목들 */}
           {!isLoading && recommendations.length > 0 && (
             <div style={{ marginBottom: '32px' }}>
-              <h4 style={{ 
-                margin: '0 0 16px 0', 
-                fontSize: '16px', 
+              <h4 style={{
+                margin: '0 0 16px 0',
+                fontSize: '16px',
                 fontWeight: '600',
                 color: '#1f2937'
               }}>
                 🤖 AI 추천 제목
               </h4>
-              
+
               <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
                 {recommendations.map((titleObj, index) => {
                   const title = typeof titleObj === 'object' ? titleObj.title : titleObj;
                   const concept = typeof titleObj === 'object' ? titleObj.concept : `추천 ${index + 1}번`;
-                  
+
                   // 컨셉별 색상 및 아이콘 설정
                   const getConceptStyle = (concept) => {
                     switch(concept) {
                       case '신입친화형':
-                        return { 
-                          color: '#10b981', 
-                          bgColor: '#ecfdf5', 
+                        return {
+                          color: '#10b981',
+                          bgColor: '#ecfdf5',
                           icon: '🌱',
                           borderColor: '#10b981'
                         };
                       case '전문가형':
-                        return { 
-                          color: '#8b5cf6', 
-                          bgColor: '#f3e8ff', 
+                        return {
+                          color: '#8b5cf6',
+                          bgColor: '#f3e8ff',
                           icon: '💼',
                           borderColor: '#8b5cf6'
                         };
                       case '일반형':
-                        return { 
-                          color: '#667eea', 
-                          bgColor: '#e0e7ff', 
+                        return {
+                          color: '#667eea',
+                          bgColor: '#e0e7ff',
                           icon: '📋',
                           borderColor: '#667eea'
                         };
                       case '일반형 변형':
-                        return { 
-                          color: '#f59e0b', 
-                          bgColor: '#fef3c7', 
+                        return {
+                          color: '#f59e0b',
+                          bgColor: '#fef3c7',
                           icon: '📝',
                           borderColor: '#f59e0b'
                         };
                       default:
-                        return { 
-                          color: '#64748b', 
-                          bgColor: '#f1f5f9', 
+                        return {
+                          color: '#64748b',
+                          bgColor: '#f1f5f9',
                           icon: '💡',
                           borderColor: '#64748b'
                         };
                     }
                   };
-                  
+
                   const conceptStyle = getConceptStyle(concept);
                   const isSelected = selectedTitle === title;
-                  
+
                   return (
                     <div
                       key={index}
@@ -398,7 +398,7 @@ const TitleRecommendationModal = ({
                           ✓
                         </div>
                       )}
-                      
+
                       {/* 컨셉 배지 */}
                       <div style={{
                         display: 'inline-flex',
@@ -415,7 +415,7 @@ const TitleRecommendationModal = ({
                         <span>{conceptStyle.icon}</span>
                         {concept}
                       </div>
-                      
+
                       <div style={{
                         fontSize: '14px',
                         fontWeight: '500',
@@ -425,7 +425,7 @@ const TitleRecommendationModal = ({
                       }}>
                         {title}
                       </div>
-                      
+
                       <div style={{
                         fontSize: '12px',
                         color: '#64748b'
@@ -441,15 +441,15 @@ const TitleRecommendationModal = ({
 
           {/* 직접 입력 */}
           <div style={{ marginBottom: '32px' }}>
-            <h4 style={{ 
-              margin: '0 0 16px 0', 
-              fontSize: '16px', 
+            <h4 style={{
+              margin: '0 0 16px 0',
+              fontSize: '16px',
               fontWeight: '600',
               color: '#1f2937'
             }}>
               ✏️ 직접 입력
             </h4>
-            
+
             <textarea
               value={customTitle}
               onChange={handleCustomTitleChange}
@@ -482,9 +482,9 @@ const TitleRecommendationModal = ({
           </div>
 
           {/* 버튼 영역 */}
-          <div style={{ 
-            display: 'flex', 
-            gap: '12px', 
+          <div style={{
+            display: 'flex',
+            gap: '12px',
             justifyContent: 'flex-end',
             paddingTop: '24px',
             borderTop: '1px solid #e2e8f0'
@@ -513,7 +513,7 @@ const TitleRecommendationModal = ({
             >
               취소
             </button>
-            
+
             <button
               onClick={handleConfirm}
               disabled={!selectedTitle && !customTitle.trim()}
@@ -548,7 +548,7 @@ const TitleRecommendationModal = ({
       </div>
 
       {/* 회전 애니메이션 CSS */}
-      <style jsx>{`
+      <style>{`
         @keyframes spin {
           0% { transform: rotate(0deg); }
           100% { transform: rotate(360deg); }

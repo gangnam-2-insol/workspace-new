@@ -2,6 +2,9 @@
 echo Starting AI Recruitment Management Server...
 echo.
 
+REM Activate conda environment
+call conda activate hireme
+
 REM Check if Python is available
 python --version >nul 2>&1
 if errorlevel 1 (

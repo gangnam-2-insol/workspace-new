@@ -54,13 +54,13 @@ export const NewResumeButton = styled.button`
   cursor: pointer;
   transition: all 0.2s;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  
+
   &:hover {
     background: var(--primary-dark);
     transform: translateY(-1px);
     box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
   }
-  
+
   &:active {
     transform: translateY(0);
   }
@@ -128,7 +128,7 @@ export const SearchInput = styled.input`
   border-radius: 8px;
   font-size: 14px;
   outline: none;
-  
+
   &:focus {
     border-color: var(--primary-color);
   }
@@ -152,7 +152,7 @@ export const ViewModeButton = styled.button`
   gap: 4px;
   font-size: 12px;
   transition: all 0.2s;
-  
+
   &:hover {
     border-color: var(--primary-color);
     color: ${props => props.active ? 'white' : 'var(--primary-color)'};
@@ -323,7 +323,7 @@ export const FixedActionButton = styled.button`
   align-items: center;
   gap: 4px;
   transition: all 0.2s;
-  
+
   &:hover {
     border-color: var(--primary-color);
     color: var(--primary-color);
@@ -334,7 +334,7 @@ export const FixedPassButton = styled(FixedActionButton)`
   background: ${props => props.active ? '#28a745' : 'white'};
   color: ${props => props.active ? 'white' : '#28a745'};
   border-color: #28a745;
-  
+
   &:hover {
     background: ${props => props.active ? '#218838' : '#28a745'};
     border-color: ${props => props.active ? '#1e7e34' : '#28a745'};
@@ -346,7 +346,7 @@ export const FixedPendingButton = styled(FixedActionButton)`
   background: ${props => props.active ? '#ffc107' : 'white'};
   color: ${props => props.active ? '#212529' : '#ffc107'};
   border-color: #ffc107;
-  
+
   &:hover {
     background: ${props => props.active ? '#e0a800' : '#ffc107'};
     border-color: ${props => props.active ? '#d39e00' : '#ffc107'};
@@ -358,7 +358,7 @@ export const FixedRejectButton = styled(FixedActionButton)`
   background: ${props => props.active ? '#dc3545' : 'white'};
   color: ${props => props.active ? 'white' : '#dc3545'};
   border-color: #dc3545;
-  
+
   &:hover {
     background: ${props => props.active ? '#c82333' : '#dc3545'};
     border-color: ${props => props.active ? '#bd2130' : '#dc3545'};
@@ -396,7 +396,7 @@ export const LoadingSpinner = styled.div`
   flex-direction: column;
   align-items: center;
   gap: 12px;
-  
+
   .spinner {
     width: 32px;
     height: 32px;
@@ -405,7 +405,7 @@ export const LoadingSpinner = styled.div`
     border-radius: 50%;
     animation: spin 1s linear infinite;
   }
-  
+
   @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
@@ -425,7 +425,7 @@ export const LoadMoreButton = styled.button`
   cursor: pointer;
   margin-top: 24px;
   transition: all 0.2s;
-  
+
   &:hover {
     background: var(--primary-dark);
     transform: translateY(-1px);

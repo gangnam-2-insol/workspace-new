@@ -9,19 +9,19 @@ class JobPostingAPI {
   async getJobPostings(params = {}) {
     try {
       const queryParams = new URLSearchParams();
-      
+
       if (params.skip !== undefined) queryParams.append('skip', params.skip);
       if (params.limit !== undefined) queryParams.append('limit', params.limit);
       if (params.status) queryParams.append('status', params.status);
       if (params.company) queryParams.append('company', params.company);
-      
+
       const url = `${this.baseURL}?${queryParams.toString()}`;
       const response = await fetch(url);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       return await response.json();
     } catch (error) {
       console.error('채용공고 목록 조회 실패:', error);
@@ -33,11 +33,11 @@ class JobPostingAPI {
   async getJobPosting(jobId) {
     try {
       const response = await fetch(`${this.baseURL}/${jobId}`);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       return await response.json();
     } catch (error) {
       console.error('채용공고 조회 실패:', error);
@@ -55,11 +55,11 @@ class JobPostingAPI {
         },
         body: JSON.stringify(jobData),
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       return await response.json();
     } catch (error) {
       console.error('채용공고 생성 실패:', error);
@@ -77,11 +77,11 @@ class JobPostingAPI {
         },
         body: JSON.stringify(updateData),
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       return await response.json();
     } catch (error) {
       console.error('채용공고 수정 실패:', error);
@@ -95,11 +95,11 @@ class JobPostingAPI {
       const response = await fetch(`${this.baseURL}/${jobId}`, {
         method: 'DELETE',
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       return await response.json();
     } catch (error) {
       console.error('채용공고 삭제 실패:', error);
@@ -113,11 +113,11 @@ class JobPostingAPI {
       const response = await fetch(`${this.baseURL}/${jobId}/publish`, {
         method: 'PATCH',
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       return await response.json();
     } catch (error) {
       console.error('채용공고 발행 실패:', error);
@@ -131,11 +131,11 @@ class JobPostingAPI {
       const response = await fetch(`${this.baseURL}/${jobId}/close`, {
         method: 'PATCH',
       });
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       return await response.json();
     } catch (error) {
       console.error('채용공고 마감 실패:', error);
@@ -147,11 +147,11 @@ class JobPostingAPI {
   async getJobPostingStats() {
     try {
       const response = await fetch(`${this.baseURL}/stats/overview`);
-      
+
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
-      
+
       return await response.json();
     } catch (error) {
       console.error('채용공고 통계 조회 실패:', error);

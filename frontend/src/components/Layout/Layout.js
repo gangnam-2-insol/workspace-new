@@ -2,16 +2,17 @@ import React, { useState } from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
-import { 
-	FiHome, 
-	FiFileText, 
-	FiVideo, 
+import {
+	FiHome,
+	FiFileText,
+	FiVideo,
 	FiCalendar,
-	FiCode, 
-	FiEdit3, 
-	FiUsers, 
-	FiUser, 
+	FiCode,
+	FiEdit3,
+	FiUsers,
+	FiUser,
 	FiSettings,
+	FiDatabase,
 	FiMenu,
 	FiX,
 	FiBell,
@@ -62,7 +63,7 @@ const Header = styled.header`
   backdrop-filter: blur(10px);
   border-bottom: 1px solid var(--border-color);
   padding: 16px 24px;
-  display: flex;
+  display: none;
   align-items: center;
   justify-content: space-between;
   position: sticky;
@@ -105,7 +106,7 @@ const IconButton = styled.button`
 
 const MobileMenuButton = styled(IconButton)`
   display: none;
-  
+
   @media (max-width: 768px) {
     display: flex;
   }
@@ -186,15 +187,17 @@ const navigationItems = [
   {
     title: '시스템',
     items: [
-      { name: '설정 및 지원', path: '/settings', icon: FiSettings }
+      { name: '설정 및 지원', path: '/settings', icon: FiSettings },
+      { name: '샘플 데이터 관리', path: '/sample-data', icon: FiDatabase },
+      { name: '인재상 관리', path: '/company-culture', icon: FiUsers }
     ]
   },
-  // {
-  //   title: '개발 도구',
-  //   items: [
-  //     { name: 'GitHub 테스트', path: '/github-test', icon: FiGitBranch }
-  //   ]
-  // }
+  {
+    title: '개발 도구',
+    items: [
+      { name: 'GitHub 테스트', path: '/github-test', icon: FiGitBranch }
+    ]
+  }
 ];
 
 const Layout = ({ children }) => {
@@ -216,9 +219,9 @@ const Layout = ({ children }) => {
       >
         <div style={{ padding: '0 24px 24px' }}>
           <Logo>
-            <div style={{ 
-              width: '32px', 
-              height: '32px', 
+            <div style={{
+              width: '32px',
+              height: '32px',
               background: 'linear-gradient(135deg, #00c851, #00a844)',
               borderRadius: '8px',
               display: 'flex',
@@ -262,7 +265,7 @@ const Layout = ({ children }) => {
           <MobileMenuButton onClick={toggleSidebar}>
             {isSidebarOpen ? <FiX size={24} /> : <FiMenu size={24} />}
           </MobileMenuButton>
-          
+
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
             <IconButton>
               <FiSearch size={20} />
@@ -303,4 +306,4 @@ const Layout = ({ children }) => {
   );
 };
 
-export default Layout; 
+export default Layout;

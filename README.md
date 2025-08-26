@@ -100,14 +100,16 @@ frontend/src/
 
 ### 1. 환경 설정
 ```bash
-# 가상환경 생성 및 활성화 (Windows)
-python -m venv workspace
-cd workspace
-Scripts/Activate.ps1
+# Conda 환경 생성 및 활성화 (Windows)
+conda create -n hireme python=3.11
+conda activate hireme
+
+# 또는 기존 환경 사용
+conda activate hireme
 
 # 프로젝트 클론
 git clone <repository-url>
-cd test_test
+cd workspace-new
 ```
 
 ### 2. 환경변수 설정
@@ -150,7 +152,7 @@ docker run -d --name mongodb -p 27017:27017 mongo:6.0
 
 ### 👤 JR (Junior Developer)
 - **담당 영역**: 이력서 분석 시스템, RAG 적용
-- **특이사항**: 
+- **특이사항**:
   - OpenAI GPT-4o 기반 이력서 분석 (업그레이드 완료)
   - Pinecone 벡터 DB 연동
   - 청킹 기반 유사도 분석 시스템
@@ -281,5 +283,5 @@ docker run -d --name mongodb -p 27017:27017 mongo:6.0
 
 ---
 
-**마지막 업데이트**: 2025년 1월 15일 | **버전**: v3.0 | **메인테이너**: AI Development Team  
+**마지막 업데이트**: 2025년 1월 15일 | **버전**: v3.0 | **메인테이너**: AI Development Team
 **주요 개발자**: JR (이력서), KH (Agent), MJ (관리), YC (UI), GW (OCR)
