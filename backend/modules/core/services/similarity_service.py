@@ -1165,10 +1165,68 @@ class SimilarityService:
             print(f"[SimilarityService] 지원자 벡터 저장 실패: {e}")
             return False
 
+    async def _analyze_ideal_candidate_with_llm(self, target_applicant: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        지원자 정보를 바탕으로 이상적인 인재상 LLM 분석 수행
+
+        Args:
+            target_applicant (Dict): 기준 지원자
+
+        Returns:
+            Dict: LLM 분석 결과
+        """
+        try:
+            print(f"[SimilarityService] === LLM 기반 이상적인 인재상 분석 시작 ===")
+            print(f"[SimilarityService] 기준 지원자: {target_applicant.get('name', 'N/A')}")
+
+            # 지원자 정보 수집
+            applicant_info = {
+                "name": target_applicant.get("name", "N/A"),
+                "position": target_applicant.get("position", "N/A"),
+                "experience": target_applicant.get("experience", "N/A"),
+                "skills": target_applicant.get("skills", "N/A"),
+                "department": target_applicant.get("department", "N/A"),
+                "education": target_applicant.get("education", "N/A"),
+                "growthBackground": target_applicant.get("growthBackground", ""),
+                "motivation": target_applicant.get("motivation", ""),
+                "careerHistory": target_applicant.get("careerHistory", "")
+            }
+
+            # 이력서 내용 추가 (resume_id가 있는 경우)
+            if target_applicant.get('resume_id'):
+                try:
+                    from bson import ObjectId
+                    from .mongo_service import MongoService
+                    mongo_service = MongoService()
+                    resume = await mongo_service.db.resumes.find_one({"_id": ObjectId(target_applicant['resume_id'])})
+                    if resume:
+                        if resume.get('extracted_text'):
+                            applicant_info["resume_text"] = resume['extracted_text']
+                        if resume.get('summary'):
+                            applicant_info["resume_summary"] = resume['summary']
+                        if resume.get('keywords'):
+                            applicant_info["resume_keywords"] = resume['keywords']
+                except Exception as e:
+                    print(f"[SimilarityService] 이력서 조회 실패: {e}")
+
+            # LLM 분석 요청
+            analysis_result = await self.llm_service.analyze_ideal_candidate(applicant_info)
+
+            print(f"[SimilarityService] LLM 분석 완료: 이상적인 인재상 분석")
+            return analysis_result
+
+        except Exception as e:
+            print(f"[SimilarityService] LLM 분석 실패: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "LLM 분석 중 오류가 발생했습니다."
+            }
+
     async def _analyze_similar_applicants_with_llm(self, target_applicant: Dict[str, Any],
                                                  similar_applicants: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        유사 지원자들에 대한 LLM 분석 수행
+        유사 지원자들에 대한 LLM 분석 수행 (기존 방식 유지)
 
         Args:
             target_applicant (Dict): 기준 지원자
@@ -1383,15 +1441,11 @@ class SimilarityService:
                     limit=limit
                 )
 
-                # LLM 분석 추가
+                # LLM 분석 추가 (이상적인 인재상 분석으로 변경)
                 if langchain_result and langchain_result.get("success"):
-                    similar_applicants = langchain_result.get("data", {}).get("results", [])
-                    if similar_applicants:
-                        print(f"[SimilarityService] 유사 인재에 대한 LLM 분석 수행...")
-                        llm_analysis = await self._analyze_similar_applicants_with_llm(
-                            target_applicant, similar_applicants
-                        )
-                        langchain_result["data"]["llm_analysis"] = llm_analysis
+                    print(f"[SimilarityService] 이상적인 인재상 LLM 분석 수행...")
+                    llm_analysis = await self._analyze_ideal_candidate_with_llm(target_applicant)
+                    langchain_result["data"]["llm_analysis"] = llm_analysis
 
                 return langchain_result
 

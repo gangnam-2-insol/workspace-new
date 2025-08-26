@@ -443,20 +443,39 @@ const ApplicantManagement = () => {
 
   // 메일 발송 핸들러
   const handleSendMail = useCallback(async (statusType) => {
+    console.log('📧 [DEBUG] handleSendMail 호출됨 - statusType:', statusType);
+    console.log('📧 [DEBUG] statusType 타입:', typeof statusType);
+
     const statusMap = {
       'passed': '합격',
-      'rejected': '불합격'
+      'rejected': '불합격',
+      'document_passed': '서류합격',
+      'final_passed': '최종합격',
+      'document_rejected': '서류불합격'
     };
 
     const statusText = statusMap[statusType];
+    console.log('📧 [DEBUG] statusText:', statusText);
+
+    if (!statusText) {
+      console.error('📧 [DEBUG] 알 수 없는 statusType:', statusType);
+      alert(`알 수 없는 상태 타입입니다: ${statusType}`);
+      return;
+    }
+
     const targetApplicants = applicants.filter(applicant => {
-      if (statusType === 'passed') {
+      console.log('📧 [DEBUG] 지원자 상태 확인:', applicant.name, applicant.status);
+      if (statusType === 'passed' || statusType === 'document_passed') {
         return applicant.status === '서류합격' || applicant.status === '최종합격';
-      } else if (statusType === 'rejected') {
+      } else if (statusType === 'rejected' || statusType === 'document_rejected') {
         return applicant.status === '서류불합격';
+      } else if (statusType === 'final_passed') {
+        return applicant.status === '최종합격';
       }
       return false;
     });
+
+    console.log('📧 [DEBUG] 필터링된 지원자 수:', targetApplicants.length);
 
     if (targetApplicants.length === 0) {
       alert(`${statusText}자가 없습니다.`);
@@ -471,20 +490,30 @@ const ApplicantManagement = () => {
 
     if (confirmed) {
       try {
-        console.log(`📧 ${statusText}자들에게 메일 발송 시작:`, targetApplicants.length, '명');
+        console.log(`📧 [DEBUG] ${statusText}자들에게 메일 발송 시작:`, targetApplicants.length, '명');
+        console.log(`📧 [DEBUG] statusType:`, statusType);
+        console.log(`📧 [DEBUG] targetApplicants:`, targetApplicants);
 
         // 메일 발송 API 호출
+        console.log(`📧 [DEBUG] mailApi.sendBulkMail 호출 전`);
         const result = await mailApi.sendBulkMail(statusType);
+        console.log(`📧 [DEBUG] mailApi.sendBulkMail 호출 후 결과:`, result);
 
-        if (result.success) {
+        if (result && result.success) {
+          console.log(`📧 [DEBUG] 메일 발송 성공 - 성공: ${result.success_count}, 실패: ${result.failed_count}`);
           alert(`✅ ${result.success_count}명의 ${statusText}자들에게 메일이 성공적으로 발송되었습니다.\n\n실패: ${result.failed_count}건`);
         } else {
-          alert(`❌ 메일 발송 실패: ${result.message}`);
+          console.log(`📧 [DEBUG] 메일 발송 실패 - result:`, result);
+          const errorMessage = result ? result.message : '알 수 없는 오류';
+          alert(`❌ 메일 발송 실패: ${errorMessage}`);
         }
 
       } catch (error) {
-        console.error('메일 발송 실패:', error);
-        alert('메일 발송 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+        console.error('📧 [DEBUG] 메일 발송 실패 상세:', error);
+        console.error('📧 [DEBUG] 오류 타입:', typeof error);
+        console.error('📧 [DEBUG] 오류 메시지:', error.message);
+        console.error('📧 [DEBUG] 오류 스택:', error.stack);
+        alert(`메일 발송 중 오류가 발생했습니다: ${error.message}`);
       }
     }
   }, [applicants]);
