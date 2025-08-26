@@ -674,11 +674,7 @@ const ApplicantDetailModal = ({
               </DocumentButton>
                              <DocumentButton onClick={() => onCoverLetterAnalysis && onCoverLetterAnalysis(applicant)}>
                  <FiBarChart2 size={18} />
-                 자소서 분석
-               </DocumentButton>
-               <DocumentButton onClick={() => onDetailedAnalysis && onDetailedAnalysis()}>
-                 <FiStar size={18} />
-                 통합 분석
+                 자소서 표절 의심도 검사
                </DocumentButton>
               <DocumentButton onClick={() => onDocumentClick('portfolio', applicant)}>
                 <FiCode size={18} />

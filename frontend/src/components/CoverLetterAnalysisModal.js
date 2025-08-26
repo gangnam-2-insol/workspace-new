@@ -659,82 +659,11 @@ const CoverLetterAnalysisModal = ({
 
           <Header>
             <HeaderBackground />
-            <Title>자소서 상세 분석</Title>
-            <Subtitle>{applicantName}님의 자소서 분석 결과</Subtitle>
+            <Title>자소서 표절 의심도 검사</Title>
+            <Subtitle>{applicantName}님의 자소서 표절 의심도 결과</Subtitle>
           </Header>
 
           <Content>
-            {/* 전체 점수 섹션 */}
-            <OverallScore>
-              <ScoreCircle score={overallScore}>
-                {overallScore}
-              </ScoreCircle>
-              <ScoreInfo>
-                <ScoreLabel>전체 평가 점수</ScoreLabel>
-                <ScoreValue>{overallScore}/10점</ScoreValue>
-                <ScoreDescription>
-                  {scoreGrade.grade} 등급 - {scoreGrade.grade === '우수' ? '매우 우수한 자소서입니다' :
-                    scoreGrade.grade === '양호' ? '양호한 자소서입니다' :
-                    scoreGrade.grade === '보통' ? '개선이 필요한 부분이 있습니다' :
-                    '전반적인 개선이 필요합니다'}
-                </ScoreDescription>
-              </ScoreInfo>
-            </OverallScore>
-
-            {/* 레이더 차트 섹션 */}
-            {chartData && (
-              <ChartContainer>
-                <ChartTitle>9개 평가 항목 분석</ChartTitle>
-                <ChartDescription>
-                  지원 동기부터 문장 가독성까지 9개 항목을 종합적으로 분석한 결과입니다.
-                </ChartDescription>
-                <ChartWrapper>
-                  <Radar data={chartData} options={chartOptions} height={400} />
-                </ChartWrapper>
-              </ChartContainer>
-            )}
-
-            {/* 상세 분석 항목 */}
-            {processedData && (
-              <AnalysisGrid
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.5 }}
-              >
-                {Object.entries(processedData).map(([key, value], index) => {
-                  if (!value || typeof value !== 'object' || !('score' in value)) return null;
-
-                  const score = value.score;
-                  const grade = getScoreGrade(score);
-
-                  return (
-                    <AnalysisItem
-                      key={key}
-                      score={score}
-                      initial={{ opacity: 0, y: 20 }}
-                      animate={{ opacity: 1, y: 0 }}
-                      transition={{ duration: 0.5, delay: index * 0.1 }}
-                    >
-                      <ItemHeader>
-                        <ItemTitle>
-                          {getCoverLetterAnalysisLabel(key)}
-                        </ItemTitle>
-                        <ItemScore>
-                          <ScoreNumber score={score}>{score}</ScoreNumber>
-                          <ScoreMax>/10</ScoreMax>
-                          <StatusIcon score={score}>
-                            {grade.icon}
-                          </StatusIcon>
-                        </ItemScore>
-                      </ItemHeader>
-                      <ItemDescription>
-                        {value.description || value.reason || '분석 결과가 없습니다.'}
-                      </ItemDescription>
-                    </AnalysisItem>
-                  );
-                })}
-              </AnalysisGrid>
-            )}
 
             {/* 표절 의심도 분석 결과 섹션 */}
             <SuspicionSection
@@ -842,38 +771,6 @@ const CoverLetterAnalysisModal = ({
                 })()}
               </SuspicionContent>
             </SuspicionSection>
-
-            {/* 분석 수행 버튼 */}
-            {onPerformAnalysis && applicantId && (
-              <AnalyzeButton
-                onClick={handlePerformAnalysis}
-                disabled={isAnalyzing}
-              >
-                {isAnalyzing ? (
-                  <>
-                    <FiTrendingUp />
-                    분석 중...
-                  </>
-                ) : (
-                  <>
-                    <FiBarChart2 />
-                    자소서 분석 수행
-                  </>
-                )}
-              </AnalyzeButton>
-            )}
-
-            {/* JSON 원본 데이터 보기 */}
-            <ToggleButton onClick={() => setShowJson(!showJson)}>
-              <FiEye />
-              {showJson ? 'JSON 숨기기' : 'JSON 원본 데이터 보기'}
-            </ToggleButton>
-
-            {showJson && (
-              <JsonViewer>
-                <pre>{JSON.stringify(analysisData, null, 2)}</pre>
-              </JsonViewer>
-            )}
           </Content>
         </ModalContent>
       </ModalOverlay>
