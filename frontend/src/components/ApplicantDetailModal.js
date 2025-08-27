@@ -716,7 +716,8 @@ const ApplicantDetailModal = ({
   onDelete,
   onStatusUpdate,
   onCoverLetterAnalysis,
-  onDetailedAnalysis
+  onDetailedAnalysis,
+  onApplicantSelect
 }) => {
   const [recommendations, setRecommendations] = useState([]);
   const [recommendationsLoading, setRecommendationsLoading] = useState(false);
@@ -749,9 +750,18 @@ const ApplicantDetailModal = ({
       return;
     }
 
-    // 이미 로드했거나 로딩 중이면 다시 로드하지 않음
-    if (recommendationsLoaded || recommendationsLoading) {
-      addDebugLog('이미 로드됨 또는 로딩 중 - 스킵', 'info');
+    // 이미 로딩 중이면 스킵 (더 강화된 중복 방지)
+    if (recommendationsLoading) {
+      addDebugLog('이미 로딩 중 - 스킵', 'warning');
+      return;
+    }
+
+    const currentApplicantId = applicant._id || applicant.id;
+    
+    // 동일한 지원자에 대해 이미 로드했으면 스킵
+    if (recommendationsLoaded && recommendations.length > 0 && 
+        recommendations[0]?.targetApplicantId === currentApplicantId) {
+      addDebugLog(`동일 지원자 ${currentApplicantId} - 이미 로드됨`, 'info');
       return;
     }
 
@@ -795,15 +805,20 @@ const ApplicantDetailModal = ({
       // 백엔드 응답 구조에 맞춰 데이터 처리
       if (data.status === 'success' && data.recommendations) {
         addDebugLog('응답 데이터 처리 시작', 'info');
+        console.log('전체 recommendations 구조:', data.recommendations);
 
         const recommendationData = data.recommendations.data || data.recommendations;
+        console.log('recommendationData 구조:', recommendationData);
+        console.log('recommendationData.results 존재여부:', !!recommendationData.results);
+        console.log('recommendationData.results 길이:', recommendationData.results?.length);
 
-        if (recommendationData && recommendationData.results) {
+        if (recommendationData && recommendationData.results && recommendationData.results.length > 0) {
           const results = recommendationData.results.slice(0, 5); // 최대 5개
           addDebugLog(`추천 결과 ${results.length}개 발견`, 'success');
 
-          // 각 추천 결과 상세 로깅
+          // 각 추천 결과에 대상 지원자 ID 추가 및 상세 로깅
           results.forEach((result, index) => {
+            result.targetApplicantId = applicantId; // 중복 방지를 위한 대상 지원자 ID 저장
             addDebugLog(`추천 #${index + 1}: ${result.applicant?.name} (점수: ${(result.final_score * 100).toFixed(1)}%)`, 'info');
           });
 
@@ -844,7 +859,10 @@ const ApplicantDetailModal = ({
             addDebugLog('LLM 분석 결과 없음 또는 실패', 'warning');
           }
 
+          console.log('setRecommendations 호출 전 results:', results);
+          console.log('results 길이:', results.length);
           setRecommendations(results);
+          console.log('setRecommendations 호출 완료');
           addDebugLog('최종 추천 결과 설정 완료', 'success');
         } else {
           addDebugLog('추천 결과 없음', 'warning');
@@ -866,32 +884,69 @@ const ApplicantDetailModal = ({
     }
   };
 
+  // 이전 지원자 ID 추적을 위한 ref
+  const prevApplicantIdRef = React.useRef(null);
+
   // applicant가 변경될 때 캐시 리셋 및 유사인재 추천 로드
   useEffect(() => {
     if (applicant && applicant._id) {
-      // 새로운 지원자인 경우에만 캐시 리셋
       const currentApplicantId = applicant._id || applicant.id;
-      const isNewApplicant = !recommendationsLoaded || recommendations.length === 0;
+      
+      // 이전과 동일한 지원자면 스킵 (임시로 비활성화)
+      // if (prevApplicantIdRef.current === currentApplicantId) {
+      //   addDebugLog(`동일 지원자 ${currentApplicantId} - 이전과 동일함`, 'info');
+      //   return;
+      // }
 
-      if (isNewApplicant) {
-        setRecommendationsLoaded(false);
-        setRecommendations([]);
-        setRecommendationsError(null);
-
-        // 약간의 딜레이를 두어 중복 호출 방지
-        const timer = setTimeout(() => {
-          fetchRecommendations();
-        }, 100);
-
-        return () => clearTimeout(timer);
+      // 이미 로딩 중이면 스킵
+      if (recommendationsLoading) {
+        addDebugLog(`로딩 중 ${currentApplicantId} - 스킵`, 'warning');
+        return;
       }
+
+      // 새로운 지원자 ID 저장
+      prevApplicantIdRef.current = currentApplicantId;
+      
+      addDebugLog(`새 지원자 ${currentApplicantId} - 상태 리셋 및 추천 요청`, 'info');
+      setRecommendationsLoaded(false);
+      setRecommendations([]);
+      setRecommendationsError(null);
+      clearDebugLogs();
+
+      // 중복 호출 방지를 위한 딜레이
+      const timer = setTimeout(() => {
+        if (!recommendationsLoading && prevApplicantIdRef.current === currentApplicantId) {
+          fetchRecommendations();
+        }
+      }, 300);
+
+      return () => {
+        clearTimeout(timer);
+      };
     }
   }, [applicant?._id]);
 
+  // 모달 스크롤을 맨 위로 이동
+  useEffect(() => {
+    if (applicant) {
+      // 모달이 열릴 때 맨 위로 스크롤
+      const modalElement = document.querySelector('[data-modal="applicant-detail"]');
+      if (modalElement) {
+        modalElement.scrollTop = 0;
+      }
+      // 또는 body의 스크롤도 맨 위로
+      window.scrollTo(0, 0);
+    }
+  }, [applicant]);
+
   // 추천 카드 클릭 핸들러
   const handleRecommendationClick = (recommendedApplicant) => {
-    // 추천된 지원자의 상세 정보를 보여주거나 다른 액션 수행
-    console.log('추천 지원자 클릭:', recommendedApplicant);
+    if (onApplicantSelect) {
+      // 추천된 지원자의 상세 모달을 열기 위해 부모 컴포넌트로 전달
+      onApplicantSelect(recommendedApplicant);
+    } else {
+      console.log('추천 지원자 클릭:', recommendedApplicant);
+    }
   };
 
   // LLM 분석 결과 파싱 함수
@@ -1120,6 +1175,7 @@ const ApplicantDetailModal = ({
         onClick={onClose}
       >
         <ModalContent
+          data-modal="applicant-detail"
           initial={{ scale: 0.9, y: 20 }}
           animate={{ scale: 1, y: 0 }}
           exit={{ scale: 0.9, y: 20 }}
@@ -1307,6 +1363,14 @@ const ApplicantDetailModal = ({
                 </ErrorMessage>
               )}
 
+              {(() => {
+                console.log('렌더링 조건 확인:');
+                console.log('- recommendationsLoading:', recommendationsLoading);
+                console.log('- recommendationsError:', recommendationsError);
+                console.log('- recommendations.length:', recommendations.length);
+                console.log('- recommendations:', recommendations);
+                return null;
+              })()}
               {!recommendationsLoading && !recommendationsError && recommendations.length > 0 && (
                 <RecommendationGrid>
                   {recommendations.map((recommendation, index) => (

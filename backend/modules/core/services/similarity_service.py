@@ -1399,11 +1399,13 @@ class SimilarityService:
                     limit=limit
                 )
 
-                # LLM 분석 추가 (이상적인 인재상 분석으로 변경)
+                # LLM 분석 추가 (유사인재 분석)
                 if langchain_result and langchain_result.get("success"):
-                    print(f"[SimilarityService] 이상적인 인재상 LLM 분석 수행...")
-                    llm_analysis = await self._analyze_ideal_candidate_with_llm(target_applicant)
-                    langchain_result["data"]["llm_analysis"] = llm_analysis
+                    print(f"[SimilarityService] 유사인재 LLM 분석 수행...")
+                    similar_applicants = langchain_result["data"].get("results", [])
+                    if similar_applicants:
+                        llm_analysis = await self._analyze_similar_applicants_with_llm(target_applicant, similar_applicants)
+                        langchain_result["data"]["llm_analysis"] = llm_analysis
 
                 return langchain_result
 

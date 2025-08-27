@@ -296,7 +296,11 @@ async def get_talent_recommendations(
         if result.get('success'):
             data = result.get('data', {})
             print(f"  - 검색 방법: {data.get('search_method', 'N/A')}")
-            print(f"  - 가중치 설정: {data.get('weights', 'N/A')}")
+            ensemble_weights = data.get('ensemble_weights', {})
+            if ensemble_weights:
+                print(f"  - 가중치 설정: vector: {ensemble_weights.get('vector', 0.5)}, keyword: {ensemble_weights.get('keyword', 0.5)}")
+            else:
+                print(f"  - 가중치 설정: N/A")
             print(f"  - 총 결과 수: {data.get('total', 0)}")
             print(f"  - 벡터 검색 결과 수: {data.get('vector_count', 0)}")
             print(f"  - 키워드 검색 결과 수: {data.get('keyword_count', 0)}")
