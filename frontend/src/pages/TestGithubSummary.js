@@ -747,62 +747,123 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
 
                     if (processed.length > 0) {
                       return (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '40px' }}>
-                          <ResponsiveContainer width="60%" height={360}>
-                            <PieChart key={`chart-${result?.source || 'new'}-${Date.now()}`}>
-                              <Pie
-                                data={processed}
-                                dataKey="value"
-                                nameKey="name"
-                                cx="50%"
-                                cy="50%"
-                                innerRadius={0}
-                                outerRadius={130}
-                                startAngle={90}
-                                endAngle={-270}
-                                isAnimationActive={true}
-                                animationBegin={0}
-                                animationDuration={900}
-                                animationEasing="ease-out"
-                                labelLine={false}
-                                label={renderCustomizedLabel}
-                              >
-                                {processed.map((entry, index) => (
-                                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                ))}
-                              </Pie>
-                              <Tooltip content={<CustomTooltip />} />
-                            </PieChart>
-                          </ResponsiveContainer>
-                          
-                          {/* 오른쪽 범례 */}
+                        <div style={{ 
+                          display: 'flex', 
+                          alignItems: 'center', 
+                          justifyContent: 'center',
+                          gap: '60px',
+                          padding: '20px 0'
+                        }}>
+                          {/* 차트 컨테이너 - 중앙 배치 */}
                           <div style={{ 
-                            flex: 1, 
+                            display: 'flex', 
+                            justifyContent: 'center',
+                            width: '50%'
+                          }}>
+                            <ResponsiveContainer width="100%" height={360}>
+                              <PieChart key={`chart-${result?.source || 'new'}-${Date.now()}`}>
+                                <Pie
+                                  data={processed}
+                                  dataKey="value"
+                                  nameKey="name"
+                                  cx="50%"
+                                  cy="50%"
+                                  innerRadius={0}
+                                  outerRadius={130}
+                                  startAngle={90}
+                                  endAngle={-270}
+                                  isAnimationActive={true}
+                                  animationBegin={0}
+                                  animationDuration={900}
+                                  animationEasing="ease-out"
+                                  labelLine={false}
+                                  label={renderCustomizedLabel}
+                                >
+                                  {processed.map((entry, index) => (
+                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                  ))}
+                                </Pie>
+                                <Tooltip content={<CustomTooltip />} />
+                              </PieChart>
+                            </ResponsiveContainer>
+                          </div>
+                          
+                          {/* 오른쪽 범례 - 깔끔하게 정렬 */}
+                          <div style={{ 
+                            width: '40%',
                             display: 'flex', 
                             flexDirection: 'column', 
-                            gap: '12px',
-                            padding: '20px'
+                            gap: '16px',
+                            padding: '20px',
+                            background: '#f8f9fa',
+                            borderRadius: '12px',
+                            border: '1px solid #e9ecef',
+                            height: '360px' // 고정 높이 설정
                           }}>
-                            {processed.map((entry, index) => (
-                              <div key={index} style={{ 
-                                display: 'flex', 
-                                alignItems: 'center', 
-                                gap: '12px',
-                                fontSize: '14px',
-                                fontWeight: '500'
-                              }}>
-                                <div style={{ 
-                                  width: '16px', 
-                                  height: '16px', 
-                                  backgroundColor: COLORS[index % COLORS.length],
-                                  borderRadius: '3px'
-                                }} />
-                                <span style={{ color: '#333' }}>{entry.name}</span>
-                                <span style={{ color: '#666', fontSize: '12px' }}>
-                                  ({((entry.value / total) * 100).toFixed(1)}%)
-                                </span>
-                              </div>
-                            ))}
+                            <div style={{
+                              fontSize: '16px',
+                              fontWeight: '600',
+                              color: '#333',
+                              marginBottom: '12px',
+                              textAlign: 'center',
+                              flexShrink: 0 // 제목은 고정
+                            }}>
+                              언어별 사용량
+                            </div>
+                            {/* 스크롤 가능한 언어 목록 */}
+                            <div style={{
+                              flex: 1,
+                              overflowY: 'auto',
+                              display: 'flex',
+                              flexDirection: 'column',
+                              gap: '7px', // 간격 줄임
+                              paddingRight: '4px' // 스크롤바 공간 확보
+                            }}>
+                              {processed.map((entry, index) => (
+                                <div key={index} style={{ 
+                                  display: 'flex', 
+                                  alignItems: 'center', 
+                                  justifyContent: 'space-between',
+                                  padding: '6px 10px', // 패딩 줄임
+                                  background: 'white',
+                                  borderRadius: '6px', // 둥근 모서리 줄임
+                                  border: '1px solid #e9ecef',
+                                  transition: 'all 0.2s ease',
+                                  flexShrink: 0 // 아이템 크기 고정
+                                }}>
+                                  <div style={{ 
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    gap: '8px' // 간격 줄임
+                                  }}>
+                                    <div style={{ 
+                                      width: '12px', // 크기 줄임
+                                      height: '12px', // 크기 줄임
+                                      backgroundColor: COLORS[index % COLORS.length],
+                                      borderRadius: '2px', // 둥근 모서리 줄임
+                                      boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
+                                    }} />
+                                    <span style={{ 
+                                      color: '#333',
+                                      fontSize: '13px', // 폰트 크기 줄임
+                                      fontWeight: '500'
+                                    }}>
+                                      {entry.name}
+                                    </span>
+                                  </div>
+                                  <span style={{ 
+                                    color: '#666', 
+                                    fontSize: '12px', // 폰트 크기 줄임
+                                    fontWeight: '600',
+                                    background: '#f1f3f4',
+                                    padding: '3px 6px', // 패딩 줄임
+                                    borderRadius: '3px'
+                                  }}>
+                                    {((entry.value / total) * 100).toFixed(1)}%
+                                  </span>
+                                </div>
+                              ))}
+                            </div>
                           </div>
                         </div>
                       );
