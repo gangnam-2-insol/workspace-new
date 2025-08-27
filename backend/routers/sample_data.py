@@ -748,13 +748,20 @@ async def create_sample_resumes(count: int = 10):
             template = resume_templates[template_key]
 
             # 기본 정보에 지원자 정보 추가
-            basic_info = template["basic_info"].copy()
-            basic_info.update({
-                "emails": [f"{applicant['name'].lower()}@email.com"],
-                "phones": [f"010-{random.randint(1000,9999)}-{random.randint(1000,9999)}"],
-                "names": [applicant["name"]],
-                "urls": [basic_info.get("github", ""), basic_info.get("portfolio", ""), basic_info.get("linkedin", "")]
-            })
+            applicant_name = applicant["name"]
+            applicant_email = f"{applicant_name.lower().replace(' ', '')}@email.com"
+            applicant_phone = f"010-{random.randint(1000,9999)}-{random.randint(1000,9999)}"
+            
+            basic_info = {
+                "emails": [applicant_email],
+                "phones": [applicant_phone],
+                "names": [applicant_name],
+                "urls": [
+                    template["basic_info"].get("github", ""),
+                    template["basic_info"].get("portfolio", ""),
+                    template["basic_info"].get("linkedin", "")
+                ]
+            }
 
             # 전체 텍스트 생성
             experiences_text = "\n".join([
@@ -769,11 +776,14 @@ async def create_sample_resumes(count: int = 10):
 
             certifications_text = "\n".join([f"• {cert}" for cert in template["certifications"]])
 
-            extracted_text = f"""이름: {applicant['name']}
-이메일: {basic_info['emails'][0]}
-전화번호: {basic_info['phones'][0]}
-위치: {basic_info['location']}
-학력: {basic_info['education']}
+            # skills를 문자열에서 리스트로 변환 (콤마로 분리)
+            skills_list = applicant.get('skills', 'JavaScript, Python, SQL').split(', ') if isinstance(applicant.get('skills', ''), str) else applicant.get('skills', [])
+
+            extracted_text = f"""이름: {applicant_name}
+이메일: {applicant_email}
+전화번호: {applicant_phone}
+위치: {template["basic_info"].get('location', '서울특별시')}
+학력: {template["basic_info"].get('education', '학사')}
 
 경력사항:
 {experiences_text}
@@ -784,17 +794,19 @@ async def create_sample_resumes(count: int = 10):
 자격증:
 {certifications_text}
 
-기술스택: {', '.join(applicant.get('skills', ['JavaScript', 'Python', 'SQL']))}
-경력연차: {applicant.get('experience', random.randint(1, 5))}년"""
+기술스택: {', '.join(skills_list)}
+경력연차: {applicant.get('experience', f'{random.randint(1, 5)}년')}"""
 
             # AI 요약 생성
-            summary = f"{applicant['name']}님은 {applicant.get('experience', random.randint(1, 5))}년차 {position}로, {', '.join(applicant.get('skills', ['JavaScript', 'Python'])[:3])} 등의 기술을 보유하고 있습니다. {template['experiences'][0]['company']}에서의 경험을 바탕으로 실무 역량을 갖춘 전문가입니다."
+            experience_years = applicant.get('experience', f'{random.randint(1, 5)}년')
+            summary = f"{applicant_name}님은 {experience_years}차 {position}로, {', '.join(skills_list[:3])} 등의 기술을 보유하고 있습니다. {template['experiences'][0]['company']}에서의 경험을 바탕으로 실무 역량을 갖춘 전문가입니다."
 
-            # 키워드 추출
-            all_skills = set(applicant.get('skills', []))
+            # 키워드 추출 (중복 제거)
+            all_skills = set(skills_list)
             for proj in template["projects"]:
                 all_skills.update(proj["technologies"])
-            keywords = list(all_skills)
+            # 빈 문자열 제거
+            keywords = [skill for skill in list(all_skills) if skill.strip()]
 
             resume = {
                 "applicant_id": str(applicant["_id"]),
@@ -804,16 +816,13 @@ async def create_sample_resumes(count: int = 10):
                 "document_type": "resume",
                 "basic_info": basic_info,
                 "file_metadata": {
-                    "filename": f"이력서_{applicant['name']}_{i+1}.pdf",
+                    "filename": f"이력서_{applicant_name}_{i+1}.pdf",
                     "size": random.randint(100000, 500000),
                     "mime": "application/pdf",
-                    "hash": f"hash_{applicant['name']}_{i+1}_{random.randint(1000, 9999)}",
+                    "hash": f"hash_{applicant_name.replace(' ', '_')}_{i+1}_{random.randint(1000, 9999)}",
                     "created_at": datetime.now(),
                     "modified_at": datetime.now()
                 },
-                "experiences": template["experiences"],
-                "projects": template["projects"],
-                "certifications": template["certifications"],
                 "created_at": datetime.now()
             }
 

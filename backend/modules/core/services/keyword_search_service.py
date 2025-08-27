@@ -149,42 +149,47 @@ class KeywordSearchService:
             mapping = {
                 "mappings": {
                     "properties": {
-                        "resume_id": {"type": "keyword"},
-                        "name": {
+                        "applicant_id": {"type": "keyword"},
+                        "extracted_text": {
                             "type": "text",
                             "analyzer": "standard"
                         },
-                        "position": {
+                        "summary": {
                             "type": "text",
                             "analyzer": "standard"
                         },
-                        "department": {
-                            "type": "text",
-                            "analyzer": "standard"
+                        "keywords": {
+                            "type": "keyword"
                         },
-                        "skills": {
-                            "type": "text",
-                            "analyzer": "standard"
+                        "document_type": {"type": "keyword"},
+                        "basic_info": {
+                            "type": "object",
+                            "properties": {
+                                "names": {
+                                    "type": "text",
+                                    "analyzer": "standard"
+                                },
+                                "emails": {
+                                    "type": "keyword"
+                                },
+                                "phones": {
+                                    "type": "keyword"
+                                },
+                                "urls": {
+                                    "type": "keyword"
+                                }
+                            }
                         },
-                        "experience": {
-                            "type": "text",
-                            "analyzer": "standard"
-                        },
-                        "growth_background": {
-                            "type": "text",
-                            "analyzer": "standard"
-                        },
-                        "motivation": {
-                            "type": "text",
-                            "analyzer": "standard"
-                        },
-                        "career_history": {
-                            "type": "text",
-                            "analyzer": "standard"
-                        },
-                        "resume_text": {
-                            "type": "text",
-                            "analyzer": "standard"
+                        "file_metadata": {
+                            "type": "object",
+                            "properties": {
+                                "filename": {"type": "keyword"},
+                                "size": {"type": "integer"},
+                                "mime": {"type": "keyword"},
+                                "hash": {"type": "keyword"},
+                                "created_at": {"type": "date"},
+                                "modified_at": {"type": "date"}
+                            }
                         },
                         "all_content": {
                             "type": "text",
@@ -394,26 +399,26 @@ class KeywordSearchService:
         Returns:
             str: 검색 가능한 텍스트
         """
-        # 키워드 검색에 포함될 필드들
-        searchable_fields = [
-            'name',           # 이름
-            'position',       # 직무
-            'department',     # 부서
-            'skills',         # 기술스택
-            'experience',     # 경력
-            'growthBackground',  # 성장배경
-            'motivation',     # 지원동기
-            'careerHistory',  # 경력사항
-            'resume_text'     # 전체 이력서 텍스트
-        ]
-
         text_parts = []
-
-        for field in searchable_fields:
-            value = resume.get(field, "")
-            if value and isinstance(value, str) and value.strip():
-                text_parts.append(value.strip())
-
+        
+        # extracted_text가 있으면 우선 사용
+        if resume.get("extracted_text"):
+            text_parts.append(resume["extracted_text"])
+        
+        # summary 추가
+        if resume.get("summary"):
+            text_parts.append(resume["summary"])
+            
+        # keywords 추가 (리스트를 문자열로 변환)
+        if resume.get("keywords") and isinstance(resume["keywords"], list):
+            text_parts.append(" ".join(resume["keywords"]))
+            
+        # basic_info의 이름들 추가
+        if resume.get("basic_info", {}).get("names"):
+            names = resume["basic_info"]["names"]
+            if isinstance(names, list):
+                text_parts.extend(names)
+            
         combined_text = " ".join(text_parts)
         return combined_text
 
@@ -442,16 +447,13 @@ class KeywordSearchService:
 
             # Elasticsearch 문서 생성
             doc = {
-                "resume_id": resume_id,
-                "name": resume.get("name", ""),
-                "position": resume.get("position", ""),
-                "department": resume.get("department", ""),
-                "skills": resume.get("skills", ""),
-                "experience": resume.get("experience", ""),
-                "growth_background": resume.get("growthBackground", ""),
-                "motivation": resume.get("motivation", ""),
-                "career_history": resume.get("careerHistory", ""),
-                "resume_text": resume.get("resume_text", ""),
+                "applicant_id": resume.get("applicant_id", resume_id),
+                "extracted_text": resume.get("extracted_text", ""),
+                "summary": resume.get("summary", ""),
+                "keywords": resume.get("keywords", []),
+                "document_type": resume.get("document_type", "resume"),
+                "basic_info": resume.get("basic_info", {}),
+                "file_metadata": resume.get("file_metadata", {}),
                 "all_content": searchable_text,
                 "tokens": tokens,
                 "created_at": resume.get("created_at", datetime.now()),
@@ -601,7 +603,7 @@ class KeywordSearchService:
                                 "multi_match": {
                                     "query": query,
                                     "fields": [
-                                        "basic_info_names^3",  # 이름에 가중치 3
+                                        "basic_info.names^3",  # 이름에 가중치 3
                                         "keywords^2",          # 키워드에 가중치 2
                                         "summary^1.5",         # 요약에 가중치 1.5
                                         "extracted_text",      # 추출된 텍스트
@@ -624,7 +626,7 @@ class KeywordSearchService:
                 "highlight": {
                     "fields": {
                         "all_content": {},
-                        "basic_info_names": {},
+                        "basic_info.names": {},
                         "keywords": {},
                         "summary": {},
                         "extracted_text": {}
@@ -633,7 +635,7 @@ class KeywordSearchService:
                     "post_tags": ["**"]
                 },
                 "size": limit,
-                "source": ["resume_id", "basic_info_names", "applicant_id", "keywords", "summary", "extracted_text", "indexed_at"]
+                "source": ["applicant_id", "basic_info", "keywords", "summary", "extracted_text", "indexed_at"]
             }
 
             # Elasticsearch 검색 실행 (8.x 버전 호환)
@@ -652,32 +654,30 @@ class KeywordSearchService:
                     "total": 0
                 }
 
-            # MongoDB에서 상세 정보 조회
-            resume_ids = [ObjectId(hit["_source"]["resume_id"]) for hit in hits]
-            resume_cursor = collection.find({"_id": {"$in": resume_ids}})
-            resume_list = await resume_cursor.to_list(length=None)
-            resumes = {str(r["_id"]): r for r in resume_list}
+            # MongoDB에서 지원자 정보 조회 (applicant_id 사용)
+            applicant_ids = [ObjectId(hit["_source"]["applicant_id"]) for hit in hits]
+            # applicants 컬렉션에서 지원자 정보 조회 (collection은 resumes이므로 db에서 직접 접근)
+            db = collection.database
+            applicant_cursor = db.applicants.find({"_id": {"$in": applicant_ids}})
+            applicant_list = await applicant_cursor.to_list(length=None)
+            applicants = {str(a["_id"]): a for a in applicant_list}
 
             # 결과 매핑
             results = []
             for hit in hits:
-                resume_id = hit["_source"]["resume_id"]
+                applicant_id = hit["_source"]["applicant_id"]
                 score = hit["_score"]
 
-                resume = resumes.get(resume_id)
-                if resume:
+                applicant = applicants.get(applicant_id)
+                if applicant:
                     # ObjectId를 문자열로 변환
-                    resume["_id"] = str(resume["_id"])
-                    if "resume_id" in resume:
-                        resume["resume_id"] = str(resume["resume_id"])
-                    else:
-                        resume["resume_id"] = str(resume["_id"])
-
+                    applicant["_id"] = str(applicant["_id"])
+                    
                     # 날짜 변환
-                    if "created_at" in resume:
-                        resume["created_at"] = resume["created_at"].isoformat()
+                    if "created_at" in applicant:
+                        applicant["created_at"] = applicant["created_at"].isoformat()
 
-                    # 하이라이트 텍스트 추출
+                    # 하이라이트 텍스트 추출 (이력서 텍스트에서)
                     highlight_text = ""
                     if "highlight" in hit:
                         highlight_parts = []
@@ -685,16 +685,16 @@ class KeywordSearchService:
                             highlight_parts.extend(highlights)
                         highlight_text = " ... ".join(highlight_parts)
 
-                    # 하이라이트가 없으면 기본 방식 사용
-                    if not highlight_text:
+                    # 하이라이트가 없으면 이력서 텍스트에서 추출
+                    if not highlight_text and "extracted_text" in hit["_source"]:
                         highlight_text = self._highlight_query_terms(
-                            self._extract_searchable_text(resume),
+                            hit["_source"]["extracted_text"],
                             query_tokens
                         )
 
                     results.append({
                         "bm25_score": round(score, 4),
-                        "resume": resume,
+                        "resume": applicant,  # 지원자 정보를 resume 키로 반환 (기존 API 호환성)
                         "highlight": highlight_text[:200] + "..." if len(highlight_text) > 200 else highlight_text
                     })
 

@@ -2617,6 +2617,7 @@ const ApplicantManagement = () => {
             onStatusUpdate={handleUpdateStatus}
             onCoverLetterAnalysis={handleCoverLetterAnalysisModalOpen}
             onDetailedAnalysis={() => setShowDetailedAnalysis(true)}
+            onApplicantSelect={setSelectedApplicant}
           />
         )}
 
