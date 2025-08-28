@@ -199,7 +199,7 @@ class VectorService:
             # 필터 구성
             filter_dict = {}
             if filter_type:
-                filter_dict["chunk_type"] = {"$eq": filter_type}
+                filter_dict["document_type"] = {"$eq": filter_type}
             
             # Pinecone 검색
             search_results = self.index.query(

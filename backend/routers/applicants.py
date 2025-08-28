@@ -396,12 +396,10 @@ async def check_cover_letter_plagiarism(
         # 4. 유사도 서비스 초기화
         similarity_service = get_similarity_service()
 
-        # 5. 자소서 표절체크 수행 (청킹 기반 유사도 검색 사용)
-        result = await similarity_service.find_similar_documents_by_chunks(
-            document_id=applicant_id,
-            collection=mongo_service.db.applicants,
-            document_type="cover_letter",
-            limit=10
+        # 5. 자소서 표절체크 수행 (직접 표절체크 메서드 사용)
+        result = await similarity_service.check_cover_letter_plagiarism(
+            cover_letter_id=cover_letter_id,
+            collection=mongo_service.db.cover_letters
         )
 
         return {

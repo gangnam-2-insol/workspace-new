@@ -1366,7 +1366,7 @@ const ApplicantManagement = () => {
 
     try {
       console.log('🔍 자소서 표절 의심도 검사 시작...');
-      console.log('- API 요청 URL:', `http://localhost:8000/api/coverletter/similarity-check/${applicantWithId._id}`);
+      console.log('- API 요청 URL:', `http://localhost:8000/api/applicants/${applicantWithId._id}/cover-letter`);
 
       const suspicionResult = await applicantApi.checkCoverLetterSuspicion(applicantWithId._id);
       console.log('✅ 자소서 표절 의심도 검사 완료:', suspicionResult);
@@ -1495,7 +1495,7 @@ const ApplicantManagement = () => {
 
       try {
         console.log('🔍 자소서 표절 의심도 검사 시작...');
-        console.log('- API 요청 URL:', `http://localhost:8000/api/coverletter/similarity-check/${applicantWithId._id}`);
+        console.log('- API 요청 URL:', `http://localhost:8000/api/applicants/${applicantWithId._id}/cover-letter`);
 
         const suspicionResult = await applicantApi.checkCoverLetterSuspicion(applicantWithId._id);
         console.log('✅ 자소서 표절 의심도 검사 완료:', suspicionResult);

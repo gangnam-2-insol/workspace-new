@@ -688,6 +688,7 @@ const CoverLetterAnalysisModal = ({
                   console.log('- applicantId:', applicantId);
                   console.log('- suspicionResult:', suspicionResult);
                   console.log('- isLoading:', isLoading);
+                  console.log('- suspicionResult.suspicion_analysis:', suspicionResult?.suspicion_analysis);
                   
                   if (isLoading || !suspicionResult) {
                     return (
@@ -724,10 +725,12 @@ const CoverLetterAnalysisModal = ({
                     );
                   }
                   
-                  // API 응답 구조 파싱
+                  // API 응답 구조 파싱 - 콘솔 로그 기반으로 수정
                   let analysisData = suspicionResult;
-                  if (suspicionResult.plagiarism_result?.data?.suspicion_analysis) {
-                    analysisData = suspicionResult.plagiarism_result.data.suspicion_analysis;
+                  if (suspicionResult.plagiarism_result) {
+                    analysisData = suspicionResult.plagiarism_result;
+                  } else if (suspicionResult.suspicion_analysis) {
+                    analysisData = suspicionResult.suspicion_analysis;
                   } else if (suspicionResult.data?.suspicion_analysis) {
                     analysisData = suspicionResult.data.suspicion_analysis;
                   } else if (suspicionResult.data) {
@@ -735,9 +738,19 @@ const CoverLetterAnalysisModal = ({
                   }
                   
                   const suspicionLevel = analysisData.suspicion_level || 'UNKNOWN';
-                  const suspicionScore = analysisData.suspicion_score_percent || (analysisData.suspicion_score * 100) || 0;
+                  const suspicionScore = analysisData.suspicion_score_percent || 
+                                        (typeof analysisData.suspicion_score === 'number' ? analysisData.suspicion_score * 100 : 0);
                   const analysis = analysisData.analysis || '분석 결과 없음';
                   const similarCount = analysisData.similar_count || 0;
+                  
+                  // 파싱 결과 디버깅
+                  console.log('📋 [CoverLetterAnalysisModal] 파싱된 데이터:', {
+                    suspicionLevel,
+                    suspicionScore,
+                    analysis,
+                    similarCount,
+                    originalAnalysisData: analysisData
+                  });
                   
                   return (
                     <>

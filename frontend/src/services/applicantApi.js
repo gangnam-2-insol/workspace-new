@@ -139,7 +139,7 @@ export const applicantApi = {
   checkCoverLetterSuspicion: async (applicantId) => {
     try {
       console.log(`[API] 자기소개서 표절 의심도 검사 요청 - applicantId: ${applicantId}`);
-      const response = await fetch(`${API_BASE_URL}/api/coverletter/similarity-check/${applicantId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/applicants/${applicantId}/cover-letter`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

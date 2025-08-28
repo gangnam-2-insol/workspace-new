@@ -1319,7 +1319,7 @@ const ApplicantDetailModal = ({
             )}
 
             {/* AI 분석 요약 섹션 */}
-            <AnalysisSection>
+            {/* <AnalysisSection>
               <SectionTitle>
                 <FiBarChart2 size={20} />
                 AI 분석 요약
@@ -1342,7 +1342,7 @@ const ApplicantDetailModal = ({
                   {applicant.summary}
                 </SummaryText>
               )}
-            </AnalysisSection>
+            </AnalysisSection> */}
 
             {/* 유사인재 추천 섹션 */}
             <RecommendationSection>

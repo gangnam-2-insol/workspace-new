@@ -226,8 +226,9 @@ class SimilarityService:
                 chunk_scores = [chunk_data["score"] for chunk_data in data["chunks"].values()]
                 avg_score = sum(chunk_scores) / len(chunk_scores)
 
-                # 임계값 체크
-                if avg_score >= self.similarity_threshold:
+                # 임계값 체크 (표절 검사용 낮은 임계값 사용)
+                plagiarism_threshold = 0.2 if document_type == "cover_letter" else self.similarity_threshold
+                if avg_score >= plagiarism_threshold:
                     document_scores.append({
                         "document_id": match_document_id,
                         "similarity_score": avg_score,
@@ -318,7 +319,8 @@ class SimilarityService:
         try:
             # 자소서 표절체크만 지원
             if document_type == "cover_letter":
-                return await self._check_cover_letter_plagiarism(document_id, collection, limit)
+                # 직접 표절체크 수행 (무한루프 제거)
+                return await self.check_cover_letter_plagiarism(document_id, collection)
             else:
                 # 이력서/포트폴리오 유사도 검사는 제거됨
                 print(f"[SimilarityService] {document_type} 유사도 검사는 더 이상 지원되지 않습니다.")
@@ -332,168 +334,6 @@ class SimilarityService:
             print(f"[SimilarityService] 문서 유사도 검색 실패: {str(e)}")
             raise e
 
-    async def _check_cover_letter_plagiarism(self, cover_letter_id: str, collection: Collection, limit: int = 5) -> Dict[str, Any]:
-        """자소서 표절체크 전용 메서드"""
-        try:
-            print(f"[SimilarityService] === 자소서 표절체크 시작 ===")
-            print(f"[SimilarityService] 자소서 ID: {cover_letter_id}")
-
-            # 자소서 조회
-            cover_letter = await collection.find_one({"_id": ObjectId(cover_letter_id)})
-            if not cover_letter:
-                raise ValueError("자소서를 찾을 수 없습니다.")
-
-            print(f"[SimilarityService] 자소서 찾음")
-
-            # 자소서 텍스트 추출
-            cover_letter_text = self._extract_cover_letter_text(cover_letter)
-            if not cover_letter_text:
-                raise ValueError("자소서 텍스트가 없습니다.")
-
-            # 임베딩 생성
-            query_embedding = await self.embedding_service.create_query_embedding(cover_letter_text)
-            if not query_embedding:
-                raise ValueError("자소서 임베딩 생성에 실패했습니다.")
-
-            # 현재 자소서가 벡터 DB에 있는지 확인하고 없으면 저장
-            cover_letter_vector_id = f"cover_letter_{cover_letter_id}"
-            try:
-                # Pinecone에서 현재 자소서 벡터 확인
-                existing_vector = self.vector_service.index.fetch([cover_letter_vector_id])
-                if not existing_vector.vectors or cover_letter_vector_id not in existing_vector.vectors:
-                    print(f"[SimilarityService] 자소서 벡터 없음. 벡터 DB에 저장 중...")
-
-                    # 벡터 저장 (직접 upsert 사용하여 고정 ID 지정)
-                    vector_data = {
-                        "id": cover_letter_vector_id,
-                        "values": query_embedding,
-                        "metadata": {
-                            "document_id": cover_letter_id,
-                            "document_type": "cover_letter",
-                            "chunk_type": "cover_letter",
-                            "applicant_id": cover_letter.get("applicant_id", ""),
-                            "text_preview": cover_letter_text[:100] + "..." if len(cover_letter_text) > 100 else cover_letter_text,
-                            "created_at": datetime.now().isoformat()
-                        }
-                    }
-
-                    self.vector_service.index.upsert(vectors=[vector_data])
-                    print(f"[SimilarityService] 자소서 벡터 저장 완료: {cover_letter_vector_id}")
-                else:
-                    print(f"[SimilarityService] 자소서 벡터 이미 존재: {cover_letter_vector_id}")
-            except Exception as e:
-                print(f"[SimilarityService] 벡터 확인/저장 중 오류: {e}")
-                # 오류 발생 시 강제로 벡터 저장
-                print(f"[SimilarityService] 오류로 인해 자소서 벡터 강제 저장...")
-                vector_data = {
-                    "id": cover_letter_vector_id,
-                    "values": query_embedding,
-                    "metadata": {
-                        "document_id": cover_letter_id,
-                        "document_type": "cover_letter",
-                        "chunk_type": "cover_letter",
-                        "applicant_id": cover_letter.get("applicant_id", ""),
-                        "text_preview": cover_letter_text[:100] + "..." if len(cover_letter_text) > 100 else cover_letter_text,
-                        "created_at": datetime.now().isoformat()
-                    }
-                }
-
-                self.vector_service.index.upsert(vectors=[vector_data])
-                print(f"[SimilarityService] 자소서 벡터 강제 저장 완료: {cover_letter_vector_id}")
-
-            # Pinecone에서 유사한 벡터 검색 (표절 의심 수준으로 높은 임계값 사용)
-            search_result = await self.vector_service.search_similar_vectors(
-                query_embedding=query_embedding,
-                top_k=limit + 5,  # 더 많이 검색해서 필터링
-                filter_type="cover_letter"
-            )
-
-            # 표절 의심 결과 필터링 (임계값 0.8 이상)
-            plagiarism_threshold = 0.8
-            suspected_plagiarism = []
-
-            for match in search_result["matches"]:
-                # VectorService에서 cover_letter_id가 document_id로 저장됨
-                match_id = match["metadata"].get("document_id", match["metadata"].get("resume_id"))
-                similarity_score = match["score"]
-
-                # 자기 자신 제외하고 높은 유사도만 포함
-                if match_id != cover_letter_id and similarity_score >= plagiarism_threshold:
-                    suspected_plagiarism.append(match)
-                    print(f"[SimilarityService] 표절 의심: ID={match_id}, 유사도={similarity_score:.1%}")
-
-            if len(suspected_plagiarism) > 0:
-                print(f"[SimilarityService] 표절 의심 자소서 {len(suspected_plagiarism)}개 발견")
-
-            # MongoDB에서 상세 정보 조회
-            results = []
-            if suspected_plagiarism:
-                cover_letter_ids = [ObjectId(match["metadata"].get("document_id", match["metadata"].get("resume_id"))) for match in suspected_plagiarism]
-                cover_letters_detail = await collection.find({"_id": {"$in": cover_letter_ids}}).to_list(1000)
-
-                for match in suspected_plagiarism:
-                    match_doc_id = match["metadata"].get("document_id", match["metadata"].get("resume_id"))
-                    cover_letter_detail = next((cl for cl in cover_letters_detail if str(cl["_id"]) == match_doc_id), None)
-                    if cover_letter_detail:
-                        cover_letter_detail["_id"] = str(cover_letter_detail["_id"])
-
-                        # 모든 datetime 필드를 문자열로 변환 (JSON 직렬화를 위해)
-                        for key, value in list(cover_letter_detail.items()):
-                            if hasattr(value, 'isoformat'):  # datetime 객체인지 확인
-                                cover_letter_detail[key] = value.isoformat()
-                            elif key == "_id":
-                                cover_letter_detail[key] = str(value)  # ObjectId도 문자열로
-
-                        # 표절 위험도 분석
-                        plagiarism_analysis = await self.llm_service.analyze_plagiarism_suspicion(
-                            original_resume=cover_letter,
-                            similar_resumes=[{"resume": cover_letter_detail, "similarity_score": match["score"]}]
-                        )
-
-                        results.append({
-                            "similarity_score": match["score"],
-                            "similarity_percentage": round(match["score"] * 100, 1),
-                            "suspicion_risk": "HIGH" if match["score"] >= 0.85 else "MEDIUM",
-                            "cover_letter": cover_letter_detail,
-                            "suspicion_analysis": plagiarism_analysis
-                        })
-
-            # 유사도 점수로 정렬
-            results.sort(key=lambda x: x["similarity_score"], reverse=True)
-
-            print(f"[SimilarityService] 표절 의심 자소서 수: {len(results)}")
-            print(f"[SimilarityService] === 자소서 표절체크 완료 ===")
-
-            # 원본 자소서도 datetime 처리
-            original_data = {
-                "id": str(cover_letter["_id"]),
-                "applicant_id": cover_letter.get("applicant_id", "")
-            }
-
-            # created_at 필드 처리
-            if cover_letter.get("created_at"):
-                if hasattr(cover_letter["created_at"], 'isoformat'):
-                    original_data["created_at"] = cover_letter["created_at"].isoformat()
-                else:
-                    original_data["created_at"] = str(cover_letter["created_at"])
-            else:
-                original_data["created_at"] = ""
-
-            return {
-                "success": True,
-                "document_type": "cover_letter",
-                "analysis_type": "suspicion_check",
-                "data": {
-                    "original_cover_letter": original_data,
-                    "suspected_suspicion": results,
-                    "total": len(results),
-                    "suspicion_threshold": plagiarism_threshold
-                }
-            }
-
-        except Exception as e:
-            print(f"[SimilarityService] 자소서 표절체크 실패: {str(e)}")
-            raise e
 
 
     async def search_resumes_by_query(self, query: str, collection: Collection,
@@ -1971,19 +1811,25 @@ class SimilarityService:
             print(f"[SimilarityService] 유사도 점수 계산 실패: {str(e)}")
             return 0.0
 
-    async def check_cover_letter_plagiarism(self, cover_letter_id: str, db) -> Dict[str, Any]:
+    async def check_cover_letter_plagiarism(self, cover_letter_id: str, collection) -> Dict[str, Any]:
         """
         자소서 표절 위험도 체크
 
         Args:
             cover_letter_id (str): 자소서 ID
-            db: 데이터베이스 연결
+            collection: MongoDB 컬렉션
 
         Returns:
             Dict[str, Any]: 표절 체크 결과
         """
+        print("[DEBUG] *** NEW check_cover_letter_plagiarism method called ***")
         try:
             print(f"[INFO] 자소서 표절 체크 요청 - cover_letter_id: {cover_letter_id}")
+
+            # MongoDB DB 연결 얻기
+            from .mongo_service import MongoService
+            mongo_service = MongoService()
+            db = mongo_service.db
 
             # 자소서 ID 유효성 검사
             if not ObjectId.is_valid(cover_letter_id):
@@ -1997,23 +1843,105 @@ class SimilarityService:
             cover_letter_name = original_cover_letter.get('basic_info_names') or original_cover_letter.get('name', 'Unknown')
             print(f"[INFO] 원본 자소서 조회 완료: {cover_letter_name}")
 
-            # 유사한 자소서 검색 (간단한 텍스트 유사도 기반)
+            # 직접 벡터 검색을 통한 유사한 자소서 검색
+            print(f"[INFO] 벡터 기반 자소서 표절 검사 시작")
+            
+            # 자소서 청킹
+            chunks = self.chunking_service.chunk_cover_letter(original_cover_letter)
+            if not chunks:
+                print(f"[ERROR] 자소서 청킹 실패")
+                return {"suspicion_level": "LOW", "suspicion_score": 0.0}
+                
+            print(f"[INFO] 자소서 청크 수: {len(chunks)}")
+            
+            # 각 청크별로 유사 벡터 검색 수행
+            chunk_similarities = {}
+            total_matches_found = 0
+            total_matches_filtered = 0
+            
+            for chunk in chunks:
+                print(f"[DEBUG] Processing chunk: {chunk['chunk_type']}")
+                query_embedding = await self.embedding_service.create_query_embedding(chunk["text"])
+                if not query_embedding:
+                    continue
+                    
+                # Pinecone에서 유사한 벡터 검색 (올바른 필터로 자소서만 검색)
+                search_result = await self.vector_service.search_similar_vectors(
+                    query_embedding=query_embedding,
+                    top_k=50,  # 더 많은 결과로 새로운 데이터 확보
+                    filter_type="cover_letter"  # document_type으로 자소서만 필터링
+                )
+                
+                print(f"[DEBUG] Search result for chunk {chunk['chunk_type']}: {len(search_result['matches'])} matches")
+                
+                for match in search_result["matches"]:
+                    match_document_id = match["metadata"].get("document_id")
+                    similarity_score = match["score"]
+                    total_matches_found += 1
+                    
+                    print(f"[DEBUG] Match found: doc_id={match_document_id}, score={similarity_score:.3f}, original_id={cover_letter_id}")
+                    
+                    # 자기 자신 제외
+                    if match_document_id == cover_letter_id:
+                        print(f"[DEBUG] Filtering out self-match: {match_document_id}")
+                        total_matches_filtered += 1
+                        continue
+                    
+                    # 오래된 Pinecone 데이터 필터링 (새로운 MongoDB ID 패턴만 허용)
+                    if not match_document_id.startswith('68ae4a34'):
+                        print(f"[DEBUG] Filtering out outdated Pinecone data: {match_document_id}")
+                        total_matches_filtered += 1
+                        continue
+                        
+                    # 문서별로 청크 유사도 누적
+                    if match_document_id not in chunk_similarities:
+                        chunk_similarities[match_document_id] = []
+                    chunk_similarities[match_document_id].append(similarity_score)
+                    print(f"[DEBUG] Added match: {match_document_id} with score {similarity_score:.3f}")
+            
+            print(f"[DEBUG] Total matches found: {total_matches_found}, filtered: {total_matches_filtered}, remaining: {len(chunk_similarities)}")
+            
+            # 문서별 평균 점수 계산 및 필터링
+            print(f"[DEBUG] Raw document similarities found: {len(chunk_similarities)}")
+            for doc_id, scores in chunk_similarities.items():
+                avg_score = sum(scores) / len(scores)
+                print(f"[DEBUG] Document {doc_id}: avg_score={avg_score:.3f} ({len(scores)} chunks)")
+            
             similar_cover_letters = []
-            async for doc in db.cover_letters.find({"_id": {"$ne": ObjectId(cover_letter_id)}}):
-                # 자소서에서 실제 텍스트 추출
-                original_text = self._get_cover_letter_full_text(original_cover_letter)
-                doc_text = self._get_cover_letter_full_text(doc)
+            for doc_id, scores in chunk_similarities.items():
+                avg_score = sum(scores) / len(scores)
+                print(f"[DEBUG] Checking document {doc_id}: score={avg_score:.3f}, threshold=0.3")
+                if avg_score >= 0.3:  # 30% 이상 유사도 (원래 임계값)
+                    # MongoDB에서 문서 조회 - ID 유효성 체크 추가
+                    try:
+                        if ObjectId.is_valid(doc_id):
+                            similar_doc = await db.cover_letters.find_one({"_id": ObjectId(doc_id)})
+                            if similar_doc:
+                                # MongoDB 객체들을 JSON 직렬화 가능하도록 변환
+                                serializable_doc = {}
+                                for key, value in similar_doc.items():
+                                    if key == "_id":
+                                        serializable_doc[key] = str(value)
+                                    elif hasattr(value, 'isoformat'):  # datetime 객체
+                                        serializable_doc[key] = value.isoformat()
+                                    else:
+                                        serializable_doc[key] = value
+                                
+                                similar_cover_letters.append({
+                                    'document': serializable_doc,
+                                    'similarity_score': avg_score
+                                })
+                                print(f"[DEBUG] Added document {doc_id} with score {avg_score:.3f}")
+                            else:
+                                print(f"[DEBUG] Document {doc_id} not found in MongoDB - Pinecone data outdated")
+                        else:
+                            print(f"[DEBUG] Invalid ObjectId: {doc_id}")
+                    except Exception as e:
+                        print(f"[DEBUG] Error checking document {doc_id}: {str(e)}")
+                else:
+                    print(f"[DEBUG] Document {doc_id} filtered out (score {avg_score:.3f} < 0.15)")
 
-                # 간단한 유사도 계산
-                similarity_score = self.calculate_simple_similarity(original_text, doc_text)
-
-                if similarity_score > 0.3:  # 30% 이상 유사한 경우만
-                    similar_cover_letters.append({
-                        'document': doc,
-                        'similarity_score': similarity_score
-                    })
-
-            print(f"[INFO] 유사한 자소서 {len(similar_cover_letters)}개 발견")
+            print(f"[INFO] Final similar cover letters found: {len(similar_cover_letters)}")
 
             # LLM을 통한 표절 위험도 분석
             plagiarism_analysis = await self.llm_service.analyze_plagiarism_suspicion(
