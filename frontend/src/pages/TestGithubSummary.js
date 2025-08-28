@@ -521,24 +521,7 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                 </div>
               )}
               
-              {/* 캐시된 결과 알림 */}
-              {result.source === 'cached' && (
-                <div style={{
-                  background: '#d1ecf1',
-                  border: '1px solid #bee5eb',
-                  borderRadius: '8px',
-                  padding: '12px',
-                  marginBottom: '20px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '10px'
-                }}>
-                  <span style={{ fontSize: '16px' }}>💾</span>
-                  <span style={{ color: '#0c5460', fontSize: '14px' }}>
-                    캐시된 분석 결과를 사용합니다
-                  </span>
-                </div>
-              )}
+
               <div style={{ 
                 display: 'flex', 
                 gap: '20px', 
@@ -553,23 +536,19 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                     href={result.profileUrl} 
                     target="_blank" 
                     rel="noreferrer"
-                                    style={{ 
+                    style={{ 
                       color: '#2c3e50', 
                       textDecoration: 'none',
                       fontWeight: 'bold'
                     }}
                   >
-                    {result.profileUrl}
+                    {result.user_name || '지원자 이름 없음'}
                   </a>
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>📊 분석 소스</div>
+                  <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>📊 깃헙 주소</div>
                   <div style={{ fontWeight: 'bold', color: '#333' }}>
-                    {result.source === 'profile_readme' && '프로필 README 분석'}
-                    {result.source === 'repos_meta' && '전체 레포지토리 분석'}
-                    {result.source?.startsWith('repos_meta_filtered_') && `특정 레포지토리 분석 (${result.source.replace('repos_meta_filtered_', '')})`}
-                    {result.source?.startsWith('repo_analysis_') && `특정 레포지토리 분석 (${result.source.replace('repo_analysis_', '')})`}
-                    {!result.source?.includes('profile_readme') && !result.source?.includes('repos_meta') && !result.source?.startsWith('repo_analysis_') && !result.source?.startsWith('repos_meta_filtered_') && result.source}
+                    {result.github_url || result.profileUrl}
                   </div>
                 </div>
               </div>
@@ -1678,87 +1657,7 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
             </div>
           )}
 
-          {/* 토큰 사용량 표시 - 맨 아래에 배치 */}
-          {result && result.token_usage && (
-            <div style={{ 
-              marginTop: '20px', 
-              padding: '15px', 
-              background: 'linear-gradient(135deg, #f8f9fa 0%, #e8f4f8 100%)', 
-              borderRadius: '8px',
-              border: '2px solid #28a745'
-            }}>
-              <h5 style={{ 
-                margin: '0 0 15px 0', 
-                color: '#2c3e50', 
-                fontSize: '16px',
-                display: 'flex',
-                alignItems: 'center',
-                gap: '8px'
-              }}>
-                📊 API 토큰 사용량
-              </h5>
-              
-              <div style={{ 
-                display: 'grid', 
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
-                gap: '15px'
-              }}>
-                {/* GitHub API 호출 수 */}
-                <div style={{ 
-                  padding: '12px', 
-                  background: 'white', 
-                  borderRadius: '6px',
-                  border: '1px solid #dee2e6',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>🔗 GitHub API</div>
-                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#2c3e50' }}>
-                    {result.token_usage.github_api_calls || 0}회 호출
-                  </div>
-                </div>
-                
-                {/* OpenAI API 호출 수 */}
-                <div style={{ 
-                  padding: '12px', 
-                  background: 'white', 
-                  borderRadius: '6px',
-                  border: '1px solid #dee2e6',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>🤖 OpenAI API</div>
-                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#2c3e50' }}>
-                    {result.token_usage.openai_api_calls || 0}회 호출
-                  </div>
-                </div>
-                
-                {/* OpenAI 토큰 사용량 */}
-                <div style={{ 
-                  padding: '12px', 
-                  background: 'white', 
-                  borderRadius: '6px',
-                  border: '1px solid #dee2e6',
-                  textAlign: 'center'
-                }}>
-                  <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>🔤 토큰 사용량</div>
-                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#2c3e50' }}>
-                    {result.token_usage.openai_tokens_used || 0} 토큰
-                  </div>
-                </div>
-              </div>
-              
-              <div style={{ 
-                fontSize: '12px', 
-                color: '#666',
-                textAlign: 'center',
-                marginTop: '10px',
-                padding: '8px',
-                background: 'rgba(255,255,255,0.8)',
-                borderRadius: '4px'
-              }}>
-                💡 API 호출 횟수와 토큰 사용량은 분석 품질과 비용을 추적하는 데 도움이 됩니다.
-              </div>
-            </div>
-          )}
+
       </div>
     </div>
   );
