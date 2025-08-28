@@ -1152,10 +1152,68 @@ class SimilarityService:
             print(f"[SimilarityService] 지원자 벡터 저장 실패: {e}")
             return False
 
+    async def _analyze_ideal_candidate_with_llm(self, target_applicant: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        지원자 정보를 바탕으로 이상적인 인재상 LLM 분석 수행
+
+        Args:
+            target_applicant (Dict): 기준 지원자
+
+        Returns:
+            Dict: LLM 분석 결과
+        """
+        try:
+            print(f"[SimilarityService] === LLM 기반 이상적인 인재상 분석 시작 ===")
+            print(f"[SimilarityService] 기준 지원자: {target_applicant.get('name', 'N/A')}")
+
+            # 지원자 정보 수집
+            applicant_info = {
+                "name": target_applicant.get("name", "N/A"),
+                "position": target_applicant.get("position", "N/A"),
+                "experience": target_applicant.get("experience", "N/A"),
+                "skills": target_applicant.get("skills", "N/A"),
+                "department": target_applicant.get("department", "N/A"),
+                "education": target_applicant.get("education", "N/A"),
+                "growthBackground": target_applicant.get("growthBackground", ""),
+                "motivation": target_applicant.get("motivation", ""),
+                "careerHistory": target_applicant.get("careerHistory", "")
+            }
+
+            # 이력서 내용 추가 (resume_id가 있는 경우)
+            if target_applicant.get('resume_id'):
+                try:
+                    from bson import ObjectId
+                    from .mongo_service import MongoService
+                    mongo_service = MongoService()
+                    resume = await mongo_service.db.resumes.find_one({"_id": ObjectId(target_applicant['resume_id'])})
+                    if resume:
+                        if resume.get('extracted_text'):
+                            applicant_info["resume_text"] = resume['extracted_text']
+                        if resume.get('summary'):
+                            applicant_info["resume_summary"] = resume['summary']
+                        if resume.get('keywords'):
+                            applicant_info["resume_keywords"] = resume['keywords']
+                except Exception as e:
+                    print(f"[SimilarityService] 이력서 조회 실패: {e}")
+
+            # LLM 분석 요청
+            analysis_result = await self.llm_service.analyze_ideal_candidate(applicant_info)
+
+            print(f"[SimilarityService] LLM 분석 완료: 이상적인 인재상 분석")
+            return analysis_result
+
+        except Exception as e:
+            print(f"[SimilarityService] LLM 분석 실패: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "LLM 분석 중 오류가 발생했습니다."
+            }
+
     async def _analyze_similar_applicants_with_llm(self, target_applicant: Dict[str, Any],
                                                  similar_applicants: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        유사 지원자들에 대한 LLM 분석 수행
+        유사 지원자들에 대한 LLM 분석 수행 (기존 방식 유지)
 
         Args:
             target_applicant (Dict): 기준 지원자
@@ -1324,14 +1382,50 @@ class SimilarityService:
 
             print(f"[SimilarityService] 벡터 검색 결과: {len(vector_results)}개")
 
-            # 4. 키워드 검색 수행 (이력서 내용 기반)
+            # 4. LangChain 하이브리드 검색 시도 (우선 - 키워드 검색 포함)
+            if self.langchain_hybrid and vector_query_text:
+                print(f"[SimilarityService] LangChain 하이브리드 검색 사용")
+                # 이력서 컬렉션 가져오기 (키워드 검색용)
+                from .mongo_service import MongoService
+                mongo_service = MongoService()
+                resumes_collection = mongo_service.db.resumes
+
+                langchain_result = await self.langchain_hybrid.search_similar_applicants_langchain(
+                    vector_query=vector_query_text,
+                    keyword_query=keyword_query_text,
+                    applicants_collection=applicants_collection,
+                    resumes_collection=resumes_collection,
+                    target_applicant=target_applicant,
+                    limit=limit
+                )
+
+                # LLM 분석 추가 (유사인재 분석)
+                if langchain_result and langchain_result.get("success"):
+                    print(f"[SimilarityService] 유사인재 LLM 분석 수행...")
+                    similar_applicants = langchain_result["data"].get("results", [])
+                    if similar_applicants:
+                        llm_analysis = await self._analyze_similar_applicants_with_llm(target_applicant, similar_applicants)
+                        langchain_result["data"]["llm_analysis"] = llm_analysis
+
+                return langchain_result
+
+            # 5. 기존 방식 폴백 (LangChain 실패 시) - 키워드 검색 수행
+            print(f"[SimilarityService] 기존 하이브리드 검색 사용 (폴백)")
+            
+            # 폴백 시에만 키워드 검색 수행 (이력서 내용 기반)
             keyword_results = []
             if keyword_query_text:
-                print(f"[SimilarityService] 키워드 검색 수행 (이력서 내용 기반)...")
-                # Elasticsearch 기반 BM25 검색 실행
+                print(f"[SimilarityService] 폴백: 키워드 검색 수행 (이력서 내용 기반)...")
+                
+                # 이력서 컬렉션에서 검색
+                from .mongo_service import MongoService
+                mongo_service = MongoService()
+                resumes_collection = mongo_service.db.resumes
+                
+                # Elasticsearch 기반 BM25 검색 실행 (이력서 컬렉션 대상)
                 es_result = await self.keyword_search_service.search_by_keywords(
                     query=keyword_query_text,
-                    collection=applicants_collection,
+                    collection=resumes_collection,
                     limit=limit * 2
                 )
                 # 융합 로직에서 기대하는 형식({_id, _score})으로 변환
@@ -1349,41 +1443,10 @@ class SimilarityService:
                         except Exception:
                             continue
             else:
-                print(f"[SimilarityService] 키워드 검색 스킵 (이력서 내용 없음)")
+                print(f"[SimilarityService] 폴백: 키워드 검색 스킵 (이력서 내용 없음)")
 
-            print(f"[SimilarityService] 키워드 검색 결과: {len(keyword_results)}개")
-
-            # 5. LangChain 하이브리드 검색 시도 (우선)
-            if self.langchain_hybrid and vector_query_text:
-                print(f"[SimilarityService] LangChain 하이브리드 검색 사용")
-                # 이력서 컬렉션 가져오기 (키워드 검색용)
-                from .mongo_service import MongoService
-                mongo_service = MongoService()
-                resumes_collection = mongo_service.db.resumes
-
-                langchain_result = await self.langchain_hybrid.search_similar_applicants_langchain(
-                    vector_query=vector_query_text,
-                    keyword_query=keyword_query_text,
-                    applicants_collection=applicants_collection,
-                    resumes_collection=resumes_collection,
-                    target_applicant=target_applicant,
-                    limit=limit
-                )
-
-                # LLM 분석 추가
-                if langchain_result and langchain_result.get("success"):
-                    similar_applicants = langchain_result.get("data", {}).get("results", [])
-                    if similar_applicants:
-                        print(f"[SimilarityService] 유사 인재에 대한 LLM 분석 수행...")
-                        llm_analysis = await self._analyze_similar_applicants_with_llm(
-                            target_applicant, similar_applicants
-                        )
-                        langchain_result["data"]["llm_analysis"] = llm_analysis
-
-                return langchain_result
-
-            # 6. 기존 방식 폴백 (LangChain 실패 시)
-            print(f"[SimilarityService] 기존 하이브리드 검색 사용 (폴백)")
+            print(f"[SimilarityService] 폴백: 키워드 검색 결과: {len(keyword_results)}개")
+            
             return await self._fuse_applicant_search_results(
                 vector_results, keyword_results, applicants_collection,
                 target_applicant, vector_query_text, limit
@@ -1404,14 +1467,26 @@ class SimilarityService:
         지원자 기반 벡터 + 키워드 검색 결과 융합
         """
         try:
-            print(f"[SimilarityService] === 지원자 기반 결과 융합 시작 ===")
+            print(f"🔗 [SimilarityService] === 지원자 기반 결과 융합 시작 ===")
+            print(f"📊 [SimilarityService] 입력 데이터:")
+            print(f"  - 벡터 결과 수: {len(vector_results)}")
+            print(f"  - 키워드 결과 수: {len(keyword_results)}")
+            print(f"  - 검색 제한: {limit}명")
+            print(f"  - 기준 지원자: {target_applicant.get('name', 'N/A')}")
 
             # 벡터 결과를 지원자 ID 기반으로 변환
+            print(f"🔄 [SimilarityService] 1단계: 벡터 결과 변환")
             vector_applicant_scores = {}
-            for match in vector_results:
+            for i, match in enumerate(vector_results):
+                print(f"  - 벡터 결과 #{i+1} 처리:")
+                print(f"    - 메타데이터: {match.get('metadata', {})}")
+                print(f"    - 점수: {match.get('score', 0)}")
+                
                 # 지원자 벡터의 경우 document_id가 applicant_id임
                 applicant_id = match["metadata"].get("document_id")
                 if applicant_id and applicant_id != str(target_applicant.get("_id")):
+                    print(f"    - 지원자 ID: {applicant_id}")
+                    
                     # applicant_id로 지원자 찾기
                     from bson import ObjectId
                     applicant = await applicants_collection.find_one({"_id": ObjectId(applicant_id)})
@@ -1421,12 +1496,24 @@ class SimilarityService:
                                 "score": match["score"],
                                 "applicant": applicant
                             }
+                            print(f"    ✅ 지원자 매칭 성공: {applicant.get('name', 'N/A')}")
+                        else:
+                            print(f"    ⚠️ 중복 지원자 ID (기존 점수 유지)")
+                    else:
+                        print(f"    ❌ 지원자 조회 실패: {applicant_id}")
+                else:
+                    print(f"    ⚠️ 유효하지 않은 지원자 ID 또는 기준 지원자와 동일")
 
-            print(f"[SimilarityService] 벡터 검색으로 매칭된 지원자 수: {len(vector_applicant_scores)}")
+            print(f"  - 벡터 검색으로 매칭된 지원자 수: {len(vector_applicant_scores)}")
 
             # 키워드 결과를 지원자 ID 기반으로 변환
+            print(f"🔄 [SimilarityService] 2단계: 키워드 결과 변환")
             keyword_applicant_scores = {}
-            for result in keyword_results:
+            for i, result in enumerate(keyword_results):
+                print(f"  - 키워드 결과 #{i+1} 처리:")
+                print(f"    - 이력서 ID: {result.get('_id')}")
+                print(f"    - 원본 점수: {result.get('_score', 0)}")
+                
                 resume_id = result.get("_id")
                 if resume_id and resume_id != target_applicant.get("resume_id"):
                     # resume_id로 지원자 찾기
@@ -1443,27 +1530,45 @@ class SimilarityService:
                                 "original_score": bm25_score,
                                 "applicant": applicant
                             }
+                            print(f"    ✅ 지원자 매칭 성공: {applicant.get('name', 'N/A')} (정규화 점수: {normalized_score:.3f})")
+                        else:
+                            print(f"    ⚠️ 중복 지원자 ID (기존 점수 유지)")
+                    else:
+                        print(f"    ❌ 지원자 조회 실패 (resume_id: {resume_id})")
+                else:
+                    print(f"    ⚠️ 유효하지 않은 이력서 ID 또는 기준 지원자와 동일")
 
-            print(f"[SimilarityService] 키워드 검색으로 매칭된 지원자 수: {len(keyword_applicant_scores)}")
+            print(f"  - 키워드 검색으로 매칭된 지원자 수: {len(keyword_applicant_scores)}")
 
             # 결과 융합
+            print(f"🔗 [SimilarityService] 3단계: 결과 융합")
             fused_results = []
             all_applicant_ids = set(vector_applicant_scores.keys()) | set(keyword_applicant_scores.keys())
+            print(f"  - 총 고유 지원자 수: {len(all_applicant_ids)}")
 
             for applicant_id in all_applicant_ids:
+                print(f"  - 지원자 ID {applicant_id} 융합:")
+                
                 v_score = vector_applicant_scores.get(applicant_id, {}).get("score", 0)
                 k_score_data = keyword_applicant_scores.get(applicant_id, {})
                 k_score_normalized = k_score_data.get("score", 0)
                 k_score = k_score_data.get("original_score", 0)
 
+                print(f"    - 벡터 점수: {v_score:.3f}")
+                print(f"    - 키워드 정규화 점수: {k_score_normalized:.3f}")
+                print(f"    - 키워드 원본 점수: {k_score:.3f}")
+
                 # 가중 평균으로 최종 점수 계산
                 final_score = (v_score * self.search_weights['vector']) + (k_score_normalized * self.search_weights['keyword'])
+                print(f"    - 최종 점수: {final_score:.3f} (가중치: V={self.search_weights['vector']}, K={self.search_weights['keyword']})")
 
                 # 지원자 정보 가져오기
                 applicant = vector_applicant_scores.get(applicant_id, {}).get("applicant") or \
                            keyword_applicant_scores.get(applicant_id, {}).get("applicant")
 
                 if applicant and final_score > 0:
+                    print(f"    ✅ 유효한 지원자: {applicant.get('name', 'N/A')}")
+                    
                     # ID와 datetime 필드 처리
                     applicant["_id"] = str(applicant["_id"])
 
@@ -1478,33 +1583,41 @@ class SimilarityService:
                     if not applicant.get('name'):
                         applicant['name'] = '이름미상'
 
+                    # 검색 방법 목록 생성
+                    search_methods = []
+                    if v_score > 0:
+                        search_methods.append("vector")
+                    if k_score_normalized > 0:
+                        search_methods.append("keyword")
+
                     fused_results.append({
                         "final_score": final_score,
                         "vector_score": v_score,
                         "keyword_score": k_score_normalized,
                         "original_keyword_score": k_score,
                         "applicant": applicant,
-                        "search_methods": [
-                            method for method, score in [
-                                ("vector", v_score),
-                                ("keyword", k_score_normalized)
-                            ] if score > 0
-                        ]
+                        "search_methods": search_methods
                     })
+                    
+                    print(f"    ✅ 융합 결과 추가 완료")
+                else:
+                    print(f"    ❌ 유효하지 않은 지원자 또는 점수 0")
 
             # 최종 점수 기준으로 정렬
+            print(f"📊 [SimilarityService] 4단계: 결과 정렬")
             fused_results.sort(key=lambda x: x["final_score"], reverse=True)
             final_results = fused_results[:limit]
 
-            print(f"[SimilarityService] 융합 결과: {len(final_results)}개 지원자")
+            print(f"  - 융합 결과: {len(final_results)}개 지원자")
             for i, result in enumerate(final_results[:3]):
                 applicant_name = result['applicant'].get('name', '이름미상')
                 applicant_position = result['applicant'].get('position', 'N/A')
-                print(f"[SimilarityService] #{i+1}: {applicant_name} ({applicant_position}) "
+                print(f"  #{i+1}: {applicant_name} ({applicant_position}) "
                       f"(최종:{result['final_score']:.3f}, V:{result['vector_score']:.3f}, "
-                      f"K:{result['keyword_score']:.3f})")
+                      f"K:{result['keyword_score']:.3f}, 방법:{result['search_methods']})")
 
-            return {
+            # 응답 구성
+            response_data = {
                 "success": True,
                 "message": "유사 인재 추천 완료",
                 "data": {
@@ -1526,12 +1639,25 @@ class SimilarityService:
                 }
             }
 
+            print(f"✅ [SimilarityService] === 지원자 기반 결과 융합 완료 ===")
+            return response_data
+
         except Exception as e:
-            print(f"[SimilarityService] 지원자 기반 결과 융합 실패: {str(e)}")
+            print(f"❌ [SimilarityService] 지원자 기반 결과 융합 실패: {str(e)}")
+            import traceback
+            print(f"  - 상세 스택 트레이스:")
+            traceback.print_exc()
             return {
                 "success": False,
                 "error": str(e),
-                "message": "결과 융합 중 오류가 발생했습니다."
+                "message": "결과 융합 중 오류가 발생했습니다.",
+                "debug_info": {
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "vector_results_count": len(vector_results),
+                    "keyword_results_count": len(keyword_results),
+                    "target_applicant_name": target_applicant.get('name', 'N/A')
+                }
             }
 
     async def delete_resume_data(self, resume_id: str) -> Dict[str, Any]:

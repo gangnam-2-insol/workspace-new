@@ -148,7 +148,7 @@ app.include_router(integrated_ocr_router, prefix="/api/integrated-ocr", tags=["i
 app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
 app.include_router(job_posting_router, tags=["job-postings"])
 app.include_router(applicants_router, tags=["applicants"])
-app.include_router(sample_data_router, tags=["sample-data"])
+app.include_router(sample_data_router, prefix="/api/sample", tags=["sample-data"])
 app.include_router(chatbot_router, prefix="/chatbot", tags=["chatbot"])
 
 # 회사 인재상 라우터 등록
@@ -466,6 +466,368 @@ async def create_resume(resume: Resume):
     result = await db.resumes.insert_one(resume_dict)
     resume_dict["id"] = str(result.inserted_id)
     return Resume(**resume_dict)
+
+# 지원자별 이력서 조회 API (모든 정보 포함)
+@app.get("/api/applicants/{applicant_id}/resume")
+async def get_applicant_resume(applicant_id: str):
+    """지원자의 이력서 정보를 모두 가져옴 (분석 결과 포함)"""
+    try:
+        # 1. 지원자 정보 조회
+        applicant = await db.applicants.find_one({"_id": ObjectId(applicant_id)})
+        if not applicant:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다.")
+        
+        # 2. 이력서 ID 확인
+        resume_id = applicant.get("resume_id")
+        if not resume_id:
+            raise HTTPException(status_code=404, detail="이력서가 등록되지 않았습니다.")
+        
+        # 3. 이력서 정보 조회 (resumes 컬렉션에서)
+        resume = await db.resumes.find_one({"_id": ObjectId(resume_id)})
+        if not resume:
+            # resumes 컬렉션에 없으면 applicants 컬렉션의 이력서 필드들 사용
+            resume_data = {
+                "name": applicant.get("name", ""),
+                "position": applicant.get("position", ""),
+                "department": applicant.get("department", ""),
+                "experience": applicant.get("experience", ""),
+                "skills": applicant.get("skills", ""),
+                "growthBackground": applicant.get("growthBackground", ""),
+                "motivation": applicant.get("motivation", ""),
+                "careerHistory": applicant.get("careerHistory", ""),
+                "analysisScore": applicant.get("analysisScore", 0),
+                "analysisResult": applicant.get("analysisResult", ""),
+                "status": applicant.get("status", "pending"),
+                "created_at": applicant.get("created_at"),
+                "extracted_text": applicant.get("extracted_text", ""),
+                "file_metadata": applicant.get("file_metadata", {}),
+                "source": "applicants_collection"
+            }
+        else:
+            # resumes 컬렉션에서 가져온 데이터
+            resume_data = resume.copy()
+            resume_data["source"] = "resumes_collection"
+        
+        # 4. _id를 문자열로 변환
+        if "_id" in resume_data:
+            resume_data["id"] = str(resume_data["_id"])
+            del resume_data["_id"]
+        
+        # 5. 지원자 기본 정보도 포함
+        resume_data["applicant_info"] = {
+            "id": str(applicant["_id"]),
+            "name": applicant.get("name", ""),
+            "email": applicant.get("email", ""),
+            "phone": applicant.get("phone", ""),
+            "status": applicant.get("status", ""),
+            "applied_at": applicant.get("applied_at"),
+            "created_at": applicant.get("created_at")
+        }
+        
+        # 6. AI 분석 결과 조회 (있는 경우)
+        try:
+            from modules.ai.resume_analysis_service import ResumeAnalysisService
+            analysis_service = ResumeAnalysisService(db)
+            analysis_result = await analysis_service.get_applicant_analysis(applicant_id)
+            if analysis_result:
+                resume_data["ai_analysis"] = analysis_result
+        except Exception as e:
+            print(f"[WARNING] AI 분석 결과 조회 실패: {str(e)}")
+            # AI 분석 실패해도 기본 이력서 정보는 반환
+        
+        return {
+            "success": True,
+            "message": "이력서 정보 조회 성공",
+            "data": resume_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 이력서 조회 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"이력서 조회에 실패했습니다: {str(e)}")
+
+# AI 이력서 분석 API
+@app.post("/api/ai-analysis/resume/analyze")
+async def analyze_resume(request: dict):
+    """이력서 AI 분석 실행"""
+    try:
+        from modules.ai.resume_analysis_service import ResumeAnalysisService
+        from models.resume_analysis import ResumeAnalysisRequest
+        
+        # 요청 데이터 검증
+        applicant_id = request.get("applicant_id")
+        analysis_type = request.get("analysis_type", "openai")
+        force_reanalysis = request.get("force_reanalysis", False)
+        
+        if not applicant_id:
+            raise HTTPException(status_code=400, detail="지원자 ID가 필요합니다.")
+        
+        # 분석 서비스 초기화
+        analysis_service = ResumeAnalysisService(db)
+        
+        # 분석 요청 생성
+        analysis_request = ResumeAnalysisRequest(
+            applicant_id=applicant_id,
+            analysis_type=analysis_type,
+            force_reanalysis=force_reanalysis
+        )
+        
+        # 분석 실행
+        result = await analysis_service.analyze_resume(analysis_request)
+        
+        if result.success:
+            return {
+                "success": True,
+                "message": result.message,
+                "data": result.data,
+                "analysis_id": result.analysis_id,
+                "processing_time": result.processing_time
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result.message)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] AI 분석 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AI 분석에 실패했습니다: {str(e)}")
+
+@app.post("/api/ai-analysis/resume/batch-analyze")
+async def batch_analyze_resumes(request: dict):
+    """이력서 일괄 AI 분석"""
+    try:
+        from modules.ai.resume_analysis_service import ResumeAnalysisService
+        from models.resume_analysis import BatchAnalysisRequest
+        
+        # 요청 데이터 검증
+        applicant_ids = request.get("applicant_ids", [])
+        analysis_type = request.get("analysis_type", "openai")
+        
+        if not applicant_ids:
+            raise HTTPException(status_code=400, detail="지원자 ID 리스트가 필요합니다.")
+        
+        # 분석 서비스 초기화
+        analysis_service = ResumeAnalysisService(db)
+        
+        # 일괄 분석 요청 생성
+        batch_request = BatchAnalysisRequest(
+            applicant_ids=applicant_ids,
+            analysis_type=analysis_type
+        )
+        
+        # 일괄 분석 실행
+        result = await analysis_service.batch_analyze(batch_request)
+        
+        if result.success:
+            return {
+                "success": True,
+                "message": result.message,
+                "data": result.data,
+                "processing_time": result.processing_time
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result.message)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 일괄 AI 분석 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"일괄 AI 분석에 실패했습니다: {str(e)}")
+
+@app.post("/api/ai-analysis/resume/reanalyze")
+async def reanalyze_resume(request: dict):
+    """이력서 재분석"""
+    try:
+        from modules.ai.resume_analysis_service import ResumeAnalysisService
+        from models.resume_analysis import ResumeAnalysisRequest
+        
+        # 요청 데이터 검증
+        applicant_id = request.get("applicant_id")
+        analysis_type = request.get("analysis_type", "openai")
+        
+        if not applicant_id:
+            raise HTTPException(status_code=400, detail="지원자 ID가 필요합니다.")
+        
+        # 분석 서비스 초기화
+        analysis_service = ResumeAnalysisService(db)
+        
+        # 재분석 요청 생성
+        analysis_request = ResumeAnalysisRequest(
+            applicant_id=applicant_id,
+            analysis_type=analysis_type,
+            force_reanalysis=True
+        )
+        
+        # 재분석 실행
+        result = await analysis_service.reanalyze_resume(analysis_request)
+        
+        if result.success:
+            return {
+                "success": True,
+                "message": result.message,
+                "data": result.data,
+                "analysis_id": result.analysis_id,
+                "processing_time": result.processing_time
+            }
+        else:
+            raise HTTPException(status_code=500, detail=result.message)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 재분석 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"재분석에 실패했습니다: {str(e)}")
+
+@app.get("/api/ai-analysis/resume/analysis-status")
+async def get_analysis_status():
+    """AI 분석 상태 조회"""
+    try:
+        from modules.ai.resume_analysis_service import ResumeAnalysisService
+        
+        # 분석 서비스 초기화
+        analysis_service = ResumeAnalysisService(db)
+        
+        # 상태 조회
+        status = await analysis_service.get_analysis_status()
+        
+        if status.success:
+            return {
+                "success": True,
+                "message": status.message,
+                "data": status.data,
+                "total_applicants": status.total_applicants,
+                "analyzed_count": status.analyzed_count,
+                "pending_count": status.pending_count,
+                "failed_count": status.failed_count,
+                "progress_percentage": status.progress_percentage
+            }
+        else:
+            raise HTTPException(status_code=500, detail=status.message)
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 분석 상태 조회 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"분석 상태 조회에 실패했습니다: {str(e)}")
+
+@app.get("/api/ai-analysis/resume/{applicant_id}")
+async def get_applicant_analysis(applicant_id: str):
+    """지원자별 AI 분석 결과 조회"""
+    try:
+        from modules.ai.resume_analysis_service import ResumeAnalysisService
+        
+        # 분석 서비스 초기화
+        analysis_service = ResumeAnalysisService(db)
+        
+        # 분석 결과 조회
+        analysis_result = await analysis_service.get_applicant_analysis(applicant_id)
+        
+        if analysis_result:
+            return {
+                "success": True,
+                "message": "AI 분석 결과 조회 성공",
+                "data": analysis_result
+            }
+        else:
+            raise HTTPException(status_code=404, detail="AI 분석 결과를 찾을 수 없습니다.")
+            
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] AI 분석 결과 조회 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"AI 분석 결과 조회에 실패했습니다: {str(e)}")
+
+# 지원자별 자기소개서 조회 API
+@app.get("/api/applicants/{applicant_id}/cover-letter")
+async def get_applicant_cover_letter(applicant_id: str):
+    """지원자의 자기소개서 정보를 모두 가져옴"""
+    try:
+        # 1. 지원자 정보 조회
+        applicant = await db.applicants.find_one({"_id": ObjectId(applicant_id)})
+        if not applicant:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다.")
+        
+        # 2. 자기소개서 정보 조회 (applicants 컬렉션에서)
+        cover_letter_data = {
+            "name": applicant.get("name", ""),
+            "position": applicant.get("position", ""),
+            "cover_letter_text": applicant.get("cover_letter_text", ""),
+            "cover_letter_summary": applicant.get("cover_letter_summary", ""),
+            "cover_letter_analysis": applicant.get("cover_letter_analysis", {}),
+            "extracted_text": applicant.get("cover_letter_extracted_text", ""),
+            "file_metadata": applicant.get("cover_letter_file_metadata", {}),
+            "created_at": applicant.get("created_at"),
+            "source": "applicants_collection"
+        }
+        
+        # 3. 지원자 기본 정보도 포함
+        cover_letter_data["applicant_info"] = {
+            "id": str(applicant["_id"]),
+            "name": applicant.get("name", ""),
+            "email": applicant.get("email", ""),
+            "phone": applicant.get("phone", ""),
+            "status": applicant.get("status", ""),
+            "applied_at": applicant.get("applied_at"),
+            "created_at": applicant.get("created_at")
+        }
+        
+        return {
+            "success": True,
+            "message": "자기소개서 정보 조회 성공",
+            "data": cover_letter_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 자기소개서 조회 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"자기소개서 조회에 실패했습니다: {str(e)}")
+
+# 지원자별 포트폴리오 조회 API
+@app.get("/api/applicants/{applicant_id}/portfolio")
+async def get_applicant_portfolio(applicant_id: str):
+    """지원자의 포트폴리오 정보를 모두 가져옴"""
+    try:
+        # 1. 지원자 정보 조회
+        applicant = await db.applicants.find_one({"_id": ObjectId(applicant_id)})
+        if not applicant:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다.")
+        
+        # 2. 포트폴리오 정보 조회 (applicants 컬렉션에서)
+        portfolio_data = {
+            "name": applicant.get("name", ""),
+            "position": applicant.get("position", ""),
+            "github_url": applicant.get("github_url", ""),
+            "github_analysis": applicant.get("github_analysis", {}),
+            "portfolio_files": applicant.get("portfolio_files", []),
+            "portfolio_summary": applicant.get("portfolio_summary", ""),
+            "created_at": applicant.get("created_at"),
+            "source": "applicants_collection"
+        }
+        
+        # 3. 지원자 기본 정보도 포함
+        portfolio_data["applicant_info"] = {
+            "id": str(applicant["_id"]),
+            "name": applicant.get("name", ""),
+            "email": applicant.get("email", ""),
+            "phone": applicant.get("phone", ""),
+            "status": applicant.get("status", ""),
+            "applied_at": applicant.get("applied_at"),
+            "created_at": applicant.get("created_at")
+        }
+        
+        return {
+            "success": True,
+            "message": "포트폴리오 정보 조회 성공",
+            "data": portfolio_data
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 포트폴리오 조회 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"포트폴리오 조회에 실패했습니다: {str(e)}")
 
 # 면접 관련 API
 @app.get("/api/interviews", response_model=List[Interview])
@@ -1176,38 +1538,48 @@ async def check_coverletter_similarity(
         # 1. 지원자 존재 확인
         applicant = await mongo_service.get_applicant_by_id(applicant_id)
         if not applicant:
+            print(f"[ERROR] 지원자를 찾을 수 없음 - applicant_id: {applicant_id}")
             raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
+
+        print(f"[INFO] 지원자 정보 확인 - applicant: {applicant}")
+        print(f"[INFO] 지원자 필드들: {list(applicant.keys())}")
 
         # 2. 자소서 존재 확인
         cover_letter_id = applicant.get("cover_letter_id")
+        print(f"[INFO] 자소서 ID 확인 - cover_letter_id: {cover_letter_id}")
+
         if not cover_letter_id:
+            print(f"[ERROR] 자소서 ID가 없음 - applicant_id: {applicant_id}")
             raise HTTPException(status_code=404, detail="자소서가 없습니다")
 
         # 3. 자소서 내용 가져오기
+        from bson import ObjectId
+        from motor.motor_asyncio import AsyncIOMotorClient
+
+        mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/hireme")
+        client = AsyncIOMotorClient(mongo_uri)
+        db = client.hireme
+
         try:
-            from bson import ObjectId
-            from motor.motor_asyncio import AsyncIOMotorClient
-
-            mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/hireme")
-            client = AsyncIOMotorClient(mongo_uri)
-            db = client.hireme
-
             # ObjectId 변환 시도
             try:
                 object_id = ObjectId(cover_letter_id)
             except Exception as e:
                 print(f"[ERROR] 잘못된 ObjectId 형식: {cover_letter_id}")
-                client.close()
                 raise HTTPException(status_code=400, detail="잘못된 자소서 ID 형식입니다")
 
             cover_letter = await db.cover_letters.find_one({"_id": object_id})
-            client.close()
 
             if not cover_letter:
                 raise HTTPException(status_code=404, detail="자소서를 찾을 수 없습니다")
 
             # 자소서 내용 추출 (content 또는 extracted_text 필드에서)
             cover_letter_text = cover_letter.get("content", "") or cover_letter.get("extracted_text", "")
+            
+            # 자소서 데이터에 extracted_text 필드가 없으면 content를 사용
+            if not cover_letter.get("extracted_text"):
+                cover_letter["extracted_text"] = cover_letter_text
+            
             if not cover_letter_text:
                 print(f"[WARNING] 자소서 내용이 비어있음 - applicant_id: {applicant_id}")
                 return {
@@ -1223,24 +1595,48 @@ async def check_coverletter_similarity(
                 }
 
             print(f"[INFO] 자소서 내용 발견 - 길이: {len(cover_letter_text)}자")
+            print(f"[INFO] 자소서 필드들: {list(cover_letter.keys())}")
+
+            # 4. 유사도 서비스 초기화
+            similarity_service = get_similarity_service()
+
+            # 5. 자소서 표절체크 수행 (청킹 기반 유사도 검색 사용)
+            # 자소서 데이터를 직접 전달하여 청킹 처리
+            result = await similarity_service.find_similar_documents_by_chunks(
+                document_id=cover_letter_id,
+                collection=db.cover_letters,
+                document_type="cover_letter",
+                limit=10
+            )
 
         except HTTPException:
             raise
         except Exception as e:
             print(f"[ERROR] 자소서 조회 실패: {str(e)}")
             raise HTTPException(status_code=500, detail="자소서 조회 중 오류가 발생했습니다")
+        finally:
+            client.close()
 
-        # 4. 유사도 서비스 초기화
-        similarity_service = get_similarity_service()
-
-        # 5. 자소서 표절체크 수행 (청킹 기반 유사도 검색 사용)
-        # cover_letter_id를 사용하여 cover_letters 컬렉션에서 검색
-        result = await similarity_service.find_similar_documents_by_chunks(
-            document_id=cover_letter_id,
-            collection=db.cover_letters,
-            document_type="cover_letter",
-            limit=10
-        )
+        # 결과 검증 및 폴백 처리
+        if not result or not result.get("success"):
+            print(f"[WARNING] 자소서 표절체크 결과가 비어있음 - 폴백 응답 생성")
+            return {
+                "status": "success",
+                "applicant_id": applicant_id,
+                "plagiarism_result": {
+                    "status": "no_similar_documents",
+                    "message": "유사한 자소서를 찾을 수 없어 표절 검사를 수행할 수 없습니다.",
+                    "similar_count": 0,
+                    "suspicion_level": "UNKNOWN",
+                    "debug_info": {
+                        "cover_letter_id": cover_letter_id,
+                        "content_length": len(cover_letter_text),
+                        "has_extracted_text": bool(cover_letter.get("extracted_text")),
+                        "cover_letter_fields": list(cover_letter.keys())
+                    }
+                },
+                "message": "자소서 표절체크 완료 (유사 문서 없음)"
+            }
 
         return {
             "status": "success",
@@ -1258,88 +1654,7 @@ async def check_coverletter_similarity(
             detail=f"자소서 표절체크 중 오류가 발생했습니다: {str(e)}"
         )
 
-# 커버레터 표절 의심도 체크 엔드포인트
-@app.post("/api/coverletter/similarity-check/{applicant_id}")
-async def check_coverletter_similarity(
-    applicant_id: str,
-    mongo_service: MongoService = Depends(get_mongo_service),
-    similarity_service: SimilarityService = Depends(get_similarity_service)
-):
-    """자기소개서 표절 의심도 검사"""
-    try:
-        print(f"[INFO] 자소서 표절 의심도 검사 요청 - applicant_id: {applicant_id}")
 
-        # 1. 지원자 존재 확인
-        applicant = await mongo_service.get_applicant_by_id(applicant_id)
-        if not applicant:
-            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
-
-        # 2. 자소서 존재 확인
-        cover_letter_id = applicant.get("cover_letter_id")
-        if not cover_letter_id:
-            raise HTTPException(status_code=404, detail="자소서가 없습니다")
-
-        # 3. 자소서 내용 가져오기
-        try:
-            # ObjectId 변환 시도
-            try:
-                object_id = ObjectId(cover_letter_id)
-            except Exception as e:
-                print(f"[ERROR] 잘못된 ObjectId 형식: {cover_letter_id}")
-                raise HTTPException(status_code=400, detail="잘못된 자소서 ID 형식입니다")
-
-            cover_letter = await db.cover_letters.find_one({"_id": object_id})
-
-            if not cover_letter:
-                raise HTTPException(status_code=404, detail="자소서를 찾을 수 없습니다")
-
-            # 자소서 내용 추출
-            cover_letter_text = cover_letter.get("content", "") or cover_letter.get("extracted_text", "")
-            if not cover_letter_text:
-                print(f"[WARNING] 자소서 내용이 비어있음 - applicant_id: {applicant_id}")
-                return {
-                    "status": "success",
-                    "applicant_id": applicant_id,
-                    "plagiarism_result": {
-                        "status": "no_content",
-                        "message": "자소서 내용이 없어 표절 의심도 검사를 수행할 수 없습니다.",
-                        "similar_count": 0,
-                        "suspicion_level": "UNKNOWN"
-                    },
-                    "message": "자소서 내용이 없습니다"
-                }
-
-            print(f"[INFO] 자소서 내용 발견 - 길이: {len(cover_letter_text)}자")
-
-        except HTTPException:
-            raise
-        except Exception as e:
-            print(f"[ERROR] 자소서 조회 실패: {str(e)}")
-            raise HTTPException(status_code=500, detail="자소서 조회 중 오류가 발생했습니다")
-
-        # 4. 자소서 표절 의심도 검사 수행
-        result = await similarity_service.find_similar_documents_by_chunks(
-            document_id=cover_letter_id,
-            collection=db.cover_letters,
-            document_type="cover_letter",
-            limit=10
-        )
-
-        return {
-            "status": "success",
-            "applicant_id": applicant_id,
-            "plagiarism_result": result,
-            "message": "자소서 표절 의심도 검사 완료"
-        }
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        print(f"[ERROR] 자소서 표절 의심도 검사 실패: {str(e)}")
-        raise HTTPException(
-            status_code=500,
-            detail=f"자소서 표절 의심도 검사 중 오류가 발생했습니다: {str(e)}"
-        )
 
 # 메일 템플릿 및 설정 관련 엔드포인트
 @app.get("/api/mail-templates")
@@ -1347,7 +1662,21 @@ async def get_mail_templates():
     """메일 템플릿 조회"""
     try:
         templates = await db.mail_templates.find_one({"_id": "default"})
-        if not templates:
+
+        # 기존 템플릿이 있더라도 새로운 상태 타입들이 없으면 재생성
+        should_recreate = False
+        if templates:
+            required_types = ["passed", "document_passed", "final_passed", "rejected", "document_rejected"]
+            for required_type in required_types:
+                if required_type not in templates:
+                    should_recreate = True
+                    break
+
+        if not templates or should_recreate:
+            # 기존 템플릿이 있으면 삭제
+            if templates:
+                await db.mail_templates.delete_one({"_id": "default"})
+
             # 기본 템플릿 생성
             default_templates = {
                 "_id": "default",
@@ -1362,7 +1691,41 @@ async def get_mail_templates():
 감사합니다.
 {company_name} 채용팀"""
                 },
+                "document_passed": {
+                    "subject": "축하합니다! 서류 전형 합격 안내",
+                    "content": """안녕하세요, {applicant_name}님
+
+축하드립니다! {job_posting_title} 포지션에 대한 서류 전형에 합격하셨습니다.
+
+다음 단계인 면접 일정은 추후 별도로 안내드리겠습니다.
+
+감사합니다.
+{company_name} 채용팀"""
+                },
+                "final_passed": {
+                    "subject": "축하합니다! 최종 합격 안내",
+                    "content": """안녕하세요, {applicant_name}님
+
+축하드립니다! {job_posting_title} 포지션에 대한 최종 전형에 합격하셨습니다.
+
+입사 관련 상세 안내는 추후 별도로 연락드리겠습니다.
+
+감사합니다.
+{company_name} 채용팀"""
+                },
                 "rejected": {
+                    "subject": "서류 전형 결과 안내",
+                    "content": """안녕하세요, {applicant_name}님
+
+{job_posting_title} 포지션에 대한 서류 전형 결과를 안내드립니다.
+
+안타깝게도 이번 전형에서는 합격하지 못했습니다.
+앞으로 더 좋은 기회가 있을 때 다시 지원해 주시기 바랍니다.
+
+감사합니다.
+{company_name} 채용팀"""
+                },
+                "document_rejected": {
                     "subject": "서류 전형 결과 안내",
                     "content": """안녕하세요, {applicant_name}님
 
@@ -1392,7 +1755,10 @@ async def save_mail_templates(templates: Dict[str, Any]):
     try:
         update_data = {
             "passed": templates.get("passed", {}),
+            "document_passed": templates.get("document_passed", {}),
+            "final_passed": templates.get("final_passed", {}),
             "rejected": templates.get("rejected", {}),
+            "document_rejected": templates.get("document_rejected", {}),
             "updated_at": datetime.now()
         }
 
@@ -1555,6 +1921,195 @@ async def send_test_mail(request: Request):
     except Exception as e:
         print(f"테스트 메일 발송 중 오류: {str(e)}")  # 디버깅용 로그
         raise HTTPException(status_code=500, detail=f"테스트 메일 발송 중 오류가 발생했습니다: {str(e)}")
+
+@app.post("/api/send-bulk-mail")
+async def send_bulk_mail(request: Request):
+    """대량 메일 발송"""
+    try:
+        import smtplib
+        from email.mime.multipart import MIMEMultipart
+        from email.mime.text import MIMEText
+
+        print(f"📧 [DEBUG] 대량 메일 발송 요청 시작")
+
+        data = await request.json()
+        print(f"📧 [DEBUG] 받은 데이터: {data}")
+
+        status_type = data.get("statusType")
+        print(f"📧 [DEBUG] statusType: {status_type}")
+
+        if not status_type:
+            print(f"📧 [DEBUG] 상태 타입이 없음")
+            raise HTTPException(status_code=400, detail="상태 타입이 필요합니다.")
+
+        # 메일 설정 조회
+        print(f"📧 [DEBUG] 메일 설정 조회 시작")
+        mail_settings = await db.mail_settings.find_one({"_id": "default"})
+        print(f"📧 [DEBUG] 메일 설정 조회 결과: {mail_settings}")
+
+        if not mail_settings:
+            print(f"📧 [DEBUG] 메일 설정이 없음")
+            raise HTTPException(status_code=400, detail="메일 설정이 필요합니다.")
+
+        # 메일 템플릿 조회
+        print(f"📧 [DEBUG] 메일 템플릿 조회 시작")
+        mail_templates = await db.mail_templates.find_one({"_id": "default"})
+        print(f"📧 [DEBUG] 메일 템플릿 조회 결과: {mail_templates}")
+
+        if not mail_templates:
+            print(f"📧 [DEBUG] 메일 템플릿이 없음")
+            raise HTTPException(status_code=400, detail="메일 템플릿이 필요합니다.")
+
+        # 지원자 조회
+        print(f"📧 [DEBUG] 지원자 조회 시작 - statusType: {status_type}")
+
+        if status_type == 'passed':
+            # 합격자 (서류합격, 최종합격)
+            print(f"📧 [DEBUG] 합격자 조회 쿼리 실행")
+            applicants = await db.applicants.find({
+                "status": {"$in": ["서류합격", "최종합격"]}
+            }).to_list(None)
+            print(f"📧 [DEBUG] 합격자 조회 결과: {len(applicants)}명")
+        elif status_type == 'document_passed':
+            # 서류합격자
+            print(f"📧 [DEBUG] 서류합격자 조회 쿼리 실행")
+            applicants = await db.applicants.find({
+                "status": "서류합격"
+            }).to_list(None)
+            print(f"📧 [DEBUG] 서류합격자 조회 결과: {len(applicants)}명")
+        elif status_type == 'final_passed':
+            # 최종합격자
+            print(f"📧 [DEBUG] 최종합격자 조회 쿼리 실행")
+            applicants = await db.applicants.find({
+                "status": "최종합격"
+            }).to_list(None)
+            print(f"📧 [DEBUG] 최종합격자 조회 결과: {len(applicants)}명")
+        elif status_type == 'rejected':
+            # 불합격자 (서류불합격)
+            print(f"📧 [DEBUG] 불합격자 조회 쿼리 실행")
+            applicants = await db.applicants.find({
+                "status": "서류불합격"
+            }).to_list(None)
+            print(f"📧 [DEBUG] 불합격자 조회 결과: {len(applicants)}명")
+        elif status_type == 'document_rejected':
+            # 서류불합격자
+            print(f"📧 [DEBUG] 서류불합격자 조회 쿼리 실행")
+            applicants = await db.applicants.find({
+                "status": "서류불합격"
+            }).to_list(None)
+            print(f"📧 [DEBUG] 서류불합격자 조회 결과: {len(applicants)}명")
+        else:
+            print(f"📧 [DEBUG] 잘못된 상태 타입: {status_type}")
+            raise HTTPException(status_code=400, detail="잘못된 상태 타입입니다.")
+
+        print(f"📧 [DEBUG] 조회된 지원자 목록:")
+        for i, applicant in enumerate(applicants[:5]):  # 처음 5명만 출력
+            print(f"  {i+1}. {applicant.get('name', 'Unknown')} - {applicant.get('email', 'No email')} - {applicant.get('status', 'No status')}")
+
+        if not applicants:
+            print(f"📧 [DEBUG] 발송할 지원자가 없음")
+            return {
+                "success": False,
+                "message": "발송할 지원자가 없습니다.",
+                "total": 0,
+                "success_count": 0,
+                "failed_count": 0
+            }
+
+        # 메일 템플릿 선택
+        template = mail_templates.get(status_type, {})
+        if not template:
+            print(f"📧 [DEBUG] {status_type} 상태에 대한 메일 템플릿이 없습니다.")
+            print(f"📧 [DEBUG] 사용 가능한 템플릿: {list(mail_templates.keys())}")
+            return {
+                "success": False,
+                "message": f"{status_type} 상태에 대한 메일 템플릿이 없습니다. /settings 페이지에서 템플릿을 추가해주세요.",
+                "total": 0,
+                "success_count": 0,
+                "failed_count": 0
+            }
+
+        success_count = 0
+        failed_count = 0
+        failed_emails = []
+
+        for applicant in applicants:
+            # 지원자 이메일 확인
+            email = applicant.get('email')
+            if not email:
+                failed_count += 1
+                continue
+
+            # 채용공고 정보 조회
+            job_posting_id = applicant.get('job_posting_id')
+            job_posting = {}
+            if job_posting_id:
+                job_posting = await db.job_postings.find_one({"_id": ObjectId(job_posting_id)}) or {}
+
+            # 메일 내용 포맷팅
+            try:
+                content = template.get('content', '').format(
+                    applicant_name=applicant.get('name', '지원자'),
+                    job_posting_title=job_posting.get('title', '채용공고'),
+                    company_name=job_posting.get('company', '회사명'),
+                    position=applicant.get('position', '지원 직무')
+                )
+            except Exception as e:
+                print(f"메일 내용 포맷팅 실패: {e}")
+                content = template.get('content', '')
+
+            # 메일 객체 생성
+            msg = MIMEMultipart()
+            msg['From'] = f"{mail_settings.get('senderName', '')} <{mail_settings.get('senderEmail')}>"
+            msg['To'] = email
+            msg['Subject'] = template.get('subject', '안내 메일')
+            msg.attach(MIMEText(content, 'plain', 'utf-8'))
+
+            # SMTP 서버 연결 및 메일 발송
+            try:
+                smtp_port = mail_settings.get('smtpPort', 587)
+                smtp_server = mail_settings.get('smtpServer', 'smtp.gmail.com')
+
+                if smtp_port == 465:
+                    with smtplib.SMTP_SSL(smtp_server, smtp_port) as server:
+                        server.login(mail_settings.get('senderEmail'), mail_settings.get('senderPassword'))
+                        server.send_message(msg)
+                else:
+                    with smtplib.SMTP(smtp_server, smtp_port) as server:
+                        server.starttls()
+                        server.login(mail_settings.get('senderEmail'), mail_settings.get('senderPassword'))
+                        server.send_message(msg)
+
+                success_count += 1
+                print(f"✅ {applicant.get('name', 'Unknown')} ({email}) - 메일 발송 성공")
+
+            except Exception as e:
+                failed_count += 1
+                failed_emails.append(email)
+                print(f"❌ {applicant.get('name', 'Unknown')} ({email}) - 메일 발송 실패: {e}")
+
+        # 결과 반환
+        result = {
+            "success": True,
+            "total": len(applicants),
+            "success_count": success_count,
+            "failed_count": failed_count,
+            "failed_emails": failed_emails,
+            "message": f"메일 발송 완료: {success_count}건 성공, {failed_count}건 실패"
+        }
+
+        print(f"\n📊 메일 발송 결과:")
+        print(f"  - 총 대상: {len(applicants)}명")
+        print(f"  - 성공: {success_count}건")
+        print(f"  - 실패: {failed_count}건")
+
+        return result
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"대량 메일 발송 중 오류: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"대량 메일 발송 중 오류가 발생했습니다: {str(e)}")
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

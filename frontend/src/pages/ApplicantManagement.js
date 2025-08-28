@@ -290,7 +290,7 @@ const logError = (message, error = null) => {
 
 const ApplicantManagement = () => {
   log('컴포넌트 초기화 시작');
-  
+
   // 전역 표절 의심도 상태
   const { updateSuspicionData, setLoadingState, getSuspicionData, getLoadingState } = useSuspicion();
 
@@ -447,20 +447,39 @@ const ApplicantManagement = () => {
 
   // 메일 발송 핸들러
   const handleSendMail = useCallback(async (statusType) => {
+    console.log('📧 [DEBUG] handleSendMail 호출됨 - statusType:', statusType);
+    console.log('📧 [DEBUG] statusType 타입:', typeof statusType);
+
     const statusMap = {
       'passed': '합격',
-      'rejected': '불합격'
+      'rejected': '불합격',
+      'document_passed': '서류합격',
+      'final_passed': '최종합격',
+      'document_rejected': '서류불합격'
     };
 
     const statusText = statusMap[statusType];
+    console.log('📧 [DEBUG] statusText:', statusText);
+
+    if (!statusText) {
+      console.error('📧 [DEBUG] 알 수 없는 statusType:', statusType);
+      alert(`알 수 없는 상태 타입입니다: ${statusType}`);
+      return;
+    }
+
     const targetApplicants = applicants.filter(applicant => {
-      if (statusType === 'passed') {
+      console.log('📧 [DEBUG] 지원자 상태 확인:', applicant.name, applicant.status);
+      if (statusType === 'passed' || statusType === 'document_passed') {
         return applicant.status === '서류합격' || applicant.status === '최종합격';
-      } else if (statusType === 'rejected') {
+      } else if (statusType === 'rejected' || statusType === 'document_rejected') {
         return applicant.status === '서류불합격';
+      } else if (statusType === 'final_passed') {
+        return applicant.status === '최종합격';
       }
       return false;
     });
+
+    console.log('📧 [DEBUG] 필터링된 지원자 수:', targetApplicants.length);
 
     if (targetApplicants.length === 0) {
       alert(`${statusText}자가 없습니다.`);
@@ -475,20 +494,30 @@ const ApplicantManagement = () => {
 
     if (confirmed) {
       try {
-        console.log(`📧 ${statusText}자들에게 메일 발송 시작:`, targetApplicants.length, '명');
+        console.log(`📧 [DEBUG] ${statusText}자들에게 메일 발송 시작:`, targetApplicants.length, '명');
+        console.log(`📧 [DEBUG] statusType:`, statusType);
+        console.log(`📧 [DEBUG] targetApplicants:`, targetApplicants);
 
         // 메일 발송 API 호출
+        console.log(`📧 [DEBUG] mailApi.sendBulkMail 호출 전`);
         const result = await mailApi.sendBulkMail(statusType);
+        console.log(`📧 [DEBUG] mailApi.sendBulkMail 호출 후 결과:`, result);
 
-        if (result.success) {
+        if (result && result.success) {
+          console.log(`📧 [DEBUG] 메일 발송 성공 - 성공: ${result.success_count}, 실패: ${result.failed_count}`);
           alert(`✅ ${result.success_count}명의 ${statusText}자들에게 메일이 성공적으로 발송되었습니다.\n\n실패: ${result.failed_count}건`);
         } else {
-          alert(`❌ 메일 발송 실패: ${result.message}`);
+          console.log(`📧 [DEBUG] 메일 발송 실패 - result:`, result);
+          const errorMessage = result ? result.message : '알 수 없는 오류';
+          alert(`❌ 메일 발송 실패: ${errorMessage}`);
         }
 
       } catch (error) {
-        console.error('메일 발송 실패:', error);
-        alert('메일 발송 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.');
+        console.error('📧 [DEBUG] 메일 발송 실패 상세:', error);
+        console.error('📧 [DEBUG] 오류 타입:', typeof error);
+        console.error('📧 [DEBUG] 오류 메시지:', error.message);
+        console.error('📧 [DEBUG] 오류 스택:', error.stack);
+        alert(`메일 발송 중 오류가 발생했습니다: ${error.message}`);
       }
     }
   }, [applicants]);
@@ -1273,7 +1302,7 @@ const ApplicantManagement = () => {
   const handleCardClick = async (applicant) => {
     setSelectedApplicant(applicant);
     setIsModalOpen(true);
-    
+
     // 유사인재 추천 API 호출
     try {
       console.log('🚀 [ApplicantManagement] 유사인재 추천 API 호출 시작', applicant.id);
@@ -1367,20 +1396,20 @@ const ApplicantManagement = () => {
     console.log('🚀 [ApplicantManagement] 자소서 분석 모달 열림 - 표절 의심도 검사 시작');
     console.log('- applicantId:', applicantWithId._id);
     console.log('- applicantName:', applicantWithId.name);
-    
+
     setLoadingState(applicantWithId._id, true);
-    
+
     try {
       console.log('🔍 자소서 표절 의심도 검사 시작...');
       console.log('- API 요청 URL:', `http://localhost:8000/api/coverletter/similarity-check/${applicantWithId._id}`);
-      
+
       const suspicionResult = await applicantApi.checkCoverLetterSuspicion(applicantWithId._id);
       console.log('✅ 자소서 표절 의심도 검사 완료:', suspicionResult);
       console.log('- 응답 데이터 구조:', JSON.stringify(suspicionResult, null, 2));
-      
+
       updateSuspicionData(applicantWithId._id, suspicionResult);
       console.log('💾 전역 상태에 표절 의심도 결과 저장 완료');
-      
+
       // 저장된 데이터 검증
       const storedData = getSuspicionData(applicantWithId._id);
       console.log('📋 저장된 데이터 확인:', storedData);
@@ -1433,7 +1462,7 @@ const ApplicantManagement = () => {
     // 모달 먼저 열기
     setDocumentModal({ isOpen: true, type, applicant: applicantWithId, isOriginal: false, documentData: null, suspicionData: null, isLoadingSuspicion: type === 'coverLetter' });
     if (type === 'portfolio') {
-      setPortfolioView('select');
+      setPortfolioView('github');
     }
 
     // 각 문서 타입별로 해당 컬렉션에서 데이터 가져오기
@@ -1496,20 +1525,20 @@ const ApplicantManagement = () => {
       console.log('🚀 [ApplicantManagement] 자소서 모달 열림 - 표절 의심도 검사 시작');
       console.log('- applicantId:', applicantWithId._id);
       console.log('- applicantName:', applicantWithId.name);
-      
+
       setLoadingState(applicantWithId._id, true);
-      
+
       try {
         console.log('🔍 자소서 표절 의심도 검사 시작...');
         console.log('- API 요청 URL:', `http://localhost:8000/api/coverletter/similarity-check/${applicantWithId._id}`);
-        
+
         const suspicionResult = await applicantApi.checkCoverLetterSuspicion(applicantWithId._id);
         console.log('✅ 자소서 표절 의심도 검사 완료:', suspicionResult);
         console.log('- 응답 데이터 구조:', JSON.stringify(suspicionResult, null, 2));
-        
+
         updateSuspicionData(applicantWithId._id, suspicionResult);
         console.log('💾 전역 상태에 표절 의심도 결과 저장 완료');
-        
+
         // 저장된 데이터 검증
         const storedData = getSuspicionData(applicantWithId._id);
         console.log('📋 저장된 데이터 확인:', storedData);
@@ -2436,7 +2465,7 @@ const ApplicantManagement = () => {
         </Wrapper>
       ) : (
         <Wrapper>
-          <ApplicantsBoard>
+          <BoardContainer>
             {paginatedApplicants.length > 0 ? (
               paginatedApplicants.map((applicant, index) => {
                 // filteredApplicants에서 해당 지원자의 순위 가져오기
@@ -2453,7 +2482,7 @@ const ApplicantManagement = () => {
                   onMouseEnter={() => setHoveredApplicant(applicant.id)}
                   onMouseLeave={() => setHoveredApplicant(null)}
                 >
-                  <ApplicantHeader>
+                  <BoardCardHeader>
                     <ApplicantCheckbox onClick={(e) => e.stopPropagation()}>
                       <CheckboxInput
                         type="checkbox"
@@ -2464,80 +2493,72 @@ const ApplicantManagement = () => {
                         }}
                       />
                     </ApplicantCheckbox>
-                    <ApplicantName>
-                      {rank && rank <= 3 && selectedJobPostingId && (
-                        <BoardRankBadge rank={rank} />
-                      )}
-                      {applicant.name}
-                    </ApplicantName>
-                    <ApplicantPosition>{applicant.position}</ApplicantPosition>
-                    <ApplicantEmail>
-                      <ContactItem>
+                    <BoardCardContent>
+                      <CardAvatar>
+                        {rank && rank <= 3 && selectedJobPostingId && (
+                          <BoardRankBadge rank={rank} />
+                        )}
+                        {applicant.name?.charAt(0) || '?'}
+                      </CardAvatar>
+                      <CardName>{applicant.name}</CardName>
+                      <CardPosition>{applicant.position}</CardPosition>
+                      <CardContact>
                         <FiMail size={10} />
                         {applicant.email}
-                      </ContactItem>
-                    </ApplicantEmail>
-                    <ApplicantPhone>
-                      <ContactItem>
-                        <FiPhone size={10} />
-                        {applicant.phone}
-                      </ContactItem>
-                    </ApplicantPhone>
-                    <ApplicantSkills>
-                      {applicant.skills ? (
-                        <>
-                          {Array.isArray(applicant.skills)
-                            ? applicant.skills.slice(0, 2).map((skill, skillIndex) => (
-                                <SkillTag key={skillIndex}>
-                                  {skill}
-                                </SkillTag>
-                              ))
-                            : applicant.skills.split(',').slice(0, 2).map((skill, skillIndex) => (
-                                <SkillTag key={skillIndex}>
-                                  {skill.trim()}
-                                </SkillTag>
-                              ))
-                          }
-                          {Array.isArray(applicant.skills)
-                            ? applicant.skills.length > 2 && (
-                              <SkillTag>+{applicant.skills.length - 2}</SkillTag>
-                            )
-                            : applicant.skills.split(',').length > 2 && (
-                              <SkillTag>+{applicant.skills.split(',').length - 2}</SkillTag>
-                            )
-                          }
-                        </>
-                      ) : (
-                        <SkillTag>기술스택 없음</SkillTag>
-                      )}
-                    </ApplicantSkills>
-                    <ApplicantDate>
-                      {applicant.appliedDate || applicant.created_at
-                        ? new Date(applicant.appliedDate || applicant.created_at).toLocaleDateString('ko-KR', {
-                            year: 'numeric',
-                            month: '2-digit',
-                            day: '2-digit'
-                          }).replace(/\. /g, '.').replace(' ', '')
-                        : '날짜 없음'
-                      }
-                    </ApplicantDate>
-                    <ApplicantScoreBoard>
-                      <ScoreBadge score={applicant.ranks?.total || 0}>
-                        {applicant.ranks?.total || 0}점
-                      </ScoreBadge>
-                    </ApplicantScoreBoard>
-                    <StatusColumnWrapper>
-                      <StatusBadge
-                        status={applicant.status}
-                        small
-                        initial={{ opacity: 0, scale: 0.8 }}
-                        animate={{ opacity: 1, scale: 1 }}
-                        transition={{ duration: 0.08, ease: "easeOut" }}
+                      </CardContact>
+                      <CardSkills>
+                        {applicant.skills ? (
+                          Array.isArray(applicant.skills)
+                            ? applicant.skills.slice(0, 1).join(', ')
+                            : applicant.skills.split(',').slice(0, 1).join(', ')
+                        ) : (
+                          '기술스택 없음'
+                        )}
+                      </CardSkills>
+                      <CardDate>
+                        {applicant.appliedDate || applicant.created_at
+                          ? new Date(applicant.appliedDate || applicant.created_at).toLocaleDateString('ko-KR', {
+                              year: 'numeric',
+                              month: '2-digit',
+                              day: '2-digit'
+                            }).replace(/\. /g, '.').replace(' ', '')
+                          : '날짜 없음'
+                        }
+                      </CardDate>
+                      <CardScore>
+                        {applicant.analysisScore || 0}점
+                      </CardScore>
+                    </BoardCardContent>
+                    <BoardCardActions>
+                      <FixedPassButton
+                        active={applicant.status === '서류합격'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUpdateStatus(applicant.id, '서류합격');
+                        }}
                       >
-                        {getStatusText(applicant.status)}
-                      </StatusBadge>
-                    </StatusColumnWrapper>
-                  </ApplicantHeader>
+                        합격
+                      </FixedPassButton>
+                      <FixedPendingButton
+                        active={applicant.status === '보류'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUpdateStatus(applicant.id, '보류');
+                        }}
+                      >
+                        보류
+                      </FixedPendingButton>
+                      <FixedRejectButton
+                        active={applicant.status === '서류불합격'}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleUpdateStatus(applicant.id, '서류불합격');
+                        }}
+                      >
+                        불합격
+                      </FixedRejectButton>
+                    </BoardCardActions>
+                  </BoardCardHeader>
                 </BoardApplicantCard>
               );
             })          ) : (
@@ -2547,7 +2568,7 @@ const ApplicantManagement = () => {
                 <p>다른 검색어나 필터 조건을 시도해보세요.</p>
               </EmptyState>
             )}
-          </ApplicantsBoard>
+          </BoardContainer>
 
           {/* 페이지네이션 (보드 뷰) */}
           {totalPages > 0 && (
@@ -2631,6 +2652,7 @@ const ApplicantManagement = () => {
             onStatusUpdate={handleUpdateStatus}
             onCoverLetterAnalysis={handleCoverLetterAnalysisModalOpen}
             onDetailedAnalysis={() => setShowDetailedAnalysis(true)}
+            onApplicantSelect={setSelectedApplicant}
           />
         )}
 
@@ -2665,100 +2687,15 @@ const ApplicantManagement = () => {
               </DocumentModalHeader>
 
               <DocumentContent>
-                {/* 포트폴리오: 선택 화면 */}
-                {documentModal.type === 'portfolio' && portfolioView === 'select' && (
-                  <>
-                    <DocumentSection>
-                      <DocumentSectionTitle>포트폴리오 요약 방법 선택</DocumentSectionTitle>
-                      <SelectionGrid>
-                        <SelectionCard
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => setPortfolioView('github')}
-                        >
-                          <SelectionIcon className="github">
-                            <FiGitBranch />
-                          </SelectionIcon>
-                          <SelectionTitle>깃헙 요약</SelectionTitle>
-                          <SelectionDesc>GitHub URL/아이디로 레포 분석 요약 보기</SelectionDesc>
-                        </SelectionCard>
-                        <SelectionCard
-                          whileHover={{ scale: 1.02 }}
-                          whileTap={{ scale: 0.98 }}
-                          onClick={() => {
-                            console.log('포트폴리오 버튼 클릭:', documentModal.applicant);
-                            if (documentModal.applicant && documentModal.applicant._id) {
-                              setPortfolioView('portfolio');
-                              loadPortfolioData(documentModal.applicant._id);
-                            } else {
-                              console.error('지원자 ID가 없습니다:', documentModal.applicant);
-                              alert('지원자 정보를 찾을 수 없습니다.');
-                            }
-                          }}
-                        >
-                          <SelectionIcon className="portfolio">
-                            <FiCode />
-                          </SelectionIcon>
-                          <SelectionTitle>포트폴리오 요약</SelectionTitle>
-                          <SelectionDesc>등록된 포트폴리오 정보 기반 요약 보기</SelectionDesc>
-                        </SelectionCard>
-                      </SelectionGrid>
-                    </DocumentSection>
-                  </>
-                )}
 
-                {/* 포트폴리오: 깃헙 요약 화면 */}
-                {documentModal.type === 'portfolio' && portfolioView === 'github' && (
+                {/* 포트폴리오: GitHub 요약 화면 */}
+                {documentModal.type === 'portfolio' && (
                   <>
                     <DocumentSection>
                       <DocumentSectionTitle>
-                        <button
-                          onClick={() => setPortfolioView('select')}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: 'pointer',
-                            marginRight: 8,
-                            color: 'var(--text-secondary)'
-                          }}
-                          aria-label="뒤로"
-                        >
-                          <FiArrowLeft />
-                        </button>
-                        깃헙 요약
-                      </DocumentSectionTitle>
-                      <GithubSummaryPanel />
-                    </DocumentSection>
-                  </>
-                )}
-
-                {/* 포트폴리오: 기존 포트폴리오 상세 */}
-                {documentModal.type === 'portfolio' && portfolioView === 'portfolio' && (
-                  <>
-                    <DocumentSection>
-                      <DocumentSectionTitle>
-                        <button
-                          onClick={() => setPortfolioView('select')}
-                          style={{
-                            background: 'transparent',
-                            border: 'none',
-                            cursor: 'pointer',
-                            marginRight: 8,
-                            color: 'var(--text-secondary)'
-                          }}
-                          aria-label="뒤로"
-                        >
-                          <FiArrowLeft />
-                        </button>
                         포트폴리오
                       </DocumentSectionTitle>
-                      {isLoadingPortfolio ? (
-                        <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                          <div>포트폴리오 데이터를 불러오는 중...</div>
-                        </div>
-                      ) : (
-                        <PortfolioSummaryPanel portfolio={portfolioData} />
-                      )}
+                      <GithubSummaryPanel applicant={documentModal.applicant} />
                     </DocumentSection>
                   </>
                 )}

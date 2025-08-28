@@ -197,7 +197,14 @@ export const documentApi = {
       if (!response.ok) {
         throw new Error('이력서 조회 실패');
       }
-      return await response.json();
+      const result = await response.json();
+      
+      // 백엔드 응답 구조에 맞게 데이터 추출
+      if (result.success && result.data) {
+        return result.data;
+      } else {
+        throw new Error(result.message || '이력서 데이터를 가져올 수 없습니다.');
+      }
     } catch (error) {
       console.error('이력서 조회 오류:', error);
       throw error;
@@ -211,7 +218,14 @@ export const documentApi = {
       if (!response.ok) {
         throw new Error('자기소개서 조회 실패');
       }
-      return await response.json();
+      const result = await response.json();
+      
+      // 백엔드 응답 구조에 맞게 데이터 추출
+      if (result.success && result.data) {
+        return result.data;
+      } else {
+        throw new Error(result.message || '자기소개서 데이터를 가져올 수 없습니다.');
+      }
     } catch (error) {
       console.error('자기소개서 조회 오류:', error);
       throw error;
@@ -245,7 +259,14 @@ export const documentApi = {
       if (!response.ok) {
         throw new Error('포트폴리오 조회 실패');
       }
-      return await response.json();
+      const result = await response.json();
+      
+      // 백엔드 응답 구조에 맞게 데이터 추출
+      if (result.success && result.data) {
+        return result.data;
+      } else {
+        throw new Error(result.message || '포트폴리오 데이터를 가져올 수 없습니다.');
+      }
     } catch (error) {
       console.error('포트폴리오 조회 오류:', error);
       throw error;
@@ -370,6 +391,10 @@ export const mailApi = {
   // 대량 메일 발송
   sendBulkMail: async (statusType) => {
     try {
+      console.log('📧 [DEBUG] 메일 발송 시작 - statusType:', statusType);
+      console.log('📧 [DEBUG] API URL:', 'http://localhost:8000/api/send-bulk-mail');
+      console.log('📧 [DEBUG] 요청 데이터:', { statusType });
+
       const response = await fetch('http://localhost:8000/api/send-bulk-mail', {
         method: 'POST',
         headers: {
@@ -378,14 +403,21 @@ export const mailApi = {
         body: JSON.stringify({ statusType })
       });
 
+      console.log('📧 [DEBUG] 응답 상태:', response.status);
+      console.log('📧 [DEBUG] 응답 헤더:', Object.fromEntries(response.headers.entries()));
+
       if (!response.ok) {
-        throw new Error('대량 메일 발송 실패');
+        const errorText = await response.text();
+        console.error('📧 [DEBUG] 응답 오류 내용:', errorText);
+        throw new Error(`대량 메일 발송 실패: ${response.status} - ${errorText}`);
       }
 
       const result = await response.json();
+      console.log('📧 [DEBUG] 응답 결과:', result);
       return result;
     } catch (error) {
-      console.error('대량 메일 발송 오류:', error);
+      console.error('📧 [DEBUG] 메일 발송 오류 상세:', error);
+      console.error('📧 [DEBUG] 오류 스택:', error.stack);
       throw error;
     }
   }

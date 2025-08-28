@@ -16,7 +16,8 @@ import {
   FiUpload,
   FiDownload,
   FiCode,
-  FiTable
+  FiTable,
+  FiUser
 } from 'react-icons/fi';
 
 const Container = styled.div`
@@ -294,6 +295,70 @@ const UploadSubtext = styled.div`
   color: var(--text-light);
 `;
 
+const FormContainer = styled.div`
+  background: #f8f9fa;
+  border-radius: var(--border-radius);
+  padding: 24px;
+  margin-bottom: 24px;
+`;
+
+const FormTitle = styled.h3`
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const FormGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const FormField = styled.div`
+  display: flex;
+  flex-direction: column;
+`;
+
+const FormLabel = styled.label`
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+`;
+
+const FormInput = styled.input`
+  padding: 12px 16px;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: var(--transition);
+
+  &:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+  }
+
+  &::placeholder {
+    color: #6c757d;
+  }
+`;
+
+const FormDescription = styled.div`
+  font-size: 12px;
+  color: var(--text-light);
+  margin-top: 4px;
+`;
+
 const TabContainer = styled.div`
   margin-bottom: 24px;
 `;
@@ -337,6 +402,30 @@ const SampleDataManagement = () => {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [jobPostings, setJobPostings] = useState([]);
   const [applicants, setApplicants] = useState([]);
+
+  // 개별 지원자 생성 상태
+  const [singleApplicantForm, setSingleApplicantForm] = useState({
+    name: '',
+    email: '',
+    github_url: ''
+  });
+
+  // 토스트 알림 상태
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState('success');
+
+  // 토스트 알림 표시 함수
+  const showToastNotification = (message, type = 'success') => {
+    setToastMessage(message);
+    setToastType(type);
+    setShowToast(true);
+
+    // 5초 후 토스트 숨기기
+    setTimeout(() => {
+      setShowToast(false);
+    }, 5000);
+  };
 
   // 현재 데이터 통계 조회
   const loadCurrentStats = async () => {
@@ -455,8 +544,8 @@ const SampleDataManagement = () => {
     }
   };
 
-  // 샘플 자소서 데이터 생성
-  const generateSampleCoverLetters = async (count = 50) => {
+  // 샘플 자소서 데이터 생성 (자소서가 없는 지원자들만)
+  const generateSampleCoverLetters = async () => {
     // 먼저 기존 지원자 확인
     if (applicants.length === 0) {
       setMessage({
@@ -469,7 +558,7 @@ const SampleDataManagement = () => {
     setLoading(true);
     setProgress(0);
     setCurrentOperation('자소서 샘플 데이터 생성 중...');
-    setMessage({ type: 'info', text: '자소서 샘플 데이터를 생성하고 있습니다...' });
+    setMessage({ type: 'info', text: '자소서가 없는 지원자들을 위한 자소서 데이터를 생성하고 있습니다...' });
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/sample/generate-cover-letters`, {
@@ -477,7 +566,7 @@ const SampleDataManagement = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ count })
+        body: JSON.stringify({})
       });
 
       if (response.ok) {
@@ -493,6 +582,50 @@ const SampleDataManagement = () => {
     } catch (error) {
       setMessage({ type: 'error', text: error.message || '자소서 샘플 데이터 생성에 실패했습니다.' });
       console.error('자소서 생성 오류:', error);
+    } finally {
+      setLoading(false);
+      setCurrentOperation('');
+    }
+  };
+
+  // 샘플 이력서 데이터 생성 (이력서가 없는 지원자들만)
+  const generateSampleResumes = async () => {
+    // 먼저 기존 지원자 확인
+    if (applicants.length === 0) {
+      setMessage({
+        type: 'error',
+        text: '이력서를 생성하기 전에 먼저 지원자를 생성해주세요. 이력서는 반드시 지원자에 소속되어야 합니다.'
+      });
+      return;
+    }
+
+    setLoading(true);
+    setProgress(0);
+    setCurrentOperation('이력서 샘플 데이터 생성 중...');
+    setMessage({ type: 'info', text: '이력서가 없는 지원자들을 위한 이력서 데이터를 생성하고 있습니다...' });
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/sample/resumes`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ count: 50 }) // 최대 50개까지 생성
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setMessage({ type: 'success', text: result.message });
+        setProgress(100);
+        loadCurrentStats(); // 통계 새로고침
+        loadApplicants(); // 지원자 목록 새로고침
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '이력서 데이터 생성 실패');
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || '이력서 샘플 데이터 생성에 실패했습니다.' });
+      console.error('이력서 생성 오류:', error);
     } finally {
       setLoading(false);
       setCurrentOperation('');
@@ -575,12 +708,61 @@ const SampleDataManagement = () => {
     }
   };
 
-  // 통계 새로고침
-  const refreshStats = async () => {
+
+
+  // 개별 지원자 생성
+  const createSingleApplicant = async () => {
+    if (!singleApplicantForm.name || !singleApplicantForm.email) {
+      setMessage({ type: 'error', text: '이름과 이메일은 필수 입력 항목입니다.' });
+      return;
+    }
+
     setLoading(true);
-    await loadCurrentStats();
-    setLoading(false);
-    setMessage({ type: 'success', text: '통계가 새로고침되었습니다!' });
+    setCurrentOperation('개별 지원자 생성 중...');
+    setMessage({ type: 'info', text: '개별 지원자를 생성하고 있습니다...' });
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/sample/create-single-applicant`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(singleApplicantForm)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const successMessage = `${result.message} (${result.job_posting.position} - ${result.job_posting.company})`;
+
+        setMessage({
+          type: 'success',
+          text: successMessage
+        });
+
+        // 토스트 알림 표시
+        showToastNotification(`✅ ${singleApplicantForm.name} 지원자가 성공적으로 등록되었습니다!`, 'success');
+
+        // 폼 초기화
+        setSingleApplicantForm({
+          name: '',
+          email: '',
+          github_url: ''
+        });
+
+        // 데이터 새로고침
+        loadCurrentStats();
+        loadApplicants();
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '개별 지원자 생성 실패');
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || '개별 지원자 생성에 실패했습니다.' });
+      console.error('개별 지원자 생성 오류:', error);
+    } finally {
+      setLoading(false);
+      setCurrentOperation('');
+    }
   };
 
   // 파일 업로드 처리
@@ -658,6 +840,70 @@ const SampleDataManagement = () => {
 
   return (
     <Container>
+      {/* 토스트 알림 */}
+      {showToast && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            background: toastType === 'success'
+              ? 'linear-gradient(135deg, #28a745 0%, #20c997 100%)'
+              : toastType === 'error'
+              ? 'linear-gradient(135deg, #dc3545 0%, #fd7e14 100%)'
+              : 'linear-gradient(135deg, #007bff 0%, #6610f2 100%)',
+            color: 'white',
+            padding: '16px 20px',
+            borderRadius: '12px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)',
+            zIndex: 10000,
+            maxWidth: '400px',
+            fontSize: '14px',
+            lineHeight: '1.5',
+            animation: 'slideInRight 0.3s ease-out',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '12px'
+          }}
+        >
+          <div style={{
+            fontSize: '20px',
+            marginTop: '2px'
+          }}>
+            {toastType === 'success' ? '✅' : toastType === 'error' ? '❌' : 'ℹ️'}
+          </div>
+          <div style={{ flex: 1 }}>
+            {toastMessage.split('\n').map((line, index) => (
+              <div key={index} style={{
+                marginBottom: index < toastMessage.split('\n').length - 1 ? '4px' : '0'
+              }}>
+                {line}
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={() => setShowToast(false)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '16px',
+              padding: '0',
+              marginLeft: '8px',
+              opacity: '0.8',
+              transition: 'opacity 0.2s ease'
+            }}
+            onMouseEnter={(e) => e.target.style.opacity = '1'}
+            onMouseLeave={(e) => e.target.style.opacity = '0.8'}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <Header>
         <Title>샘플 데이터 관리</Title>
         <Subtitle>
@@ -1352,7 +1598,7 @@ const SampleDataManagement = () => {
             <InfoCard>
               <InfoTitle>
                 <FiUsers />
-                현재 지원자 및 자소서 현황
+                현재 지원자 및 문서 현황
               </InfoTitle>
               <InfoList>
                 <InfoItem>
@@ -1360,11 +1606,80 @@ const SampleDataManagement = () => {
                   <span>{applicants.length}명</span>
                 </InfoItem>
                 <InfoItem>
-                  <span>자소서 생성 가능</span>
-                  <span>{applicants.length > 0 ? '가능' : '불가능 (지원자 필요)'}</span>
+                  <span>자소서 생성 대상</span>
+                  <span>{applicants.length > 0 ? '자소서가 없는 지원자들' : '불가능 (지원자 필요)'}</span>
+                </InfoItem>
+                <InfoItem>
+                  <span>이력서 생성 대상</span>
+                  <span>{applicants.length > 0 ? '이력서가 없는 지원자들' : '불가능 (지원자 필요)'}</span>
                 </InfoItem>
               </InfoList>
             </InfoCard>
+
+            {/* 개별 지원자 생성 폼 */}
+            <FormContainer>
+              <FormTitle>
+                <FiUser />
+                개별 지원자 생성
+              </FormTitle>
+              <FormDescription>
+                테스트용 개별 지원자를 생성합니다. 이름과 이메일은 필수 입력 항목이며, 나머지 정보는 자동으로 생성됩니다.
+              </FormDescription>
+
+              <FormGrid>
+                <FormField>
+                  <FormLabel>이름 *</FormLabel>
+                  <FormInput
+                    type="text"
+                    placeholder="예: 홍길동"
+                    value={singleApplicantForm.name}
+                    onChange={(e) => setSingleApplicantForm(prev => ({
+                      ...prev,
+                      name: e.target.value
+                    }))}
+                  />
+                </FormField>
+
+                <FormField>
+                  <FormLabel>이메일 주소 *</FormLabel>
+                  <FormInput
+                    type="email"
+                    placeholder="예: hong@example.com"
+                    value={singleApplicantForm.email}
+                    onChange={(e) => setSingleApplicantForm(prev => ({
+                      ...prev,
+                      email: e.target.value
+                    }))}
+                  />
+                </FormField>
+              </FormGrid>
+
+              <FormField>
+                <FormLabel>GitHub 주소 (선택사항)</FormLabel>
+                <FormInput
+                  type="url"
+                  placeholder="예: https://github.com/username"
+                  value={singleApplicantForm.github_url}
+                  onChange={(e) => setSingleApplicantForm(prev => ({
+                    ...prev,
+                    github_url: e.target.value
+                  }))}
+                />
+                <FormDescription>
+                  입력하지 않으면 자동으로 생성됩니다.
+                </FormDescription>
+              </FormField>
+
+              <Button
+                onClick={createSingleApplicant}
+                disabled={loading || !singleApplicantForm.name || !singleApplicantForm.email}
+                variant="primary"
+                style={{ marginTop: '16px' }}
+              >
+                <FiUser />
+                특정 지원자 생성
+              </Button>
+            </FormContainer>
 
             <ButtonGroup>
               {/* 채용공고 생성 버튼들을 먼저 배치 */}
@@ -1413,33 +1728,29 @@ const SampleDataManagement = () => {
               {/* 구분선 */}
               <div style={{ width: '100%', height: '1px', background: '#dee2e6', margin: '16px 0' }} />
 
-              {/* 자소서 생성 버튼들 */}
+              {/* 자소서 생성 버튼 */}
               <Button
-                onClick={() => generateSampleCoverLetters(50)}
+                onClick={generateSampleCoverLetters}
                 disabled={loading || applicants.length === 0}
                 variant={applicants.length === 0 ? 'danger' : 'success'}
               >
                 <FiFileText />
-                50개 자소서 생성
+                자소서가 없는 지원자들을 위한 자소서 생성
                 {applicants.length === 0 && ' (지원자 필요)'}
               </Button>
 
+              {/* 구분선 */}
+              <div style={{ width: '100%', height: '1px', background: '#dee2e6', margin: '16px 0' }} />
+
+              {/* 이력서 생성 버튼 */}
               <Button
-                onClick={() => generateSampleCoverLetters(100)}
+                onClick={generateSampleResumes}
                 disabled={loading || applicants.length === 0}
-                variant={applicants.length === 0 ? 'danger' : 'success'}
+                variant={applicants.length === 0 ? 'danger' : 'primary'}
               >
-                <FiFileText />
-                100개 자소서 생성
+                <FiUser />
+                이력서가 없는 지원자들을 위한 이력서 생성
                 {applicants.length === 0 && ' (지원자 필요)'}
-              </Button>
-
-              <Button
-                onClick={refreshStats}
-                disabled={loading}
-              >
-                <FiRefreshCw />
-                통계 새로고침
               </Button>
             </ButtonGroup>
           </Section>
@@ -1551,6 +1862,17 @@ const SampleDataManagement = () => {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+
+        @keyframes slideInRight {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
         }
       `}</style>
     </Container>
