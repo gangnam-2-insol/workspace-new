@@ -1703,10 +1703,9 @@ class GithubSummaryResponse(BaseModel):
     language_stats: Optional[Dict[str, int]] = None
     language_total_bytes: Optional[int] = None
     original_language_stats: Optional[Dict[str, int]] = None  # 원본 언어 통계
+    token_usage: Optional[Dict[str, int]] = None  # 토큰 사용량 추가
     content_changed: Optional[bool] = False  # 콘텐츠 변경 여부
     changes_detected: Optional[List[str]] = None  # 감지된 변경 사항들
-    user_name: Optional[str] = None  # GitHub 사용자 이름
-    github_url: Optional[str] = None  # GitHub URL
 
 class LanguageChartResponse(BaseModel):
     language_stats: Dict[str, int]  # 언어별 통계
@@ -1843,10 +1842,31 @@ async def fetch_github_file_content(owner: str, repo: str, file_path: str, token
 
 
 
+# 토큰 사용량 추적을 위한 전역 변수
+github_api_calls = 0
+openai_api_calls = 0
+openai_tokens_used = 0
 
+def reset_token_usage():
+    """토큰 사용량 초기화"""
+    global github_api_calls, openai_api_calls, openai_tokens_used
+    github_api_calls = 0
+    openai_api_calls = 0
+    openai_tokens_used = 0
+
+def get_token_usage():
+    """현재 토큰 사용량 반환"""
+    global github_api_calls, openai_api_calls, openai_tokens_used
+    return {
+        "github_api_calls": github_api_calls,
+        "openai_api_calls": openai_api_calls,
+        "openai_tokens_used": openai_tokens_used
+    }
 
 async def fetch_github(url: str, token: Optional[str] = None) -> Dict:
     """GitHub API 호출"""
+    global github_api_calls
+    github_api_calls += 1
     
     headers = {
         'Accept': 'application/vnd.github+json',
@@ -1943,55 +1963,6 @@ def parse_github_url(url: str) -> Optional[tuple[str, Optional[str]]]:
         pass
     
     return None
-
-async def fetch_user_info(username: str, token: Optional[str] = None) -> Optional[Dict]:
-    """GitHub 사용자 정보 가져오기"""
-    try:
-        user_data = await fetch_github(f'{GITHUB_API_BASE}/users/{username}', token)
-        return {
-            'name': user_data.get('name', username),
-            'login': user_data.get('login', username),
-            'html_url': user_data.get('html_url', f'https://github.com/{username}'),
-            'avatar_url': user_data.get('avatar_url'),
-            'bio': user_data.get('bio'),
-            'company': user_data.get('company'),
-            'location': user_data.get('location'),
-            'public_repos': user_data.get('public_repos', 0),
-            'followers': user_data.get('followers', 0),
-            'following': user_data.get('following', 0)
-        }
-    except Exception as e:
-        print(f"사용자 정보 가져오기 실패: {e}")
-        return None
-
-async def get_applicant_name(applicant_id: str) -> Optional[str]:
-    """MongoDB에서 지원자 이름 가져오기"""
-    try:
-        if not applicant_id:
-            return None
-            
-        # MongoDB에서 지원자 정보 조회
-        db = mongo_client.hireme
-        
-        # ObjectId로 변환 시도
-        try:
-            from bson import ObjectId
-            object_id = ObjectId(applicant_id)
-            applicant = db.applicants.find_one({"_id": object_id})
-        except:
-            # ObjectId 변환 실패 시 문자열로 직접 조회
-            applicant = db.applicants.find_one({"_id": applicant_id})
-        
-        if applicant:
-            # 지원자 이름 반환 (name 필드가 있으면 사용, 없으면 github_username 사용)
-            return applicant.get('name') or applicant.get('github_username')
-        else:
-            print(f"지원자 ID {applicant_id}를 찾을 수 없습니다.")
-            return None
-            
-    except Exception as e:
-        print(f"지원자 정보 조회 실패: {e}")
-        return None
 
 async def fetch_user_repos(username: str, token: Optional[str] = None) -> List[Dict]:
     """사용자 리포지토리 목록 가져오기"""
@@ -3498,7 +3469,13 @@ async def generate_unified_summary(username: str, repo_name: Optional[str] = Non
         response.raise_for_status()
         data = response.json()
         
-        # 토큰 사용량 추적 제거됨
+        # 토큰 사용량 추적
+        global openai_api_calls, openai_tokens_used
+        openai_api_calls += 1
+        if 'usage' in data:
+            usage = data['usage']
+            openai_tokens_used += usage.get('total_tokens', 0)
+            print(f"[TOKEN USAGE] API 호출: {openai_api_calls}, 총 토큰: {openai_tokens_used}")
         
         response_text = data.get('choices', [{}])[0].get('message', {}).get('content', '').strip()
         
@@ -3645,6 +3622,8 @@ async def generate_repo_language_chart(username: str, repo_name: str, token: Opt
 @router.post("/github/summary", response_model=GithubSummaryResponse)
 async def github_summary(request: GithubSummaryRequest):
     """GitHub 사용자 요약 - MongoDB 캐싱 및 에러 처리 강화"""
+    # 토큰 사용량 초기화
+    reset_token_usage()
     
     try:
         print(f"=== GitHub 검색 요청 시작 ===")
@@ -3698,15 +3677,6 @@ async def github_summary(request: GithubSummaryRequest):
                 
                 if not has_changes:
                     print("콘텐츠 변경 없음 - 캐시된 결과 반환")
-                    
-                    # 캐시된 결과에서 사용자 이름 결정
-                    cached_user_name = cached_analysis.analysis_data.get('user_name', username)
-                    if request.applicant_id:
-                        applicant_name = await get_applicant_name(request.applicant_id)
-                        final_user_name = applicant_name if applicant_name else cached_user_name
-                    else:
-                        final_user_name = cached_user_name
-                    
                     return GithubSummaryResponse(
                         profileUrl=cached_analysis.analysis_data.get('profileUrl', f"https://github.com/{username}"),
                         profileApiUrl=cached_analysis.analysis_data.get('profileApiUrl', f"https://api.github.com/users/{username}"),
@@ -3716,8 +3686,7 @@ async def github_summary(request: GithubSummaryRequest):
                         language_stats=cached_analysis.analysis_data.get('language_stats'),
                         language_total_bytes=cached_analysis.analysis_data.get('language_total_bytes'),
                         original_language_stats=cached_analysis.analysis_data.get('original_language_stats'),
-                        user_name=final_user_name,
-                        github_url=cached_analysis.analysis_data.get('github_url', f"https://github.com/{username}"),
+                        token_usage=cached_analysis.analysis_data.get('token_usage', {}),
                         content_changed=False,
                         changes_detected=None
                     )
@@ -3780,21 +3749,7 @@ async def github_summary(request: GithubSummaryRequest):
         profile_url = f"https://github.com/{username}"
         profile_api_url = f"https://api.github.com/users/{username}"
         
-        # GitHub 사용자 정보 가져오기
-        user_info = await fetch_user_info(username, github_token)
-        github_url = user_info.get('html_url', profile_url) if user_info else profile_url
-        
-        # 지원자 이름 결정: MongoDB 지원자 정보 우선, 없으면 GitHub 사용자 이름 사용
-        if request.applicant_id:
-            applicant_name = await get_applicant_name(request.applicant_id)
-            user_name = applicant_name if applicant_name else (user_info.get('name', username) if user_info else username)
-            print(f"MongoDB 지원자 이름 사용: {applicant_name}")
-        else:
-            user_name = user_info.get('name', username) if user_info else username
-            print(f"GitHub 사용자 이름 사용: {user_name}")
-        
         print(f"최종 처리 - username: {username}, repo_name: {repo_name}")
-        print(f"사용자 정보 - name: {user_name}, github_url: {github_url}")
         
         # 언어 통계 데이터 생성
         language_stats: Dict[str, int] = {}
@@ -3900,8 +3855,7 @@ async def github_summary(request: GithubSummaryRequest):
                     language_stats=language_stats,
                     language_total_bytes=language_total_bytes,
                     original_language_stats=chart_response.original_stats,
-                    user_name=user_name,
-                    github_url=github_url
+                    token_usage=get_token_usage()
                 )
                 
                 # MongoDB에 분석 결과 저장 (파일 해시 포함)
@@ -3938,8 +3892,7 @@ async def github_summary(request: GithubSummaryRequest):
                     language_stats=language_stats,
                     language_total_bytes=language_total_bytes,
                     original_language_stats=chart_response.original_stats,
-                    user_name=user_name,
-                    github_url=github_url
+                    token_usage=get_token_usage()
                 )
                 
                 # MongoDB에 프로필 분석 결과 저장
@@ -4085,8 +4038,7 @@ async def github_summary(request: GithubSummaryRequest):
                 language_stats=language_stats,
                 language_total_bytes=language_total_bytes,
                 original_language_stats=chart_response.original_stats,
-                user_name=user_name,
-                github_url=github_url,
+                token_usage=get_token_usage(),
                 content_changed=content_changed if 'content_changed' in locals() else False,
                 changes_detected=changes_detected if 'changes_detected' in locals() else None
             )
@@ -4104,9 +4056,7 @@ async def github_summary(request: GithubSummaryRequest):
                         'language_stats': result.language_stats,
                         'language_total_bytes': result.language_total_bytes,
                         'original_language_stats': result.original_language_stats,
-                        'user_name': result.user_name,
-                        'github_url': result.github_url,
-
+                        'token_usage': result.token_usage,
                         'total_repos': len(analyses) if 'analyses' in locals() else None,
                         'total_stars': sum(repo.get('stargazers_count', 0) for repo in analyses) if 'analyses' in locals() else None,
                         'total_forks': sum(repo.get('forks_count', 0) for repo in analyses) if 'analyses' in locals() else None,
@@ -4301,7 +4251,7 @@ async def github_repo_analysis(request: GithubSummaryRequest):
             language_stats=language_stats,
             language_total_bytes=language_total_bytes,
             original_language_stats=chart_response.original_stats,
-
+            token_usage=None
         )
         
         # MongoDB에 분석 결과 저장 (파일 해시 포함)

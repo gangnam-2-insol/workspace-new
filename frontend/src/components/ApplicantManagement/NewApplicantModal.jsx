@@ -41,6 +41,9 @@ const ModalTitle = styled.h2`
 `;
 
 const CloseButton = styled.button`
+  position: fixed;
+  top: 16px;
+  right: 16px;
   background: none;
   border: none;
   font-size: 24px;
@@ -49,6 +52,7 @@ const CloseButton = styled.button`
   padding: 8px;
   border-radius: 8px;
   transition: all 0.2s;
+  z-index: 3010;
 
   &:hover {
     background: var(--background-secondary);
@@ -268,13 +272,13 @@ const overlayVariants = {
   exit: { opacity: 0 }
 };
 
-const NewApplicantModal = ({ 
-  isOpen, 
-  onClose, 
-  onSubmit, 
-  existingApplicant, 
+const NewApplicantModal = ({
+  isOpen,
+  onClose,
+  onSubmit,
+  existingApplicant,
   isCheckingDuplicate,
-  onReplaceExisting 
+  onReplaceExisting
 }) => {
   const [isDragOver, setIsDragOver] = useState(false);
   const [resumeData, setResumeData] = useState({
@@ -303,7 +307,7 @@ const NewApplicantModal = ({
   const handleDrop = useCallback((e) => {
     e.preventDefault();
     setIsDragOver(false);
-    
+
     const files = Array.from(e.dataTransfer.files);
     const pdfFile = files.find(file => file.type === 'application/pdf');
     if (pdfFile) {
@@ -579,8 +583,8 @@ const NewApplicantModal = ({
             <Button className="secondary" onClick={handleClose}>
               취소
             </Button>
-            <Button 
-              className="primary" 
+            <Button
+              className="primary"
               onClick={handleSubmit}
               disabled={!resumeFile || !resumeData.name || !resumeData.email || isCheckingDuplicate}
             >

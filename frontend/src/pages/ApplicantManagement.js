@@ -1366,7 +1366,7 @@ const ApplicantManagement = () => {
 
     try {
       console.log('🔍 자소서 표절 의심도 검사 시작...');
-      console.log('- API 요청 URL:', `http://localhost:8000/api/coverletter/similarity-check/${applicantWithId._id}`);
+      console.log('- API 요청 URL:', `http://localhost:8000/api/cover-letters/similarity-check/${applicantWithId._id}`);
 
       const suspicionResult = await applicantApi.checkCoverLetterSuspicion(applicantWithId._id);
       console.log('✅ 자소서 표절 의심도 검사 완료:', suspicionResult);
@@ -1381,11 +1381,19 @@ const ApplicantManagement = () => {
     } catch (error) {
       console.error('❌ 자소서 표절 의심도 검사 실패:', error);
       console.error('- 에러 상세:', error.stack);
+
+      // 자소서가 없는 경우에 대한 특별 처리
+      let errorMessage = '표절 의심도 검사 중 오류가 발생했습니다: ' + error.message;
+      if (error.message.includes('자소서가 없습니다') || error.message.includes('404')) {
+        errorMessage = '해당 지원자의 자소서가 등록되지 않았습니다. 자소서를 먼저 업로드해주세요.';
+      }
+
       updateSuspicionData(applicantWithId._id, {
         status: 'error',
-        message: '표절 의심도 검사 중 오류가 발생했습니다: ' + error.message,
+        message: errorMessage,
         error: error.message,
-        fullError: error.stack
+        fullError: error.stack,
+        isNoCoverLetter: error.message.includes('자소서가 없습니다') || error.message.includes('404')
       });
     } finally {
       setLoadingState(applicantWithId._id, false);
@@ -1450,16 +1458,38 @@ const ApplicantManagement = () => {
             documentData = await documentApi.getCoverLetter(applicantId);
             console.log('✅ 자소서 데이터 로드 완료:', documentData);
 
-            // 자소서 분석 수행
+            // 자소서 분석 수행 - 직접 API 호출
             try {
-              const analysisData = await documentApi.getCoverLetterAnalysis(applicantId);
-                documentData.analysis = analysisData.analysis || analysisData;
-                console.log('✅ 자소서 분석 완료:', analysisData);
+              console.log('🔍 자소서 분석 시작...');
+              const response = await fetch(`http://localhost:8000/api/cover-letters/applicant/${applicantId}/analysis`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({}),
+              });
+
+              if (response.ok) {
+                const analysisResult = await response.json();
+                console.log('✅ 자소서 분석 완료:', analysisResult);
+
+                // 분석 결과를 documentData에 추가
+                if (analysisResult && analysisResult.success) {
+                  documentData.analysis = analysisResult.data;
+                } else {
+                  console.warn('⚠️ 자소서 분석 결과가 없습니다');
+                }
+              } else {
+                console.warn('⚠️ 자소서 분석 API 호출 실패:', response.status);
+              }
             } catch (analysisError) {
               console.error('❌ 자소서 분석 오류:', analysisError);
+              // 분석 실패 시에도 자소서 내용은 표시
             }
           } catch (error) {
             console.error('❌ 자소서 데이터 로드 실패:', error);
+            // 오류 발생 시 더미데이터 대신 null로 설정
+            documentData = null;
           }
           break;
 
@@ -1495,7 +1525,7 @@ const ApplicantManagement = () => {
 
       try {
         console.log('🔍 자소서 표절 의심도 검사 시작...');
-        console.log('- API 요청 URL:', `http://localhost:8000/api/coverletter/similarity-check/${applicantWithId._id}`);
+        console.log('- API 요청 URL:', `http://localhost:8000/api/cover-letters/similarity-check/${applicantWithId._id}`);
 
         const suspicionResult = await applicantApi.checkCoverLetterSuspicion(applicantWithId._id);
         console.log('✅ 자소서 표절 의심도 검사 완료:', suspicionResult);
@@ -2318,20 +2348,23 @@ const ApplicantManagement = () => {
         <Wrapper>
           <ApplicantsGrid viewMode={viewMode}>
             {(() => {
-              console.log('🔍 렌더링 시작 - paginatedApplicants:', {
-                length: paginatedApplicants.length,
-                selectedJobPostingId,
-                viewMode,
-                currentPage,
-                itemsPerPage
-              });
+              // 🔍 성능 최적화: 개발 모드에서만 상세 로그 출력
+              if (process.env.NODE_ENV === 'development') {
+                console.log('🔍 렌더링 시작 - paginatedApplicants:', {
+                  length: paginatedApplicants.length,
+                  selectedJobPostingId,
+                  viewMode,
+                  currentPage,
+                  itemsPerPage
+                });
 
-              if (paginatedApplicants.length > 0) {
-                console.log('🔍 렌더링할 지원자들:', paginatedApplicants.slice(0, 3).map(app => ({
-                  id: app.id,
-                  name: app.name,
-                  job_posting_id: app.job_posting_id
-                })));
+                if (paginatedApplicants.length > 0) {
+                  console.log('🔍 렌더링할 지원자들:', paginatedApplicants.slice(0, 3).map(app => ({
+                    id: app.id,
+                    name: app.name,
+                    job_posting_id: app.job_posting_id
+                  })));
+                }
               }
 
               return paginatedApplicants.length > 0 ? (
@@ -2617,7 +2650,6 @@ const ApplicantManagement = () => {
             onStatusUpdate={handleUpdateStatus}
             onCoverLetterAnalysis={handleCoverLetterAnalysisModalOpen}
             onDetailedAnalysis={() => setShowDetailedAnalysis(true)}
-            onApplicantSelect={setSelectedApplicant}
           />
         )}
 
@@ -2881,15 +2913,27 @@ const ApplicantManagement = () => {
                     {/* 자소서 분석 결과 섹션 */}
                     <DocumentSection>
                       <DocumentSectionTitle>자소서 분석 결과</DocumentSectionTitle>
-                      <CoverLetterAnalysis
-                        analysisData={documentModal.documentData?.analysis || {
-                          technical_suitability: { score: 75, feedback: '기술적합성에 대한 분석이 필요합니다.' },
-                          job_understanding: { score: 80, feedback: '직무이해도에 대한 분석이 필요합니다.' },
-                          growth_potential: { score: 85, feedback: '성장가능성에 대한 분석이 필요합니다.' },
-                          teamwork_communication: { score: 70, feedback: '팀워크 및 커뮤니케이션에 대한 분석이 필요합니다.' },
-                          motivation_company_fit: { score: 90, feedback: '지원동기/회사 가치관 부합도에 대한 분석이 필요합니다.' }
-                        }}
-                      />
+                      {(() => {
+                        console.log('🔍 [ApplicantManagement] CoverLetterAnalysis 렌더링:', {
+                          hasDocumentData: !!documentModal.documentData,
+                          hasAnalysis: !!documentModal.documentData?.analysis,
+                          documentDataType: typeof documentModal.documentData,
+                          documentDataKeys: documentModal.documentData ? Object.keys(documentModal.documentData) : [],
+                          usingDummyData: !documentModal.documentData?.analysis
+                        });
+                        return (
+                          <CoverLetterAnalysis
+                            analysisData={documentModal.documentData?.analysis || {
+                              technical_suitability: { score: 75, feedback: '기술적합성에 대한 분석이 필요합니다.' },
+                              job_understanding: { score: 80, feedback: '직무이해도에 대한 분석이 필요합니다.' },
+                              growth_potential: { score: 85, feedback: '성장가능성에 대한 분석이 필요합니다.' },
+                              teamwork_communication: { score: 70, feedback: '팀워크 및 커뮤니케이션에 대한 분석이 필요합니다.' },
+                              motivation_company_fit: { score: 90, feedback: '지원동기/회사 가치관 부합도에 대한 분석이 필요합니다.' }
+                            }}
+                            applicant={documentModal.applicant}
+                          />
+                        );
+                      })()}
                     </DocumentSection>
 
                     {/* 표절 의심도 검사는 백그라운드에서 실행됨 - CoverLetterValidation.js에서 결과 확인 */}

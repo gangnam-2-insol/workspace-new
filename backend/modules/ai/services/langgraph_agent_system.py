@@ -724,7 +724,7 @@ def fallback_node(state: AgentState) -> AgentState:
 📋 주요 기능:
 • 채용공고 작성 및 관리
 • 이력서 분석 및 평가
-• 면접 일정 관리
+
 • 인재 추천 및 매칭
 
 💡 사용법:

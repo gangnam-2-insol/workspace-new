@@ -2,18 +2,18 @@ import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
 import { FiX, FiPlay, FiRefreshCw, FiTrendingUp, FiTrendingDown, FiMinus } from 'react-icons/fi';
-import { 
-  analyzeResume, 
-  reanalyzeResume, 
-  generateAnalysisSummary, 
-  calculateScoreGrade 
+import {
+  analyzeResume,
+  reanalyzeResume,
+  generateAnalysisSummary,
+  calculateScoreGrade
 } from '../../services/aiAnalysisApi';
 
-const AIAnalysisModal = ({ 
-  isOpen, 
-  applicant, 
-  onClose, 
-  onAnalysisComplete 
+const AIAnalysisModal = ({
+  isOpen,
+  applicant,
+  onClose,
+  onAnalysisComplete
 }) => {
   const [analysisResult, setAnalysisResult] = useState(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
@@ -41,7 +41,7 @@ const AIAnalysisModal = ({
       const result = await analyzeResume(applicant.id, analysisType, false);
       setAnalysisResult(result);
       setSummary(generateAnalysisSummary(result));
-      
+
       if (onAnalysisComplete) {
         onAnalysisComplete(result);
       }
@@ -62,7 +62,7 @@ const AIAnalysisModal = ({
       const result = await reanalyzeResume(applicant.id, analysisType);
       setAnalysisResult(result);
       setSummary(generateAnalysisSummary(result));
-      
+
       if (onAnalysisComplete) {
         onAnalysisComplete(result);
       }
@@ -142,7 +142,7 @@ const AIAnalysisModal = ({
                 <option value="openai">OpenAI GPT-4o-mini</option>
                 <option value="huggingface">HuggingFace (로컬)</option>
               </AnalysisTypeSelect>
-              
+
               <ControlButtons>
                 {!analysisResult ? (
                   <AnalyzeButton onClick={handleAnalyze} disabled={isAnalyzing}>
@@ -206,7 +206,7 @@ const AIAnalysisModal = ({
                   {renderScoreCard('기술/역량', summary.categories.skills.score, summary.categories.skills.grade)}
                   {renderScoreCard('프로젝트/성과', summary.categories.projects.score, summary.categories.projects.grade)}
                   {renderScoreCard('성장/발전', summary.categories.growth.score, summary.categories.growth.grade)}
-                  
+
                   {/* 추가 점수 (HuggingFace 분석기인 경우) */}
                   {summary.additional.grammar && renderScoreCard('문법/표현', summary.additional.grammar.score, summary.additional.grammar.grade)}
                   {summary.additional.jobMatching && renderScoreCard('직무 적합성', summary.additional.jobMatching.score, summary.additional.jobMatching.grade)}
@@ -221,13 +221,13 @@ const AIAnalysisModal = ({
                 </OverallFeedback>
 
                 {/* 강점 및 개선점 */}
-                {summary.feedback.strengths.length > 0 && 
+                {summary.feedback.strengths.length > 0 &&
                   renderFeedbackSection('💪 주요 강점', summary.feedback.strengths, 'strengths')}
-                
-                {summary.feedback.improvements.length > 0 && 
+
+                {summary.feedback.improvements.length > 0 &&
                   renderFeedbackSection('🔧 개선이 필요한 부분', summary.feedback.improvements, 'improvements')}
-                
-                {summary.feedback.recommendations.length > 0 && 
+
+                {summary.feedback.recommendations.length > 0 &&
                   renderFeedbackSection('💡 개선 권장사항', summary.feedback.recommendations, 'recommendations')}
 
                 {/* 분석 정보 */}
@@ -298,6 +298,9 @@ const ModalTitle = styled.h2`
 `;
 
 const CloseButton = styled.button`
+  position: fixed;
+  top: 16px;
+  right: 16px;
   background: none;
   border: none;
   font-size: 24px;
@@ -306,6 +309,7 @@ const CloseButton = styled.button`
   padding: 8px;
   border-radius: 50%;
   transition: all 0.2s;
+  z-index: 3010;
 
   &:hover {
     background: #f8f9fa;

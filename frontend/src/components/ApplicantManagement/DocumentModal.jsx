@@ -43,6 +43,9 @@ const ModalTitle = styled.h2`
 `;
 
 const CloseButton = styled.button`
+  position: fixed;
+  top: 16px;
+  right: 16px;
   background: none;
   border: none;
   font-size: 24px;
@@ -51,6 +54,7 @@ const CloseButton = styled.button`
   padding: 8px;
   border-radius: 8px;
   transition: all 0.2s;
+  z-index: 3010;
 
   &:hover {
     background: var(--background-secondary);
@@ -254,15 +258,15 @@ const overlayVariants = {
   exit: { opacity: 0 }
 };
 
-const DocumentModal = ({ 
-  isOpen, 
-  type, 
-  applicant, 
-  documentData, 
-  similarityData, 
+const DocumentModal = ({
+  isOpen,
+  type,
+  applicant,
+  documentData,
+  similarityData,
   isLoadingSimilarity,
   onClose,
-  onPortfolioViewChange 
+  onPortfolioViewChange
 }) => {
   const [portfolioView, setPortfolioView] = useState('select');
   const [viewMode, setViewMode] = useState('summary'); // 'summary' | 'original'
@@ -396,7 +400,7 @@ const DocumentModal = ({
                   AI 분석
                 </button>
               </div>
-              
+
               {documentData.analysisResult ? (
                 <>
                   <div style={{ fontSize: '14px', lineHeight: '1.6' }}>
@@ -417,13 +421,13 @@ const DocumentModal = ({
               )}
             </div>
           )}
-              
+
               {/* 문서 내용 표시 */}
               <div style={{ marginTop: '16px' }}>
                 <h4 style={{ margin: '0 0 12px 0', color: '#495057', fontSize: '16px' }}>📄 문서 내용</h4>
                 {documentData.extracted_text || documentData.content || documentData.text || '내용이 없습니다.'}
               </div>
-              
+
               {/* 추가 정보 표시 */}
               {type === 'resume' && (
                 <div style={{ marginTop: '20px', padding: '16px', backgroundColor: '#f8f9fa', borderRadius: '8px', border: '1px solid #e9ecef' }}>
@@ -470,8 +474,8 @@ const DocumentModal = ({
             </SimilarityIcon>
             <SimilarityText>
               유사도 점수: {(similarityData.similarity_score * 100).toFixed(1)}%
-              {similarityData.similarity_score > 0.7 
-                ? ' (높은 유사도 - 주의 필요)' 
+              {similarityData.similarity_score > 0.7
+                ? ' (높은 유사도 - 주의 필요)'
                 : ' (정상 범위)'}
             </SimilarityText>
           </SimilarityResult>
@@ -520,9 +524,9 @@ const DocumentModal = ({
               <InfoItem>
                 <InfoLabel>지원일시</InfoLabel>
                 <InfoValue>
-                  {applicant.applied_at 
+                  {applicant.applied_at
                     ? new Date(applicant.applied_at).toLocaleDateString('ko-KR')
-                    : applicant.created_at 
+                    : applicant.created_at
                       ? new Date(applicant.created_at).toLocaleDateString('ko-KR')
                       : '-'}
                 </InfoValue>
@@ -534,7 +538,7 @@ const DocumentModal = ({
           {renderDocumentContent()}
         </DocumentContent>
       </ModalContent>
-      
+
       {/* AI 분석 모달 */}
       <AIAnalysisModal
         isOpen={isAIAnalysisModalOpen}

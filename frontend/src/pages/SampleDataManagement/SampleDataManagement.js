@@ -588,50 +588,6 @@ const SampleDataManagement = () => {
     }
   };
 
-  // 샘플 이력서 데이터 생성 (이력서가 없는 지원자들만)
-  const generateSampleResumes = async () => {
-    // 먼저 기존 지원자 확인
-    if (applicants.length === 0) {
-      setMessage({
-        type: 'error',
-        text: '이력서를 생성하기 전에 먼저 지원자를 생성해주세요. 이력서는 반드시 지원자에 소속되어야 합니다.'
-      });
-      return;
-    }
-
-    setLoading(true);
-    setProgress(0);
-    setCurrentOperation('이력서 샘플 데이터 생성 중...');
-    setMessage({ type: 'info', text: '이력서가 없는 지원자들을 위한 이력서 데이터를 생성하고 있습니다...' });
-
-    try {
-      const response = await fetch(`${API_BASE_URL}/api/sample/resumes`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ count: 50 }) // 최대 50개까지 생성
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        setMessage({ type: 'success', text: result.message });
-        setProgress(100);
-        loadCurrentStats(); // 통계 새로고침
-        loadApplicants(); // 지원자 목록 새로고침
-      } else {
-        const errorData = await response.json();
-        throw new Error(errorData.detail || '이력서 데이터 생성 실패');
-      }
-    } catch (error) {
-      setMessage({ type: 'error', text: error.message || '이력서 샘플 데이터 생성에 실패했습니다.' });
-      console.error('이력서 생성 오류:', error);
-    } finally {
-      setLoading(false);
-      setCurrentOperation('');
-    }
-  };
-
   // 샘플 채용공고 데이터 생성
   const generateSampleJobPostings = async (count = 10) => {
     setLoading(true);
@@ -771,29 +727,51 @@ const SampleDataManagement = () => {
 
     setLoading(true);
     setProgress(0);
-    setCurrentOperation('엑셀 파일 업로드 중...');
-    setMessage({ type: 'info', text: '엑셀 파일을 업로드하고 있습니다...' });
+    setCurrentOperation('JSON 파일 업로드 중...');
+    setMessage({ type: 'info', text: 'JSON 파일을 업로드하고 있습니다...' });
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      // JSON 파일 읽기
+      const text = await file.text();
+      const jsonData = JSON.parse(text);
 
-      const response = await fetch(`${API_BASE_URL}/api/sample/upload-excel`, {
+      const response = await fetch(`${API_BASE_URL}/api/sample/upload-json`, {
         method: 'POST',
-        body: formData
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(jsonData)
       });
 
-      if (response.ok) {
+            if (response.ok) {
         const result = await response.json();
-        setMessage({ type: 'success', text: `${result.uploaded_count}개의 데이터가 성공적으로 업로드되었습니다!` });
+        let successMessage = `${result.uploaded_count}개의 데이터가 성공적으로 업로드되었습니다!`;
+        if (result.job_posting_count > 0) {
+          successMessage += ` (기존 ${result.job_posting_count}개 채용공고에 랜덤 할당됨)`;
+        }
+        if (result.vector_saved_count > 0) {
+          successMessage += ` ${result.vector_saved_count}개 데이터가 벡터 DB에 저장됨`;
+        }
+        setMessage({ type: 'success', text: successMessage });
         setProgress(100);
         loadCurrentStats();
         setUploadedFile(null);
+
+        // 업로드 완료 후 자동으로 데이터 생성 탭으로 이동
+        setTimeout(() => {
+          setActiveTab('generate');
+          let toastMessage = 'JSON 데이터 업로드 완료! 지원자들에게 채용공고가 자동 할당되었습니다.';
+          if (result.vector_saved_count > 0) {
+            toastMessage += ` 벡터 DB에도 ${result.vector_saved_count}개 저장됨`;
+          }
+          showToastNotification(toastMessage);
+        }, 1500);
       } else {
-        throw new Error('파일 업로드 실패');
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '파일 업로드 실패');
       }
     } catch (error) {
-      setMessage({ type: 'error', text: '엑셀 파일 업로드에 실패했습니다.' });
+      setMessage({ type: 'error', text: `JSON 파일 업로드에 실패했습니다: ${error.message}` });
       console.error('파일 업로드 오류:', error);
     } finally {
       setLoading(false);
@@ -819,12 +797,11 @@ const SampleDataManagement = () => {
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       const file = files[0];
-      if (file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-          file.type === 'application/vnd.ms-excel') {
+      if (file.type === 'application/json' || file.name.endsWith('.json')) {
         setUploadedFile(file);
         handleFileUpload(file);
       } else {
-        setMessage({ type: 'error', text: '엑셀 파일(.xlsx, .xls)만 업로드 가능합니다.' });
+        setMessage({ type: 'error', text: 'JSON 파일(.json)만 업로드 가능합니다.' });
       }
     }
   };
@@ -835,6 +812,31 @@ const SampleDataManagement = () => {
     if (file) {
       setUploadedFile(file);
       handleFileUpload(file);
+    }
+  };
+
+  // JSON 템플릿 다운로드
+  const downloadJsonTemplate = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/sample/json-template`);
+      if (response.ok) {
+        const template = await response.json();
+        const blob = new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'sample-data-template.json';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        showToastNotification('JSON 템플릿이 다운로드되었습니다!');
+      } else {
+        throw new Error('템플릿 다운로드 실패');
+      }
+    } catch (error) {
+      showToastNotification('템플릿 다운로드에 실패했습니다.', 'error');
+      console.error('템플릿 다운로드 오류:', error);
     }
   };
 
@@ -1030,7 +1032,7 @@ const SampleDataManagement = () => {
               onClick={() => setActiveTab('upload')}
             >
               <FiUpload />
-              엑셀 업로드
+              JSON 업로드
             </Tab>
             <Tab
               active={activeTab === 'manage'}
@@ -1061,8 +1063,8 @@ const SampleDataManagement = () => {
                   <span>AI가 자동으로 다양한 샘플 데이터를 생성합니다</span>
                 </InfoItem>
                 <InfoItem>
-                  <span>엑셀 업로드</span>
-                  <span>기존 엑셀 파일을 업로드하여 데이터를 등록합니다</span>
+                  <span>JSON 업로드</span>
+                  <span>JSON 파일을 업로드하여 데이터를 등록합니다</span>
                 </InfoItem>
                 <InfoItem>
                   <span>데이터 초기화</span>
@@ -1598,7 +1600,7 @@ const SampleDataManagement = () => {
             <InfoCard>
               <InfoTitle>
                 <FiUsers />
-                현재 지원자 및 문서 현황
+                현재 지원자 및 자소서 현황
               </InfoTitle>
               <InfoList>
                 <InfoItem>
@@ -1608,10 +1610,6 @@ const SampleDataManagement = () => {
                 <InfoItem>
                   <span>자소서 생성 대상</span>
                   <span>{applicants.length > 0 ? '자소서가 없는 지원자들' : '불가능 (지원자 필요)'}</span>
-                </InfoItem>
-                <InfoItem>
-                  <span>이력서 생성 대상</span>
-                  <span>{applicants.length > 0 ? '이력서가 없는 지원자들' : '불가능 (지원자 필요)'}</span>
                 </InfoItem>
               </InfoList>
             </InfoCard>
@@ -1738,41 +1736,27 @@ const SampleDataManagement = () => {
                 자소서가 없는 지원자들을 위한 자소서 생성
                 {applicants.length === 0 && ' (지원자 필요)'}
               </Button>
-
-              {/* 구분선 */}
-              <div style={{ width: '100%', height: '1px', background: '#dee2e6', margin: '16px 0' }} />
-
-              {/* 이력서 생성 버튼 */}
-              <Button
-                onClick={generateSampleResumes}
-                disabled={loading || applicants.length === 0}
-                variant={applicants.length === 0 ? 'danger' : 'primary'}
-              >
-                <FiUser />
-                이력서가 없는 지원자들을 위한 이력서 생성
-                {applicants.length === 0 && ' (지원자 필요)'}
-              </Button>
             </ButtonGroup>
           </Section>
         )}
 
-        {/* 엑셀 업로드 탭 */}
+        {/* JSON 업로드 탭 */}
         {activeTab === 'upload' && (
           <Section>
             <SectionTitle>
               <FiUpload />
-              엑셀 파일 업로드
+              JSON 데이터 업로드
             </SectionTitle>
 
             <InfoCard>
               <InfoTitle>
                 <FiInfo />
-                엑셀 파일 업로드 가이드
+                JSON 데이터 업로드 가이드
               </InfoTitle>
               <InfoList>
                 <InfoItem>
                   <span>지원 형식</span>
-                  <span>.xlsx, .xls, .csv</span>
+                  <span>.json</span>
                 </InfoItem>
                 <InfoItem>
                   <span>최대 크기</span>
@@ -1783,8 +1767,8 @@ const SampleDataManagement = () => {
                   <span>UTF-8</span>
                 </InfoItem>
                 <InfoItem>
-                  <span>시트명</span>
-                  <span>첫 번째 시트 사용</span>
+                  <span>데이터 구조</span>
+                  <span>applicants, job_postings 배열</span>
                 </InfoItem>
               </InfoList>
             </InfoCard>
@@ -1793,42 +1777,90 @@ const SampleDataManagement = () => {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              onClick={() => document.getElementById('file-input').click()}
+              onClick={() => document.getElementById('json-file-input').click()}
             >
               <UploadIcon>
                 <FiUpload size={48} />
               </UploadIcon>
               <UploadText>
-                {uploadedFile ? uploadedFile.name : '클릭하거나 파일을 드래그하여 업로드하세요'}
+                {uploadedFile ? uploadedFile.name : '클릭하거나 JSON 파일을 드래그하여 업로드하세요'}
               </UploadText>
               <UploadSubtext>
-                지원 형식: .xlsx, .xls, .csv (최대 10MB)
+                지원 형식: .json (최대 10MB)
               </UploadSubtext>
               <FileInput
-                id="file-input"
+                id="json-file-input"
                 type="file"
-                accept=".xlsx,.xls,.csv"
+                accept=".json"
                 onChange={handleFileSelect}
               />
             </FileUploadArea>
 
             <ButtonGroup>
               <Button
-                onClick={() => document.getElementById('file-input').click()}
+                onClick={() => document.getElementById('json-file-input').click()}
                 disabled={loading}
               >
                 <FiUpload />
-                파일 선택
+                JSON 파일 선택
               </Button>
 
               <Button
-                onClick={() => window.open('/sample-template.xlsx', '_blank')}
+                onClick={downloadJsonTemplate}
                 disabled={loading}
               >
                 <FiDownload />
-                템플릿 다운로드
+                JSON 템플릿 다운로드
               </Button>
             </ButtonGroup>
+
+            {/* 업로드 완료 후 다음 단계 안내 */}
+            {message && message.type === 'success' && message.text.includes('업로드되었습니다') && (
+              <InfoCard style={{ marginTop: '24px', background: '#d4edda', border: '1px solid #c3e6cb' }}>
+                <InfoTitle style={{ color: '#155724' }}>
+                  <FiCheckCircle />
+                  업로드 완료! 다음 단계를 진행하세요
+                </InfoTitle>
+                <InfoList>
+                  <InfoItem>
+                    <span>✅ JSON 데이터가 성공적으로 등록되었습니다</span>
+                    <span></span>
+                  </InfoItem>
+                  <InfoItem>
+                    <span>🎯 지원자들에게 기존 채용공고가 랜덤하게 할당되었습니다</span>
+                    <span></span>
+                  </InfoItem>
+                  <InfoItem>
+                    <span>🔍 데이터가 벡터 데이터베이스에도 저장되어 검색 기능을 사용할 수 있습니다</span>
+                    <span></span>
+                  </InfoItem>
+                  <InfoItem>
+                    <span>📊 현재 데이터 통계를 확인하세요</span>
+                    <span></span>
+                  </InfoItem>
+                  <InfoItem>
+                    <span>🚀 추가 데이터를 생성하거나 관리하세요</span>
+                    <span></span>
+                  </InfoItem>
+                </InfoList>
+                <ButtonGroup style={{ marginTop: '16px' }}>
+                  <Button
+                    onClick={() => setActiveTab('generate')}
+                    variant="success"
+                  >
+                    <FiPlus />
+                    추가 데이터 생성하기
+                  </Button>
+                  <Button
+                    onClick={() => setActiveTab('help')}
+                    variant="primary"
+                  >
+                    <FiInfo />
+                    도움말 보기
+                  </Button>
+                </ButtonGroup>
+              </InfoCard>
+            )}
           </Section>
         )}
 

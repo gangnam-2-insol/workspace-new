@@ -22,6 +22,7 @@ import {
   FiUsers,
   FiChevronRight
 } from 'react-icons/fi';
+import { parseSkills } from '../utils/skillParser';
 
 // 모달 오버레이
 const ModalOverlay = styled(motion.div)`
@@ -52,7 +53,7 @@ const ModalContent = styled(motion.div)`
 
 // 닫기 버튼
 const CloseButton = styled.button`
-  position: absolute;
+  position: fixed;
   top: 20px;
   right: 20px;
   background: #f8f9fa;
@@ -63,7 +64,7 @@ const CloseButton = styled.button`
   padding: 12px;
   border-radius: 50%;
   transition: all 0.2s;
-  z-index: 10;
+  z-index: 3010;
 
   &:hover {
     background: #e9ecef;
@@ -244,6 +245,40 @@ const SkillTag = styled.span`
   font-size: 13px;
   font-weight: 600;
   box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3);
+`;
+
+// 기술 스택 컨테이너
+const SkillsContainer = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+`;
+
+// 액션 버튼들 컨테이너
+const ActionButtons = styled.div`
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  flex-wrap: wrap;
+`;
+
+// 정보 섹션
+const InfoSection = styled.div`
+  margin-bottom: 24px;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 20px;
+  border: 1px solid #e2e8f0;
+`;
+
+// 정보 텍스트
+const InfoText = styled.div`
+  font-size: 14px;
+  color: #4a5568;
+  line-height: 1.6;
+  margin-top: 8px;
+  white-space: pre-wrap;
 `;
 
 // AI 분석 섹션
@@ -491,9 +526,13 @@ const RecommendationCard = styled.div`
   min-height: 200px;
 
   &:hover {
-    transform: translateY(-3px);
-    box-shadow: 0 8px 25px rgba(0, 123, 191, 0.15);
-    border-color: #0284c7;
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.15);
+    border-color: #667eea;
+  }
+
+  &:active {
+    transform: translateY(-2px);
   }
 `;
 
@@ -716,8 +755,7 @@ const ApplicantDetailModal = ({
   onDelete,
   onStatusUpdate,
   onCoverLetterAnalysis,
-  onDetailedAnalysis,
-  onApplicantSelect
+  onDetailedAnalysis
 }) => {
   const [recommendations, setRecommendations] = useState([]);
   const [recommendationsLoading, setRecommendationsLoading] = useState(false);
@@ -725,6 +763,11 @@ const ApplicantDetailModal = ({
   const [recommendationsLoaded, setRecommendationsLoaded] = useState(false); // 한 번 로드했는지 추적
   const [showDebug, setShowDebug] = useState(false); // 디버그 패널 표시 여부
   const [debugLogs, setDebugLogs] = useState([]); // 디버그 로그 저장
+
+  // 추천된 지원자 상세정보 모달 상태
+  const [selectedRecommendedApplicant, setSelectedRecommendedApplicant] = useState(null);
+  const [isRecommendedApplicantModalOpen, setIsRecommendedApplicantModalOpen] = useState(false);
+  const [isLoadingRecommendedApplicant, setIsLoadingRecommendedApplicant] = useState(false);
 
   // 디버그 로그 추가 함수
   const addDebugLog = (message, type = 'info') => {
@@ -750,18 +793,9 @@ const ApplicantDetailModal = ({
       return;
     }
 
-    // 이미 로딩 중이면 스킵 (더 강화된 중복 방지)
-    if (recommendationsLoading) {
-      addDebugLog('이미 로딩 중 - 스킵', 'warning');
-      return;
-    }
-
-    const currentApplicantId = applicant._id || applicant.id;
-    
-    // 동일한 지원자에 대해 이미 로드했으면 스킵
-    if (recommendationsLoaded && recommendations.length > 0 && 
-        recommendations[0]?.targetApplicantId === currentApplicantId) {
-      addDebugLog(`동일 지원자 ${currentApplicantId} - 이미 로드됨`, 'info');
+    // 이미 로드했거나 로딩 중이면 다시 로드하지 않음
+    if (recommendationsLoaded || recommendationsLoading) {
+      addDebugLog('이미 로드됨 또는 로딩 중 - 스킵', 'info');
       return;
     }
 
@@ -805,20 +839,15 @@ const ApplicantDetailModal = ({
       // 백엔드 응답 구조에 맞춰 데이터 처리
       if (data.status === 'success' && data.recommendations) {
         addDebugLog('응답 데이터 처리 시작', 'info');
-        console.log('전체 recommendations 구조:', data.recommendations);
 
         const recommendationData = data.recommendations.data || data.recommendations;
-        console.log('recommendationData 구조:', recommendationData);
-        console.log('recommendationData.results 존재여부:', !!recommendationData.results);
-        console.log('recommendationData.results 길이:', recommendationData.results?.length);
 
-        if (recommendationData && recommendationData.results && recommendationData.results.length > 0) {
+        if (recommendationData && recommendationData.results) {
           const results = recommendationData.results.slice(0, 5); // 최대 5개
           addDebugLog(`추천 결과 ${results.length}개 발견`, 'success');
 
-          // 각 추천 결과에 대상 지원자 ID 추가 및 상세 로깅
+          // 각 추천 결과 상세 로깅
           results.forEach((result, index) => {
-            result.targetApplicantId = applicantId; // 중복 방지를 위한 대상 지원자 ID 저장
             addDebugLog(`추천 #${index + 1}: ${result.applicant?.name} (점수: ${(result.final_score * 100).toFixed(1)}%)`, 'info');
           });
 
@@ -859,10 +888,7 @@ const ApplicantDetailModal = ({
             addDebugLog('LLM 분석 결과 없음 또는 실패', 'warning');
           }
 
-          console.log('setRecommendations 호출 전 results:', results);
-          console.log('results 길이:', results.length);
           setRecommendations(results);
-          console.log('setRecommendations 호출 완료');
           addDebugLog('최종 추천 결과 설정 완료', 'success');
         } else {
           addDebugLog('추천 결과 없음', 'warning');
@@ -884,69 +910,74 @@ const ApplicantDetailModal = ({
     }
   };
 
-  // 이전 지원자 ID 추적을 위한 ref
-  const prevApplicantIdRef = React.useRef(null);
-
   // applicant가 변경될 때 캐시 리셋 및 유사인재 추천 로드
   useEffect(() => {
     if (applicant && applicant._id) {
+      // 새로운 지원자인 경우에만 캐시 리셋
       const currentApplicantId = applicant._id || applicant.id;
-      
-      // 이전과 동일한 지원자면 스킵 (임시로 비활성화)
-      // if (prevApplicantIdRef.current === currentApplicantId) {
-      //   addDebugLog(`동일 지원자 ${currentApplicantId} - 이전과 동일함`, 'info');
-      //   return;
-      // }
+      const isNewApplicant = !recommendationsLoaded || recommendations.length === 0;
 
-      // 이미 로딩 중이면 스킵
-      if (recommendationsLoading) {
-        addDebugLog(`로딩 중 ${currentApplicantId} - 스킵`, 'warning');
-        return;
-      }
+      if (isNewApplicant) {
+        setRecommendationsLoaded(false);
+        setRecommendations([]);
+        setRecommendationsError(null);
 
-      // 새로운 지원자 ID 저장
-      prevApplicantIdRef.current = currentApplicantId;
-      
-      addDebugLog(`새 지원자 ${currentApplicantId} - 상태 리셋 및 추천 요청`, 'info');
-      setRecommendationsLoaded(false);
-      setRecommendations([]);
-      setRecommendationsError(null);
-      clearDebugLogs();
-
-      // 중복 호출 방지를 위한 딜레이
-      const timer = setTimeout(() => {
-        if (!recommendationsLoading && prevApplicantIdRef.current === currentApplicantId) {
+        // 약간의 딜레이를 두어 중복 호출 방지
+        const timer = setTimeout(() => {
           fetchRecommendations();
-        }
-      }, 300);
+        }, 100);
 
-      return () => {
-        clearTimeout(timer);
-      };
+        return () => clearTimeout(timer);
+      }
     }
   }, [applicant?._id]);
 
-  // 모달 스크롤을 맨 위로 이동
-  useEffect(() => {
-    if (applicant) {
-      // 모달이 열릴 때 맨 위로 스크롤
-      const modalElement = document.querySelector('[data-modal="applicant-detail"]');
-      if (modalElement) {
-        modalElement.scrollTop = 0;
-      }
-      // 또는 body의 스크롤도 맨 위로
-      window.scrollTo(0, 0);
-    }
-  }, [applicant]);
-
   // 추천 카드 클릭 핸들러
-  const handleRecommendationClick = (recommendedApplicant) => {
-    if (onApplicantSelect) {
-      // 추천된 지원자의 상세 모달을 열기 위해 부모 컴포넌트로 전달
-      onApplicantSelect(recommendedApplicant);
-    } else {
+  const handleRecommendationClick = async (recommendedApplicant) => {
+    try {
       console.log('추천 지원자 클릭:', recommendedApplicant);
+      addDebugLog(`추천된 지원자 클릭: ${recommendedApplicant.name}`, 'info');
+
+      // 추천된 지원자의 상세 정보를 가져오기
+      const applicantId = recommendedApplicant._id || recommendedApplicant.id;
+      if (!applicantId) {
+        addDebugLog('추천된 지원자 ID가 없습니다', 'error');
+        return;
+      }
+
+      // 로딩 상태 시작
+      setIsLoadingRecommendedApplicant(true);
+      setIsRecommendedApplicantModalOpen(true);
+      setSelectedRecommendedApplicant(null);
+
+      addDebugLog(`추천된 지원자 상세정보 조회 시작: ${applicantId}`, 'info');
+
+      // API 호출로 상세 정보 가져오기
+      const response = await fetch(`/api/applicants/${applicantId}`);
+      if (!response.ok) {
+        throw new Error(`지원자 정보 조회 실패: ${response.status}`);
+      }
+
+      const detailedApplicant = await response.json();
+      addDebugLog(`추천된 지원자 상세정보 조회 완료: ${detailedApplicant.name}`, 'success');
+
+      // 모달 상태 설정
+      setSelectedRecommendedApplicant(detailedApplicant);
+
+    } catch (error) {
+      console.error('추천된 지원자 상세정보 조회 오류:', error);
+      addDebugLog(`추천된 지원자 상세정보 조회 오류: ${error.message}`, 'error');
+      setIsRecommendedApplicantModalOpen(false);
+    } finally {
+      setIsLoadingRecommendedApplicant(false);
     }
+  };
+
+  // 추천된 지원자 모달 닫기 핸들러
+  const handleCloseRecommendedApplicantModal = () => {
+    setIsRecommendedApplicantModalOpen(false);
+    setSelectedRecommendedApplicant(null);
+    addDebugLog('추천된 지원자 모달 닫기', 'info');
   };
 
   // LLM 분석 결과 파싱 함수
@@ -1175,7 +1206,6 @@ const ApplicantDetailModal = ({
         onClick={onClose}
       >
         <ModalContent
-          data-modal="applicant-detail"
           initial={{ scale: 0.9, y: 20 }}
           animate={{ scale: 1, y: 0 }}
           exit={{ scale: 0.9, y: 20 }}
@@ -1299,20 +1329,14 @@ const ApplicantDetailModal = ({
                 </SectionTitle>
                 <SectionContent>
                   <SkillsGrid>
-                    {Array.isArray(applicant.skills)
-                      ? applicant.skills.map((skill, index) => (
-                          <SkillTag key={index}>
-                            {skill}
-                          </SkillTag>
-                        ))
-                      : typeof applicant.skills === 'string'
-                      ? applicant.skills.split(',').map((skill, index) => (
-                          <SkillTag key={index}>
-                            {skill.trim()}
-                          </SkillTag>
-                        ))
-                      : null
-                    }
+                    {(() => {
+                      const skills = parseSkills(applicant.skills);
+                      return skills.map((skill, index) => (
+                        <SkillTag key={`skill-${index}-${skill}`}>
+                          {skill}
+                        </SkillTag>
+                      ));
+                    })()}
                   </SkillsGrid>
                 </SectionContent>
               </Section>
@@ -1363,14 +1387,6 @@ const ApplicantDetailModal = ({
                 </ErrorMessage>
               )}
 
-              {(() => {
-                console.log('렌더링 조건 확인:');
-                console.log('- recommendationsLoading:', recommendationsLoading);
-                console.log('- recommendationsError:', recommendationsError);
-                console.log('- recommendations.length:', recommendations.length);
-                console.log('- recommendations:', recommendations);
-                return null;
-              })()}
               {!recommendationsLoading && !recommendationsError && recommendations.length > 0 && (
                 <RecommendationGrid>
                   {recommendations.map((recommendation, index) => (
@@ -1402,17 +1418,39 @@ const ApplicantDetailModal = ({
                           {recommendation.applicant.skills && (
                             <div>
                               <RecommendationCardLabel>주요 기술</RecommendationCardLabel>
-                              <RecommendationCardValue>
-                                {Array.isArray(recommendation.applicant.skills)
-                                  ? recommendation.applicant.skills.slice(0, 2).join(', ')
-                                  : typeof recommendation.applicant.skills === 'string'
-                                  ? recommendation.applicant.skills.split(',').slice(0, 2).join(', ')
-                                  : '기술스택 정보 없음'
-                                }
-                                {((Array.isArray(recommendation.applicant.skills) && recommendation.applicant.skills.length > 2) ||
-                                  (typeof recommendation.applicant.skills === 'string' && recommendation.applicant.skills.split(',').length > 2)) &&
-                                  ' 외'}
-                              </RecommendationCardValue>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                                {(() => {
+                                  const skills = parseSkills(recommendation.applicant.skills);
+                                  return skills.slice(0, 3).map((skill, index) => (
+                                    <span
+                                      key={`rec-skill-${index}-${skill}`}
+                                      style={{
+                                        background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                                        color: 'white',
+                                        padding: '2px 8px',
+                                        borderRadius: '12px',
+                                        fontSize: '10px',
+                                        fontWeight: '500',
+                                        display: 'inline-block'
+                                      }}
+                                    >
+                                      {skill}
+                                    </span>
+                                  ));
+                                })()}
+                                {(() => {
+                                  const skills = parseSkills(recommendation.applicant.skills);
+                                  return skills.length > 3 && (
+                                    <span style={{
+                                      fontSize: '10px',
+                                      color: '#64748b',
+                                      marginLeft: '4px'
+                                    }}>
+                                      외 {skills.length - 3}개
+                                    </span>
+                                  );
+                                })()}
+                              </div>
                             </div>
                           )}
                         </ExperienceSkillsRow>
@@ -1426,7 +1464,7 @@ const ApplicantDetailModal = ({
                           AI 인재 추천 이유
                         </AIReasonTitle>
                         {generateAIReasons(recommendation, applicant).map((reason, reasonIndex) => (
-                          <AIReasonItem key={reasonIndex}>
+                          <AIReasonItem key={`reason-${reasonIndex}-${reason.label}`}>
                             <AIReasonIcon>{reason.icon}</AIReasonIcon>
                             <AIReasonText>
                               <strong>{reason.label}:</strong> {reason.text}
@@ -1434,6 +1472,26 @@ const ApplicantDetailModal = ({
                           </AIReasonItem>
                         ))}
                       </AIReasonSection>
+
+                      {/* 클릭 안내 텍스트 */}
+                      <div style={{
+                        marginTop: '12px',
+                        padding: '8px 12px',
+                        background: 'linear-gradient(135deg, #f0f9ff, #e0f2fe)',
+                        borderRadius: '8px',
+                        border: '1px solid #bae6fd',
+                        textAlign: 'center',
+                        fontSize: '12px',
+                        color: '#0284c7',
+                        fontWeight: '500',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        gap: '4px'
+                      }}>
+                        <FiChevronRight size={12} />
+                        클릭하여 상세정보 보기
+                      </div>
                     </RecommendationCard>
                   ))}
                 </RecommendationGrid>
@@ -1483,6 +1541,169 @@ const ApplicantDetailModal = ({
           </Content>
         </ModalContent>
       </ModalOverlay>
+
+      {/* 추천된 지원자 상세정보 모달 */}
+      {isRecommendedApplicantModalOpen && (
+        <ModalOverlay
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          onClick={handleCloseRecommendedApplicantModal}
+        >
+            <ModalContent
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              transition={{ type: "spring", duration: 0.3 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <Header>
+                <Title>
+                  <FiUser size={24} />
+                  추천된 지원자 상세정보
+                </Title>
+                <CloseButton onClick={handleCloseRecommendedApplicantModal}>
+                  <FiX size={24} />
+                </CloseButton>
+              </Header>
+
+              <Content>
+                {isLoadingRecommendedApplicant ? (
+                  <LoadingSpinner>
+                    추천된 지원자 정보를 불러오는 중...
+                  </LoadingSpinner>
+                ) : selectedRecommendedApplicant ? (
+                  <>
+                    {/* 추천된 지원자 기본 정보 */}
+                    <InfoSection>
+                      <SectionTitle>
+                        <FiUser size={20} />
+                        기본 정보
+                      </SectionTitle>
+                      <InfoGrid>
+                        <InfoItem>
+                          <InfoLabel>이름</InfoLabel>
+                          <InfoValue>{selectedRecommendedApplicant.name || '정보 없음'}</InfoValue>
+                        </InfoItem>
+                        <InfoItem>
+                          <InfoLabel>지원 직무</InfoLabel>
+                          <InfoValue>{selectedRecommendedApplicant.position || '정보 없음'}</InfoValue>
+                        </InfoItem>
+                        <InfoItem>
+                          <InfoLabel>경력</InfoLabel>
+                          <InfoValue>{selectedRecommendedApplicant.experience || '정보 없음'}</InfoValue>
+                        </InfoItem>
+                        <InfoItem>
+                          <InfoLabel>학력</InfoLabel>
+                          <InfoValue>{selectedRecommendedApplicant.education || '정보 없음'}</InfoValue>
+                        </InfoItem>
+                        <InfoItem>
+                          <InfoLabel>연락처</InfoLabel>
+                          <InfoValue>{selectedRecommendedApplicant.phone || '정보 없음'}</InfoValue>
+                        </InfoItem>
+                        <InfoItem>
+                          <InfoLabel>이메일</InfoLabel>
+                          <InfoValue>{selectedRecommendedApplicant.email || '정보 없음'}</InfoValue>
+                        </InfoItem>
+                      </InfoGrid>
+                    </InfoSection>
+
+                {/* 기술 스택 */}
+                {selectedRecommendedApplicant.skills && (
+                  <InfoSection>
+                    <SectionTitle>
+                      <FiCode size={20} />
+                      기술 스택
+                    </SectionTitle>
+                    <SkillsContainer>
+                      {(() => {
+                        const skills = parseSkills(selectedRecommendedApplicant.skills);
+                        return skills.map((skill, index) => (
+                          <SkillTag key={`rec-applicant-skill-${index}-${skill}`}>
+                            {skill}
+                          </SkillTag>
+                        ));
+                      })()}
+                    </SkillsContainer>
+                  </InfoSection>
+                )}
+
+                {/* 성장 배경 */}
+                {selectedRecommendedApplicant.growthBackground && (
+                  <InfoSection>
+                    <SectionTitle>
+                      <FiTrendingUp size={20} />
+                      성장 배경
+                    </SectionTitle>
+                    <InfoText>{selectedRecommendedApplicant.growthBackground}</InfoText>
+                  </InfoSection>
+                )}
+
+                {/* 지원 동기 */}
+                {selectedRecommendedApplicant.motivation && (
+                  <InfoSection>
+                    <SectionTitle>
+                      <FiTarget size={20} />
+                      지원 동기
+                    </SectionTitle>
+                    <InfoText>{selectedRecommendedApplicant.motivation}</InfoText>
+                  </InfoSection>
+                )}
+
+                {/* 경력 사항 */}
+                {selectedRecommendedApplicant.careerHistory && (
+                  <InfoSection>
+                    <SectionTitle>
+                      <FiBriefcase size={20} />
+                      경력 사항
+                    </SectionTitle>
+                    <InfoText>{selectedRecommendedApplicant.careerHistory}</InfoText>
+                  </InfoSection>
+                )}
+
+                {/* AI 분석 요약 */}
+                {selectedRecommendedApplicant.summary && (
+                  <InfoSection>
+                    <SectionTitle>
+                      <FiBarChart2 size={20} />
+                      AI 분석 요약
+                    </SectionTitle>
+                    <InfoText>{selectedRecommendedApplicant.summary}</InfoText>
+                  </InfoSection>
+                )}
+
+                    {/* 액션 버튼들 */}
+                    <ActionButtons>
+                      <ActionButton onClick={() => onResumeClick && onResumeClick(selectedRecommendedApplicant)}>
+                        <FiFileText size={18} />
+                        이력서 보기
+                      </ActionButton>
+                      <ActionButton onClick={() => onDocumentClick && onDocumentClick('coverLetter', selectedRecommendedApplicant)}>
+                        <FiMessageSquare size={18} />
+                        자소서 보기
+                      </ActionButton>
+                      <ActionButton onClick={() => onDocumentClick && onDocumentClick('portfolio', selectedRecommendedApplicant)}>
+                        <FiCode size={18} />
+                        포트폴리오 보기
+                      </ActionButton>
+                    </ActionButtons>
+                  </>
+                ) : (
+                  <div style={{
+                    padding: '40px',
+                    textAlign: 'center',
+                    color: '#64748b',
+                    background: 'white',
+                    borderRadius: '12px',
+                    border: '1px solid #e2e8f0'
+                  }}>
+                    지원자 정보를 불러올 수 없습니다.
+                  </div>
+                )}
+              </Content>
+            </ModalContent>
+          </ModalOverlay>
+        )}
     </AnimatePresence>
   );
 };

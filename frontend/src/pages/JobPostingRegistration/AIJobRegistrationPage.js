@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { flushSync } from 'react-dom';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -18,6 +19,30 @@ import {
 import TitleRecommendationModal from '../../components/TitleRecommendationModal';
 import jobPostingApi from '../../services/jobPostingApi';
 import companyCultureApi from '../../services/companyCultureApi';
+
+// 헬퍼 함수들
+const calculateDeadline = (daysFromNow) => {
+  const today = new Date();
+  const deadline = new Date(today.getTime() + (daysFromNow * 24 * 60 * 60 * 1000));
+  return deadline.toISOString().split('T')[0]; // YYYY-MM-DD 형식
+};
+
+const extractExperienceYears = (experienceLevel) => {
+  if (!experienceLevel) return '';
+
+  // "3년차", "5년 이상" 등에서 숫자 추출
+  const match = experienceLevel.match(/(\d+)/);
+  if (match) {
+    return match[1];
+  }
+
+  // "신입"인 경우
+  if (experienceLevel.includes('신입')) {
+    return '0';
+  }
+
+  return '';
+};
 
 // Styled Components
 const PageContainer = styled.div`
@@ -80,6 +105,61 @@ const HeaderRight = styled.div`
 `;
 
 
+
+// AI 입력 상태 표시 컴포넌트
+const AIStatusBar = styled.div`
+  background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+  color: white;
+  padding: 16px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-weight: 500;
+  box-shadow: 0 2px 8px rgba(74, 222, 128, 0.2);
+`;
+
+const AIStatusLeft = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+`;
+
+const AIStatusSpinner = styled.div`
+  width: 20px;
+  height: 20px;
+  border: 2px solid rgba(255, 255, 255, 0.3);
+  border-top: 2px solid white;
+  border-radius: 50%;
+  animation: spin 1s linear infinite;
+
+  @keyframes spin {
+    0% { transform: rotate(0deg); }
+    100% { transform: rotate(360deg); }
+  }
+`;
+
+const AIStatusProgress = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+`;
+
+const AIProgressBar = styled.div`
+  width: 120px;
+  height: 6px;
+  background: rgba(255, 255, 255, 0.3);
+  border-radius: 3px;
+  overflow: hidden;
+`;
+
+const AIProgressFill = styled.div`
+  height: 100%;
+  background: white;
+  border-radius: 3px;
+  transition: width 0.3s ease;
+  width: ${props => (props.progress / props.total) * 100}%;
+`;
 
 const Content = styled.div`
   padding: 32px;
@@ -308,6 +388,63 @@ const SampleButton = styled.button`
   }
 `;
 
+const AutoExtractButton = styled.button`
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border: none;
+  color: white;
+  padding: 8px 16px;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+
+  &:hover:not(:disabled) {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+  }
+
+  &:disabled {
+    background: #ccc;
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+`;
+
+const ExtractionIndicator = styled.div`
+  margin-top: 8px;
+  padding: 8px 12px;
+  background: ${props =>
+    props.isDefault
+      ? 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)'  // 주황색 (기본값)
+      : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'  // 파란색 (추출)
+  };
+  color: white;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+`;
+
+const ConfidenceScore = styled.span`
+  margin-left: 8px;
+  padding: 2px 6px;
+  background: ${props =>
+    props.confidence >= 0.8 ? '#10b981' :
+    props.confidence >= 0.6 ? '#f59e0b' : '#ef4444'
+  };
+  color: white;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 500;
+`;
+
 const AIJobRegistrationPage = () => {
   const navigate = useNavigate();
 
@@ -318,6 +455,23 @@ const AIJobRegistrationPage = () => {
   const [cultures, setCultures] = useState([]);
   const [defaultCulture, setDefaultCulture] = useState(null);
   const [loadingCultures, setLoadingCultures] = useState(false);
+
+  // AI 자동 입력 상태
+  const [aiInputStatus, setAiInputStatus] = useState({
+    isActive: false,
+    currentField: '',
+    progress: 0,
+    totalFields: 0
+  });
+
+  // 분야 추출 결과 상태
+  const [extractionResults, setExtractionResults] = useState({
+    industry: null,
+    jobCategory: null
+  });
+
+  // 추출 로딩 상태
+  const [isExtracting, setIsExtracting] = useState(false);
 
   const [formData, setFormData] = useState({
     // 기본 정보
@@ -350,21 +504,284 @@ const AIJobRegistrationPage = () => {
     selected_culture_id: null
   });
 
+  // 폼 데이터 변경 추적 디버깅 함수
+  useEffect(() => {
+    console.log('📊 formData 변경 감지:', {
+      industry: formData.industry,
+      jobCategory: formData.jobCategory,
+      timestamp: new Date().toLocaleTimeString()
+    });
+  }, [formData.industry, formData.jobCategory]);
+
+  // 폼 데이터 변경 추적 디버깅 함수
+  const debugAIFormChange = (fieldName, oldValue, newValue, source = 'user') => {
+    console.group(`📝 [AI 폼 필드 변경] ${fieldName}`);
+    console.log('🔄 변경 소스:', source);
+    console.log('📋 이전 값:', oldValue || '(비어있음)');
+    console.log('📝 새 값:', newValue || '(비어있음)');
+
+    // AI 폼 특화 분석
+    if (fieldName === 'jobKeywords') {
+      console.log('🏷️ 키워드 개수:', Array.isArray(newValue) ? newValue.length : 0);
+    } else if (fieldName === 'experienceLevel') {
+      console.log('💼 경력 수준 변경:', `${oldValue} → ${newValue}`);
+    } else if (fieldName === 'selected_culture_id') {
+      console.log('🏢 인재상 선택:', newValue ? '선택됨' : '미선택');
+    }
+
+    console.groupEnd();
+  };
+
+    // 향상된 폼 데이터 업데이트 함수
+  const updateAIFormData = (updates, source = 'user') => {
+    setFormData(prev => {
+      const newData = { ...prev, ...updates };
+
+      // 각 변경된 필드에 대해 디버깅
+      Object.entries(updates).forEach(([key, value]) => {
+        if (prev[key] !== value) {
+          debugAIFormChange(key, prev[key], value, source);
+        }
+      });
+
+      // 주요업무 자동 분리 체크
+      if (updates.mainDuties && updates.mainDuties !== prev.mainDuties) {
+        checkAutoSeparation(updates.mainDuties, source);
+      }
+
+      return newData;
+    });
+  };
+
+    // 스마트 자동 분리 체크 함수 (즉시 실행)
+  const checkAutoSeparation = async (mainDutiesText, source) => {
+    // 자동 분리 조건 체크 (더 적극적으로)
+    if (!mainDutiesText || mainDutiesText.length < 80) {
+      console.log('📝 [스마트 분리 체크] 텍스트가 너무 짧음 - 자동 분리 안함');
+      return;
+    }
+
+    // 더 넓은 조건으로 자동 분리 실행
+    const shouldAutoSeparate = (
+      source === 'ai_chatbot' ||           // AI 챗봇 입력
+      source === 'ai_text_analysis' ||     // AI 텍스트 분석
+      source === 'ai_object_data' ||       // AI 객체 데이터
+      mainDutiesText.length > 150 ||       // 150자 이상 (기존 200자에서 낮춤)
+      /[,.].*[,.]/.test(mainDutiesText)    // 여러 문장이 포함된 경우
+    );
+
+    if (shouldAutoSeparate) {
+      console.log('🤖 [스마트 분리 트리거]:', {
+        소스: source,
+        텍스트길이: mainDutiesText.length,
+        자동분리조건: '충족',
+        실행방식: '즉시'
+      });
+
+      // 즉시 스마트 분리 실행 (대기 시간 없음)
+      await performAutoSeparation(mainDutiesText);
+
+    } else {
+      console.log('📝 [스마트 분리 체크] 조건 미충족:', {
+        소스: source,
+        텍스트길이: mainDutiesText.length,
+        여러문장여부: /[,.].*[,.]/.test(mainDutiesText)
+      });
+    }
+  };
+
+    // 스마트 자동 분리 실행 함수
+  const performAutoSeparation = async (mainDutiesText) => {
+    console.group('🤖 [스마트 자동 분리] 실행 시작');
+    console.log('📝 대상 텍스트:', mainDutiesText.substring(0, 100) + '...');
+
+    try {
+      // 스마트 분리 API 사용
+      const result = await jobPostingApi.separateMainDutiesSmart(mainDutiesText);
+
+      if (result.success && result.smart_extraction) {
+        const smartExtraction = result.smart_extraction;
+        const displaySuggestions = smartExtraction.display_suggestions;
+
+        console.log('✅ [스마트 분리 성공]:', {
+          품질점수: (smartExtraction.quality_score * 100).toFixed(1) + '점',
+          추천내용길이: smartExtraction.recommended_content.length,
+          주요카테고리: displaySuggestions.primary_display?.length || 0,
+          보조카테고리: displaySuggestions.secondary_display?.length || 0
+        });
+
+        // 분리된 데이터 저장
+        setSeparatedDuties(result.separated_duties);
+
+        // 스마트 추출된 가장 적합한 내용을 주요업무 필드에 설정
+        const recommendedContent = smartExtraction.recommended_content ||
+                                 result.separated_duties.core_responsibilities ||
+                                 mainDutiesText;
+
+        setFormData(prev => ({
+          ...prev,
+          mainDuties: recommendedContent
+        }));
+
+        console.log('🎯 [스마트 추출 적용] 가장 적합한 내용으로 업데이트');
+        console.log('📝 추천 내용:', recommendedContent.substring(0, 80) + '...');
+        console.log('💯 추출 품질:', (smartExtraction.quality_score * 100).toFixed(1) + '점');
+
+        // UI에 스마트 분리 결과 표시 (선택적)
+        if (displaySuggestions.primary_display?.length > 0) {
+          console.log('🎨 [주요 카테고리]:',
+            displaySuggestions.primary_display.map(item =>
+              `${item.category} (${item.score.toFixed(2)}점)`
+            ).join(', ')
+          );
+        }
+
+        // 사용자에게 스마트 분리 완료 알림
+        console.log('🔔 [스마트 분리 완료] 최적화된 내용으로 자동 업데이트됨');
+
+      } else {
+        console.warn('⚠️ [스마트 분리 실패] 일반 분리로 폴백');
+        // 일반 분리로 폴백
+        await performBasicSeparation(mainDutiesText);
+      }
+    } catch (error) {
+      console.error('❌ [스마트 분리 오류]:', error.message);
+      console.log('🔄 [폴백] 일반 분리로 재시도');
+      // 오류 시 일반 분리로 폴백
+      await performBasicSeparation(mainDutiesText);
+    } finally {
+      console.groupEnd();
+    }
+  };
+
+  // 일반 분리 폴백 함수
+  const performBasicSeparation = async (mainDutiesText) => {
+    try {
+      const result = await jobPostingApi.separateMainDuties(mainDutiesText);
+
+      if (result.success) {
+        setSeparatedDuties(result.separated_duties);
+
+        const coreContent = result.separated_duties.core_responsibilities || mainDutiesText;
+        setFormData(prev => ({
+          ...prev,
+          mainDuties: coreContent
+        }));
+
+        console.log('✅ [일반 분리 완료] 핵심업무 추출됨');
+      }
+    } catch (error) {
+      console.error('❌ [일반 분리도 실패]:', error.message);
+      // 최후의 수단: 원본 텍스트를 적절히 줄임
+      const truncatedContent = mainDutiesText.length > 200
+        ? mainDutiesText.substring(0, 200) + '...'
+        : mainDutiesText;
+
+      setFormData(prev => ({
+        ...prev,
+        mainDuties: truncatedContent
+      }));
+
+      console.log('🔄 [최종 폴백] 원본 텍스트 요약 적용');
+    }
+  };
+
   const [titleRecommendationModal, setTitleRecommendationModal] = useState({
     isOpen: false,
     finalFormData: null
   });
 
+  // 주요업무 분리 기능 상태
+  const [separatedDuties, setSeparatedDuties] = useState(null);
+  const [isSeparating, setIsSeparating] = useState(false);
+
+  // AI 챗봇 자동 입력 데이터 로드
+  useEffect(() => {
+    // 🎯 sessionStorage에서 자동 입력 데이터 확인
+    const autoFillData = sessionStorage.getItem('autoFillJobPostingData');
+    if (autoFillData) {
+      try {
+        const data = JSON.parse(autoFillData);
+        console.log('🤖 [자동 입력] AI 채팅에서 전달받은 데이터:', data);
+
+        // 자동 입력 데이터 매핑 (백엔드 필드 → 프론트엔드 필드)
+        const mappedData = {
+          // 기본 정보
+          department: data.department || '개발팀',
+          position: data.position || data.title || '',
+          experience: data.experience_level || '신입',
+          experienceLevel: data.experience_level || '신입',
+          headcount: String(data.headcount || data.team_size || '0'),
+          salary: data.salary || '',  // 급여 필드 추가
+
+          // 업무 정보
+          mainDuties: data.description || '',
+          locationCity: data.location || '서울',
+          workHours: data.working_hours || '09:00-18:00',  // 근무 시간 추가
+          workDays: '평일 (월~금)',  // 근무 요일 기본값
+
+          // 연락처 및 마감일
+          contactEmail: data.contact_email || '',  // 연락처 이메일
+          deadline: calculateDeadline(30),  // 30일 후 마감일 계산
+
+          // 경력 연수 매핑
+          experienceYears: extractExperienceYears(data.experience_level),
+
+          // 기술 스택을 키워드로 매핑
+          jobKeywords: Array.isArray(data.tech_stack) ? data.tech_stack : [],
+
+          // 추가 정보는 자동 추출 API로 설정
+          industry: '',
+          jobCategory: '',
+        };
+
+        // 추가 필드 매핑
+        if (data.requirements && Array.isArray(data.requirements)) {
+          mappedData.mainDuties += (mappedData.mainDuties ? '\n\n' : '') +
+            '• 주요 요구사항:\n' + data.requirements.map(req => `  - ${req}`).join('\n');
+        }
+
+        if (data.preferred_qualifications && Array.isArray(data.preferred_qualifications)) {
+          mappedData.mainDuties += (mappedData.mainDuties ? '\n\n' : '') +
+            '• 우대사항:\n' + data.preferred_qualifications.map(pref => `  - ${pref}`).join('\n');
+        }
+
+        if (data.benefits && Array.isArray(data.benefits)) {
+          mappedData.mainDuties += (mappedData.mainDuties ? '\n\n' : '') +
+            '• 혜택:\n' + data.benefits.map(benefit => `  - ${benefit}`).join('\n');
+        }
+
+                console.log('🎯 [자동 입력] 매핑된 폼 데이터:', mappedData);
+
+        // 자동 입력 데이터 상세 분석
+        console.log('📊 [자동 입력 분석]:', {
+          총필드수: Object.keys(mappedData).length,
+          채워진필드수: Object.values(mappedData).filter(v => v && v !== '').length,
+          주요업무길이: (mappedData.mainDuties || '').length,
+          키워드수: Array.isArray(mappedData.jobKeywords) ? mappedData.jobKeywords.length : 0,
+          데이터크기: JSON.stringify(mappedData).length
+        });
+
+        // 🎭 애니메이션 자동 입력 시작 (사용자가 보는 앞에서 실시간으로)
+        startAnimatedAutoFill(mappedData);
+
+        // 사용 후 데이터 정리
+        sessionStorage.removeItem('autoFillJobPostingData');
+        console.log('✅ [자동 입력] sessionStorage 정리 완료');
+
+      } catch (error) {
+        console.error('❌ [자동 입력] 데이터 파싱 오류:', error);
+      }
+    }
+  }, []);
+
   // AI 챗봇 이벤트 리스너
   useEffect(() => {
     const handleFormFieldUpdate = (event) => {
       const { field, value } = event.detail;
-      console.log('AI 필드 업데이트:', field, value);
+      console.log('🤖 [AI 필드 업데이트]:', field, value);
 
-      setFormData(prev => ({
-        ...prev,
-        [field]: value
-      }));
+      updateAIFormData({ [field]: value }, 'ai_chatbot');
     };
 
     // 개별 필드 업데이트 이벤트 리스너들
@@ -380,12 +797,15 @@ const AIJobRegistrationPage = () => {
       'updateDeadline': 'deadline'
     };
 
+    console.log('🔧 [이벤트 리스너] AI 폼 이벤트 등록:', Object.keys(fieldEvents));
+
     window.addEventListener('updateFormField', handleFormFieldUpdate);
 
     Object.entries(fieldEvents).forEach(([eventName, fieldName]) => {
       const handler = (event) => {
         const { value } = event.detail;
-        setFormData(prev => ({ ...prev, [fieldName]: value }));
+        console.log(`🎯 [개별 이벤트] ${eventName} → ${fieldName}:`, value);
+        updateAIFormData({ [fieldName]: value }, 'ai_individual_event');
       };
       window.addEventListener(eventName, handler);
     });
@@ -402,6 +822,129 @@ const AIJobRegistrationPage = () => {
   useEffect(() => {
     loadCultures();
   }, []);
+
+  // 🎭 애니메이션 자동 입력 함수
+  const startAnimatedAutoFill = async (mappedData) => {
+    console.log('🎬 [애니메이션 자동 입력] 시작!');
+
+    // 입력할 필드들을 순서대로 정의 (빠른 속도로 조정)
+    const fillSequence = [
+      { field: 'department', value: mappedData.department, label: '구인 부서', delay: 200 },
+      { field: 'position', value: mappedData.position, label: '채용 직무', delay: 300 },
+      { field: 'experience', value: mappedData.experience, label: '경력 요구사항', delay: 250 },
+      { field: 'experienceYears', value: mappedData.experienceYears, label: '경력 연수', delay: 200 },
+      { field: 'headcount', value: mappedData.headcount, label: '채용 인원', delay: 200 },
+      { field: 'salary', value: mappedData.salary, label: '급여 조건', delay: 200 },
+      { field: 'workHours', value: mappedData.workHours, label: '근무 시간', delay: 200 },
+      { field: 'workDays', value: mappedData.workDays, label: '근무 요일', delay: 200 },
+      { field: 'locationCity', value: mappedData.locationCity, label: '근무 지역', delay: 250 },
+      { field: 'contactEmail', value: mappedData.contactEmail, label: '연락처 이메일', delay: 200 },
+      { field: 'deadline', value: mappedData.deadline, label: '마감일', delay: 200 },
+      { field: 'mainDuties', value: mappedData.mainDuties, label: '주요 업무', delay: 400 },
+    ];
+
+    // 🎯 AI 입력 상태 활성화
+    const validFields = fillSequence.filter(item => item.value && item.value.toString().trim());
+    setAiInputStatus({
+      isActive: true,
+      currentField: '시작 중...',
+      progress: 0,
+      totalFields: validFields.length
+    });
+
+    console.log('🤖 [AI 입력] AI가 추출한 정보를 자동으로 입력하고 있습니다...');
+
+    // 각 필드를 순차적으로 애니메이션과 함께 입력
+    for (let i = 0; i < validFields.length; i++) {
+      const { field, value, label, delay } = validFields[i];
+
+      // 현재 입력 중인 필드 상태 업데이트
+      setAiInputStatus(prev => ({
+        ...prev,
+        currentField: label,
+        progress: i + 1
+      }));
+
+      console.log(`✍️ [AI 입력] ${i + 1}/${validFields.length}: ${label} 입력 중...`);
+
+      // 타이핑 애니메이션 (긴 텍스트는 점진적으로)
+      if (field === 'mainDuties' && value.length > 50) {
+        await animateTyping(field, value, 15); // 15ms 간격으로 빠른 타이핑
+      } else {
+        // 짧은 필드는 바로 입력
+        setFormData(prev => ({
+          ...prev,
+          [field]: value
+        }));
+      }
+
+      // 다음 필드로 넘어가기 전 잠시 대기
+      await new Promise(resolve => setTimeout(resolve, delay));
+    }
+
+    // 키워드 배열은 마지막에 한번에 처리
+    if (mappedData.jobKeywords && mappedData.jobKeywords.length > 0) {
+      setAiInputStatus(prev => ({
+        ...prev,
+        currentField: '기술 키워드 설정 중...'
+      }));
+
+      setFormData(prev => ({
+        ...prev,
+        jobKeywords: mappedData.jobKeywords,
+        industry: mappedData.industry,
+        jobCategory: mappedData.jobCategory,
+        experienceLevel: mappedData.experienceLevel
+      }));
+
+      await new Promise(resolve => setTimeout(resolve, 200));
+    }
+
+    // 🎉 완료 상태로 전환
+    setAiInputStatus(prev => ({
+      ...prev,
+      currentField: '완료!',
+      isActive: false
+    }));
+
+    console.log('🎉 [애니메이션 자동 입력] 완료! 모든 정보가 입력되었습니다.');
+
+    // 1초 후 상태 초기화 및 자동 분야 추출 실행
+    setTimeout(async () => {
+      setAiInputStatus({
+        isActive: false,
+        currentField: '',
+        progress: 0,
+        totalFields: 0
+      });
+
+      // 자동 분야 추출 실행
+      console.log('🤖 [자동 분야 추출] AI 입력 완료 후 자동 실행');
+      try {
+        await handleAutoExtractFields();
+      } catch (error) {
+        console.error('❌ [자동 분야 추출] 실패:', error);
+      }
+    }, 1000);
+  };
+
+  // 🎭 타이핑 애니메이션 함수
+  const animateTyping = async (fieldName, fullText, typingSpeed = 50) => {
+    const words = fullText.split(' ');
+    let currentText = '';
+
+    for (let i = 0; i < words.length; i++) {
+      currentText += (i > 0 ? ' ' : '') + words[i];
+
+      setFormData(prev => ({
+        ...prev,
+        [fieldName]: currentText
+      }));
+
+      // 타이핑 속도 조절
+      await new Promise(resolve => setTimeout(resolve, typingSpeed));
+    }
+  };
 
   const loadCultures = async () => {
     try {
@@ -473,6 +1016,242 @@ const AIJobRegistrationPage = () => {
     return salaryValue;
   };
 
+  // 분야 값 매핑 함수 (백엔드 값 → 프론트엔드 옵션)
+  const mapFieldValues = (backendValue, fieldType) => {
+    if (fieldType === 'industry') {
+      const industryMapping = {
+        '기술/IT': 'IT/소프트웨어',
+        'IT': 'IT/소프트웨어',
+        '기술': 'IT/소프트웨어',
+        // 다른 매핑들도 필요시 추가
+      };
+      return industryMapping[backendValue] || backendValue;
+    }
+
+    if (fieldType === 'jobCategory') {
+      const categoryMapping = {
+        '기술': '개발',
+        'IT': '개발',
+        '소프트웨어': '개발',
+        // 다른 매핑들도 필요시 추가
+      };
+      return categoryMapping[backendValue] || backendValue;
+    }
+
+    return backendValue;
+  };
+
+  // 자동 분야 추출 함수
+  const handleAutoExtractFields = async () => {
+    if (isExtracting) return;
+
+    setIsExtracting(true);
+
+    try {
+      console.log('🤖 분야 자동 추출 시작...');
+
+      const inputData = {
+        input_text: `${formData.department} ${formData.position} ${formData.mainDuties}`,
+        department: formData.department || '',
+        position: formData.position || '',
+        main_duties: formData.mainDuties || ''
+      };
+
+      const response = await jobPostingApi.extractJobFields(inputData);
+
+      if (response.success) {
+        const { extracted_fields, confidence_scores } = response;
+
+        // 백엔드 값을 프론트엔드 옵션에 맞게 매핑
+        const mappedIndustry = mapFieldValues(extracted_fields.industry, 'industry');
+        const mappedJobCategory = mapFieldValues(extracted_fields.job_category, 'jobCategory');
+
+        console.log('🔄 [분야 매핑]:', {
+          원본: { industry: extracted_fields.industry, jobCategory: extracted_fields.job_category },
+          매핑후: { industry: mappedIndustry, jobCategory: mappedJobCategory }
+        });
+
+        // 추출 결과 저장
+        setExtractionResults({
+          industry: {
+            value: mappedIndustry,
+            confidence: confidence_scores.industry,
+            isExtracted: true
+          },
+          jobCategory: {
+            value: mappedJobCategory,
+            confidence: confidence_scores.job_category,
+            isExtracted: true
+          }
+        });
+
+        // 폼 데이터 업데이트 (flushSync로 즉시 적용)
+        flushSync(() => {
+          setFormData(prev => {
+            const updatedData = {
+              ...prev,
+              industry: mappedIndustry,
+              jobCategory: mappedJobCategory
+            };
+            console.log('📝 폼 데이터 업데이트 (flushSync):', {
+              이전값: { industry: prev.industry, jobCategory: prev.jobCategory },
+              새로운값: { industry: mappedIndustry, jobCategory: mappedJobCategory },
+              전체데이터: updatedData
+            });
+            return updatedData;
+          });
+        });
+
+                console.log('✅ 분야 추출 완료:', {
+          원본: { industry: extracted_fields.industry, jobCategory: extracted_fields.job_category },
+          매핑후: { industry: mappedIndustry, jobCategory: mappedJobCategory },
+          confidence: confidence_scores
+        });
+
+        // 성공 알림 (기본값 사용 여부에 따라 메시지 구분)
+        const isDefaultIndustry = mappedIndustry === 'IT/소프트웨어' && confidence_scores.industry <= 0.5;
+        const isDefaultJobCategory = mappedJobCategory === '개발' && confidence_scores.job_category <= 0.5;
+
+        let message = '분야 추출이 완료되었습니다!\n\n';
+        message += `산업 분야: ${mappedIndustry}`;
+        if (isDefaultIndustry) {
+          message += ' (기본값)';
+        } else {
+          message += ` (신뢰도: ${Math.round(confidence_scores.industry * 100)}%)`;
+        }
+
+        message += `\n직무 카테고리: ${mappedJobCategory}`;
+        if (isDefaultJobCategory) {
+          message += ' (기본값)';
+        } else {
+          message += ` (신뢰도: ${Math.round(confidence_scores.job_category * 100)}%)`;
+        }
+
+        if (isDefaultIndustry || isDefaultJobCategory) {
+          message += '\n\n※ 일부 항목은 기본값이 적용되었습니다. 필요시 수정해주세요.';
+        }
+
+        alert(message);
+
+      } else {
+        throw new Error('추출 실패');
+      }
+
+    } catch (error) {
+      console.error('❌ 분야 추출 실패:', error);
+
+      // 추출 실패 시 기본값 설정 (flushSync로 즉시 적용)
+      flushSync(() => {
+        setFormData(prev => ({
+          ...prev,
+          industry: 'IT/소프트웨어',
+          jobCategory: '개발'
+        }));
+      });
+
+      setExtractionResults({
+        industry: {
+          value: 'IT/소프트웨어',
+          confidence: 0.3,
+          isExtracted: true,
+          isDefault: true
+        },
+        jobCategory: {
+          value: '개발',
+          confidence: 0.3,
+          isExtracted: true,
+          isDefault: true
+        }
+      });
+
+      alert('분야 추출에 실패하여 기본값을 설정했습니다.\n\n산업 분야: IT/소프트웨어 (기본값)\n직무 카테고리: 개발 (기본값)\n\n필요시 직접 수정해주세요.');
+    } finally {
+      setIsExtracting(false);
+    }
+  };
+
+  // 주요업무 분리 함수
+  const handleSeparateMainDuties = async () => {
+    const startTime = Date.now();
+
+    console.group('🔄 [AI 페이지 주요업무 분리] 프로세스 시작');
+    console.log('📝 원본 텍스트 길이:', formData.mainDuties?.length || 0);
+    console.log('📊 원본 텍스트 미리보기:', (formData.mainDuties || '').substring(0, 100) + '...');
+
+    // 입력 검증 디버깅
+    if (!formData.mainDuties || formData.mainDuties.length < 10) {
+      console.warn('⚠️ [검증 실패] 주요업무 텍스트가 너무 짧음:', formData.mainDuties?.length || 0);
+      console.groupEnd();
+      alert('주요업무 내용이 너무 짧습니다. 더 상세히 입력해주세요.');
+      return;
+    }
+
+    console.log('✅ [검증 통과] 분리 작업 시작');
+    setIsSeparating(true);
+
+    try {
+      console.log('🚀 API 호출 시작');
+      const apiStart = Date.now();
+      const result = await jobPostingApi.separateMainDuties(formData.mainDuties);
+      const apiTime = Date.now() - apiStart;
+
+      console.log('📊 [API 응답 분석]:', {
+        소요시간: `${apiTime}ms`,
+        성공여부: result.success,
+        응답크기: JSON.stringify(result).length,
+        카테고리수: result.summary?.total_categories || 0
+      });
+
+      if (result.success) {
+        // 분리 결과 상세 분석
+        console.log('🎯 [분리 결과 상세]:', {
+          총카테고리: result.summary.total_categories,
+          채워진카테고리: result.summary.filled_categories,
+          총문자수: result.summary.total_chars,
+          분리품질: result.summary.separation_quality
+        });
+
+        // 각 카테고리별 내용 분석
+        Object.entries(result.separated_duties).forEach(([category, content]) => {
+          if (content && content.trim()) {
+            console.log(`  📋 ${category}: ${content.length}자 - "${content.substring(0, 50)}..."`);
+          }
+        });
+
+        setSeparatedDuties(result.separated_duties);
+
+        // 분리된 내용을 폼 데이터에 적용
+        updateAIFormData({
+          mainDuties: result.separated_duties.core_responsibilities || formData.mainDuties
+        }, 'duties_separation');
+
+        alert(`✅ ${result.summary.total_categories}개 카테고리로 분리되었습니다!`);
+
+        console.log('✅ [분리 완료] UI 업데이트 성공');
+      } else {
+        console.error('❌ [분리 실패] 서버에서 실패 응답');
+        alert('주요업무 분리에 실패했습니다.');
+      }
+    } catch (error) {
+      const errorTime = Date.now() - startTime;
+
+      console.error('❌ [분리 오류]:', {
+        오류타입: error.name,
+        오류메시지: error.message,
+        소요시간: `${errorTime}ms`,
+        원본길이: formData.mainDuties?.length || 0
+      });
+
+      alert('주요업무 분리 중 오류가 발생했습니다.');
+    } finally {
+      const totalTime = Date.now() - startTime;
+      setIsSeparating(false);
+
+      console.log(`⏱️ [분리 완료] 총 소요시간: ${totalTime}ms`);
+      console.groupEnd();
+    }
+  };
+
   const handleRegistration = () => {
     console.log('등록 버튼 클릭 - 제목 추천 모달 열기');
     setTitleRecommendationModal({
@@ -482,11 +1261,24 @@ const AIJobRegistrationPage = () => {
   };
 
   const handleTitleSelect = async (selectedTitle) => {
-    console.log('추천 제목 선택:', selectedTitle);
+    const startTime = Date.now();
+
+    console.group('🎯 [제목 선택 및 최종 제출]');
+    console.log('📝 선택된 제목:', selectedTitle);
+    console.log('🕐 제출 시작:', new Date().toISOString());
+
     const finalData = {
       ...titleRecommendationModal.finalFormData,
       title: selectedTitle
     };
+
+    console.log('📋 [최종 데이터 준비]:', {
+      제목: selectedTitle,
+      부서: finalData.department,
+      직무: finalData.position,
+      위치: finalData.locationCity,
+      인재상ID: finalData.selected_culture_id
+    });
 
     try {
       // 채용공고 데이터 준비
@@ -530,11 +1322,31 @@ const AIJobRegistrationPage = () => {
         require_career_history: false
       };
 
-      console.log('생성할 채용공고 데이터:', jobData);
+      console.log('📊 [최종 제출 데이터 분석]:', {
+        총필드수: Object.keys(jobData).length,
+        필수필드채움: {
+          제목: jobData.title ? '✅' : '❌',
+          부서: jobData.department ? '✅' : '❌',
+          주요업무: jobData.main_duties ? '✅' : '❌',
+          연락처: jobData.contact_email ? '✅' : '❌'
+        },
+        데이터크기: JSON.stringify(jobData).length,
+        인재상선택: jobData.selected_culture_id ? '예' : '아니오'
+      });
+
+      console.log('🚀 [API 호출] 최종 채용공고 생성');
+      const apiStart = Date.now();
 
       // API 호출하여 DB에 저장
       const newJob = await jobPostingApi.createJobPosting(jobData);
-      console.log('채용공고 생성 성공:', newJob);
+      const apiTime = Date.now() - apiStart;
+
+      console.log('📊 [API 응답 분석]:', {
+        소요시간: `${apiTime}ms`,
+        성공여부: newJob ? '성공' : '실패',
+        생성된ID: newJob?.id || 'N/A',
+        응답크기: JSON.stringify(newJob || {}).length
+      });
 
       setTitleRecommendationModal({
         isOpen: false,
@@ -553,7 +1365,13 @@ const AIJobRegistrationPage = () => {
   };
 
   const handleDirectTitleInput = async (customTitle) => {
-    console.log('직접 입력 제목:', customTitle);
+    const startTime = Date.now();
+    const selectedTitle = customTitle;
+
+    console.group('🎯 [직접 제목 입력 및 최종 제출]');
+    console.log('📝 입력된 제목:', selectedTitle);
+    console.log('🕐 제출 시작:', new Date().toISOString());
+
     const finalData = {
       ...titleRecommendationModal.finalFormData,
       title: customTitle
@@ -605,21 +1423,45 @@ const AIJobRegistrationPage = () => {
 
       // API 호출하여 DB에 저장
       const newJob = await jobPostingApi.createJobPosting(jobData);
-      console.log('채용공고 생성 성공:', newJob);
 
       setTitleRecommendationModal({
         isOpen: false,
         finalFormData: null
       });
 
-      // 성공 메시지
-      alert('채용공고가 성공적으로 등록되었습니다!');
+      if (newJob) {
+        const totalTime = Date.now() - startTime;
+        console.log('🎉 [등록 성공]:', {
+          총처리시간: `${totalTime}ms`,
+          생성된ID: newJob.id || 'N/A',
+          제목: selectedTitle
+        });
 
-      // 완료 후 job-posting 페이지로 이동
-      navigate('/job-posting');
+        // 성공 메시지
+        alert('채용공고가 성공적으로 등록되었습니다!');
+
+        // 완료 후 job-posting 페이지로 이동
+        navigate('/job-posting');
+      } else {
+        console.error('❌ [등록 실패] API에서 빈 응답');
+        alert('채용공고 등록에 실패했습니다.');
+      }
+
     } catch (error) {
-      console.error('채용공고 생성 실패:', error);
+      const errorTime = Date.now() - startTime;
+
+      console.error('❌ [제목 선택 제출 오류]:', {
+        오류타입: error.name,
+        오류메시지: error.message,
+        소요시간: `${errorTime}ms`,
+        선택제목: selectedTitle
+      });
+
       alert('채용공고 등록에 실패했습니다. 다시 시도해주세요.');
+    } finally {
+      const totalTime = Date.now() - startTime;
+      console.log(`⏱️ [제목 선택 완료] 총 소요시간: ${totalTime}ms`);
+      console.groupEnd();
     }
   };
 
@@ -789,6 +1631,34 @@ const AIJobRegistrationPage = () => {
           </HeaderRight>
         </Header>
 
+        {/* 🤖 AI 자동 입력 상태 표시 */}
+        {(aiInputStatus.isActive || aiInputStatus.currentField === '완료!') && (
+          <AIStatusBar>
+            <AIStatusLeft>
+              {aiInputStatus.isActive && <AIStatusSpinner />}
+              <span>
+                {aiInputStatus.isActive
+                  ? `🤖 AI가 자동으로 입력하고 있습니다: ${aiInputStatus.currentField}`
+                  : '🎉 AI 자동 입력 완료!'
+                }
+              </span>
+            </AIStatusLeft>
+            <AIStatusProgress>
+              {aiInputStatus.totalFields > 0 && (
+                <>
+                  <span>{aiInputStatus.progress}/{aiInputStatus.totalFields}</span>
+                  <AIProgressBar>
+                    <AIProgressFill
+                      progress={aiInputStatus.progress}
+                      total={aiInputStatus.totalFields}
+                    />
+                  </AIProgressBar>
+                </>
+              )}
+            </AIStatusProgress>
+          </AIStatusBar>
+        )}
+
         <Content>
 
           <FormSection>
@@ -844,12 +1714,12 @@ const AIJobRegistrationPage = () => {
                    👥
                    구인 인원수
                  </Label>
-                <Input
+                                 <Input
                   type="text"
                   name="headcount"
-                  value={formData.headcount || ''}
+                  value={formData.headcount || '0명'}
                   onChange={handleInputChange}
-                  placeholder="예: 1명, 2명, 3명"
+                  placeholder="예: 0명, 1명, 2명, 3명"
                   required
                   className={formData.headcount ? 'filled' : ''}
                 />
@@ -877,6 +1747,76 @@ const AIJobRegistrationPage = () => {
                   <FilledIndicator>
                     ✅ 입력됨: {formData.mainDuties.length}자
                   </FilledIndicator>
+                )}
+
+                {/* 주요업무 분리 버튼 */}
+                {formData.mainDuties && formData.mainDuties.length > 50 && (
+                  <div style={{ marginTop: '12px' }}>
+                    <Button
+                      type="button"
+                      className="ai"
+                      onClick={handleSeparateMainDuties}
+                      disabled={isSeparating}
+                      style={{
+                        fontSize: '14px',
+                        padding: '8px 16px',
+                        background: isSeparating
+                          ? 'linear-gradient(135deg, #9ca3af 0%, #6b7280 100%)'
+                          : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        cursor: isSeparating ? 'not-allowed' : 'pointer'
+                      }}
+                    >
+                      {isSeparating ? '🔄 분리 중...' : '🔄 업무 내용 분리하기'}
+                    </Button>
+                  </div>
+                )}
+
+                {/* 분리된 업무 필드들 표시 */}
+                {separatedDuties && (
+                  <div style={{
+                    marginTop: '16px',
+                    padding: '16px',
+                    background: '#f8f9fa',
+                    borderRadius: '8px',
+                    border: '2px solid #e9ecef'
+                  }}>
+                    <h4 style={{
+                      margin: '0 0 12px 0',
+                      color: '#495057',
+                      fontSize: '14px',
+                      fontWeight: '600'
+                    }}>
+                      📋 분리된 업무 카테고리
+                    </h4>
+                    {Object.entries(separatedDuties).map(([key, value]) => (
+                      value && value.trim() && (
+                        <div key={key} style={{
+                          marginBottom: '8px',
+                          padding: '8px 12px',
+                          background: 'white',
+                          borderRadius: '6px',
+                          border: '1px solid #dee2e6'
+                        }}>
+                          <strong style={{ fontSize: '12px', color: '#667eea' }}>
+                            {key === 'core_responsibilities' && '🎯 핵심 담당업무'}
+                            {key === 'daily_tasks' && '📅 일상 업무'}
+                            {key === 'project_tasks' && '🚀 프로젝트 업무'}
+                            {key === 'collaboration_tasks' && '🤝 협업 업무'}
+                            {key === 'technical_tasks' && '⚙️ 기술적 업무'}
+                            {key === 'management_tasks' && '👔 관리 업무'}
+                          </strong>
+                          <div style={{
+                            fontSize: '13px',
+                            color: '#495057',
+                            marginTop: '4px',
+                            lineHeight: '1.4'
+                          }}>
+                            {value}
+                          </div>
+                        </div>
+                      )
+                    ))}
+                  </div>
                 )}
               </FormGroup>
 
@@ -1115,6 +2055,12 @@ const AIJobRegistrationPage = () => {
              <SectionTitle>
                🔍
                분석용 추가 정보
+                                                            <AutoExtractButton
+                 onClick={handleAutoExtractFields}
+                 disabled={(!formData.department && !formData.position && !formData.mainDuties) || isExtracting}
+               >
+                 {isExtracting ? '🔄 추출 중...' : '🤖 자동 추출'}
+               </AutoExtractButton>
              </SectionTitle>
              <FormGrid>
                <FormGroup>
@@ -1125,7 +2071,10 @@ const AIJobRegistrationPage = () => {
                  <Select
                    name="industry"
                    value={formData.industry || ''}
-                   onChange={handleInputChange}
+                   onChange={(e) => {
+                     console.log('🔄 산업 분야 Select onChange:', e.target.value);
+                     handleInputChange(e);
+                   }}
                    className={formData.industry ? 'filled' : ''}
                  >
                    <option value="">선택해주세요</option>
@@ -1141,7 +2090,20 @@ const AIJobRegistrationPage = () => {
                  {formData.industry && (
                    <FilledIndicator>
                      ✅ 선택됨: {formData.industry}
+                     {extractionResults.industry && (
+                       <ConfidenceScore confidence={extractionResults.industry.confidence}>
+                         신뢰도: {Math.round(extractionResults.industry.confidence * 100)}%
+                       </ConfidenceScore>
+                     )}
                    </FilledIndicator>
+                 )}
+                 {extractionResults.industry?.isExtracted && (
+                   <ExtractionIndicator isDefault={extractionResults.industry?.isDefault}>
+                     {extractionResults.industry?.isDefault
+                       ? '⚠️ 추출 실패로 기본값이 적용되었습니다'
+                       : '🤖 AI가 자동으로 추출한 분야입니다'
+                     }
+                   </ExtractionIndicator>
                  )}
                </FormGroup>
 
@@ -1153,7 +2115,10 @@ const AIJobRegistrationPage = () => {
                  <Select
                    name="jobCategory"
                    value={formData.jobCategory || ''}
-                   onChange={handleInputChange}
+                   onChange={(e) => {
+                     console.log('🔄 직무 카테고리 Select onChange:', e.target.value);
+                     handleInputChange(e);
+                   }}
                    className={formData.jobCategory ? 'filled' : ''}
                  >
                    <option value="">선택해주세요</option>
@@ -1169,7 +2134,20 @@ const AIJobRegistrationPage = () => {
                  {formData.jobCategory && (
                    <FilledIndicator>
                      ✅ 선택됨: {formData.jobCategory}
+                     {extractionResults.jobCategory && (
+                       <ConfidenceScore confidence={extractionResults.jobCategory.confidence}>
+                         신뢰도: {Math.round(extractionResults.jobCategory.confidence * 100)}%
+                       </ConfidenceScore>
+                     )}
                    </FilledIndicator>
+                 )}
+                 {extractionResults.jobCategory?.isExtracted && (
+                   <ExtractionIndicator isDefault={extractionResults.jobCategory?.isDefault}>
+                     {extractionResults.jobCategory?.isDefault
+                       ? '⚠️ 추출 실패로 기본값이 적용되었습니다'
+                       : '🤖 AI가 자동으로 추출한 카테고리입니다'
+                     }
+                   </ExtractionIndicator>
                  )}
                </FormGroup>
              </FormGrid>

@@ -2,7 +2,7 @@ import styled from 'styled-components';
 
 export const StatsGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
   gap: 20px;
   margin-bottom: 40px;
   padding: 20px;

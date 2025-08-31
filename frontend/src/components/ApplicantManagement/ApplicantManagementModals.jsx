@@ -10,7 +10,7 @@ const ApplicantManagementModals = ({
   resumeModal,
   documentModal,
   newApplicantModal,
-  
+
   // 모달 핸들러
   onDetailModalOpen,
   onDetailModalClose,
@@ -20,11 +20,11 @@ const ApplicantManagementModals = ({
   onDocumentModalClose,
   onNewApplicantModalOpen,
   onNewApplicantModalClose,
-  
+
   // 데이터 핸들러
   onResumeSubmit,
   onPortfolioViewChange,
-  
+
   // API 관련
   API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000'
 }) => {
@@ -44,7 +44,7 @@ const ApplicantManagementModals = ({
     if (onPortfolioViewChange) {
       onPortfolioViewChange(view);
     }
-    
+
     // 포트폴리오 데이터 로드
     if (view !== 'select' && documentModal.applicant) {
       loadPortfolioData(view, documentModal.applicant);
@@ -54,7 +54,7 @@ const ApplicantManagementModals = ({
   // 포트폴리오 데이터 로드
   const loadPortfolioData = useCallback(async (view, applicant) => {
     if (!applicant) return;
-    
+
     setIsLoadingPortfolio(true);
     try {
       let endpoint = '';
@@ -63,7 +63,7 @@ const ApplicantManagementModals = ({
       } else {
         endpoint = `${API_BASE_URL}/api/applicants/${applicant.id}/portfolio`;
       }
-      
+
       const response = await fetch(endpoint);
       if (response.ok) {
         const data = await response.json();
@@ -83,7 +83,7 @@ const ApplicantManagementModals = ({
   // 문서 모달 열기 시 데이터 로드
   const handleDocumentModalOpen = useCallback(async (type, applicant) => {
     if (!applicant) return;
-    
+
     // 문서 데이터 로드
     try {
       let endpoint = '';
@@ -100,7 +100,7 @@ const ApplicantManagementModals = ({
         default:
           break;
       }
-      
+
       if (endpoint) {
         const response = await fetch(endpoint);
         if (response.ok) {
@@ -111,23 +111,23 @@ const ApplicantManagementModals = ({
           setDocumentData(null);
         }
       }
-      
+
       // 자소서인 경우 유사도 체크
       if (type === 'coverLetter') {
         await checkSimilarity(applicant.id);
       }
-      
+
       // 포트폴리오인 경우 뷰 초기화
       if (type === 'portfolio') {
         setPortfolioView('select');
         setPortfolioData(null);
       }
-      
+
     } catch (error) {
       console.error('문서 데이터 로드 오류:', error);
       setDocumentData(null);
     }
-    
+
     // 모달 열기
     if (onDocumentModalOpen) {
       onDocumentModalOpen(type, applicant);
@@ -138,7 +138,7 @@ const ApplicantManagementModals = ({
   const checkSimilarity = useCallback(async (applicantId) => {
     setIsLoadingSimilarity(true);
     try {
-      const response = await fetch(`${API_BASE_URL}/api/coverletter/similarity-check/${applicantId}`);
+      const response = await fetch(`${API_BASE_URL}/api/cover-letters/similarity-check/${applicantId}`);
       if (response.ok) {
         const data = await response.json();
         setSimilarityData(data);
@@ -172,16 +172,16 @@ const ApplicantManagementModals = ({
         method: 'POST',
         body: formData,
       });
-      
+
       if (response.ok) {
         const result = await response.json();
         console.log('새 지원자 등록 성공:', result);
-        
+
         // 성공 시 모달 닫기 및 콜백 실행
         if (onNewApplicantModalClose) {
           onNewApplicantModalClose();
         }
-        
+
         // 부모 컴포넌트에 새로고침 요청
         if (onResumeSubmit) {
           onResumeSubmit(result);

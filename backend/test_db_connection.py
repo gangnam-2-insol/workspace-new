@@ -1,66 +1,65 @@
 #!/usr/bin/env python3
 """
-MongoDB 연결 테스트 스크립트
-DB(without yc).txt 구조와 일치하는지 확인
+데이터베이스 연결 및 자소서 데이터 확인 스크립트
 """
 
 import asyncio
-import os
-from motor.motor_asyncio import AsyncIOMotorClient
-from datetime import datetime
 
-async def test_db_connection():
-    """MongoDB 연결 및 구조 테스트"""
+from motor.motor_asyncio import AsyncIOMotorClient
+
+
+async def check_database():
+    """데이터베이스 상태 확인"""
     try:
         # MongoDB 연결
-        mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/hireme")
-        client = AsyncIOMotorClient(mongo_uri)
-        db = client.hireme
+        client = AsyncIOMotorClient('mongodb://localhost:27017')
+        db = client['hireme']
 
-        print("🔍 MongoDB 연결 테스트 시작...")
-        print(f"연결 URI: {mongo_uri}")
+        print("=== 데이터베이스 연결 확인 ===")
 
-        # 서버 정보 확인
-        server_info = await client.admin.command('serverStatus')
-        print(f"✅ MongoDB 서버 연결 성공 (버전: {server_info.get('version', 'unknown')})")
+        # 지원자 컬렉션 확인
+        print("\n=== 지원자 컬렉션 ===")
+        applicants_count = await db.applicants.count_documents({})
+        print(f"총 지원자 수: {applicants_count}")
 
-        # 컬렉션 목록 확인
-        collections = await db.list_collection_names()
-        print(f"📚 현재 컬렉션: {collections}")
+        # 이민호 지원자 정보 확인
+        applicant = await db.applicants.find_one({"_id": "68b3ce182f0cf5df5e13004e"})
+        if applicant:
+            print(f"이민호 지원자 정보:")
+            print(f"  - ID: {applicant['_id']}")
+            print(f"  - 이름: {applicant['name']}")
+            print(f"  - 자소서 ID: {applicant.get('cover_letter_id', 'None')}")
+            print(f"  - 이메일: {applicant.get('email', 'N/A')}")
+        else:
+            print("이민호 지원자를 찾을 수 없습니다.")
 
-        # 각 컬렉션의 문서 수 확인
-        for collection_name in collections:
-            count = await db[collection_name].count_documents({})
-            print(f"  - {collection_name}: {count}개 문서")
+        # 자소서 컬렉션 확인
+        print("\n=== 자소서 컬렉션 ===")
+        cover_letters_count = await db.cover_letters.count_documents({})
+        print(f"총 자소서 수: {cover_letters_count}")
 
-        # 샘플 데이터 확인 (applicants 컬렉션)
-        if 'applicants' in collections:
-            sample_applicant = await db.applicants.find_one({})
-            if sample_applicant:
-                print(f"\n📋 샘플 지원자 데이터 구조:")
-                print(f"  - ID: {sample_applicant.get('_id')}")
-                print(f"  - 이름: {sample_applicant.get('name')}")
-                print(f"  - 이메일: {sample_applicant.get('email')}")
-                print(f"  - 직무: {sample_applicant.get('position')}")
-                print(f"  - 상태: {sample_applicant.get('status')}")
-                print(f"  - 랭킹: {sample_applicant.get('ranks', {})}")
-                print(f"  - 생성일: {sample_applicant.get('created_at')}")
-                print(f"  - 수정일: {sample_applicant.get('updated_at')}")
+        # 모든 자소서 확인
+        cover_letters = await db.cover_letters.find({}).to_list(length=10)
+        for i, cl in enumerate(cover_letters):
+            print(f"  {i+1}. ID: {cl['_id']}, 파일명: {cl.get('filename', 'N/A')}, 내용 길이: {len(cl.get('content', ''))}")
+
+        # 이민호의 자소서 찾기
+        if applicant and applicant.get('cover_letter_id'):
+            cover_letter = await db.cover_letters.find_one({"_id": applicant['cover_letter_id']})
+            if cover_letter:
+                print(f"\n=== 이민호의 자소서 ===")
+                print(f"  - ID: {cover_letter['_id']}")
+                print(f"  - 파일명: {cover_letter.get('filename', 'N/A')}")
+                print(f"  - 내용 길이: {len(cover_letter.get('content', ''))}")
+                print(f"  - 내용 미리보기: {cover_letter.get('content', '')[:100]}...")
+            else:
+                print(f"\n이민호의 자소서를 찾을 수 없습니다. (ID: {applicant['cover_letter_id']})")
 
         client.close()
-        print("\n✅ DB 연결 테스트 완료!")
-        return True
+        print("\n=== 데이터베이스 연결 종료 ===")
 
     except Exception as e:
-        print(f"❌ DB 연결 실패: {e}")
-        print("\n💡 해결 방법:")
-        print("1. Docker Compose로 MongoDB 실행:")
-        print("   docker-compose up -d mongodb")
-        print("2. MongoDB 서비스 상태 확인:")
-        print("   docker ps")
-        print("3. 환경 변수 확인:")
-        print("   MONGODB_URI=mongodb://localhost:27017/hireme")
-        return False
+        print(f"오류 발생: {str(e)}")
 
 if __name__ == "__main__":
-    asyncio.run(test_db_connection())
+    asyncio.run(check_database())

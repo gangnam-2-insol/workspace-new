@@ -8,6 +8,7 @@ import TitleRecommendationModal from '../../components/TitleRecommendationModal'
 import './TextBasedRegistration.css';
 import { FiX, FiArrowLeft, FiArrowRight, FiCheck, FiFileText, FiClock, FiMapPin, FiDollarSign, FiUsers, FiMail, FiCalendar, FiFolder, FiSettings } from 'react-icons/fi';
 import companyCultureApi from '../../services/companyCultureApi';
+import jobPostingApi from '../../services/jobPostingApi';
 
 // Styled Components
 const Overlay = styled(motion.div)`
@@ -822,9 +823,9 @@ const TextBasedRegistration = ({
                     <input
                       type="text"
                       name="headcount"
-                      value={formData.headcount || ''}
+                      value={formData.headcount || '0명'}
                       onChange={handleInputChange}
-                      placeholder="예: 1명, 2명, 3명"
+                      placeholder="예: 0명, 1명, 2명, 3명"
                       required
                       className="custom-input"
                       style={{

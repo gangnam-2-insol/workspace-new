@@ -2,6 +2,7 @@ import React from 'react';
 import { motion } from 'framer-motion';
 import styled from 'styled-components';
 import { FiX, FiFileText, FiEdit3, FiExternalLink } from 'react-icons/fi';
+import { parseSkills } from '../../utils/skillParser';
 
 const ModalOverlay = styled(motion.div)`
   position: fixed;
@@ -41,6 +42,9 @@ const ModalTitle = styled.h2`
 `;
 
 const CloseButton = styled.button`
+  position: fixed;
+  top: 16px;
+  right: 16px;
   background: none;
   border: none;
   font-size: 24px;
@@ -49,6 +53,7 @@ const CloseButton = styled.button`
   padding: 8px;
   border-radius: 8px;
   transition: all 0.2s;
+  z-index: 3010;
 
   &:hover {
     background: var(--background-secondary);
@@ -238,9 +243,10 @@ const ApplicantDetailModal = ({ isOpen, applicant, onClose, onResumeClick, onDoc
             <InfoRow>
               <InfoLabel>기술스택</InfoLabel>
               <InfoValue>
-                {applicant.skills && applicant.skills.length > 0 
-                  ? applicant.skills.join(', ') 
-                  : applicant.technical_skills || '-'}
+                {(() => {
+                  const skills = parseSkills(applicant.skills || applicant.technical_skills);
+                  return skills.length > 0 ? skills.join(', ') : '-';
+                })()}
               </InfoValue>
             </InfoRow>
             <InfoRow>
@@ -254,9 +260,9 @@ const ApplicantDetailModal = ({ isOpen, applicant, onClose, onResumeClick, onDoc
             <InfoRow>
               <InfoLabel>지원일시</InfoLabel>
               <InfoValue>
-                {applicant.applied_at 
+                {applicant.applied_at
                   ? new Date(applicant.applied_at).toLocaleDateString('ko-KR')
-                  : applicant.created_at 
+                  : applicant.created_at
                     ? new Date(applicant.created_at).toLocaleDateString('ko-KR')
                     : '-'}
               </InfoValue>

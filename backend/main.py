@@ -10,7 +10,7 @@ import uvicorn
 from dotenv import load_dotenv
 
 # .env 파일 로드 (가장 먼저 실행)
-load_dotenv()
+load_dotenv(dotenv_path=".env")
 from bson import ObjectId
 from chatbot.routers.chatbot_router import router as chatbot_router
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -33,6 +33,9 @@ from routers.integrated_ocr import router as integrated_ocr_router
 from routers.job_posting import router as job_posting_router
 from routers.pdf_ocr import router as pdf_ocr_router
 from routers.pick_chatbot import router as pick_chatbot_router
+from routers.pick_chatbot_direct_registration import (
+    router as pick_chatbot_direct_router,
+)
 from routers.sample_data import router as sample_data_router
 from routers.upload import router as upload_router
 
@@ -138,6 +141,7 @@ else:
     print("❌ GitHub 라우터 등록 실패")
 app.include_router(upload_router, tags=["upload"])
 app.include_router(pick_chatbot_router, prefix="/api/pick-chatbot", tags=["pick-chatbot"])
+app.include_router(pick_chatbot_direct_router, tags=["pick-chatbot-direct"])
 app.include_router(integrated_ocr_router, prefix="/api/integrated-ocr", tags=["integrated-ocr"])
 app.include_router(pdf_ocr_router, prefix="/api/pdf-ocr", tags=["pdf_ocr"])
 app.include_router(job_posting_router, tags=["job-postings"])
@@ -162,7 +166,7 @@ else:
     print("❌ 이력서 라우터 등록 실패")
 
 if cover_letter_router:
-    app.include_router(cover_letter_router, prefix="/api/cover-letter", tags=["cover-letter"])
+    app.include_router(cover_letter_router, tags=["cover-letter"])
     print("✅ 자기소개서 라우터 등록 완료")
 else:
     print("❌ 자기소개서 라우터 등록 실패")
@@ -181,10 +185,44 @@ else:
 
 # AI 유사도 분석 모듈화된 라우터 등록
 if similarity_router:
-    app.include_router(similarity_router, prefix="/api", tags=["similarity"])
+    app.include_router(similarity_router, tags=["similarity"])
     print("✅ 유사도 분석 라우터 등록 완료")
 else:
     print("❌ 유사도 분석 라우터 등록 실패")
+
+# 채용공고 에이전트 라우터 등록
+try:
+    from routers.job_posting_agent import router as job_posting_agent_router
+    app.include_router(job_posting_agent_router, tags=["job-posting-agent"])
+    print("✅ 채용공고 에이전트 라우터 등록 완료")
+except ImportError as e:
+    print(f"❌ 채용공고 에이전트 라우터 등록 실패: {e}")
+
+# 채용공고 에이전트 초기화
+try:
+    from modules.job_posting.dynamic_templates import init_dynamic_template_manager
+    from modules.job_posting.job_posting_agent import init_job_posting_agent
+
+    # 전역 변수로 초기화 상태 관리
+    agent_initialized = False
+
+    async def init_services():
+        global agent_initialized
+        try:
+            await init_dynamic_template_manager(client)
+            await init_job_posting_agent(client, None)
+            agent_initialized = True
+            print("✅ 채용공고 에이전트 초기화 완료")
+        except Exception as e:
+            print(f"❌ 채용공고 에이전트 초기화 실패: {e}")
+
+    # FastAPI startup 이벤트에서 초기화
+    @app.on_event("startup")
+    async def startup_event():
+        await init_services()
+
+except ImportError as e:
+    print(f"❌ 채용공고 에이전트 초기화 실패: {e}")
 
 print("🔧 모듈화된 라우터 등록 완료\n")
 
@@ -208,10 +246,43 @@ GOOGLE_API_KEY = os.getenv("GOOGLE_API_KEY")
 PINECONE_API_KEY = os.getenv("PINECONE_API_KEY")
 PINECONE_INDEX_NAME = os.getenv("PINECONE_INDEX_NAME", "resume-vectors")
 
-# 서비스 초기화
+# 통합 최적화 서비스 초기화 (비동기로 처리)
 try:
-    embedding_service = EmbeddingService()
-    print("✅ Embedding 서비스 초기화 성공")
+    import asyncio
+
+    from modules.core.services.optimization_service import initialize_optimization
+
+    # 환경별 최적화 설정
+    environment = os.getenv("ENVIRONMENT", "development")
+
+    # 비동기 초기화를 백그라운드에서 실행
+    async def init_optimization():
+        await initialize_optimization(environment)
+        print("✅ 통합 최적화 서비스 초기화 성공")
+
+    # 이벤트 루프가 있으면 태스크로 실행, 없으면 새 루프 생성
+    try:
+        loop = asyncio.get_running_loop()
+        asyncio.create_task(init_optimization())
+    except RuntimeError:
+        # 실행 중인 루프가 없으면 새 루프에서 실행
+        asyncio.run(init_optimization())
+
+except Exception as e:
+    print(f"⚠️ 통합 최적화 서비스 초기화 실패: {e}")
+
+# 서비스 초기화 (하이브리드 로딩 적용)
+try:
+    # 환경변수에서 하이브리드 로딩 설정 확인
+    fast_startup = os.getenv("FAST_STARTUP", "false").lower() == "true"
+    lazy_loading = os.getenv("LAZY_LOADING_ENABLED", "false").lower() == "true"
+
+    if fast_startup or lazy_loading:
+        embedding_service = EmbeddingService(lazy_loading=True)
+        print("✅ Embedding 서비스 초기화 성공 (지연 로딩 모드)")
+    else:
+        embedding_service = EmbeddingService(lazy_loading=False)
+        print("✅ Embedding 서비스 초기화 성공 (사전 로딩 모드)")
 except Exception as e:
     print(f"⚠️ Embedding 서비스 초기화 실패: {e}")
     embedding_service = None
@@ -470,12 +541,12 @@ async def get_applicant_resume(applicant_id: str):
         applicant = await db.applicants.find_one({"_id": ObjectId(applicant_id)})
         if not applicant:
             raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다.")
-        
+
         # 2. 이력서 ID 확인
         resume_id = applicant.get("resume_id")
         if not resume_id:
             raise HTTPException(status_code=404, detail="이력서가 등록되지 않았습니다.")
-        
+
         # 3. 이력서 정보 조회 (resumes 컬렉션에서)
         resume = await db.resumes.find_one({"_id": ObjectId(resume_id)})
         if not resume:
@@ -501,12 +572,12 @@ async def get_applicant_resume(applicant_id: str):
             # resumes 컬렉션에서 가져온 데이터
             resume_data = resume.copy()
             resume_data["source"] = "resumes_collection"
-        
+
         # 4. _id를 문자열로 변환
         if "_id" in resume_data:
             resume_data["id"] = str(resume_data["_id"])
             del resume_data["_id"]
-        
+
         # 5. 지원자 기본 정보도 포함
         resume_data["applicant_info"] = {
             "id": str(applicant["_id"]),
@@ -517,24 +588,28 @@ async def get_applicant_resume(applicant_id: str):
             "applied_at": applicant.get("applied_at"),
             "created_at": applicant.get("created_at")
         }
-        
+
         # 6. AI 분석 결과 조회 (있는 경우)
         try:
             from modules.ai.resume_analysis_service import ResumeAnalysisService
-            analysis_service = ResumeAnalysisService(db)
+
+            # 하이브리드 로딩 설정 적용
+            fast_startup = os.getenv("FAST_STARTUP", "false").lower() == "true"
+            lazy_loading = os.getenv("LAZY_LOADING_ENABLED", "false").lower() == "true"
+            analysis_service = ResumeAnalysisService(db, lazy_loading=(fast_startup or lazy_loading))
             analysis_result = await analysis_service.get_applicant_analysis(applicant_id)
             if analysis_result:
                 resume_data["ai_analysis"] = analysis_result
         except Exception as e:
             print(f"[WARNING] AI 분석 결과 조회 실패: {str(e)}")
             # AI 분석 실패해도 기본 이력서 정보는 반환
-        
+
         return {
             "success": True,
             "message": "이력서 정보 조회 성공",
             "data": resume_data
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -546,30 +621,34 @@ async def get_applicant_resume(applicant_id: str):
 async def analyze_resume(request: dict):
     """이력서 AI 분석 실행"""
     try:
-        from modules.ai.resume_analysis_service import ResumeAnalysisService
         from models.resume_analysis import ResumeAnalysisRequest
-        
+        from modules.ai.resume_analysis_service import ResumeAnalysisService
+
         # 요청 데이터 검증
         applicant_id = request.get("applicant_id")
         analysis_type = request.get("analysis_type", "openai")
         force_reanalysis = request.get("force_reanalysis", False)
-        
+        weights = request.get("weights", {})  # 가중치 추가
+
         if not applicant_id:
             raise HTTPException(status_code=400, detail="지원자 ID가 필요합니다.")
-        
-        # 분석 서비스 초기화
-        analysis_service = ResumeAnalysisService(db)
-        
+
+        # 분석 서비스 초기화 (하이브리드 로딩 적용)
+        fast_startup = os.getenv("FAST_STARTUP", "false").lower() == "true"
+        lazy_loading = os.getenv("LAZY_LOADING_ENABLED", "false").lower() == "true"
+        analysis_service = ResumeAnalysisService(db, lazy_loading=(fast_startup or lazy_loading))
+
         # 분석 요청 생성
         analysis_request = ResumeAnalysisRequest(
             applicant_id=applicant_id,
             analysis_type=analysis_type,
-            force_reanalysis=force_reanalysis
+            force_reanalysis=force_reanalysis,
+            weights=weights  # 가중치 전달
         )
-        
+
         # 분석 실행
         result = await analysis_service.analyze_resume(analysis_request)
-        
+
         if result.success:
             return {
                 "success": True,
@@ -580,7 +659,7 @@ async def analyze_resume(request: dict):
             }
         else:
             raise HTTPException(status_code=500, detail=result.message)
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -591,28 +670,30 @@ async def analyze_resume(request: dict):
 async def batch_analyze_resumes(request: dict):
     """이력서 일괄 AI 분석"""
     try:
-        from modules.ai.resume_analysis_service import ResumeAnalysisService
         from models.resume_analysis import BatchAnalysisRequest
-        
+        from modules.ai.resume_analysis_service import ResumeAnalysisService
+
         # 요청 데이터 검증
         applicant_ids = request.get("applicant_ids", [])
         analysis_type = request.get("analysis_type", "openai")
-        
+
         if not applicant_ids:
             raise HTTPException(status_code=400, detail="지원자 ID 리스트가 필요합니다.")
-        
-        # 분석 서비스 초기화
-        analysis_service = ResumeAnalysisService(db)
-        
+
+        # 분석 서비스 초기화 (하이브리드 로딩 적용)
+        fast_startup = os.getenv("FAST_STARTUP", "false").lower() == "true"
+        lazy_loading = os.getenv("LAZY_LOADING_ENABLED", "false").lower() == "true"
+        analysis_service = ResumeAnalysisService(db, lazy_loading=(fast_startup or lazy_loading))
+
         # 일괄 분석 요청 생성
         batch_request = BatchAnalysisRequest(
             applicant_ids=applicant_ids,
             analysis_type=analysis_type
         )
-        
+
         # 일괄 분석 실행
         result = await analysis_service.batch_analyze(batch_request)
-        
+
         if result.success:
             return {
                 "success": True,
@@ -622,7 +703,7 @@ async def batch_analyze_resumes(request: dict):
             }
         else:
             raise HTTPException(status_code=500, detail=result.message)
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -633,29 +714,31 @@ async def batch_analyze_resumes(request: dict):
 async def reanalyze_resume(request: dict):
     """이력서 재분석"""
     try:
-        from modules.ai.resume_analysis_service import ResumeAnalysisService
         from models.resume_analysis import ResumeAnalysisRequest
-        
+        from modules.ai.resume_analysis_service import ResumeAnalysisService
+
         # 요청 데이터 검증
         applicant_id = request.get("applicant_id")
         analysis_type = request.get("analysis_type", "openai")
-        
+
         if not applicant_id:
             raise HTTPException(status_code=400, detail="지원자 ID가 필요합니다.")
-        
-        # 분석 서비스 초기화
-        analysis_service = ResumeAnalysisService(db)
-        
+
+        # 분석 서비스 초기화 (하이브리드 로딩 적용)
+        fast_startup = os.getenv("FAST_STARTUP", "false").lower() == "true"
+        lazy_loading = os.getenv("LAZY_LOADING_ENABLED", "false").lower() == "true"
+        analysis_service = ResumeAnalysisService(db, lazy_loading=(fast_startup or lazy_loading))
+
         # 재분석 요청 생성
         analysis_request = ResumeAnalysisRequest(
             applicant_id=applicant_id,
             analysis_type=analysis_type,
             force_reanalysis=True
         )
-        
+
         # 재분석 실행
         result = await analysis_service.reanalyze_resume(analysis_request)
-        
+
         if result.success:
             return {
                 "success": True,
@@ -666,7 +749,7 @@ async def reanalyze_resume(request: dict):
             }
         else:
             raise HTTPException(status_code=500, detail=result.message)
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -678,13 +761,15 @@ async def get_analysis_status():
     """AI 분석 상태 조회"""
     try:
         from modules.ai.resume_analysis_service import ResumeAnalysisService
-        
-        # 분석 서비스 초기화
-        analysis_service = ResumeAnalysisService(db)
-        
+
+        # 분석 서비스 초기화 (하이브리드 로딩 적용)
+        fast_startup = os.getenv("FAST_STARTUP", "false").lower() == "true"
+        lazy_loading = os.getenv("LAZY_LOADING_ENABLED", "false").lower() == "true"
+        analysis_service = ResumeAnalysisService(db, lazy_loading=(fast_startup or lazy_loading))
+
         # 상태 조회
         status = await analysis_service.get_analysis_status()
-        
+
         if status.success:
             return {
                 "success": True,
@@ -698,7 +783,7 @@ async def get_analysis_status():
             }
         else:
             raise HTTPException(status_code=500, detail=status.message)
-            
+
     except HTTPException:
         raise
     except Exception as e:
@@ -710,13 +795,15 @@ async def get_applicant_analysis(applicant_id: str):
     """지원자별 AI 분석 결과 조회"""
     try:
         from modules.ai.resume_analysis_service import ResumeAnalysisService
-        
-        # 분석 서비스 초기화
-        analysis_service = ResumeAnalysisService(db)
-        
+
+        # 분석 서비스 초기화 (하이브리드 로딩 적용)
+        fast_startup = os.getenv("FAST_STARTUP", "false").lower() == "true"
+        lazy_loading = os.getenv("LAZY_LOADING_ENABLED", "false").lower() == "true"
+        analysis_service = ResumeAnalysisService(db, lazy_loading=(fast_startup or lazy_loading))
+
         # 분석 결과 조회
         analysis_result = await analysis_service.get_applicant_analysis(applicant_id)
-        
+
         if analysis_result:
             return {
                 "success": True,
@@ -725,12 +812,209 @@ async def get_applicant_analysis(applicant_id: str):
             }
         else:
             raise HTTPException(status_code=404, detail="AI 분석 결과를 찾을 수 없습니다.")
-            
+
     except HTTPException:
         raise
     except Exception as e:
         print(f"[ERROR] AI 분석 결과 조회 실패: {str(e)}")
         raise HTTPException(status_code=500, detail=f"AI 분석 결과 조회에 실패했습니다: {str(e)}")
+
+# 지원자별 포트폴리오 조회 API
+@app.get("/api/portfolios/applicant/{applicant_id}")
+async def get_applicant_portfolio(applicant_id: str):
+    """지원자의 포트폴리오 정보를 가져옴"""
+    try:
+        # 1. 지원자 정보 조회
+        applicant = await db.applicants.find_one({"_id": ObjectId(applicant_id)})
+        if not applicant:
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다.")
+
+        # 2. 포트폴리오 URL 확인
+        portfolio_url = applicant.get("portfolio_url")
+        if not portfolio_url:
+            return {
+                "success": False,
+                "message": "포트폴리오 URL이 없습니다.",
+                "data": None
+            }
+
+        # 3. GitHub URL인 경우 GitHub API로 요약 생성
+        if "github.com" in portfolio_url:
+            try:
+                # GitHub API 호출
+                github_response = await fetch_github_summary(portfolio_url)
+                if github_response.get("success"):
+                    return {
+                        "success": True,
+                        "message": "포트폴리오 조회 성공",
+                        "data": {
+                            "portfolio_url": portfolio_url,
+                            "github_summary": github_response.get("data"),
+                            "applicant_info": {
+                                "id": str(applicant.get("_id")),
+                                "name": applicant.get("name", ""),
+                                "email": applicant.get("email", ""),
+                                "position": applicant.get("position", "")
+                            }
+                        }
+                    }
+                else:
+                    return {
+                        "success": False,
+                        "message": f"GitHub 분석 실패: {github_response.get('message')}",
+                        "data": {
+                            "portfolio_url": portfolio_url,
+                            "applicant_info": {
+                                "id": str(applicant.get("_id")),
+                                "name": applicant.get("name", ""),
+                                "email": applicant.get("email", ""),
+                                "position": applicant.get("position", "")
+                            }
+                        }
+                    }
+            except Exception as e:
+                return {
+                    "success": False,
+                    "message": f"GitHub 분석 중 오류: {str(e)}",
+                    "data": {
+                        "portfolio_url": portfolio_url,
+                        "applicant_info": {
+                            "id": str(applicant.get("_id")),
+                            "name": applicant.get("name", ""),
+                            "email": applicant.get("email", ""),
+                            "position": applicant.get("position", "")
+                        }
+                    }
+                }
+        else:
+            # GitHub가 아닌 경우 기본 정보만 반환
+            return {
+                "success": True,
+                "message": "포트폴리오 조회 성공 (GitHub가 아님)",
+                "data": {
+                    "portfolio_url": portfolio_url,
+                    "applicant_info": {
+                        "id": str(applicant.get("_id")),
+                        "name": applicant.get("name", ""),
+                        "email": applicant.get("email", ""),
+                        "position": applicant.get("position", "")
+                    }
+                }
+            }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        print(f"[ERROR] 포트폴리오 조회 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"포트폴리오 조회에 실패했습니다: {str(e)}")
+
+# GitHub 요약 생성 함수
+async def fetch_github_summary(github_url: str):
+    """GitHub URL에서 사용자명을 추출하고 GitHub API 호출"""
+    try:
+        # GitHub URL에서 사용자명 추출
+        if "github.com/" in github_url:
+            parts = github_url.split("github.com/")[1].split("/")
+            username = parts[0]
+        else:
+            return {"success": False, "message": "유효하지 않은 GitHub URL"}
+
+        # 실제 GitHub API 호출
+        try:
+            import os
+
+            import requests
+
+            # GitHub API 토큰 확인
+            github_token = os.getenv('GITHUB_TOKEN')
+            headers = {}
+            if github_token:
+                headers['Authorization'] = f'token {github_token}'
+
+            # GitHub 사용자 정보 가져오기
+            user_response = requests.get(f'https://api.github.com/users/{username}', headers=headers, timeout=10)
+
+            if user_response.status_code == 200:
+                user_data = user_response.json()
+
+                # 저장소 정보 가져오기
+                repos_response = requests.get(f'https://api.github.com/users/{username}/repos?per_page=10&sort=updated', headers=headers, timeout=10)
+                repos_data = []
+                if repos_response.status_code == 200:
+                    repos_data = repos_response.json()
+
+                # 언어 통계 수집
+                languages = {}
+                for repo in repos_data[:5]:  # 최근 5개 저장소만
+                    try:
+                        lang_response = requests.get(f'https://api.github.com/repos/{username}/{repo["name"]}/languages', headers=headers, timeout=5)
+                        if lang_response.status_code == 200:
+                            repo_langs = lang_response.json()
+                            for lang, bytes_count in repo_langs.items():
+                                languages[lang] = languages.get(lang, 0) + bytes_count
+                    except:
+                        continue
+
+                # 상위 언어 5개 선택
+                top_languages = sorted(languages.items(), key=lambda x: x[1], reverse=True)[:5]
+
+                return {
+                    "success": True,
+                    "data": {
+                        "username": username,
+                        "github_url": github_url,
+                        "user_info": {
+                            "name": user_data.get('name', username),
+                            "bio": user_data.get('bio', ''),
+                            "public_repos": user_data.get('public_repos', 0),
+                            "followers": user_data.get('followers', 0),
+                            "following": user_data.get('following', 0),
+                            "created_at": user_data.get('created_at', ''),
+                            "updated_at": user_data.get('updated_at', '')
+                        },
+                        "repositories": [
+                            {
+                                "name": repo.get('name', ''),
+                                "description": repo.get('description', ''),
+                                "language": repo.get('language', ''),
+                                "stars": repo.get('stargazers_count', 0),
+                                "forks": repo.get('forks_count', 0),
+                                "updated_at": repo.get('updated_at', '')
+                            } for repo in repos_data[:10]
+                        ],
+                        "languages": [{"name": lang, "percentage": round((count / sum(languages.values())) * 100, 1)} for lang, count in top_languages],
+                        "summary": {
+                            "total_repos": user_data.get('public_repos', 0),
+                            "total_stars": sum(repo.get('stargazers_count', 0) for repo in repos_data),
+                            "top_language": top_languages[0][0] if top_languages else "N/A",
+                            "most_starred_repo": max(repos_data, key=lambda x: x.get('stargazers_count', 0)).get('name', 'N/A') if repos_data else "N/A"
+                        }
+                    }
+                }
+            else:
+                return {
+                    "success": False,
+                    "message": f"GitHub 사용자 정보를 가져올 수 없습니다: {user_response.status_code}",
+                    "data": {
+                        "username": username,
+                        "github_url": github_url,
+                        "error": f"GitHub API 오류: {user_response.status_code}"
+                    }
+                }
+
+        except Exception as e:
+            return {
+                "success": False,
+                "message": f"GitHub 분석 중 오류 발생: {str(e)}",
+                "data": {
+                    "username": username,
+                    "github_url": github_url,
+                    "error": str(e)
+                }
+            }
+
+    except Exception as e:
+        return {"success": False, "message": f"GitHub 요약 생성 실패: {str(e)}"}
 
 # 지원자별 자기소개서 조회 API
 @app.get("/api/applicants/{applicant_id}/cover-letter")
@@ -741,7 +1025,7 @@ async def get_applicant_cover_letter(applicant_id: str):
         applicant = await db.applicants.find_one({"_id": ObjectId(applicant_id)})
         if not applicant:
             raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다.")
-        
+
         # 2. 자기소개서 정보 조회 (applicants 컬렉션에서)
         cover_letter_data = {
             "name": applicant.get("name", ""),
@@ -752,26 +1036,45 @@ async def get_applicant_cover_letter(applicant_id: str):
             "extracted_text": applicant.get("cover_letter_extracted_text", ""),
             "file_metadata": applicant.get("cover_letter_file_metadata", {}),
             "created_at": applicant.get("created_at"),
-            "source": "applicants_collection"
+            "source": "applicants_collection",
+            "applicant_info": {
+                "id": applicant.get("_id"),  # str() 불필요, respond()가 처리
+                "name": applicant.get("name", ""),
+                "email": applicant.get("email", ""),
+                "phone": applicant.get("phone", ""),
+                "status": applicant.get("status", ""),
+                "applied_at": applicant.get("applied_at"),
+                "created_at": applicant.get("created_at")
+            }
         }
-        
-        # 3. 지원자 기본 정보도 포함
-        cover_letter_data["applicant_info"] = {
-            "id": str(applicant["_id"]),
-            "name": applicant.get("name", ""),
-            "email": applicant.get("email", ""),
-            "phone": applicant.get("phone", ""),
-            "status": applicant.get("status", ""),
-            "applied_at": applicant.get("applied_at"),
-            "created_at": applicant.get("created_at")
-        }
-        
-        return {
+
+        payload = {
             "success": True,
             "message": "자기소개서 정보 조회 성공",
             "data": cover_letter_data
         }
-        
+
+        # 3. ObjectId와 datetime을 안전하게 직렬화하는 함수
+        def safe_serialize(obj):
+            """ObjectId와 datetime을 안전하게 직렬화"""
+            if obj is None:
+                return None
+            if isinstance(obj, ObjectId):
+                return str(obj)
+            if isinstance(obj, datetime):
+                return obj.isoformat()
+            if isinstance(obj, dict):
+                return {k: safe_serialize(v) for k, v in obj.items()}
+            if isinstance(obj, list):
+                return [safe_serialize(v) for v in obj]
+            return obj
+
+        return {
+            "success": True,
+            "message": "자기소개서 정보 조회 성공",
+            "data": safe_serialize(cover_letter_data)
+        }
+
     except HTTPException:
         raise
     except Exception as e:
@@ -787,7 +1090,7 @@ async def get_applicant_portfolio(applicant_id: str):
         applicant = await db.applicants.find_one({"_id": ObjectId(applicant_id)})
         if not applicant:
             raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다.")
-        
+
         # 2. 포트폴리오 정보 조회 (applicants 컬렉션에서)
         portfolio_data = {
             "name": applicant.get("name", ""),
@@ -799,7 +1102,7 @@ async def get_applicant_portfolio(applicant_id: str):
             "created_at": applicant.get("created_at"),
             "source": "applicants_collection"
         }
-        
+
         # 3. 지원자 기본 정보도 포함
         portfolio_data["applicant_info"] = {
             "id": str(applicant["_id"]),
@@ -810,13 +1113,13 @@ async def get_applicant_portfolio(applicant_id: str):
             "applied_at": applicant.get("applied_at"),
             "created_at": applicant.get("created_at")
         }
-        
+
         return {
             "success": True,
             "message": "포트폴리오 정보 조회 성공",
             "data": portfolio_data
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -1569,11 +1872,11 @@ async def check_coverletter_similarity(
 
             # 자소서 내용 추출 (content 또는 extracted_text 필드에서)
             cover_letter_text = cover_letter.get("content", "") or cover_letter.get("extracted_text", "")
-            
+
             # 자소서 데이터에 extracted_text 필드가 없으면 content를 사용
             if not cover_letter.get("extracted_text"):
                 cover_letter["extracted_text"] = cover_letter_text
-            
+
             if not cover_letter_text:
                 print(f"[WARNING] 자소서 내용이 비어있음 - applicant_id: {applicant_id}")
                 return {

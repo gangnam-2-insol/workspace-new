@@ -23,7 +23,15 @@ class JsonFieldMapper {
         'contactEmail': 'contactEmail',
         'deadline': 'deadline',
         // 직무명(포지션)
-        'position': 'position'
+        'position': 'position',
+
+        // 분리된 주요업무 필드들
+        'coreResponsibilities': 'coreResponsibilities',
+        'dailyTasks': 'dailyTasks',
+        'projectTasks': 'projectTasks',
+        'collaborationTasks': 'collaborationTasks',
+        'technicalTasks': 'technicalTasks',
+        'managementTasks': 'managementTasks'
       },
       // 이력서 분석 페이지
       'resume_analysis': {
@@ -43,14 +51,7 @@ class JsonFieldMapper {
         'url': 'url',
         'github': 'github'
       },
-      // 면접 관리 페이지
-      'interview_management': {
-        'candidateName': 'candidateName',
-        'position': 'position',
-        'interviewDate': 'interviewDate',
-        'interviewType': 'interviewType',
-        'notes': 'notes'
-      }
+
     };
 
     // 필드 타입별 처리 함수
@@ -76,15 +77,15 @@ class JsonFieldMapper {
    */
   analyzeUIStructure(container) {
     const fields = {};
-    
+
     // input, select, textarea 요소들 찾기
     const formElements = container.querySelectorAll('input, select, textarea');
-    
+
     formElements.forEach(element => {
       const name = element.name || element.id;
       const type = element.type || element.tagName.toLowerCase();
       const placeholder = element.placeholder || '';
-      
+
       if (name) {
         fields[name] = {
           type: this.determineFieldType(type),
@@ -136,11 +137,11 @@ class JsonFieldMapper {
     // JSON 데이터를 매핑
     for (const [jsonKey, jsonValue] of Object.entries(jsonData)) {
       const fieldName = mapping[jsonKey];
-      
+
       if (fieldName) {
         // 필드 타입에 따른 값 처리
         const processedValue = this.processValue(jsonValue, uiFields[fieldName]?.type || 'text');
-        
+
         results.mappedFields.push({
           jsonKey,
           fieldName,
@@ -177,7 +178,7 @@ class JsonFieldMapper {
     mappedFields.forEach(field => {
       try {
         onFieldUpdate(field.fieldName, field.value);
-        
+
         // 커스텀 이벤트 발생
         window.dispatchEvent(new CustomEvent('aiFieldUpdated', {
           detail: {
@@ -229,7 +230,7 @@ class JsonFieldMapper {
    */
   processChatResponse(response, pageId, container = null, onFieldUpdate = null) {
     const jsonData = this.extractJsonFromResponse(response);
-    
+
     if (!jsonData) {
       console.log('[JsonFieldMapper] JSON 데이터를 찾을 수 없습니다.');
       return { success: false, message: 'JSON 데이터를 찾을 수 없습니다.' };
@@ -239,7 +240,7 @@ class JsonFieldMapper {
 
     // JSON을 필드에 매핑
     const mappingResult = this.mapJsonToFields(jsonData, pageId, container);
-    
+
     // 매핑된 필드들을 UI에 적용
     if (mappingResult.success && onFieldUpdate) {
       this.applyMappedFields(mappingResult.mappedFields, onFieldUpdate);

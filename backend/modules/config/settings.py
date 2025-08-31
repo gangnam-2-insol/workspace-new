@@ -70,6 +70,12 @@ class Settings(BaseSettings):
     request_timeout: int = int(os.getenv("REQUEST_TIMEOUT", "30"))
     cache_ttl: int = int(os.getenv("CACHE_TTL", "3600"))  # 1시간
 
+    # 하이브리드 로딩 설정
+    fast_startup: bool = os.getenv("FAST_STARTUP", "false").lower() == "true"
+    preload_models: bool = os.getenv("PRELOAD_MODELS", "true").lower() == "true"
+    lazy_loading_enabled: bool = os.getenv("LAZY_LOADING_ENABLED", "false").lower() == "true"
+    background_preload: bool = os.getenv("BACKGROUND_PRELOAD", "true").lower() == "true"
+
     # 보안 설정
     api_key_header: str = os.getenv("API_KEY_HEADER", "X-API-Key")
     cors_origins: list = os.getenv("CORS_ORIGINS", "*").split(",")
@@ -77,6 +83,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         case_sensitive = False
+        extra = "ignore"  # 추가 필드 무시
 
 # 전역 설정 인스턴스
 settings = Settings()
@@ -134,6 +141,8 @@ def print_settings_summary():
     print(f"표절 임계값: {settings.plagiarism_threshold}")
     print(f"청크 크기: {settings.chunk_size}")
     print(f"검색 가중치 - 벡터: {settings.vector_search_weight}, 키워드: {settings.keyword_search_weight}")
+    print(f"하이브리드 로딩 - 빠른시작: {settings.fast_startup}, 모델사전로딩: {settings.preload_models}")
+    print(f"지연로딩: {settings.lazy_loading_enabled}, 백그라운드프리로딩: {settings.background_preload}")
     print("==================================")
 
 if __name__ == "__main__":

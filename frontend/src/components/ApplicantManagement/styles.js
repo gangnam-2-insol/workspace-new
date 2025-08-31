@@ -470,6 +470,9 @@ export const ModalTitle = styled.h2`
 `;
 
 export const ModalCloseButton = styled.button`
+  position: fixed;
+  top: 16px;
+  right: 16px;
   background: none;
   border: none;
   font-size: 24px;
@@ -477,6 +480,7 @@ export const ModalCloseButton = styled.button`
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
+  z-index: 3010;
 
   &:hover {
     background: var(--background-secondary);

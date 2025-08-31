@@ -12,12 +12,14 @@ class LLMService:
         api_key = os.getenv("OPENAI_API_KEY")
         if not api_key:
             print(f"[LLMService] 경고: OPENAI_API_KEY 환경변수가 설정되지 않았습니다!")
+            self.client = None
+            self.model_name = 'gpt-4o'
+            print(f"[LLMService] OpenAI 클라이언트 초기화 건너뜀 (API 키 없음)")
         else:
             print(f"[LLMService] OPENAI_API_KEY 확인됨 (길이: {len(api_key)})")
-
-        self.client = OpenAI(api_key=api_key)
-        self.model_name = 'gpt-4o'
-        print(f"[LLMService] OpenAI 클라이언트 초기화 완료: {self.model_name}")
+            self.client = OpenAI(api_key=api_key)
+            self.model_name = 'gpt-4o'
+            print(f"[LLMService] OpenAI 클라이언트 초기화 완료: {self.model_name}")
         print(f"[LLMService] === LLM 서비스 초기화 완료 ===")
 
     async def chat_completion(self, messages: List[Dict[str, str]], max_tokens: int = 1000, temperature: float = 0.7) -> str:
@@ -36,6 +38,11 @@ class LLMService:
             print(f"[LLMService] === Chat Completion 시작 ===")
             print(f"[LLMService] 메시지 수: {len(messages)}")
             print(f"[LLMService] 모델: {self.model_name}")
+
+            # API 키가 없을 때 처리
+            if self.client is None:
+                print(f"[LLMService] 경고: OpenAI 클라이언트가 초기화되지 않았습니다. API 키를 확인해주세요.")
+                return "죄송합니다. AI 서비스가 현재 사용할 수 없습니다. 관리자에게 문의해주세요."
 
             response = self.client.chat.completions.create(
                 model=self.model_name,

@@ -3242,7 +3242,7 @@ const ApplicantManagement = () => {
     console.log('🔍 === 이력서 모달 열기 시작 ===');
     console.log('📋 지원자 정보:', applicant);
     console.log('🆔 지원자 ID:', applicant._id || applicant.id);
-    
+
     // ID만 전달 (모달에서 직접 DB에서 데이터 가져옴)
     const applicantId = applicant._id || applicant.id;
     setSelectedResumeApplicant({ id: applicantId });

@@ -49,7 +49,7 @@ const ModalContent = styled(motion.div)`
 `;
 
 const CloseButton = styled.button`
-  position: absolute;
+  position: fixed;
   top: 20px;
   right: 20px;
   background: none;
@@ -60,7 +60,7 @@ const CloseButton = styled.button`
   padding: 8px;
   border-radius: 50%;
   transition: all 0.2s;
-  z-index: 10;
+  z-index: 3010;
 
   &:hover {
     background: #f5f5f5;
@@ -396,7 +396,7 @@ const LoadingSpinner = styled.div`
   padding: 40px;
   font-size: 14px;
   color: #6b7280;
-  
+
   &::before {
     content: '';
     width: 24px;
@@ -406,7 +406,7 @@ const LoadingSpinner = styled.div`
     border-radius: 50%;
     animation: spin 1s linear infinite;
   }
-  
+
   @keyframes spin {
     0% { transform: rotate(0deg); }
     100% { transform: rotate(360deg); }
@@ -499,26 +499,106 @@ const CoverLetterAnalysisModal = ({
 }) => {
   const [showJson, setShowJson] = useState(false);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
-  
+
   // 전역 표절 의심도 상태
   const { getSuspicionData, getLoadingState } = useSuspicion();
 
+  // 🔍 디버깅: 컴포넌트 마운트/업데이트 로그
+  console.log('🚀 [CoverLetterAnalysisModal] 컴포넌트 렌더링:', {
+    isOpen,
+    applicantName,
+    applicantId,
+    hasAnalysisData: !!analysisData,
+    analysisDataType: typeof analysisData,
+    analysisDataKeys: analysisData ? Object.keys(analysisData) : [],
+    timestamp: new Date().toISOString()
+  });
+
+  // 🔍 디버깅: props 변경 감지
+  useEffect(() => {
+    console.log('🔄 [CoverLetterAnalysisModal] Props 변경 감지:', {
+      isOpen,
+      applicantName,
+      applicantId,
+      analysisDataChanged: !!analysisData,
+      analysisDataStructure: analysisData ? {
+        keys: Object.keys(analysisData),
+        hasAnalysisResult: 'analysis_result' in analysisData,
+        hasAnalysis: 'analysis' in analysisData,
+        hasCoverLetterAnalysis: 'cover_letter_analysis' in analysisData
+      } : null
+    });
+  }, [isOpen, applicantName, applicantId, analysisData]);
+
   // 분석 데이터 처리
   const processedData = useMemo(() => {
-    if (!analysisData) return null;
+    console.log('🔍 [CoverLetterAnalysisModal] processedData 계산 시작:', {
+      hasAnalysisData: !!analysisData,
+      analysisDataStructure: analysisData ? Object.keys(analysisData) : [],
+      timestamp: new Date().toISOString()
+    });
+
+    if (!analysisData) {
+      console.log('❌ [CoverLetterAnalysisModal] analysisData가 없음');
+      return null;
+    }
 
     let analysisResult = null;
+
+    // 🔍 디버깅: 데이터 구조 분석
+    console.log('🔍 [CoverLetterAnalysisModal] 원본 데이터 구조 분석:', {
+      hasAnalysisResult: 'analysis_result' in analysisData,
+      hasAnalysis: 'analysis' in analysisData,
+      hasCoverLetterAnalysis: 'cover_letter_analysis' in analysisData,
+      isDirectAnalysis: typeof analysisData === 'object' && !('analysis_result' in analysisData) && !('analysis' in analysisData) && !('cover_letter_analysis' in analysisData),
+      allKeys: Object.keys(analysisData),
+      dataSize: JSON.stringify(analysisData).length
+    });
 
     // 다양한 데이터 구조 지원
     if (analysisData.analysis_result) {
       analysisResult = analysisData.analysis_result;
+      console.log('✅ [CoverLetterAnalysisModal] analysis_result 사용');
     } else if (analysisData.analysis) {
       analysisResult = analysisData.analysis;
+      console.log('✅ [CoverLetterAnalysisModal] analysis 사용');
     } else if (analysisData.cover_letter_analysis) {
       analysisResult = analysisData.cover_letter_analysis;
+      console.log('✅ [CoverLetterAnalysisModal] cover_letter_analysis 사용');
     } else {
       analysisResult = analysisData;
+      console.log('✅ [CoverLetterAnalysisModal] 직접 데이터 사용');
     }
+
+    // 자기소개서 분석 결과 디버깅
+    if (analysisResult) {
+      console.log('📊 [자기소개서 분석 데이터 처리]:', {
+        원본구조: Object.keys(analysisData),
+        처리된구조: Object.keys(analysisResult),
+        데이터크기: JSON.stringify(analysisResult).length,
+        점수필드수: Object.keys(analysisResult).filter(key => key.includes('score')).length,
+        분석항목수: Object.keys(analysisResult).length,
+        전체데이터샘플: JSON.stringify(analysisResult).substring(0, 200) + '...'
+      });
+
+      // 각 분석 항목별 상세 정보
+      Object.entries(analysisResult).forEach(([key, value]) => {
+        if (value && typeof value === 'object' && 'score' in value) {
+          console.log(`  📋 ${key}: 점수 ${value.score}, 피드백 ${value.feedback?.length || 0}자, 설명 ${value.description?.length || 0}자`);
+        } else if (value && typeof value === 'object') {
+          console.log(`  📋 ${key}: 객체 (score 없음) - ${Object.keys(value).join(', ')}`);
+        } else {
+          console.log(`  📋 ${key}: ${typeof value} - ${value}`);
+        }
+      });
+    } else {
+      console.log('❌ [CoverLetterAnalysisModal] analysisResult가 null');
+    }
+
+    console.log('✅ [CoverLetterAnalysisModal] processedData 계산 완료:', {
+      hasProcessedData: !!processedData,
+      processedDataKeys: processedData ? Object.keys(processedData) : []
+    });
 
     return analysisResult;
   }, [analysisData]);
@@ -531,34 +611,78 @@ const CoverLetterAnalysisModal = ({
       .filter(item => item && typeof item === 'object' && 'score' in item)
       .map(item => item.score);
 
-    if (scores.length === 0) return 8; // 기본값
+    // 점수 계산 디버깅
+    console.log('🧮 [점수 계산]:', {
+      추출된점수들: scores,
+      점수개수: scores.length,
+      평균점수: scores.length > 0 ? (scores.reduce((sum, score) => sum + score, 0) / scores.length).toFixed(2) : 'N/A'
+    });
+
+    if (scores.length === 0) {
+      console.log('⚠️ [점수 계산] 점수 데이터가 없어 기본값 8점 사용');
+      return 8; // 기본값
+    }
 
     const total = scores.reduce((sum, score) => sum + score, 0);
-    return Math.round((total / scores.length) * 10) / 10;
+    const finalScore = Math.round((total / scores.length) * 10) / 10;
+
+    console.log('✅ [CoverLetterAnalysisModal] 최종 점수 계산 완료:', {
+      총합: total,
+      점수개수: scores.length,
+      평균: total / scores.length,
+      최종점수: finalScore
+    });
+
+    return finalScore;
   }, [processedData]);
 
   // 차트 데이터 생성
   const chartData = useMemo(() => {
-    if (!processedData) return null;
+    console.log('🔍 [CoverLetterAnalysisModal] 차트 데이터 생성 시작:', {
+      hasProcessedData: !!processedData,
+      processedDataKeys: processedData ? Object.keys(processedData) : []
+    });
+
+    if (!processedData) {
+      console.log('❌ [CoverLetterAnalysisModal] processedData가 없어서 차트 데이터 null 반환');
+      return null;
+    }
 
     const labels = [];
     const scores = [];
     const colors = [];
+    const chartDetails = [];
 
     Object.entries(processedData).forEach(([key, value]) => {
+      console.log(`🔍 [CoverLetterAnalysisModal] 차트용 ${key} 항목 분석:`, {
+        hasScore: value && typeof value === 'object' && 'score' in value,
+        score: value && typeof value === 'object' && 'score' in value ? value.score : 'N/A',
+        label: getCoverLetterAnalysisLabel(key)
+      });
+
       if (value && typeof value === 'object' && 'score' in value) {
-        labels.push(getCoverLetterAnalysisLabel(key));
-        scores.push(value.score);
+        const label = getCoverLetterAnalysisLabel(key);
+        const score = value.score;
+
+        labels.push(label);
+        scores.push(score);
 
         // 점수별 색상
-        if (value.score >= 8) colors.push('rgba(40, 167, 69, 0.8)');
-        else if (value.score >= 6) colors.push('rgba(23, 162, 184, 0.8)');
-        else if (value.score >= 4) colors.push('rgba(255, 193, 7, 0.8)');
-        else colors.push('rgba(220, 53, 69, 0.8)');
+        let color;
+        if (score >= 8) color = 'rgba(40, 167, 69, 0.8)';
+        else if (score >= 6) color = 'rgba(23, 162, 184, 0.8)';
+        else if (score >= 4) color = 'rgba(255, 193, 7, 0.8)';
+        else color = 'rgba(220, 53, 69, 0.8)';
+
+        colors.push(color);
+        chartDetails.push({ key, label, score, color });
+        console.log(`  ✅ 차트에 추가: ${label} - ${score}점 (${color})`);
+      } else {
+        console.log(`  ❌ 차트에서 제외: ${key} (점수 없음)`);
       }
     });
 
-    return {
+    const chartResult = {
       labels,
       datasets: [
         {
@@ -574,6 +698,20 @@ const CoverLetterAnalysisModal = ({
         },
       ],
     };
+
+    console.log('✅ [CoverLetterAnalysisModal] 차트 데이터 생성 완료:', {
+      라벨개수: labels.length,
+      점수개수: scores.length,
+      색상개수: colors.length,
+      차트상세: chartDetails,
+      차트구조: {
+        labels: labels,
+        scores: scores,
+        colors: colors
+      }
+    });
+
+    return chartResult;
   }, [processedData]);
 
   const chartOptions = {
@@ -624,20 +762,65 @@ const CoverLetterAnalysisModal = ({
 
   // 분석 수행 함수
   const handlePerformAnalysis = async () => {
-    if (!onPerformAnalysis || !applicantId) return;
+    console.log('🔍 [CoverLetterAnalysisModal] 분석 수행 함수 호출:', {
+      hasOnPerformAnalysis: !!onPerformAnalysis,
+      applicantId,
+      isAnalyzing,
+      timestamp: new Date().toISOString()
+    });
+
+    if (!onPerformAnalysis || !applicantId) {
+      console.log('❌ [CoverLetterAnalysisModal] 분석 수행 불가:', {
+        hasOnPerformAnalysis: !!onPerformAnalysis,
+        hasApplicantId: !!applicantId
+      });
+      return;
+    }
+
+    console.log('🚀 [CoverLetterAnalysisModal] 분석 시작:', {
+      applicantId,
+      applicantName
+    });
 
     setIsAnalyzing(true);
     try {
       await onPerformAnalysis(applicantId);
+      console.log('✅ [CoverLetterAnalysisModal] 분석 완료:', {
+        applicantId,
+        applicantName
+      });
     } catch (error) {
-      console.error('자소서 분석 오류:', error);
+      console.error('❌ [CoverLetterAnalysisModal] 자소서 분석 오류:', {
+        error: error.message,
+        stack: error.stack,
+        applicantId,
+        applicantName
+      });
       alert('자소서 분석에 실패했습니다: ' + error.message);
     } finally {
       setIsAnalyzing(false);
+      console.log('🏁 [CoverLetterAnalysisModal] 분석 프로세스 종료:', {
+        applicantId,
+        applicantName
+      });
     }
   };
 
-  if (!isOpen) return null;
+  if (!isOpen) {
+    console.log('❌ [CoverLetterAnalysisModal] 모달이 닫혀있어서 렌더링하지 않음');
+    return null;
+  }
+
+  console.log('🎨 [CoverLetterAnalysisModal] 모달 렌더링 시작:', {
+    isOpen,
+    applicantName,
+    applicantId,
+    hasProcessedData: !!processedData,
+    overallScore,
+    hasChartData: !!chartData,
+    isAnalyzing,
+    timestamp: new Date().toISOString()
+  });
 
   return (
     <AnimatePresence>
@@ -677,18 +860,18 @@ const CoverLetterAnalysisModal = ({
                   🤖 AI 분석 결과 - 표절 의심도 검사
                 </SuspicionTitle>
               </SuspicionHeader>
-              
+
               <SuspicionContent>
                 {(() => {
                   const suspicionResult = getSuspicionData(applicantId);
                   const isLoading = getLoadingState(applicantId);
-                  
+
                   // 디버깅 로그 추가
                   console.log('🔍 [CoverLetterAnalysisModal] 표절 의심도 상태 확인:');
                   console.log('- applicantId:', applicantId);
                   console.log('- suspicionResult:', suspicionResult);
                   console.log('- isLoading:', isLoading);
-                  
+
                   if (isLoading || !suspicionResult) {
                     return (
                       <LoadingSpinner>
@@ -696,12 +879,12 @@ const CoverLetterAnalysisModal = ({
                       </LoadingSpinner>
                     );
                   }
-                  
+
                   if (!suspicionResult) {
                     return (
-                      <div style={{ 
-                        padding: '20px', 
-                        textAlign: 'center', 
+                      <div style={{
+                        padding: '20px',
+                        textAlign: 'center',
                         color: '#6b7280',
                         backgroundColor: '#f9fafb',
                         borderRadius: '8px',
@@ -715,15 +898,47 @@ const CoverLetterAnalysisModal = ({
                       </div>
                     );
                   }
-                  
+
                   if (suspicionResult.status === 'error') {
+                    // 자소서가 없는 경우에 대한 특별한 UI
+                    if (suspicionResult.isNoCoverLetter) {
+                      return (
+                        <div style={{
+                          padding: '24px',
+                          textAlign: 'center',
+                          backgroundColor: '#fef3c7',
+                          border: '2px solid #f59e0b',
+                          borderRadius: '12px',
+                          color: '#92400e'
+                        }}>
+                          <div style={{ fontSize: '32px', marginBottom: '16px' }}>📝</div>
+                          <div style={{ fontSize: '18px', fontWeight: '600', marginBottom: '8px' }}>
+                            자소서가 등록되지 않았습니다
+                          </div>
+                          <div style={{ fontSize: '14px', marginBottom: '16px' }}>
+                            {suspicionResult.message}
+                          </div>
+                          <div style={{
+                            fontSize: '12px',
+                            color: '#a16207',
+                            backgroundColor: '#fef3c7',
+                            padding: '8px 12px',
+                            borderRadius: '6px',
+                            border: '1px solid #f59e0b'
+                          }}>
+                            💡 자소서를 먼저 업로드한 후 표절 의심도 검사를 진행해주세요.
+                          </div>
+                        </div>
+                      );
+                    }
+
                     return (
                       <ErrorMessage>
                         ❌ {suspicionResult.message}
                       </ErrorMessage>
                     );
                   }
-                  
+
                   // API 응답 구조 파싱
                   let analysisData = suspicionResult;
                   if (suspicionResult.plagiarism_result?.data?.suspicion_analysis) {
@@ -733,12 +948,12 @@ const CoverLetterAnalysisModal = ({
                   } else if (suspicionResult.data) {
                     analysisData = suspicionResult.data;
                   }
-                  
+
                   const suspicionLevel = analysisData.suspicion_level || 'UNKNOWN';
                   const suspicionScore = analysisData.suspicion_score_percent || (analysisData.suspicion_score * 100) || 0;
                   const analysis = analysisData.analysis || '분석 결과 없음';
                   const similarCount = analysisData.similar_count || 0;
-                  
+
                   return (
                     <>
                       <SuspicionResult level={suspicionLevel}>
@@ -761,7 +976,7 @@ const CoverLetterAnalysisModal = ({
                           {suspicionScore.toFixed(1)}%
                         </SuspicionScore>
                       </SuspicionResult>
-                      
+
                       <SuspicionAnalysis>
                         <strong>분석 내용:</strong><br />
                         {analysis}

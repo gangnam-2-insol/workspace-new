@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { parseSkills } from '../../utils/skillParser';
 
 // API 서비스
 const API_BASE_URL = process.env.REACT_APP_API_URL || 'http://localhost:8000';
@@ -152,11 +153,20 @@ export const useApplicantFilter = (applicants) => {
   const filteredApplicants = useMemo(() => {
     return applicants.filter(applicant => {
       const searchLower = searchTerm.toLowerCase();
-      return (
+
+      // 기본 필드 검색
+      const basicMatch = (
         applicant.name?.toLowerCase().includes(searchLower) ||
-        applicant.position?.toLowerCase().includes(searchLower) ||
-        applicant.skills?.toLowerCase().includes(searchLower)
+        applicant.position?.toLowerCase().includes(searchLower)
       );
+
+      // 스킬 검색 (파싱된 스킬 배열에서 검색)
+      const skills = parseSkills(applicant.skills);
+      const skillMatch = skills.some(skill =>
+        skill.toLowerCase().includes(searchLower)
+      );
+
+      return basicMatch || skillMatch;
     });
   }, [applicants, searchTerm]);
 

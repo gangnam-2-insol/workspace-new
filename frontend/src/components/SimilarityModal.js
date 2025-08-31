@@ -29,7 +29,7 @@ const ModalContent = styled(motion.div)`
 `;
 
 const CloseButton = styled.button`
-  position: absolute;
+  position: fixed;
   top: 16px;
   right: 16px;
   background: none;
@@ -40,7 +40,8 @@ const CloseButton = styled.button`
   padding: 4px;
   border-radius: 4px;
   transition: var(--transition);
-  
+  z-index: 3010;
+
   &:hover {
     background: var(--background-light);
     color: var(--text-primary);
@@ -112,7 +113,7 @@ const SimilarResumeCard = styled.div`
   padding: 16px;
   transition: var(--transition);
   cursor: pointer;
-  
+
   &:hover {
     border-color: var(--primary-color);
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
@@ -212,7 +213,7 @@ const SimilarityModal = ({ isOpen, onClose, data, documentType = 'resume', onRes
             <CloseButton onClick={onClose}>
               <FiX />
             </CloseButton>
-            
+
             <Header>
               <Title>
                 <FiTrendingUp />
@@ -251,7 +252,7 @@ const SimilarityModal = ({ isOpen, onClose, data, documentType = 'resume', onRes
             {similar_resumes.length > 0 ? (
               <SimilarResumesList>
                 {similar_resumes.map((item, index) => (
-                  <SimilarResumeCard 
+                  <SimilarResumeCard
                     key={index}
                     onClick={() => handleResumeClick(item.resume)}
                   >
@@ -265,7 +266,7 @@ const SimilarityModal = ({ isOpen, onClose, data, documentType = 'resume', onRes
                         {formatSimilarityScore(item.similarity_score)}%
                       </SimilarityScore>
                     </SimilarResumeHeader>
-                    
+
                     <SimilarResumeInfo>
                       {item.resume.position && (
                         <InfoItem>
@@ -280,7 +281,7 @@ const SimilarityModal = ({ isOpen, onClose, data, documentType = 'resume', onRes
                         </InfoItem>
                       )}
                     </SimilarResumeInfo>
-                    
+
                     <SimilarResumeDetails>
                       {item.resume.experience && (
                         <div>경력: {item.resume.experience}</div>

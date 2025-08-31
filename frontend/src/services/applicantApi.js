@@ -139,19 +139,19 @@ export const applicantApi = {
   checkCoverLetterSuspicion: async (applicantId) => {
     try {
       console.log(`[API] 자기소개서 표절 의심도 검사 요청 - applicantId: ${applicantId}`);
-      const response = await fetch(`${API_BASE_URL}/api/coverletter/similarity-check/${applicantId}`, {
+      const response = await fetch(`${API_BASE_URL}/api/cover-letters/similarity-check/${applicantId}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
         }
       });
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error('❌ 자기소개서 표절 의심도 검사 API 오류:', errorText);
         throw new Error(`자기소개서 표절 의심도 검사 실패: ${response.status} ${response.statusText}`);
       }
-      
+
       const data = await response.json();
       console.log('✅ 자기소개서 표절 의심도 검사 성공:', data);
       return data;
@@ -171,13 +171,13 @@ export const applicantApi = {
           'Content-Type': 'application/json',
         }
       });
-      
+
       if (!response.ok) {
         const errorText = await response.text();
         console.error('❌ 유사인재 추천 API 오류:', errorText);
         throw new Error(`유사인재 추천 실패: ${response.status} ${response.statusText}`);
       }
-      
+
       const data = await response.json();
       console.log('✅ 유사인재 추천 성공:', data);
       return data;
@@ -198,7 +198,7 @@ export const documentApi = {
         throw new Error('이력서 조회 실패');
       }
       const result = await response.json();
-      
+
       // 백엔드 응답 구조에 맞게 데이터 추출
       if (result.success && result.data) {
         return result.data;
@@ -219,7 +219,7 @@ export const documentApi = {
         throw new Error('자기소개서 조회 실패');
       }
       const result = await response.json();
-      
+
       // 백엔드 응답 구조에 맞게 데이터 추출
       if (result.success && result.data) {
         return result.data;
@@ -260,7 +260,7 @@ export const documentApi = {
         throw new Error('포트폴리오 조회 실패');
       }
       const result = await response.json();
-      
+
       // 백엔드 응답 구조에 맞게 데이터 추출
       if (result.success && result.data) {
         return result.data;

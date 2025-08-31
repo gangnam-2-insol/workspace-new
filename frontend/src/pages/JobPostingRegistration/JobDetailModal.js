@@ -1,11 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import styled from 'styled-components';
 import { motion, AnimatePresence } from 'framer-motion';
-import { 
-  FiX, 
-  FiEdit3, 
-  FiSave, 
-  FiEye, 
+import {
+  FiX,
+  FiEdit3,
+  FiSave,
+  FiEye,
   FiCalendar,
   FiMapPin,
   FiDollarSign,
@@ -331,13 +331,13 @@ const StatLabel = styled.div`
   font-weight: 600;
 `;
 
-const JobDetailModal = ({ 
-  isOpen, 
-  onClose, 
-  job, 
+const JobDetailModal = ({
+  isOpen,
+  onClose,
+  job,
   mode = 'view', // 'view' or 'edit'
   onSave,
-  onDelete 
+  onDelete
 }) => {
   const [formData, setFormData] = useState({
     title: '',
@@ -512,8 +512,8 @@ const JobDetailModal = ({
                     </MetaItem>
                     <MetaItem>
                       <FiDollarSign size={16} />
-                      <MetaLabel>연봉:</MetaLabel> 
-                      {job.salary ? 
+                      <MetaLabel>연봉:</MetaLabel>
+                      {job.salary ?
                         (() => {
                           // 천 단위 구분자 제거 후 숫자 추출
                           const cleanSalary = job.salary.replace(/[,\s]/g, '');
@@ -538,7 +538,7 @@ const JobDetailModal = ({
                             }
                           }
                           return job.salary;
-                        })() : 
+                        })() :
                         '협의'
                       }
                     </MetaItem>
@@ -625,8 +625,8 @@ const JobDetailModal = ({
                                   fontSize: '12px',
                                   fontWeight: '500'
                                 }}>
-                                  {doc === 'resume' ? '이력서' : 
-                                   doc === 'cover_letter' ? '자기소개서' : 
+                                  {doc === 'resume' ? '이력서' :
+                                   doc === 'cover_letter' ? '자기소개서' :
                                    doc === 'portfolio' ? '포트폴리오' : doc}
                                 </span>
                               ))
@@ -839,20 +839,20 @@ const JobDetailModal = ({
                   </FormGroup>
 
                   {/* 지원자 요구 항목 섹션 */}
-                  <div style={{ 
-                    borderTop: '2px solid #e5e7eb', 
-                    marginTop: '32px', 
-                    paddingTop: '24px' 
+                  <div style={{
+                    borderTop: '2px solid #e5e7eb',
+                    marginTop: '32px',
+                    paddingTop: '24px'
                   }}>
-                    <h3 style={{ 
-                      marginBottom: '24px', 
-                      color: 'var(--text-primary)', 
+                    <h3 style={{
+                      marginBottom: '24px',
+                      color: 'var(--text-primary)',
                       fontSize: '18px',
                       fontWeight: '600'
                     }}>
                       📋 지원자 요구 항목
                     </h3>
-                    
+
                     <FormGrid>
                       <FormGroup>
                         <Label>필수 제출 서류 *</Label>
@@ -862,7 +862,7 @@ const JobDetailModal = ({
                               type="checkbox"
                               checked={formData.required_documents.includes('resume')}
                               onChange={(e) => {
-                                const newDocs = e.target.checked 
+                                const newDocs = e.target.checked
                                   ? [...formData.required_documents, 'resume']
                                   : formData.required_documents.filter(doc => doc !== 'resume');
                                 setFormData(prev => ({ ...prev, required_documents: newDocs }));
@@ -875,7 +875,7 @@ const JobDetailModal = ({
                               type="checkbox"
                               checked={formData.required_documents.includes('cover_letter')}
                               onChange={(e) => {
-                                const newDocs = e.target.checked 
+                                const newDocs = e.target.checked
                                   ? [...formData.required_documents, 'cover_letter']
                                   : formData.required_documents.filter(doc => doc !== 'cover_letter');
                                 setFormData(prev => ({ ...prev, required_documents: newDocs }));
@@ -888,7 +888,7 @@ const JobDetailModal = ({
                               type="checkbox"
                               checked={formData.required_documents.includes('portfolio')}
                               onChange={(e) => {
-                                const newDocs = e.target.checked 
+                                const newDocs = e.target.checked
                                   ? [...formData.required_documents, 'portfolio']
                                   : formData.required_documents.filter(doc => doc !== 'portfolio');
                                 setFormData(prev => ({ ...prev, required_documents: newDocs }));
@@ -932,9 +932,9 @@ const JobDetailModal = ({
                             <input
                               type="checkbox"
                               checked={formData.require_portfolio_pdf}
-                              onChange={(e) => setFormData(prev => ({ 
-                                ...prev, 
-                                require_portfolio_pdf: e.target.checked 
+                              onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                require_portfolio_pdf: e.target.checked
                               }))}
                             />
                             포트폴리오 PDF 제출 필수
@@ -943,9 +943,9 @@ const JobDetailModal = ({
                             <input
                               type="checkbox"
                               checked={formData.require_github_url}
-                              onChange={(e) => setFormData(prev => ({ 
-                                ...prev, 
-                                require_github_url: e.target.checked 
+                              onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                require_github_url: e.target.checked
                               }))}
                             />
                             GitHub URL 제출 필수
@@ -960,9 +960,9 @@ const JobDetailModal = ({
                             <input
                               type="checkbox"
                               checked={formData.require_growth_background}
-                              onChange={(e) => setFormData(prev => ({ 
-                                ...prev, 
-                                require_growth_background: e.target.checked 
+                              onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                require_growth_background: e.target.checked
                               }))}
                             />
                             성장 배경 작성 필수
@@ -971,9 +971,9 @@ const JobDetailModal = ({
                             <input
                               type="checkbox"
                               checked={formData.require_motivation}
-                              onChange={(e) => setFormData(prev => ({ 
-                                ...prev, 
-                                require_motivation: e.target.checked 
+                              onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                require_motivation: e.target.checked
                               }))}
                             />
                             지원 동기 작성 필수
@@ -982,9 +982,9 @@ const JobDetailModal = ({
                             <input
                               type="checkbox"
                               checked={formData.require_career_history}
-                              onChange={(e) => setFormData(prev => ({ 
-                                ...prev, 
-                                require_career_history: e.target.checked 
+                              onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                require_career_history: e.target.checked
                               }))}
                             />
                             경력 사항 작성 필수
@@ -1000,9 +1000,9 @@ const JobDetailModal = ({
                             <Input
                               type="number"
                               value={formData.max_file_size_mb}
-                              onChange={(e) => setFormData(prev => ({ 
-                                ...prev, 
-                                max_file_size_mb: parseInt(e.target.value) || 50 
+                              onChange={(e) => setFormData(prev => ({
+                                ...prev,
+                                max_file_size_mb: parseInt(e.target.value) || 50
                               }))}
                               style={{ width: '100px', marginLeft: '8px' }}
                             />
@@ -1030,15 +1030,15 @@ const JobDetailModal = ({
               <ButtonGroup>
                 {!isEditing ? (
                   <>
-                    <Button 
-                      className="secondary" 
+                    <Button
+                      className="secondary"
                       onClick={() => setIsEditing(true)}
                     >
                       <FiEdit3 size={16} />
                       수정
                     </Button>
-                    <Button 
-                      className="danger" 
+                    <Button
+                      className="danger"
                       onClick={() => onDelete && onDelete(job.id)}
                     >
                       삭제
@@ -1046,14 +1046,14 @@ const JobDetailModal = ({
                   </>
                 ) : (
                   <>
-                    <Button 
-                      className="secondary" 
+                    <Button
+                      className="secondary"
                       onClick={handleCancel}
                     >
                       취소
                     </Button>
-                    <Button 
-                      className="primary" 
+                    <Button
+                      className="primary"
                       onClick={handleSave}
                     >
                       <FiSave size={16} />
@@ -1070,4 +1070,4 @@ const JobDetailModal = ({
   );
 };
 
-export default JobDetailModal; 
+export default JobDetailModal;

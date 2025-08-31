@@ -61,18 +61,18 @@ const ApplicantManagement = () => {
   /* 7. 모달 상태 */
   const [detailModal, setDetailModal] = useState({ isOpen: false, applicant: null });
   const [resumeModal, setResumeModal] = useState({ isOpen: false, applicant: null });
-  const [documentModal, setDocumentModal] = useState({ 
-    isOpen: false, 
-    type: '', 
-    applicant: null, 
-    documentData: null, 
-    similarityData: null, 
-    isLoadingSimilarity: false 
+  const [documentModal, setDocumentModal] = useState({
+    isOpen: false,
+    type: '',
+    applicant: null,
+    documentData: null,
+    similarityData: null,
+    isLoadingSimilarity: false
   });
-  const [newApplicantModal, setNewApplicantModal] = useState({ 
-    isOpen: false, 
-    existingApplicant: null, 
-    isCheckingDuplicate: false 
+  const [newApplicantModal, setNewApplicantModal] = useState({
+    isOpen: false,
+    existingApplicant: null,
+    isCheckingDuplicate: false
   });
 
   /* 8. 이벤트 핸들러 */
@@ -93,24 +93,24 @@ const ApplicantManagement = () => {
   }, []);
 
   const handleDocumentModalOpen = useCallback((type, applicant) => {
-    setDocumentModal({ 
-      isOpen: true, 
-      type, 
-      applicant, 
-      documentData: null, 
-      similarityData: null, 
-      isLoadingSimilarity: false 
+    setDocumentModal({
+      isOpen: true,
+      type,
+      applicant,
+      documentData: null,
+      similarityData: null,
+      isLoadingSimilarity: false
     });
   }, []);
 
   const handleDocumentModalClose = useCallback(() => {
-    setDocumentModal({ 
-      isOpen: false, 
-      type: '', 
-      applicant: null, 
-      documentData: null, 
-      similarityData: null, 
-      isLoadingSimilarity: false 
+    setDocumentModal({
+      isOpen: false,
+      type: '',
+      applicant: null,
+      documentData: null,
+      similarityData: null,
+      isLoadingSimilarity: false
     });
   }, []);
 

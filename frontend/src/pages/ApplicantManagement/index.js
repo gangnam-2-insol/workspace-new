@@ -24,6 +24,7 @@ import {
 } from 'react-icons/fi';
 import DetailedAnalysisModal from '../../components/DetailedAnalysisModal';
 import ApplicantDetailModal from '../../components/ApplicantDetailModal';
+import { parseSkills, formatSkills } from '../../utils/skillParser';
 
 // 스타일 컴포넌트 임포트
 import * as S from './styles';
@@ -281,6 +282,16 @@ const ApplicantManagement = () => {
 
   const handleLoadMore = () => {
     setPage(prev => prev + 1);
+  };
+
+  const handleResumeModalOpen = (applicant) => {
+    console.log('이력서 모달 열기:', applicant);
+    // 이력서 모달 열기 로직 추가
+  };
+
+  const handleDeleteApplicant = (applicantId) => {
+    console.log('지원자 삭제:', applicantId);
+    // 지원자 삭제 로직 추가
   };
 
   // 메일 발송 핸들러
@@ -661,16 +672,22 @@ const ApplicantManagement = () => {
 
                   <S.ApplicantSkills>
                     <S.SkillsContainer>
-                      {applicant.skills && applicant.skills.length > 0 ? (
-                        applicant.skills.slice(0, 3).map((skill, skillIndex) => (
-                          <S.SkillTag key={skillIndex}>{skill}</S.SkillTag>
-                        ))
-                      ) : (
-                        <S.NoSkills>기술스택 없음</S.NoSkills>
-                      )}
-                      {applicant.skills && applicant.skills.length > 3 && (
-                        <S.MoreSkills>+{applicant.skills.length - 3}</S.MoreSkills>
-                      )}
+                      {(() => {
+                        const skillData = formatSkills(applicant.skills, 4);
+                        if (skillData.totalCount === 0) {
+                          return <S.NoSkills>기술스택 없음</S.NoSkills>;
+                        }
+                        return (
+                          <>
+                            {skillData.displaySkills.map((skill, skillIndex) => (
+                              <S.SkillTag key={skillIndex}>{skill}</S.SkillTag>
+                            ))}
+                            {skillData.remainingCount > 0 && (
+                              <S.MoreSkills>+{skillData.remainingCount}</S.MoreSkills>
+                            )}
+                          </>
+                        );
+                      })()}
                     </S.SkillsContainer>
                   </S.ApplicantSkills>
 
@@ -728,185 +745,188 @@ const ApplicantManagement = () => {
           )}
         </>
       ) : (
-        <S.HeaderRowBoard>
-          <S.HeaderCheckbox>
-            <S.CheckboxInput
-              type="checkbox"
-              checked={selectedApplicants.length === filteredApplicants.length}
-              onChange={handleSelectAll}
-            />
-          </S.HeaderCheckbox>
-          <S.HeaderName>이름</S.HeaderName>
-          <S.HeaderPosition>직무</S.HeaderPosition>
-          <S.HeaderDate>지원일</S.HeaderDate>
-          <S.HeaderRanks>평가</S.HeaderRanks>
-          <S.HeaderActions>액션</S.HeaderActions>
-        </S.HeaderRowBoard>
+        <>
+          {/* 보드 뷰 헤더 */}
+          <S.HeaderRowBoard>
+            <S.HeaderCheckbox>
+              <S.CheckboxInput
+                type="checkbox"
+                checked={selectedApplicants.length === filteredApplicants.length}
+                onChange={handleSelectAll}
+              />
+            </S.HeaderCheckbox>
+            <S.HeaderName>이름</S.HeaderName>
+            <S.HeaderPosition>직무</S.HeaderPosition>
+            <S.HeaderDate>지원일</S.HeaderDate>
+            <S.HeaderRanks>평가</S.HeaderRanks>
+            <S.HeaderActions>액션</S.HeaderActions>
+          </S.HeaderRowBoard>
 
-        {/* 보드 뷰 지원자 목록 */}
-        <S.ApplicantsBoard className="applicant-board-view">
-          {filteredApplicants.length > 0 ? (
-            filteredApplicants.map((applicant, index) => {
-              // 지원자 상태에 따른 뱃지 색상
-              const getStatusBadgeColor = (status) => {
-                switch (status) {
-                  case 'passed': return '#10b981';
-                  case 'final_passed': return '#3b82f6';
-                  case 'waiting': return '#f59e0b';
-                  case 'rejected': return '#ef4444';
-                  case 'pending': return '#6b7280';
-                  default: return '#6b7280';
-                }
-              };
+          {/* 보드 뷰 지원자 목록 */}
+          <S.ApplicantsBoard className="applicant-board-view">
+            {filteredApplicants.length > 0 ? (
+              filteredApplicants.map((applicant, index) => {
+                // 지원자 상태에 따른 뱃지 색상
+                const getStatusBadgeColor = (status) => {
+                  switch (status) {
+                    case 'passed': return '#10b981';
+                    case 'final_passed': return '#3b82f6';
+                    case 'waiting': return '#f59e0b';
+                    case 'rejected': return '#ef4444';
+                    case 'pending': return '#6b7280';
+                    default: return '#6b7280';
+                  }
+                };
 
-              // 지원자 상태 텍스트
-              const getStatusText = (status) => {
-                switch (status) {
-                  case 'passed': return '서류합격';
-                  case 'final_passed': return '최종합격';
-                  case 'waiting': return '보류';
-                  case 'rejected': return '불합격';
-                  case 'pending': return '검토중';
-                  default: return '미분류';
-                }
-              };
+                // 지원자 상태 텍스트
+                const getStatusText = (status) => {
+                  switch (status) {
+                    case 'passed': return '서류합격';
+                    case 'final_passed': return '최종합격';
+                    case 'waiting': return '보류';
+                    case 'rejected': return '불합격';
+                    case 'pending': return '검토중';
+                    default: return '미분류';
+                  }
+                };
 
-              return (
-                <S.ApplicantCardBoard
-                  key={applicant.id || applicant._id}
-                  className="applicant-card-item"
-                  onClick={() => handleShowDetail(applicant)}
-                  style={{ cursor: 'pointer' }}
-                >
-                  <S.ApplicantCardHeader className="applicant-card-header">
-                    <S.ApplicantCardCheckbox className="applicant-card-checkbox">
-                      <S.CheckboxInput
-                        type="checkbox"
-                        className="applicant-checkbox-input"
-                        checked={selectedApplicants.includes(applicant.id || applicant._id)}
-                        onChange={(e) => {
-                          e.stopPropagation();
-                          handleApplicantSelect(applicant.id || applicant._id);
-                        }}
-                      />
-                    </S.ApplicantCardCheckbox>
-                    <S.ApplicantCardName className="applicant-card-name">
-                      <S.NameText className="applicant-name-text">{applicant.name || '이름 없음'}</S.NameText>
-                    </S.ApplicantCardName>
-                  </S.ApplicantCardHeader>
+                return (
+                  <S.ApplicantCardBoard
+                    key={applicant.id || applicant._id}
+                    className="applicant-card-item"
+                    onClick={() => handleShowDetail(applicant)}
+                    style={{ cursor: 'pointer' }}
+                  >
+                    <S.ApplicantCardHeader className="applicant-card-header">
+                      <S.ApplicantCardCheckbox className="applicant-card-checkbox">
+                        <S.CheckboxInput
+                          type="checkbox"
+                          className="applicant-checkbox-input"
+                          checked={selectedApplicants.includes(applicant.id || applicant._id)}
+                          onChange={(e) => {
+                            e.stopPropagation();
+                            handleApplicantSelect(applicant.id || applicant._id);
+                          }}
+                        />
+                      </S.ApplicantCardCheckbox>
+                      <S.ApplicantCardName className="applicant-card-name">
+                        <S.NameText className="applicant-name-text">{applicant.name || '이름 없음'}</S.NameText>
+                      </S.ApplicantCardName>
+                    </S.ApplicantCardHeader>
 
-                  <S.ApplicantCardContent className="applicant-card-content">
-                    <S.ApplicantCardPosition className="applicant-card-position">
-                      <S.PositionBadge className="applicant-position-badge">{applicant.position || '직무 미지정'}</S.PositionBadge>
-                    </S.ApplicantCardPosition>
+                    <S.ApplicantCardContent className="applicant-card-content">
+                      <S.ApplicantCardPosition className="applicant-card-position">
+                        <S.PositionBadge className="applicant-position-badge">{applicant.position || '직무 미지정'}</S.PositionBadge>
+                      </S.ApplicantCardPosition>
 
-                    <S.ApplicantCardDate className="applicant-card-date">
-                      {applicant.application_date ?
-                        new Date(applicant.application_date).toLocaleDateString('ko-KR') :
-                        '날짜 없음'
-                      }
-                    </S.ApplicantCardDate>
-
-                    <S.ApplicantCardRanks className="applicant-card-ranks">
-                      <S.AvgScore
-                        className={`applicant-avg-score ${
-                          !applicant.analysisScore ? 'no-score' :
-                          applicant.analysisScore >= 80 ? 'high-score' :
-                          applicant.analysisScore >= 60 ? 'medium-score' :
-                          'low-score'
-                        }`}
-                        id={`ranking-badge-${applicant.id || applicant._id}`}
-                      >
-                        {applicant.analysisScore ?
-                          `${Math.round(applicant.analysisScore)}점` :
-                          '평가 없음'
+                      <S.ApplicantCardDate className="applicant-card-date">
+                        {applicant.application_date ?
+                          new Date(applicant.application_date).toLocaleDateString('ko-KR') :
+                          '날짜 없음'
                         }
-                      </S.AvgScore>
-                    </S.ApplicantCardRanks>
+                      </S.ApplicantCardDate>
 
-                    <S.ApplicantCardActions className="applicant-card-actions">
-                      <S.ActionButtonGroup className="applicant-action-button-group">
-                        <S.ActionButton
-                          className="applicant-action-button applicant-detail-button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleShowDetail(applicant);
-                          }}
+                      <S.ApplicantCardRanks className="applicant-card-ranks">
+                        <S.AvgScore
+                          className={`applicant-avg-score ${
+                            !applicant.analysisScore ? 'no-score' :
+                            applicant.analysisScore >= 80 ? 'high-score' :
+                            applicant.analysisScore >= 60 ? 'medium-score' :
+                            'low-score'
+                          }`}
+                          id={`ranking-badge-${applicant.id || applicant._id}`}
                         >
-                          <FiEye size={16} />
-                          상세보기
-                        </S.ActionButton>
-                        <S.ActionButton
-                          className="applicant-action-button applicant-resume-button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleResumeModalOpen(applicant);
-                          }}
-                        >
-                          <FiFileText size={16} />
-                          이력서
-                        </S.ActionButton>
-                      </S.ActionButtonGroup>
+                          {applicant.analysisScore ?
+                            `${Math.round(applicant.analysisScore)}점` :
+                            '평가 없음'
+                          }
+                        </S.AvgScore>
+                      </S.ApplicantCardRanks>
 
-                      {/* 상태값 변경 버튼들 */}
-                      <S.ActionButtonGroup style={{ marginTop: '8px' }}>
-                        <S.StatusActionButton
-                          className="pending"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStatusChange([applicant.id || applicant._id], 'pending');
-                          }}
-                        >
-                          <FiClock size={14} />
-                          보류
-                        </S.StatusActionButton>
-                        <S.StatusActionButton
-                          className="rejected"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStatusChange([applicant.id || applicant._id], 'rejected');
-                          }}
-                        >
-                          <FiX size={14} />
-                          불합격
-                        </S.StatusActionButton>
-                        <S.StatusActionButton
-                          className="passed"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleStatusChange([applicant.id || applicant._id], 'passed');
-                          }}
-                        >
-                          <FiCheck size={14} />
-                          합격
-                        </S.StatusActionButton>
-                      </S.ActionButtonGroup>
-                    </S.ApplicantCardActions>
-                  </S.ApplicantCardContent>
+                      <S.ApplicantCardActions className="applicant-card-actions">
+                        <S.ActionButtonGroup className="applicant-action-button-group">
+                          <S.ActionButton
+                            className="applicant-action-button applicant-detail-button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleShowDetail(applicant);
+                            }}
+                          >
+                            <FiEye size={16} />
+                            상세보기
+                          </S.ActionButton>
+                          <S.ActionButton
+                            className="applicant-action-button applicant-resume-button"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleResumeModalOpen(applicant);
+                            }}
+                          >
+                            <FiFileText size={16} />
+                            이력서
+                          </S.ActionButton>
+                        </S.ActionButtonGroup>
 
-                {/* 상태 뱃지 - 좌상단 위치 */}
-                <S.StatusBadgeMotion
-                  className="applicant-status-badge"
-                  id={`status-badge-${applicant.id || applicant._id}`}
-                  status={applicant.status}
-                  small
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  transition={{ duration: 0.08, ease: "easeOut" }}
-                >
-                  {getStatusText(applicant.status)}
-                </S.StatusBadgeMotion>
-              </S.ApplicantCardBoard>
-              );
-            })
-          ) : (
-            <S.NoResultsMessage>
-              <FiSearch size={48} />
-              <h3>검색 결과가 없습니다</h3>
-              <p>다른 검색어나 필터 조건을 시도해보세요.</p>
-            </S.NoResultsMessage>
-          )}
-        </S.ApplicantsBoard>
+                        {/* 상태값 변경 버튼들 */}
+                        <S.ActionButtonGroup style={{ marginTop: '8px' }}>
+                          <S.StatusActionButton
+                            className="pending"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStatusChange([applicant.id || applicant._id], 'pending');
+                            }}
+                          >
+                            <FiClock size={14} />
+                            보류
+                          </S.StatusActionButton>
+                          <S.StatusActionButton
+                            className="rejected"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStatusChange([applicant.id || applicant._id], 'rejected');
+                            }}
+                          >
+                            <FiX size={14} />
+                            불합격
+                          </S.StatusActionButton>
+                          <S.StatusActionButton
+                            className="passed"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleStatusChange([applicant.id || applicant._id], 'passed');
+                            }}
+                          >
+                            <FiCheck size={14} />
+                            합격
+                          </S.StatusActionButton>
+                        </S.ActionButtonGroup>
+                      </S.ApplicantCardActions>
+                    </S.ApplicantCardContent>
+
+                    {/* 상태 뱃지 - 좌상단 위치 */}
+                    <S.StatusBadgeMotion
+                      className="applicant-status-badge"
+                      id={`status-badge-${applicant.id || applicant._id}`}
+                      status={applicant.status}
+                      small
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.08, ease: "easeOut" }}
+                    >
+                      {getStatusText(applicant.status)}
+                    </S.StatusBadgeMotion>
+                  </S.ApplicantCardBoard>
+                );
+              })
+            ) : (
+              <S.NoResultsMessage>
+                <FiSearch size={48} />
+                <h3>검색 결과가 없습니다</h3>
+                <p>다른 검색어나 필터 조건을 시도해보세요.</p>
+              </S.NoResultsMessage>
+            )}
+          </S.ApplicantsBoard>
+        </>
       )}
 
       {hasMore && (

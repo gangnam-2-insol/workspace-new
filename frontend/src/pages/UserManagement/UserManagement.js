@@ -1,9 +1,9 @@
 import React, { useState } from 'react';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
-import { 
-  FiEye, 
-  FiEdit, 
+import {
+  FiEye,
+  FiEdit,
   FiTrash2
 } from 'react-icons/fi';
 import DetailModal, {
@@ -39,7 +39,7 @@ const UserCard = styled(motion.div)`
   box-shadow: var(--shadow-light);
   transition: var(--transition);
   border: 1px solid var(--border-color);
-  
+
   &:hover {
     transform: translateY(-4px);
     box-shadow: var(--shadow-medium);
@@ -101,23 +101,23 @@ const ActionButton = styled.button`
   display: flex;
   align-items: center;
   gap: 4px;
-  
+
   &.primary {
     background: var(--primary-color);
     color: white;
   }
-  
+
   &.secondary {
     background: white;
     color: var(--text-primary);
     border: 1px solid var(--border-color);
   }
-  
+
   &.danger {
     background: #ef4444;
     color: white;
   }
-  
+
   &:hover {
     transform: translateY(-1px);
     box-shadow: var(--shadow-light);
@@ -148,7 +148,7 @@ const users = [
     department: '채용팀',
     phone: '010-2345-6789',
     joinDate: '2023-03-20',
-    permissions: ['이력서 관리', '면접 관리', '인재 추천']
+    permissions: ['이력서 관리', '인재 추천']
   },
   {
     id: 3,
@@ -192,7 +192,7 @@ function UserManagement() {
   return (
     <Container>
       <Title>사용자 관리 및 보안</Title>
-      
+
       <UserGrid>
         {users.map((user, index) => (
           <UserCard
@@ -314,7 +314,7 @@ function UserManagement() {
               <SectionTitle>권한 정보</SectionTitle>
               <DetailText>
                 {selectedUser.permissions.map((permission, index) => (
-                  <span key={index} style={{ 
+                  <span key={index} style={{
                     display: 'inline-block',
                     margin: '4px',
                     padding: '4px 8px',
@@ -334,4 +334,4 @@ function UserManagement() {
     </Container>
   );
 }
-export default UserManagement; 
+export default UserManagement;

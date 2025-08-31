@@ -194,7 +194,7 @@ class ToolExecutor:
 
                 # 채용공고 조회인 경우
                 if collection == "job_postings":
-                    from datetime import datetime, timedelta
+                    # datetime 모듈은 이미 전역으로 import됨
 
                     from bson import ObjectId
 
@@ -303,7 +303,7 @@ class ToolExecutor:
                 job_data = params.get("job_data", {})
                 job_data["created_at"] = datetime.now()
                 job_data["updated_at"] = datetime.now()
-                job_data["status"] = "draft"
+                job_data["status"] = "published"  # 모든 채용공고를 활성화 상태로 통일
                 job_data["applicants"] = 0
                 job_data["views"] = 0
 
@@ -951,9 +951,11 @@ class SessionManager:
         return int(time.time())
 
     def create_session(self, session_id):
+        current_time = self._current_time()
         self.sessions[session_id] = {
             "history": [],
-            "last_activity": self._current_time(),
+            "last_activity": current_time,
+            "created_at": current_time,
             "context": {
                 "last_mentioned_user": None,
                 "current_page": None,
@@ -963,23 +965,37 @@ class SessionManager:
             }
         }
         try:
+            print(f"🔑 [SESSION DEBUG] 새 세션 생성")
+            print(f"    📝 세션 ID: {session_id}")
+            print(f"    ⏰ 생성 시간: {current_time}")
+            print(f"    📊 총 활성 세션 수: {len(self.sessions)}")
             logger.info(f"새 세션 생성: {session_id}")
         except (ValueError, OSError):
             pass  # detached buffer 오류 무시
 
     def add_message(self, session_id, role, content):
         if session_id not in self.sessions:
+            print(f"🔑 [SESSION DEBUG] 세션이 없어서 새로 생성: {session_id}")
             self.create_session(session_id)
 
         session = self.sessions[session_id]
+        old_history_count = len(session["history"])
         session["history"].append({"role": role, "content": content})
 
         # 오래된 기록은 잘라냄
         if len(session["history"]) > self.max_history:
+            trimmed_count = len(session["history"]) - self.max_history
             session["history"] = session["history"][-self.max_history:]
+            print(f"📚 [SESSION DEBUG] 히스토리 정리: {trimmed_count}개 메시지 제거")
 
         session["last_activity"] = self._current_time()
+
         try:
+            print(f"💬 [SESSION DEBUG] 메시지 추가")
+            print(f"    📝 세션 ID: {session_id}")
+            print(f"    👤 역할: {role}")
+            print(f"    📄 내용 길이: {len(content)}자")
+            print(f"    📊 히스토리: {old_history_count} → {len(session['history'])}개")
             logger.info(f"세션 {session_id}에 메시지 추가: {role}")
         except (ValueError, OSError):
             pass  # detached buffer 오류 무시
@@ -1058,6 +1074,7 @@ class ChatMessage(BaseModel):
     message: str
     session_id: Optional[str] = None
     user_id: Optional[str] = None
+    current_page: Optional[str] = None
 
 class ChatResponse(BaseModel):
     response: str
@@ -1217,12 +1234,30 @@ def extract_job_posting_info(user_input: str) -> Dict[str, Any]:
     if headcount_match:
         extracted_data["headcount"] = int(headcount_match.group(1))
     else:
-        extracted_data["headcount"] = 1  # 기본값
+        extracted_data["headcount"] = 0  # 기본값을 0명으로 설정
 
-    # 급여 추출
+    # 급여 추출 (만원단위 표시)
     salary_match = re.search(r'(\d+)만원', input_lower)
     if salary_match:
-        extracted_data["salary"] = int(salary_match.group(1))
+        salary_amount = int(salary_match.group(1))
+        # 만원단위로 표시 (천단위 쉼표 없이)
+        formatted_salary = f"{salary_amount}만원"
+        extracted_data["salary"] = formatted_salary
+    else:
+        extracted_data["salary"] = "협의"  # 기본값을 협의로 변경
+
+    # 경력 연차 추출 및 확인
+    experience_match = re.search(r'(\d+)년차', input_lower)
+    if experience_match:
+        experience_years = int(experience_match.group(1))
+        extracted_data["experience_years"] = experience_years
+        extracted_data["experience"] = f"{experience_years}년차"
+    elif "신입" in input_lower:
+        extracted_data["experience"] = "신입"
+        extracted_data["experience_years"] = 0
+    elif "경력" in input_lower:
+        extracted_data["experience"] = "경력"
+        extracted_data["experience_years"] = None  # 구체적 연차 미지정
 
     # 회사명 (기본값)
     extracted_data["company"] = "우리 회사"
@@ -1266,8 +1301,8 @@ async def generate_search_based_response(
 ) -> Optional[str]:
     """검색 결과를 바탕으로 LLM이 자연스러운 응답 생성"""
 
-    # 검색 키워드 추출
-    search_keywords = extract_search_keywords(user_message)
+    # 검색 키워드 추출 (임시로 사용자 메시지에서 키워드 추출)
+    search_keywords = user_message.split()[:5]  # 처음 5개 단어를 키워드로 사용
     if not search_keywords:
         return None
 
@@ -1549,7 +1584,7 @@ async def determine_target_page_with_ai(
         "/applicants": "지원자 관리, 지원자 정보 조회 및 관리",
         "/github-test": "GitHub 포트폴리오 분석, 개발자 정보 확인",
         "/job-posting": "채용공고 등록 및 관리",
-        "/interview": "면접 일정 관리 및 스케줄링",
+
         "/resume": "이력서 관리 및 분석",
         "/portfolio": "포트폴리오 종합 분석",
         "/settings": "시스템 설정 및 환경 구성"
@@ -1917,52 +1952,159 @@ async def chat_with_help_bot(
     """
     에이전트과 대화
     """
-    print(f"🔍 [DEBUG] 에이전트 호출됨 - 세션: {chat_message.session_id}, 메시지: {chat_message.message}")
+    import time
+    start_time = time.time()
+
+    # ------------------------------------------------------------------
+    # 🔧 변수를 미리 초기화해서 UnboundLocalError 방지
+    # ------------------------------------------------------------------
+    tool_usage = None
+    tool_results = None
+    error_info = None
+    session_context = None
+    context_keywords = []
+    recent_messages = []
+    conversation_context = {}
+    parallel_result = None
+
+    print(f"\n{'='*80}")
+    print(f"🚀 [PICK-TALK DEBUG] 채팅 요청 시작")
+    print(f"📝 세션 ID: {chat_message.session_id}")
+    print(f"💬 사용자 메시지: '{chat_message.message}'")
+    print(f"📄 현재 페이지: {chat_message.current_page}")
+    print(f"🕐 요청 시각: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"{'='*80}")
 
     try:
         # 세션 정리 (만료된 세션 삭제)
+        cleanup_start = time.time()
         session_manager.cleanup_sessions()
-        print(f"🔍 [DEBUG] 세션 정리 완료")
+        cleanup_time = time.time() - cleanup_start
+        print(f"🧹 [세션 정리] 완료 (소요시간: {cleanup_time:.3f}초)")
 
         # 세션 관리
+        session_start = time.time()
         session_id = get_or_create_session(chat_message.session_id)
-        print(f"🔍 [DEBUG] 세션 ID: {session_id}")
+        session_time = time.time() - session_start
+        print(f"🔑 [세션 관리] 세션 ID: {session_id} (소요시간: {session_time:.3f}초)")
 
         # 사용자 메시지 저장
+        save_start = time.time()
         update_session(session_id, chat_message.message, is_user=True)
-        print(f"🔍 [DEBUG] 사용자 메시지 저장 완료")
+        save_time = time.time() - save_start
+        print(f"💾 [메시지 저장] 사용자 메시지 저장 완료 (소요시간: {save_time:.3f}초)")
 
         # 대화 컨텍스트 가져오기 (개선된 버전)
+        context_start = time.time()
         conversation_context = get_conversation_context(session_id)
-        print(f"🔍 [DEBUG] 대화 컨텍스트 정보: {conversation_context.get('context_summary', [])}")
+        context_time = time.time() - context_start
+        context_summary = conversation_context.get('context_summary', [])
+        recent_count = len(conversation_context.get('recent_messages', []))
+        print(f"🧠 [컨텍스트] 컨텍스트 로드 완료 (소요시간: {context_time:.3f}초)")
+        print(f"    📋 컨텍스트 키워드: {context_summary}")
+        print(f"    📜 최근 메시지 수: {recent_count}개")
 
         # 컨텍스트 기반 툴 감지 개선
         context_keywords = conversation_context.get('context_summary', [])
         recent_messages = conversation_context.get('recent_messages', [])
 
-        # 세션 컨텍스트 가져오기
-        session_context = session_manager.get_context(session_id)
+        # 상세 컨텍스트 디버깅
+        if recent_count > 0:
+            print(f"    🔍 최근 대화 내용:")
+            for i, msg in enumerate(recent_messages[-3:], 1):  # 최근 3개만 표시
+                role = "👤 사용자" if msg.get('role') == 'user' else "🤖 어시스턴트"
+                content = msg.get('content', '')[:50] + ('...' if len(msg.get('content', '')) > 50 else '')
+                print(f"      {i}. {role}: {content}")
 
-        # AI 기반 툴 사용 의도 감지 (순수 AI 기반)
-        tool_usage = await detect_tool_usage_with_ai(
-            chat_message.message,
-            openai_service,
-            context_keywords=context_keywords,
-            recent_messages=recent_messages,
-            session_context=session_context
+        # 컨텍스트 품질 평가
+        context_quality = "높음" if recent_count >= 3 else "보통" if recent_count >= 1 else "낮음"
+        print(f"    📊 컨텍스트 품질: {context_quality}")
+
+        # 병렬 채용공고 처리 체크
+        intent_start = time.time()
+        from backend.modules.job_posting.parallel_job_posting_agent import (
+            get_parallel_agent,
         )
-        print(f"🔍 [DEBUG] AI 기반 툴 사용 감지 결과: {tool_usage}")
+        parallel_agent = get_parallel_agent(openai_service, tool_executor)
 
-        # 툴 실행 결과 초기화
-        tool_results = None
-        error_info = None
+        # 채용공고 생성 의도 확인
+        is_job_intent = parallel_agent._is_job_posting_intent(chat_message.message)
+        intent_time = time.time() - intent_start
+        print(f"🎯 [의도 분류] 채용공고 의도: {is_job_intent} (소요시간: {intent_time:.3f}초)")
 
-        if tool_usage:
+        if is_job_intent:
+            print(f"🚀 [채용공고 처리] 병렬 채용공고 에이전트 실행 시작")
+            try:
+                # 병렬 처리 실행
+                parallel_start = time.time()
+                parallel_result = await parallel_agent.process_job_posting_request(
+                    chat_message.message, session_id
+                )
+                parallel_time = time.time() - parallel_start
+
+                print(f"✅ [채용공고 처리] 병렬 처리 완료 (소요시간: {parallel_time:.3f}초)")
+                print(f"📊 [채용공고 결과] 상태: {parallel_result.get('status')}")
+
+                if parallel_result.get("status") == "success":
+                    # 성공적인 응답 생성
+                    response_message = parallel_result.get("response", "채용공고 등록이 완료되었습니다.")
+
+                    # 응답 저장
+                    update_session(session_id, response_message, is_user=False)
+
+                    total_time = time.time() - start_time
+                    print(f"✅ [채용공고 성공] 총 처리 시간: {total_time:.3f}초")
+
+                    return ChatResponse(
+                        response=response_message,
+                        session_id=session_id,
+                        status="success"
+                    )
+                else:
+                    print(f"⚠️ [채용공고 실패] 일반 처리로 전환")
+                    # 채용공고 실패 시 일반 툴 사용 감지 실행
+                    tool_usage = await detect_tool_usage_with_ai(
+                        chat_message.message,
+                        openai_service,
+                        context_keywords=context_keywords,
+                        recent_messages=recent_messages,
+                        session_context=session_context
+                    )
+                    print(f"🔍 [DEBUG] 채용공고 실패 후 툴 사용 감지: {tool_usage}")
+
+            except Exception as e:
+                print(f"❌ [채용공고 오류] {str(e)}")
+                logger.error(f"병렬 채용공고 처리 실패: {str(e)}")
+                # 채용공고 예외 시에도 일반 툴 사용 감지 실행
+                tool_usage = await detect_tool_usage_with_ai(
+                    chat_message.message,
+                    openai_service,
+                    context_keywords=context_keywords,
+                    recent_messages=recent_messages,
+                    session_context=session_context
+                )
+                print(f"🔍 [DEBUG] 채용공고 예외 후 툴 사용 감지: {tool_usage}")
+        else:
+            # 채용공고가 아닌 경우 일반 툴 사용 감지
+            tool_usage = await detect_tool_usage_with_ai(
+                chat_message.message,
+                openai_service,
+                context_keywords=context_keywords,
+                recent_messages=recent_messages,
+                session_context=session_context
+            )
+            print(f"🔍 [DEBUG] 일반 툴 사용 감지 결과: {tool_usage}")
+
+
+
+        # 툴 실행 로직
+        if tool_usage and tool_usage is not None:
             print(f"🔍 [DEBUG] 툴 사용 감지됨: {tool_usage}")
             try:
                 logger.info(f"툴 사용 감지: {tool_usage}")
             except (ValueError, OSError):
                 pass  # detached buffer 오류 무시
+
             try:
                 print(f"🔍 [DEBUG] 툴 실행 시작 - 툴: {tool_usage['tool']}, 액션: {tool_usage['action']}, 파라미터: {tool_usage['params']}")
 
@@ -2012,6 +2154,7 @@ async def chat_with_help_bot(
                     logger.info(f"툴 실행 완료: {result['status']}")
                 except (ValueError, OSError):
                     pass  # detached buffer 오류 무시
+
             except Exception as e:
                 print(f"🔍 [DEBUG] 툴 실행 예외 발생: {str(e)}")
                 logger.error(f"툴 실행 실패: {str(e)}")
@@ -2026,6 +2169,495 @@ async def chat_with_help_bot(
                     "error_message": str(e),
                     "retryable": True
                 }
+
+        # 채용공고 등록 확인 처리 (ai-job-registration 페이지에서만) - 의도 분류보다 먼저 실행
+        if (chat_message.message in ["등록하기", "확인", "네", "등록", "등록해줘", "이대로 등록해줘"] and
+            chat_message.current_page == "ai-job-registration"):
+            session_context = session_manager.get_context(session_id)
+            print(f"🔍 [등록처리] 세션 컨텍스트 확인:")
+            print(f"    세션 컨텍스트 존재: {bool(session_context)}")
+            if session_context:
+                print(f"    last_action: {session_context.get('last_action')}")
+                print(f"    pending_job_posting 존재: {bool(session_context.get('pending_job_posting'))}")
+                print(f"    conversation_topic: {session_context.get('conversation_topic')}")
+
+            if (session_context and
+                session_context.get("last_action") == "job_posting_preview" and
+                session_context.get("pending_job_posting")):
+
+                try:
+                    # 채용공고 등록 실행
+                    job_posting_data = session_context["pending_job_posting"]
+                    registration_result = await parallel_agent.register_job_posting(
+                        job_posting_data, session_id
+                    )
+
+                    if registration_result["status"] == "success":
+                        response_message = f"🎉 {registration_result['message']}\n\n"
+                        response_message += f"**등록 ID:** {registration_result['job_posting_id']}\n"
+                        response_message += f"**제목:** {job_posting_data['title']}\n"
+                        response_message += "이제 지원자들이 이 공고를 확인할 수 있습니다!"
+
+                        # 세션 컨텍스트 정리
+                        session_manager.update_context(session_id, {
+                            "last_action": "job_posting_registered",
+                            "pending_job_posting": None,
+                            "conversation_topic": "채용공고 등록 완료"
+                        })
+
+                        # AI 응답 저장
+                        update_session(session_id, response_message, is_user=False)
+
+                        # 추천 질문 생성
+                        suggested_questions = [
+                            "등록된 채용공고를 확인하고 싶어요",
+                            "다른 채용공고도 만들어주세요",
+                            "지원자 관리는 어떻게 하나요?"
+                        ]
+
+                        # 빠른 액션 생성
+                        quick_actions = [
+                            {"title": "등록된 채용공고", "action": "navigate", "target": "/job-posting", "icon": "📋"},
+                            {"title": "지원자 관리", "action": "navigate", "target": "/applicants", "icon": "👥"},
+                            {"title": "대시보드", "action": "navigate", "target": "/dashboard", "icon": "📊"}
+                        ]
+
+                        return ChatResponse(
+                            response=response_message,
+                            session_id=session_id,
+                            timestamp=datetime.now(),
+                            suggestions=suggested_questions,
+                            quick_actions=quick_actions,
+                            page_action=None
+                        )
+                    else:
+                        # 등록 실패
+                        error_message = f"❌ {registration_result['message']}\n\n다시 시도해주세요."
+                        update_session(session_id, error_message, is_user=False)
+
+                        return ChatResponse(
+                            response=error_message,
+                            session_id=session_id,
+                            timestamp=datetime.now(),
+                            suggestions=["다시 시도해주세요"],
+                            quick_actions=[],
+                            page_action=None
+                        )
+
+                except Exception as e:
+                    print(f"❌ [등록처리] 등록 실행 중 오류: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+
+                    error_message = "❌ 채용공고 등록 중 오류가 발생했습니다. 다시 시도해주세요."
+                    update_session(session_id, error_message, is_user=False)
+
+                    return ChatResponse(
+                        response=error_message,
+                        session_id=session_id,
+                        timestamp=datetime.now(),
+                        suggestions=["다시 시도해주세요"],
+                        quick_actions=[],
+                        page_action=None
+                    )
+            else:
+                # 등록할 채용공고가 없는 경우
+                print(f"⚠️ [등록처리] 등록할 채용공고가 없습니다.")
+                no_data_message = "등록할 채용공고가 없습니다. 먼저 채용공고를 생성해주세요."
+                update_session(session_id, no_data_message, is_user=False)
+
+                return ChatResponse(
+                    response=no_data_message,
+                    session_id=session_id,
+                    timestamp=datetime.now(),
+                    suggestions=["채용공고를 먼저 생성해주세요"],
+                    quick_actions=[],
+                    page_action=None
+                )
+
+        # 채용공고 생성 의도 확인
+        is_job_intent = parallel_agent._is_job_posting_intent(chat_message.message)
+        intent_time = time.time() - intent_start
+        print(f"🎯 [의도 분류] 채용공고 의도: {is_job_intent} (소요시간: {intent_time:.3f}초)")
+
+        if is_job_intent:
+            print(f"🚀 [채용공고 처리] 병렬 채용공고 에이전트 실행 시작")
+            try:
+                # 병렬 처리 실행
+                parallel_start = time.time()
+                parallel_result = await parallel_agent.process_job_posting_request(
+                    chat_message.message, session_id
+                )
+                parallel_time = time.time() - parallel_start
+                print(f"⚡ [병렬 처리] 완료 (소요시간: {parallel_time:.3f}초)")
+                print(f"📊 [병렬 결과] 타입: {parallel_result.get('type', 'N/A')}")
+
+                # 병렬 처리 결과 상세 디버깅
+                print(f"🔍 [병렬 결과 상세]:")
+                print(f"    ✅ 성공 여부: {parallel_result.get('success', False)}")
+                print(f"    📝 메시지: {parallel_result.get('message', 'N/A')[:100]}...")
+                if parallel_result.get('job_posting'):
+                    job_posting = parallel_result['job_posting']
+                    print(f"    📋 생성된 채용공고:")
+                    print(f"      - 제목: {job_posting.get('title', 'N/A')}")
+                    print(f"      - 회사: {job_posting.get('company_name', 'N/A')}")
+                    print(f"      - 직무: {job_posting.get('position', 'N/A')}")
+                    print(f"      - 위치: {job_posting.get('location', 'N/A')}")
+                    if job_posting.get('main_duties'):
+                        duties_preview = job_posting['main_duties'][:100] + ('...' if len(job_posting['main_duties']) > 100 else '')
+                        print(f"      - 주요업무: {duties_preview}")
+                if parallel_result.get('background_status'):
+                    print(f"    🔄 백그라운드 상태: {parallel_result['background_status']}")
+                if parallel_result.get('preview_actions'):
+                    print(f"    🎬 미리보기 액션: {list(parallel_result['preview_actions'].keys())}")
+
+                if parallel_result["type"] == "job_posting_preview":
+                    # 채용공고 미리보기 - 사용자 확인 필요
+                    job_posting = parallel_result["job_posting"]
+                    background_status = parallel_result.get("background_status", "")
+                    preview_actions = parallel_result.get("preview_actions", {})
+
+                    # 응답 메시지 구성
+                    response_message = f"✅ {parallel_result['message']}\n\n"
+                    response_message += f"**📋 생성된 채용공고:**\n"
+                    response_message += f"**제목:** {job_posting['title']}\n"
+                    response_message += f"**회사:** {job_posting.get('company_name', 'N/A')}\n"
+                    response_message += f"**직무:** {job_posting['position']}\n"
+                    response_message += f"**위치:** {job_posting['location']}\n"
+                    if job_posting.get('tech_stack'):
+                        response_message += f"**기술 스택:** {', '.join(job_posting['tech_stack'])}\n"
+                    if job_posting.get('experience_level'):
+                        response_message += f"**경력:** {job_posting['experience_level']}\n"
+                    # 인원 표시 (0명일 경우 0명으로 표시)
+                    team_size = job_posting.get('team_size', 0)
+                    response_message += f"**인원:** {team_size}명\n"
+
+                    # 급여 표시 (만원 단위로 변환하여 표시)
+                    if job_posting.get('salary'):
+                        salary = job_posting['salary']
+                        if isinstance(salary, dict):
+                            min_salary = salary.get('min', 0)
+                            max_salary = salary.get('max', 0)
+                            if min_salary == 0 and max_salary == 0:
+                                response_message += f"**급여:** 협의\n"
+                            else:
+                                # 원 단위를 만원 단위로 변환 (10000으로 나누기)
+                                if min_salary > 10000:  # 원 단위로 들어온 경우
+                                    min_display = min_salary // 10000
+                                    max_display = max_salary // 10000
+                                else:  # 이미 만원 단위인 경우
+                                    min_display = min_salary
+                                    max_display = max_salary
+
+                                if min_display == max_display:
+                                    response_message += f"**급여:** {min_display}만원\n"
+                                else:
+                                    response_message += f"**급여:** {min_display}-{max_display}만원\n"
+                        else:
+                            # 문자열인 경우 그대로 표시
+                            response_message += f"**급여:** {salary}\n"
+                    else:
+                        response_message += f"**급여:** 협의\n"
+
+                    response_message += f"\n{background_status}"
+
+                    # 지원자 추천 있는 경우
+                    if parallel_result.get("candidate_recommendations"):
+                        rec = parallel_result["candidate_recommendations"]
+                        response_message += f"\n\n{rec['message']}"
+
+                    # 🔧 핵심 수정: 세션 컨텍스트에 pending_job_posting 저장
+                    session_manager.update_context(session_id, {
+                        "last_action": "job_posting_preview",
+                        "pending_job_posting": job_posting,
+                        "conversation_topic": "채용공고 미리보기"
+                    })
+                    print(f"💾 [세션 컨텍스트] pending_job_posting 저장 완료")
+                    print(f"    📝 제목: {job_posting.get('title', 'N/A')}")
+                    print(f"    🏢 회사: {job_posting.get('company_name', 'N/A')}")
+
+                    # AI 응답 저장
+                    update_session(session_id, response_message, is_user=False)
+
+                    # 추천 질문 생성
+                    suggested_questions = [
+                        "등록하기",
+                        "취소할게요"
+                    ]
+
+                    # 빠른 액션 생성 (미리보기 액션 포함)
+                    quick_actions = [
+                        {"title": "등록하기", "action": "register_job_posting", "target": "confirm", "icon": "📝", "style": "primary"},
+                        {"title": "취소", "action": "cancel_job_posting", "target": "cancel", "icon": "❌", "style": "outline"}
+                    ]
+
+                    # 페이지 액션 추가 (채팅창 응답과 함께 페이지 이동)
+                    page_action = parallel_result.get("page_action")
+                    print(f"🎯 [페이지 액션] 채용공고 미리보기에 페이지 액션 추가: {bool(page_action)}")
+                    if page_action:
+                        print(f"    📝 액션 타입: {page_action.get('action')}")
+                        print(f"    🎯 이동 경로: {page_action.get('path')}")
+                        print(f"    📊 자동 입력 데이터: {len(page_action.get('auto_fill_data', {}))}개")
+
+                    return ChatResponse(
+                        response=response_message,
+                        session_id=session_id,
+                        timestamp=datetime.now(),  # 🔧 timestamp 추가
+                        suggestions=suggested_questions,
+                        quick_actions=quick_actions,
+                        page_action=page_action,  # 🎯 핵심: 페이지 액션 전달
+                        context_update={
+                            "last_action": "job_posting_preview",
+                            "conversation_topic": "채용공고 미리보기"
+                        }
+                    )
+
+            except Exception as e:
+                print(f"🚨 [ERROR] 병렬 채용공고 처리 중 예외 발생!")
+                print(f"🔍 [ERROR] 예외 타입: {type(e).__name__}")
+                print(f"📄 [ERROR] 예외 메시지: {str(e)}")
+                import traceback
+                print(f"📊 [ERROR] 스택 트레이스:")
+                traceback.print_exc()
+                logger.error(f"병렬 채용공고 처리 실패: {str(e)}")
+                # 기존 로직으로 폴백
+                pass
+
+        # 채용공고 등록 확인 처리 (ai-job-registration 페이지에서만)
+        if (chat_message.message in ["등록하기", "확인", "네", "등록", "등록해줘", "이대로 등록해줘"] and
+            chat_message.current_page == "ai-job-registration"):
+            session_context = session_manager.get_context(session_id)
+            print(f"🔍 [등록처리] 세션 컨텍스트 확인:")
+            print(f"    세션 컨텍스트 존재: {bool(session_context)}")
+            if session_context:
+                print(f"    last_action: {session_context.get('last_action')}")
+                print(f"    pending_job_posting 존재: {bool(session_context.get('pending_job_posting'))}")
+                print(f"    conversation_topic: {session_context.get('conversation_topic')}")
+
+                # pending_job_posting 상세 정보 로깅
+                if session_context.get('pending_job_posting'):
+                    pending_data = session_context['pending_job_posting']
+                    print(f"    📝 pending_job_posting 상세:")
+                    print(f"      - 제목: {pending_data.get('title', 'N/A')}")
+                    print(f"      - 회사: {pending_data.get('company_name', 'N/A')}")
+                    print(f"      - 직무: {pending_data.get('position', 'N/A')}")
+
+            # pending_job_posting이 있으면 바로 등록
+            if (session_context and
+                session_context.get("pending_job_posting")):
+
+                try:
+                    # 채용공고 등록 실행
+                    job_posting_data = session_context["pending_job_posting"]
+                    registration_result = await parallel_agent.register_job_posting(
+                        job_posting_data, session_id
+                    )
+
+                    if registration_result["status"] == "success":
+                        response_message = f"🎉 {registration_result['message']}\n\n"
+                        response_message += f"**등록 ID:** {registration_result['job_posting_id']}\n"
+                        response_message += f"**제목:** {job_posting_data['title']}\n"
+                        response_message += "이제 지원자들이 이 공고를 확인할 수 있습니다!"
+
+                        # 세션 컨텍스트 정리
+                        session_manager.update_context(session_id, {
+                            "last_action": "job_posting_registered",
+                            "pending_job_posting": None,
+                            "conversation_topic": "채용공고 등록 완료"
+                        })
+
+                        # AI 응답 저장
+                        update_session(session_id, response_message, is_user=False)
+
+                        # 추천 질문 생성
+                        suggested_questions = [
+                            "등록된 채용공고를 확인하고 싶어요",
+                            "다른 채용공고도 만들어주세요",
+                            "지원자 관리는 어떻게 하나요?"
+                        ]
+
+                        # 빠른 액션 생성
+                        quick_actions = [
+                            {"title": "등록된 채용공고", "action": "navigate", "target": "/job-posting", "icon": "📋"},
+                            {"title": "지원자 관리", "action": "navigate", "target": "/applicants", "icon": "👥"},
+                            {"title": "대시보드", "action": "navigate", "target": "/dashboard", "icon": "📊"}
+                        ]
+
+                        return ChatResponse(
+                            response=response_message,
+                            session_id=session_id,
+                            status="success",
+                            suggested_questions=suggested_questions,
+                            quick_actions=quick_actions,
+                            page_action=None,
+                            context_update={
+                                "last_action": "job_posting_registered",
+                                "conversation_topic": "채용공고 등록 완료"
+                            }
+                        )
+                    else:
+                        # 등록 실패
+                        error_message = f"❌ 등록 실패: {registration_result['message']}"
+                        update_session(session_id, error_message, is_user=False)
+
+                        return ChatResponse(
+                            response=error_message,
+                            session_id=session_id,
+                            status="error",
+                            suggested_questions=["다시 시도해주세요"],
+                            quick_actions=[],
+                            page_action=None
+                        )
+
+                except Exception as e:
+                    logger.error(f"채용공고 등록 처리 실패: {str(e)}")
+                    error_message = f"❌ 등록 처리 중 오류가 발생했습니다: {str(e)}"
+                    update_session(session_id, error_message, is_user=False)
+
+                    return ChatResponse(
+                        response=error_message,
+                        session_id=session_id,
+                        status="error",
+                        suggested_questions=["다시 시도해주세요"],
+                        quick_actions=[],
+                        page_action=None
+                    )
+            else:
+                # pending_job_posting이 없으면 최근 생성된 draft 상태 채용공고를 찾아서 등록
+                try:
+                    print(f"🔍 [등록처리] 최근 draft 채용공고 검색 중...")
+
+                    # 최근 1시간 내에 생성된 draft 상태의 채용공고 찾기
+                    # datetime 모듈은 이미 전역으로 import됨
+                    from datetime import timedelta
+                    one_hour_ago = datetime.now() - timedelta(hours=1)
+
+                    recent_job = await tool_executor.mongo_service.db.job_postings.find_one(
+                        {
+                            "status": "draft",
+                            "created_at": {"$gte": one_hour_ago}
+                        },
+                        sort=[("created_at", -1)]
+                    )
+
+                    if recent_job:
+                        print(f"🔍 [등록처리] 최근 draft 채용공고 발견: {recent_job['_id']}")
+
+                        # draft 상태를 active로 변경
+                        recent_job["status"] = "active"
+                        recent_job["updated_at"] = datetime.now()
+
+                        # 데이터베이스 업데이트
+                        await tool_executor.mongo_service.db.job_postings.update_one(
+                            {"_id": recent_job["_id"]},
+                            {"$set": {"status": "active", "updated_at": recent_job["updated_at"]}}
+                        )
+
+                        response_message = f"🎉 채용공고가 성공적으로 등록되었습니다!\n\n"
+                        response_message += f"**등록 ID:** {recent_job['_id']}\n"
+                        response_message += f"**제목:** {recent_job['title']}\n"
+                        response_message += f"**상태:** active\n\n"
+                        response_message += "채용공고가 성공적으로 등록되었습니다! 🚀"
+
+                        update_session(session_id, response_message, is_user=False)
+
+                        return ChatResponse(
+                            response=response_message,
+                            session_id=session_id,
+                            timestamp=datetime.now(),
+                            suggestions=["새로운 채용공고 작성", "등록된 채용공고 확인", "지원자 관리"],
+                            quick_actions=[
+                                {"title": "등록된 채용공고 확인", "action": "navigate", "target": "/job-posting", "icon": "📋"},
+                                {"title": "지원자 관리", "action": "navigate", "target": "/applicants", "icon": "👥"}
+                            ],
+                            page_action=None
+                        )
+                    else:
+                        print(f"⚠️ [등록처리] 등록할 채용공고가 없습니다.")
+                        error_message = "❌ 등록할 채용공고가 없습니다.\n\n"
+                        error_message += "**해결 방법:**\n"
+                        error_message += "1. 먼저 채용공고를 생성해주세요\n"
+                        error_message += "2. 생성된 채용공고를 검토한 후 '등록해줘'라고 말씀해주세요\n\n"
+                        error_message += "**예시:**\n"
+                        error_message += "• 'React 개발자 채용공고 만들어줘'\n"
+                        error_message += "• 'Python 백엔드 개발자 구해요'"
+
+                        update_session(session_id, error_message, is_user=False)
+
+                        return ChatResponse(
+                            response=error_message,
+                            session_id=session_id,
+                            timestamp=datetime.now(),
+                            suggestions=[
+                                "React 개발자 채용공고 만들어줘",
+                                "Python 백엔드 개발자 구해요",
+                                "새로운 채용공고 작성하기"
+                            ],
+                            quick_actions=[
+                                {"title": "채용공고 작성", "action": "navigate", "target": "/ai-job-registration", "icon": "📝"},
+                                {"title": "채용공고 목록", "action": "navigate", "target": "/job-posting", "icon": "📋"}
+                            ],
+                            page_action=None
+                        )
+
+                except Exception as e:
+                    logger.error(f"최근 채용공고 등록 중 오류: {str(e)}")
+                    error_message = f"❌ 등록 중 오류가 발생했습니다: {str(e)}"
+                    update_session(session_id, error_message, is_user=False)
+
+                    return ChatResponse(
+                        response=error_message,
+                        session_id=session_id,
+                        timestamp=datetime.now(),
+                        suggestions=["다시 시도", "고객지원 문의"],
+                        quick_actions=[],
+                        page_action=None
+                    )
+
+        # 채용공고 등록 취소 처리
+        if chat_message.message in ["취소할게요", "취소", "아니요", "그만"]:
+            session_context = session_manager.get_context(session_id)
+            if (session_context and
+                session_context.get("last_action") == "job_posting_preview" and
+                session_context.get("pending_job_posting")):
+
+                # 세션 컨텍스트 정리
+                session_manager.update_context(session_id, {
+                    "last_action": "job_posting_cancelled",
+                    "pending_job_posting": None,
+                    "conversation_topic": "채용공고 등록 취소"
+                })
+
+                response_message = "❌ 채용공고 등록이 취소되었습니다.\n\n다른 도움이 필요하시면 언제든 말씀해주세요!"
+
+                # AI 응답 저장
+                update_session(session_id, response_message, is_user=False)
+
+                # 추천 질문 생성
+                suggested_questions = [
+                    "새로운 채용공고를 만들어주세요",
+                    "지원자 관리는 어떻게 하나요?"
+                ]
+
+                # 빠른 액션 생성
+                quick_actions = [
+                    {"title": "채용공고 등록", "action": "navigate", "target": "/job-posting", "icon": "📝"},
+                    {"title": "지원자 관리", "action": "navigate", "target": "/applicants", "icon": "👥"}
+                ]
+
+                return ChatResponse(
+                    response=response_message,
+                    session_id=session_id,
+                    status="success",
+                    suggested_questions=suggested_questions,
+                    quick_actions=quick_actions,
+                    page_action=None
+                )
+
+        # 세션 컨텍스트 가져오기
+        session_context = session_manager.get_context(session_id)
+
+        # 변수들은 이미 함수 시작부에서 초기화됨
 
         # 시스템 프롬프트 정의
         system_prompt = """당신은 AI 채용 관리 시스템의 에이전트입니다.
@@ -2067,24 +2699,65 @@ async def chat_with_help_bot(
 
         # 툴 결과가 있으면 프롬프트에 추가
         if tool_results:
+            print(f"🔧 [툴 결과 처리] 시작")
+            print(f"    🔍 툴 결과 구조: {list(tool_results.keys())}")
+            print(f"    ✅ 성공 여부: {tool_results.get('result', {}).get('status')}")
+
             if tool_results.get("result", {}).get("status") == "success":
                 # 툴 결과를 자연어로 변환
-                natural_language_result = format_tool_data(tool_results["result"]["data"])
+                tool_data = tool_results["result"]["data"]
+                print(f"    📊 툴 데이터 크기: {len(str(tool_data))}자")
+                print(f"    📋 툴 데이터 타입: {type(tool_data).__name__}")
+
+                natural_language_result = format_tool_data(tool_data)
+                print(f"    📝 자연어 변환 결과: {natural_language_result[:100]}...")
+
                 messages.append({
                     "role": "assistant",
                     "content": f"툴 실행 결과: {natural_language_result}"
                 })
+                print(f"    ✅ 성공 결과를 프롬프트에 추가")
             else:
                 # 에러가 발생한 경우 에러 정보 추가
+                error_info = tool_results.get("result", {})
+                print(f"    ❌ 툴 실행 실패:")
+                print(f"      - 상태: {error_info.get('status', 'N/A')}")
+                print(f"      - 오류: {error_info.get('error', 'N/A')}")
+
                 error_message = create_error_aware_response(tool_results, chat_message.message)
                 messages.append({
                     "role": "assistant",
                     "content": f"툴 실행 중 오류 발생: {error_message}"
                 })
+                print(f"    ❌ 오류 정보를 프롬프트에 추가")
 
         print(f"🔍 [DEBUG] AI 응답 생성 시작 - 메시지 수: {len(messages)}")
+
+        # 프롬프트 내용 디버깅
+        print(f"🔍 [AI 프롬프트 분석]:")
+        for i, msg in enumerate(messages):
+            role_emoji = "👤" if msg["role"] == "user" else "🤖" if msg["role"] == "assistant" else "⚙️"
+            content_preview = msg["content"][:150] + ('...' if len(msg["content"]) > 150 else '')
+            print(f"    {i+1}. {role_emoji} {msg['role']}: {content_preview}")
+
+        # AI 응답 생성 시간 측정
+        ai_start = time.time()
         response = await openai_service.chat_completion(messages)
-        print(f"🔍 [DEBUG] AI 응답 생성 완료: {response[:100]}...")
+        ai_time = time.time() - ai_start
+
+        print(f"🔍 [DEBUG] AI 응답 생성 완료 (소요시간: {ai_time:.3f}초)")
+        print(f"📝 [AI 응답 내용]: {response[:200]}...")
+        print(f"📏 [AI 응답 길이]: {len(response)}자")
+
+        # 응답 품질 분석
+        response_quality = "높음" if len(response) > 50 else "보통" if len(response) > 20 else "낮음"
+        print(f"📊 [응답 품질]: {response_quality}")
+
+        # 특수 키워드 감지
+        special_keywords = ['채용공고', '지원자', '포트폴리오', '면접', '분석', '추천']
+        detected_keywords = [kw for kw in special_keywords if kw in response]
+        if detected_keywords:
+            print(f"🎯 [키워드 감지]: {', '.join(detected_keywords)}")
 
         # 툴 사용 시 관련 페이지로 이동하는 액션 추가
         page_action = None
@@ -2157,13 +2830,63 @@ async def chat_with_help_bot(
             page_action=page_action
         )
 
-        print(f"🔍 [DEBUG] 최종 응답 생성 완료 - 세션: {session_id}")
+        # 최종 응답 상세 디버깅
+        total_time = time.time() - start_time
+        print(f"\n🎉 [최종 응답 완료] ================================")
+        print(f"⏱️ 총 처리 시간: {total_time:.3f}초")
+        print(f"🔑 세션 ID: {session_id}")
+        print(f"📝 응답 길이: {len(response)}자")
+        print(f"💡 제안 개수: {len(suggestions)}개")
+        print(f"⚡ 빠른 액션: {len(quick_actions)}개")
+        print(f"🎯 페이지 액션: {'있음' if page_action else '없음'}")
+        print(f"🔧 툴 사용: {'있음' if tool_results else '없음'}")
+        print(f"❌ 오류 정보: {'있음' if error_info else '없음'}")
+
+        # 성능 분석
+        if total_time > 5.0:
+            print(f"⚠️ [성능 경고] 응답 시간이 5초를 초과했습니다: {total_time:.3f}초")
+        elif total_time > 2.0:
+            print(f"⚠️ [성능 주의] 응답 시간이 2초를 초과했습니다: {total_time:.3f}초")
+        else:
+            print(f"✅ [성능 양호] 응답 시간이 정상 범위입니다: {total_time:.3f}초")
+
+        print(f"================================================\n")
+
         return final_response
 
     except Exception as e:
-        print(f"🔍 [DEBUG] 에이전트 예외 발생: {str(e)}")
-        logger.error(f"에이전트 오류: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"챗봇 처리 중 오류가 발생했습니다: {str(e)}")
+        total_time = time.time() - start_time
+        error_id = f"ERR_{int(time.time())}"
+
+        print(f"\n{'!'*80}")
+        print(f"🚨 [CRITICAL ERROR] 픽톡 처리 중 심각한 오류 발생")
+        print(f"🆔 에러 ID: {error_id}")
+        print(f"📝 세션 ID: {chat_message.session_id}")
+        print(f"💬 사용자 메시지: '{chat_message.message}'")
+        print(f"⏱️ 총 처리 시간: {total_time:.3f}초")
+        print(f"🔍 에러 타입: {type(e).__name__}")
+        print(f"📄 에러 메시지: {str(e)}")
+
+        # 스택 트레이스 출력
+        import traceback
+        print(f"📊 스택 트레이스:")
+        traceback.print_exc()
+        print(f"{'!'*80}")
+
+        # 에러 메시지 저장 (세션이 있다면)
+        try:
+            error_response = f"❌ 처리 중 오류가 발생했습니다 (에러 ID: {error_id}). 잠시 후 다시 시도해주세요."
+            update_session(session_id, error_response, is_user=False)
+        except:
+            pass  # 세션 저장 실패해도 무시
+
+        logger.error(f"에이전트 심각한 오류 [ID: {error_id}]: {str(e)}")
+
+        # 사용자에게는 친화적인 에러 메시지 반환
+        raise HTTPException(
+            status_code=500,
+            detail=f"챗봇 처리 중 오류가 발생했습니다. 에러 ID: {error_id}"
+        )
 
 async def generate_suggestions_with_ai(
     user_message: str,
@@ -2290,8 +3013,7 @@ async def generate_quick_actions_with_ai(
         "/dashboard": {"title": "대시보드", "icon": "📊"},
         "/applicants": {"title": "지원자 관리", "icon": "👥"},
         "/github-test": {"title": "포트폴리오 분석", "icon": "💻"},
-        "/job-posting": {"title": "채용공고 등록", "icon": "📝"},
-        "/interview": {"title": "면접 관리", "icon": "📅"},
+        "/job-posting": {"title": "등록된 채용공고", "icon": "📋"},
         "/resume": {"title": "이력서 관리", "icon": "📄"},
         "/portfolio": {"title": "포트폴리오", "icon": "🎨"},
         "/settings": {"title": "설정", "icon": "⚙️"}

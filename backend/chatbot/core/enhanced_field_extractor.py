@@ -3,14 +3,16 @@
 AI 추론 + 사전 매칭 + 규칙 기반 결합 방식
 """
 
-import re
 import json
-from typing import Dict, List, Any, Optional
+import re
+from typing import Any, Dict, List, Optional
+
 try:
     from openai_service import OpenAIService
 except ImportError:
     OpenAIService = None
 import os
+
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -41,7 +43,7 @@ class EnhancedFieldExtractor:
             'redux': ['Redux', 'redux'],
             'vuex': ['Vuex', 'vuex'],
             'mobx': ['MobX', 'mobx'],
-            
+
             # 백엔드
             'python': ['Python', 'python', '파이썬'],
             'java': ['Java', 'java', '자바'],
@@ -51,27 +53,27 @@ class EnhancedFieldExtractor:
             'express': ['Express', 'express'],
             'flask': ['Flask', 'flask'],
             'fastapi': ['FastAPI', 'fastapi'],
-            
+
             # 데이터베이스
             'mysql': ['MySQL', 'mysql'],
             'postgresql': ['PostgreSQL', 'postgresql', 'Postgres', 'postgres'],
             'mongodb': ['MongoDB', 'mongodb'],
             'redis': ['Redis', 'redis'],
-            
+
             # 클라우드/인프라
             'aws': ['AWS', 'aws', 'Amazon Web Services'],
             'gcp': ['GCP', 'gcp', 'Google Cloud Platform'],
             'azure': ['Azure', 'azure'],
             'docker': ['Docker', 'docker'],
             'kubernetes': ['Kubernetes', 'kubernetes', 'k8s'],
-            
+
             # 기타
             'git': ['Git', 'git'],
             'jenkins': ['Jenkins', 'jenkins'],
             'jira': ['Jira', 'jira'],
             'slack': ['Slack', 'slack']
         }
-        
+
         # 직무명 사전
         self.job_dictionary = {
             '프론트엔드 개발자': ['프론트엔드 개발자', 'Frontend Developer', '웹 개발자', 'UI 개발자'],
@@ -86,13 +88,13 @@ class EnhancedFieldExtractor:
             '기획자': ['기획자', 'Planner', '전략 기획자', '서비스 기획자'],
             '운영 매니저': ['운영 매니저', 'Operation Manager', '운영자']
         }
-        
+
         # 우대조건 키워드
         self.preference_keywords = [
-            '우대', '경험', '능력', '자격', '이해도', '관심', '적응력', '협업', '참여', 
+            '우대', '경험', '능력', '자격', '이해도', '관심', '적응력', '협업', '참여',
             '활용', '구현', '선호', '가능', '바람직', '좋음', '더욱 좋음'
         ]
-        
+
         # 자격요건 키워드
         self.requirement_keywords = [
             '필수', '요구', '필요', '기본', '기본적', '최소', '최소한'
@@ -102,7 +104,7 @@ class EnhancedFieldExtractor:
         """향상된 필드 추출 (AI + 사전 + 규칙 결합)
         실패 시에도 규칙 기반 결과는 반드시 반환"""
         print(f"\n🔍 [향상된 필드 추출 시작] 사용자 입력: {user_input}")
-        
+
         # 1단계: 규칙 기반 초기 추출 (항상 수행)
         initial_fields = {}
         try:
@@ -111,7 +113,7 @@ class EnhancedFieldExtractor:
             print(f"⚠️ [규칙 기반 추출 오류] {e}")
             initial_fields = {}
         print(f"🔍 [1단계] 규칙 기반 추출 결과: {initial_fields}")
-        
+
         # 2단계: AI 기반 보완 추출 (실패해도 규칙 결과 유지)
         ai_fields: Dict[str, Any] = {}
         try:
@@ -120,21 +122,21 @@ class EnhancedFieldExtractor:
         except Exception as e:
             print(f"⚠️ [AI 기반 추출 오류] {e}")
             ai_fields = {}
-        
+
         # 3단계: 결과 병합 및 정리
         try:
             final_fields = self._merge_and_clean_fields(initial_fields, ai_fields)
         except Exception as e:
             print(f"⚠️ [병합 단계 오류] {e}")
             final_fields = initial_fields
-        
+
         print(f"🔍 [3단계] 최종 병합 결과: {final_fields}")
         return final_fields
 
     def _rule_based_extraction(self, user_input: str) -> Dict[str, Any]:
         """규칙 기반 초기 추출"""
         fields = {}
-        
+
         # 1. 직무명 추출 (사전 매칭)
         for job_title, variations in self.job_dictionary.items():
             for variation in variations:
@@ -143,7 +145,7 @@ class EnhancedFieldExtractor:
                     break
             if 'position' in fields:
                 break
-        
+
         # 1-1. 일반 직무 패턴 (담당자/매니저 등)
         try:
             position_match = re.search(r'([가-힣A-Za-z]+)\s*(담당자|매니저|전문가)', user_input)
@@ -160,10 +162,10 @@ class EnhancedFieldExtractor:
                 if variation.lower() in user_input.lower():
                     tech_stack.append(tech_name.title())  # 첫 글자 대문자로
                     break
-        
+
         if tech_stack:
             fields['tech_stack'] = list(set(tech_stack))  # 중복 제거
-        
+
         # 3. 경력 요구사항 추출
         experience_patterns = [
             r'경력\s*(\d+)\s*년\s*(이상|이하|정도|내외)?',
@@ -172,31 +174,31 @@ class EnhancedFieldExtractor:
             r'경험이\s*(\d+)\s*년\s*(이상|이하|정도|내외)?',
             r'(\d+)\s*년차'
         ]
-        
+
         for pattern in experience_patterns:
             match = re.search(pattern, user_input)
             if match:
                 years = match.group(1)
                 fields['experience'] = f"{years}년"
                 break
-        
+
         # 4. 급여 정보 추출
         salary_patterns = [
             r'(\d{2,4})\s*만원',
             r'연봉\s*(\d{2,4})\s*만원',
             r'월급\s*(\d{2,4})\s*만원'
         ]
-        
+
         for pattern in salary_patterns:
             match = re.search(pattern, user_input)
             if match:
                 salary = match.group(1)
                 fields['salary'] = f"{salary}만원"
                 break
-        
+
         if '면접 후 결정' in user_input or '협의 가능' in user_input:
             fields['salary'] = '면접 후 결정'
-        
+
         # 5. 근무지 추출
         location_keywords = ['서울', '부산', '대구', '인천', '광주', '대전', '울산', '세종', '경기', '강원', '충북', '충남', '전북', '전남', '경북', '경남', '제주']
         for location in location_keywords:
@@ -205,12 +207,18 @@ class EnhancedFieldExtractor:
                 break
 
         # 6. 인원수 추출 (예: 1명, 2명)
+        headcount_found = False
         try:
             m = re.search(r'(\d+)\s*명', user_input)
             if m:
                 fields['headcount'] = f"{m.group(1)}명"
+                headcount_found = True
         except Exception:
             pass
+
+        # 인원수가 입력되지 않으면 기본값 0명으로 설정
+        if not headcount_found:
+            fields['headcount'] = "0명"
 
         # 7. 경력 키워드 추출 (신입/경력/시니어 등)
         if '신입' in user_input:
@@ -219,7 +227,7 @@ class EnhancedFieldExtractor:
             fields.setdefault('experience', '시니어')
         elif '경력' in user_input:
             fields.setdefault('experience', '경력')
-        
+
         return fields
 
     def _ai_based_extraction(self, user_input: str) -> Dict[str, Any]:
@@ -265,7 +273,7 @@ class EnhancedFieldExtractor:
                     result_text = ""
             else:
                 result_text = ""
-            
+
             # JSON 파싱
             try:
                 # JSON 블록 추출
@@ -280,7 +288,7 @@ class EnhancedFieldExtractor:
             except json.JSONDecodeError as e:
                 print(f"⚠️ AI 응답 JSON 파싱 오류: {e}")
                 return {}
-                
+
         except Exception as e:
             print(f"❌ AI 기반 추출 오류: {e}")
             return {}
@@ -288,10 +296,10 @@ class EnhancedFieldExtractor:
     def _merge_and_clean_fields(self, rule_fields: Dict[str, Any], ai_fields: Dict[str, Any]) -> Dict[str, Any]:
         """결과 병합 및 정리"""
         merged_fields = {}
-        
+
         # 규칙 기반 결과를 기본으로 사용
         merged_fields.update(rule_fields)
-        
+
         # AI 결과로 보완
         for key, ai_value in ai_fields.items():
             if ai_value is not None and ai_value != "":
@@ -303,7 +311,7 @@ class EnhancedFieldExtractor:
                 elif isinstance(ai_value, list) and not isinstance(merged_fields[key], list):
                     # AI가 리스트로 추출했는데 규칙은 단일값인 경우
                     merged_fields[key] = ai_value
-        
+
         # 필드 정리
         cleaned_fields = {}
         for key, value in merged_fields.items():
@@ -311,7 +319,7 @@ class EnhancedFieldExtractor:
                 if isinstance(value, list) and len(value) == 0:
                     continue
                 cleaned_fields[key] = value
-        
+
         return cleaned_fields
 
 # 전역 인스턴스

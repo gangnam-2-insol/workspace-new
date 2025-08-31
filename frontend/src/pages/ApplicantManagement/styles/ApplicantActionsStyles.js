@@ -231,12 +231,19 @@ export const SkillsGrid = styled.div`
 `;
 
 export const SkillTag = styled.span`
-  background: var(--primary-color);
+  background: linear-gradient(135deg, #667eea, #764ba2);
   color: white;
-  padding: 4px 8px;
-  border-radius: 6px;
+  padding: 4px 10px;
+  border-radius: 12px;
   font-size: 11px;
-  font-weight: 500;
+  font-weight: 600;
+  box-shadow: 0 2px 4px rgba(102, 126, 234, 0.2);
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 8px rgba(102, 126, 234, 0.3);
+  }
 `;
 
 // 그리드 및 보드 스타일

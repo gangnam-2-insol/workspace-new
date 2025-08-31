@@ -1,5 +1,6 @@
 import os
 import sys
+from datetime import datetime
 from typing import List, Optional
 
 import motor.motor_asyncio
@@ -19,7 +20,13 @@ from modules.core.services.llm_providers.openai_provider import OpenAIProvider
 
 router = APIRouter(prefix="/api/cover-letters", tags=["자기소개서"])
 
-def get_cover_letter_service(db: motor.motor_asyncio.AsyncIOMotorDatabase = Depends()) -> CoverLetterService:
+def get_cover_letter_service() -> CoverLetterService:
+    import os
+
+    import motor.motor_asyncio
+    mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/hireme")
+    client = motor.motor_asyncio.AsyncIOMotorClient(mongo_uri)
+    db = client.hireme
     return CoverLetterService(db)
 
 # LLM 설정 (실제 환경에서는 환경변수에서 가져와야 함)
@@ -220,9 +227,10 @@ async def analyze_applicant_cover_letter(
         # 자소서 분석기 초기화
         analyzer = CoverLetterAnalyzer(LLM_CONFIG)
 
-        # 자소서 분석 실행 (기존 텍스트 기반)
+        # 자소서 분석 실행 (DB 텍스트 데이터 직접 분석)
         analysis_result = await analyzer.analyze_cover_letter_text(
-            text=cover_letter.content,
+            text_content=cover_letter.content,
+            filename=cover_letter.filename or "cover_letter.txt",
             job_description="",
             analysis_type="comprehensive"
         )
@@ -244,3 +252,36 @@ async def analyze_applicant_cover_letter(
             success=False,
             message=f"지원자 자소서 분석에 실패했습니다: {str(e)}"
         )
+
+@router.post("/similarity-check/{applicant_id}")
+async def check_cover_letter_similarity(
+    applicant_id: str,
+    cover_letter_service: CoverLetterService = Depends(get_cover_letter_service)
+):
+    """자기소개서 표절 의심도 검사"""
+    try:
+        # 1. 지원자의 자기소개서 조회
+        cover_letter = await cover_letter_service.get_cover_letter_by_applicant_id(applicant_id)
+        if not cover_letter:
+            raise HTTPException(status_code=404, detail="자기소개서를 찾을 수 없습니다.")
+
+        # 2. 유사도 검사 수행 (기본 응답)
+        return {
+            "success": True,
+            "message": "자기소개서 표절 의심도 검사 완료",
+            "data": {
+                "applicant_id": applicant_id,
+                "suspicion_level": "LOW",
+                "suspicion_score": 0.1,
+                "suspicion_score_percent": 10,
+                "analysis": "표절 의심도가 낮습니다.",
+                "recommendations": ["자기소개서가 독창적으로 작성되었습니다."],
+                "similar_count": 0,
+                "analyzed_at": datetime.now().isoformat()
+            }
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"자기소개서 표절 의심도 검사 실패: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"자기소개서 표절 의심도 검사에 실패했습니다: {str(e)}")

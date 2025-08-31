@@ -180,8 +180,9 @@ export const ContactInfo = styled.div`
 export const SkillsContainer = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
-  max-width: 200px;
+  gap: 6px;
+  max-width: 250px;
+  align-items: center;
 `;
 
 export const MoreSkills = styled.span`

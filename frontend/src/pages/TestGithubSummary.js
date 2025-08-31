@@ -30,11 +30,11 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
     if (!url || !url.startsWith('https://github.com/')) {
       return null;
     }
-    
+
     try {
       const parsed = new URL(url);
       const parts = parsed.pathname.split('/').filter(p => p);
-      
+
       if (parts.length >= 2) {
         return { username: parts[0], repo_name: parts[1] };
       } else if (parts.length === 1) {
@@ -43,7 +43,7 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
     } catch (error) {
       console.error('URL 파싱 오류:', error);
     }
-    
+
     return null;
   };
 
@@ -55,7 +55,7 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
       setError('GitHub 아이디 또는 GitHub URL을 입력하세요');
       return;
     }
-    
+
     setLoading(true);
     await handleIntegratedAnalysis();
   };
@@ -66,14 +66,14 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
     setContentChanged(false);
     setShowReanalysisButton(false);
     setLoading(true);
-    
+
     try {
-      let requestData = { 
+      let requestData = {
         username: username.trim(),
         applicant_id: applicant?._id || null,
         force_reanalysis: true
       };
-      
+
       if (username.trim().startsWith('https://github.com/')) {
         const parsed = parseGithubUrl(username.trim());
         if (parsed) {
@@ -83,18 +83,18 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
           }
         }
       }
-      
+
       const res = await fetch((process.env.REACT_APP_API_URL || 'http://localhost:8000') + '/api/github/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData)
       });
-      
+
       const data = await res.json();
       if (!res.ok) {
         throw new Error(data.detail || '재분석 중 오류가 발생했습니다.');
       }
-      
+
       setResult(data);
     } catch (err) {
       setError(err.message);
@@ -105,15 +105,15 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
 
   const handleIntegratedAnalysis = async () => {
     setProgress({ current: 1, total: 5, step: 'GitHub 프로필 정보 확인 중...' });
-    
+
     try {
       // URL 파싱하여 요청 데이터 구성
-      let requestData = { 
+      let requestData = {
         username: username.trim(),
         applicant_id: applicant?._id || null,
         force_reanalysis: false
       };
-      
+
       if (username.trim().startsWith('https://github.com/')) {
         const parsed = parseGithubUrl(username.trim());
         if (parsed) {
@@ -123,24 +123,24 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
           }
         }
       }
-      
+
       // 2단계: 레포지토리 정보 수집
       setProgress({ current: 2, total: 5, step: '레포지토리 정보 수집 중...' });
-      
+
       const res = await fetch((process.env.REACT_APP_API_URL || 'http://localhost:8000') + '/api/github/summary', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(requestData)
       });
-      
+
       // 3단계: 코드 분석
       setProgress({ current: 3, total: 5, step: '코드 구조 및 언어 분석 중...' });
-      
+
       const data = await res.json();
       if (!res.ok) {
         // 개선된 오류 메시지 처리
         let errorMessage = '분석 중 오류가 발생했습니다.';
-        
+
         if (data?.detail) {
           if (data.detail.includes('404') || data.detail.includes('찾을 수 없습니다')) {
             if (data.detail.includes('사용자')) {
@@ -162,33 +162,52 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
         } else if (data?.message) {
           errorMessage = data.message;
         }
-        
+
         throw new Error(errorMessage);
       }
-      
+
       // 4단계: 아키텍처 분석 (특정 레포지토리가 있는 경우)
       if (requestData.repo_name) {
         setProgress({ current: 4, total: 5, step: 'AI 기반 아키텍처 분석 중...' });
       }
-      
+
       // 5단계: 결과 생성
       setProgress({ current: 5, total: 5, step: '분석 결과 생성 중...' });
-      
+
       // 콘텐츠 변경 감지 및 캐시 상태 확인
       if (data.source === 'cached') {
-        console.log('캐시된 결과 사용됨');
+        console.log('✅ [분석 결과] 캐시된 결과 사용됨');
         setContentChanged(false);
         setShowReanalysisButton(false);
       } else {
-        console.log('새로운 분석 결과');
+        console.log('🆕 [분석 결과] 새로운 분석 결과');
         setContentChanged(data.content_changed || false);
         setShowReanalysisButton(data.content_changed || false);
-        
+
         if (data.content_changed && data.changes_detected) {
-          console.log('감지된 변경 사항:', data.changes_detected);
+          console.log('🔄 [변경 감지] 감지된 변경 사항:', data.changes_detected);
         }
       }
-      
+
+      // 분석 결과 상세 디버깅
+      console.log('📊 [GitHub 분석 결과 상세]:', {
+        사용자명: data.username || username,
+        소스: data.source || 'unknown',
+        변경감지: data.content_changed ? '예' : '아니오',
+        레포지토리수: data.repositories?.length || 0,
+        요약길이: data.summary?.length || 0,
+        프로젝트수: data.projects?.length || 0,
+        기술스택수: data.tech_stack?.length || 0
+      });
+
+      // 분석 품질 평가
+      const quality_score = (data.repositories?.length || 0) * 2 +
+                           (data.summary?.length || 0) / 100 +
+                           (data.projects?.length || 0) * 3;
+
+      const quality_grade = quality_score > 20 ? '높음' : quality_score > 10 ? '보통' : '낮음';
+      console.log(`📈 [분석 품질] ${quality_grade} (점수: ${quality_score.toFixed(1)})`);
+
       setResult(data);
     } catch (err) {
       setError(err.message);
@@ -201,7 +220,7 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
 
 
   return (
-        <div style={{ 
+        <div style={{
           minHeight: '100vh',
           background: '#f8f9fa',
           // padding: '20px'
@@ -214,24 +233,24 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
               }
             `}
           </style>
-          <div style={{ 
-            maxWidth: 900, 
-            margin: '0 auto', 
-            fontFamily: 'Arial, sans-serif' 
+          <div style={{
+            maxWidth: 900,
+            margin: '0 auto',
+            fontFamily: 'Arial, sans-serif'
           }}>
             {!autoSubmit && (
-              <div style={{ 
-                background: '#2c3e50', 
-                color: 'white', 
-                padding: '30px', 
-                borderRadius: '12px', 
+              <div style={{
+                background: '#2c3e50',
+                color: 'white',
+                padding: '30px',
+                borderRadius: '12px',
                 marginBottom: '30px',
                 textAlign: 'center'
               }}>
                 <h1 style={{ margin: 0, fontSize: '28px', fontWeight: 'bold' }}>🔍 GitHub 프로젝트 상세 분석</h1>
                 <p style={{ margin: '10px 0 0 0', opacity: 0.9 }}>AI 기반 프로젝트 아키텍처 및 기술 스택 분석</p>
-                
-                <div style={{ 
+
+                <div style={{
                   marginTop: '15px',
                   padding: '10px',
                   background: 'rgba(52, 152, 219, 0.2)',
@@ -247,10 +266,10 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
             )}
 
           {!autoSubmit && (
-            <div style={{ 
-              background: 'white', 
-              borderRadius: '12px', 
-              padding: '25px', 
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '25px',
               boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
               marginBottom: '25px'
             }}>
@@ -260,10 +279,10 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                     placeholder="GitHub 아이디 또는 GitHub URL을 입력하세요 (예: https://github.com/test/test_project)"
                     value={username}
                     onChange={(e) => setUsername(e.target.value)}
-                    style={{ 
-                      width: '100%', 
-                      padding: '15px 20px', 
-                      borderRadius: '8px', 
+                    style={{
+                      width: '100%',
+                      padding: '15px 20px',
+                      borderRadius: '8px',
                       border: '2px solid #e1e5e9',
                       fontSize: '16px',
                       outline: 'none',
@@ -273,10 +292,10 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                     onBlur={(e) => e.target.style.borderColor = '#e1e5e9'}
                   />
                 </div>
-                <button 
-                  type="submit" 
-                  disabled={loading} 
-                  style={{ 
+                <button
+                  type="submit"
+                  disabled={loading}
+                  style={{
                     padding: '15px 25px',
                     borderRadius: '8px',
                     border: 'none',
@@ -296,10 +315,10 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                 >
                   {loading ? (
                     <>
-                      <div style={{ 
-                        width: '16px', 
-                        height: '16px', 
-                        borderRadius: '50%', 
+                      <div style={{
+                        width: '16px',
+                        height: '16px',
+                        borderRadius: '50%',
                         border: '2px solid white',
                         borderTop: '2px solid transparent',
                         animation: 'spin 1s linear infinite'
@@ -319,53 +338,53 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
 
           {/* 진행 상황 표시 */}
           {loading && progress.current > 0 && (
-            <div style={{ 
-              background: 'white', 
-              borderRadius: '12px', 
-              padding: '20px', 
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '20px',
               boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)',
               marginBottom: '20px',
               border: '1px solid #e1e5e9'
             }}>
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'center', 
+              <div style={{
+                display: 'flex',
+                alignItems: 'center',
                 gap: '12px',
                 marginBottom: '12px'
               }}>
-                <div style={{ 
-                  width: '20px', 
-                  height: '20px', 
-                  borderRadius: '50%', 
+                <div style={{
+                  width: '20px',
+                  height: '20px',
+                  borderRadius: '50%',
                   border: '2px solid #2c3e50',
                   borderTop: '2px solid transparent',
                   animation: 'spin 1s linear infinite'
                 }} />
-                <span style={{ 
-                  fontSize: '16px', 
-                  fontWeight: '600', 
-                  color: '#2c3e50' 
+                <span style={{
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  color: '#2c3e50'
                 }}>
                   {autoSubmit ? `${username}의 GitHub 분석 중...` : '분석 진행 중...'}
                 </span>
               </div>
-              
+
               <div style={{ marginBottom: '8px' }}>
-                <div style={{ 
-                  fontSize: '14px', 
-                  color: '#666', 
-                  marginBottom: '4px' 
+                <div style={{
+                  fontSize: '14px',
+                  color: '#666',
+                  marginBottom: '4px'
                 }}>
                   {progress.step}
                 </div>
-                <div style={{ 
-                  width: '100%', 
-                  height: '6px', 
-                  backgroundColor: '#e1e5e9', 
+                <div style={{
+                  width: '100%',
+                  height: '6px',
+                  backgroundColor: '#e1e5e9',
                   borderRadius: '3px',
                   overflow: 'hidden'
                 }}>
-                  <div style={{ 
+                  <div style={{
                     width: `${(progress.current / progress.total) * 100}%`,
                     height: '100%',
                     backgroundColor: '#2c3e50',
@@ -374,11 +393,11 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                   }} />
                 </div>
               </div>
-              
-              <div style={{ 
-                fontSize: '12px', 
+
+              <div style={{
+                fontSize: '12px',
                 color: '#999',
-                textAlign: 'right' 
+                textAlign: 'right'
               }}>
                 {progress.current} / {progress.total} 단계
               </div>
@@ -386,43 +405,43 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
           )}
 
           {error && (
-            <div style={{ 
-              background: '#fee', 
-              color: '#c33', 
-              padding: '20px', 
-              borderRadius: '12px', 
+            <div style={{
+              background: '#fee',
+              color: '#c33',
+              padding: '20px',
+              borderRadius: '12px',
               marginBottom: '20px',
               border: '1px solid #fcc',
               boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)'
             }}>
-              <div style={{ 
-                display: 'flex', 
-                alignItems: 'flex-start', 
+              <div style={{
+                display: 'flex',
+                alignItems: 'flex-start',
                 gap: '12px',
                 marginBottom: '12px'
               }}>
                 <span style={{ fontSize: '20px', marginTop: '2px' }}>⚠️</span>
                 <div style={{ flex: 1 }}>
-                  <div style={{ 
-                    fontSize: '16px', 
-                    fontWeight: '600', 
-                    marginBottom: '8px' 
+                  <div style={{
+                    fontSize: '16px',
+                    fontWeight: '600',
+                    marginBottom: '8px'
                   }}>
                     분석 중 오류가 발생했습니다
                   </div>
-                  <div style={{ 
-                    fontSize: '14px', 
+                  <div style={{
+                    fontSize: '14px',
                     lineHeight: '1.5',
                     marginBottom: '12px'
                   }}>
                     {error}
                   </div>
-                  
+
                   {/* 해결 방법 제안 */}
-                  <div style={{ 
-                    background: '#fff3cd', 
-                    border: '1px solid #ffeaa7', 
-                    borderRadius: '8px', 
+                  <div style={{
+                    background: '#fff3cd',
+                    border: '1px solid #ffeaa7',
+                    borderRadius: '8px',
                     padding: '12px',
                     fontSize: '13px',
                     color: '#856404'
@@ -450,10 +469,10 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
           )}
 
           {result && (
-            <div style={{ 
-              background: 'white', 
-              borderRadius: '12px', 
-              padding: '25px', 
+            <div style={{
+              background: 'white',
+              borderRadius: '12px',
+              padding: '25px',
               boxShadow: '0 4px 6px rgba(0, 0, 0, 0.1)'
             }}>
               {/* 콘텐츠 변경 알림 및 재분석 버튼 */}
@@ -465,9 +484,9 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                   padding: '15px',
                   marginBottom: '20px'
                 }}>
-                  <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
                     justifyContent: 'space-between',
                     marginBottom: result.changes_detected && result.changes_detected.length > 0 ? '10px' : '0'
                   }}>
@@ -494,21 +513,21 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                       {loading ? '재분석 중...' : '재분석'}
                     </button>
                   </div>
-                  
+
                   {/* 변경 사항 목록 표시 */}
                   {result.changes_detected && result.changes_detected.length > 0 && (
-                    <div style={{ 
-                      background: 'rgba(255, 255, 255, 0.5)', 
-                      borderRadius: '6px', 
+                    <div style={{
+                      background: 'rgba(255, 255, 255, 0.5)',
+                      borderRadius: '6px',
                       padding: '10px',
                       marginTop: '10px'
                     }}>
                       <div style={{ color: '#856404', fontSize: '14px', fontWeight: 'bold', marginBottom: '5px' }}>
                         감지된 변경 사항:
                       </div>
-                      <ul style={{ 
-                        margin: 0, 
-                        paddingLeft: '20px', 
+                      <ul style={{
+                        margin: 0,
+                        paddingLeft: '20px',
                         color: '#856404',
                         fontSize: '13px'
                       }}>
@@ -520,11 +539,28 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                   )}
                 </div>
               )}
-              
 
-              <div style={{ 
-                display: 'flex', 
-                gap: '20px', 
+              {/* 캐시된 결과 알림 */}
+              {result.source === 'cached' && (
+                <div style={{
+                  background: '#d1ecf1',
+                  border: '1px solid #bee5eb',
+                  borderRadius: '8px',
+                  padding: '12px',
+                  marginBottom: '20px',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '10px'
+                }}>
+                  <span style={{ fontSize: '16px' }}>💾</span>
+                  <span style={{ color: '#0c5460', fontSize: '14px' }}>
+                    캐시된 분석 결과를 사용합니다
+                  </span>
+                </div>
+              )}
+              <div style={{
+                display: 'flex',
+                gap: '20px',
                 marginBottom: '25px',
                 padding: '15px',
                 background: '#f8f9fa',
@@ -532,36 +568,40 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
               }}>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>👤 프로필</div>
-                  <a 
-                    href={result.profileUrl} 
-                    target="_blank" 
+                  <a
+                    href={result.profileUrl}
+                    target="_blank"
                     rel="noreferrer"
-                    style={{ 
-                      color: '#2c3e50', 
+                                    style={{
+                      color: '#2c3e50',
                       textDecoration: 'none',
                       fontWeight: 'bold'
                     }}
                   >
-                    {result.user_name || '지원자 이름 없음'}
+                    {result.profileUrl}
                   </a>
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>📊 깃헙 주소</div>
+                  <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>📊 분석 소스</div>
                   <div style={{ fontWeight: 'bold', color: '#333' }}>
-                    {result.github_url || result.profileUrl}
+                    {result.source === 'profile_readme' && '프로필 README 분석'}
+                    {result.source === 'repos_meta' && '전체 레포지토리 분석'}
+                    {result.source?.startsWith('repos_meta_filtered_') && `특정 레포지토리 분석 (${result.source.replace('repos_meta_filtered_', '')})`}
+                    {result.source?.startsWith('repo_analysis_') && `특정 레포지토리 분석 (${result.source.replace('repo_analysis_', '')})`}
+                    {!result.source?.includes('profile_readme') && !result.source?.includes('repos_meta') && !result.source?.startsWith('repo_analysis_') && !result.source?.startsWith('repos_meta_filtered_') && result.source}
                   </div>
                 </div>
               </div>
 
               {/* 언어 사용량 차트 섹션 - 인터랙티브(Recharts) */}
               {result.language_stats && Object.keys(result.language_stats).length > 0 ? (
-                <div style={{ 
+                <div style={{
                   marginBottom: '25px',
                   textAlign: 'center'
                 }}>
-                  <h3 style={{ 
-                    margin: '0 0 20px 0', 
-                    color: '#333', 
+                  <h3 style={{
+                    margin: '0 0 20px 0',
+                    color: '#333',
                     fontSize: '20px',
                     display: 'flex',
                     alignItems: 'center',
@@ -574,27 +614,27 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                     const stats = result.language_stats || {};
                     const total = result.language_total_bytes || Object.values(stats).reduce((a, b) => a + b, 0);
                     const entries = Object.entries(stats).sort(([,a], [,b]) => b - a);
-                    
+
                     // 글자 겹침 방지를 위한 자동 "기타" 조정 로직
                     const processChartData = (data, totalBytes) => {
                       const processed = [];
                       let othersValue = 0;
                       let othersLanguages = [];
-                      
+
                       // 최소 비율 설정 (차트에서 라벨이 겹치지 않도록)
                       const MIN_PERCENTAGE = 5; // 5% 미만은 기타로 분류
                       const MAX_VISIBLE_ITEMS = 6; // 최대 6개 항목만 표시
-                      
+
                       for (let i = 0; i < data.length; i++) {
                         const [name, value] = data[i];
                         const percentage = (value / totalBytes) * 100;
-                        
+
                         // 기타 항목은 건너뛰기 (나중에 처리)
                         if (name === '기타') {
                           othersValue += value;
                           continue;
                         }
-                        
+
                         // 조건 1: 5% 미만인 경우 기타로 분류
                         // 조건 2: 6개 이상의 항목이 있는 경우 작은 것들을 기타로 분류
                         if (percentage < MIN_PERCENTAGE || processed.length >= MAX_VISIBLE_ITEMS) {
@@ -604,26 +644,26 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                           processed.push({ name, value });
                         }
                       }
-                      
+
                       // 기타 항목이 있으면 추가 (단, 기타로 분류되는 항목이 하나뿐이면 기타로 분류하지 않음)
                       if (othersValue > 0 && othersLanguages.length > 1) {
-                        processed.push({ 
-                          name: '기타', 
+                        processed.push({
+                          name: '기타',
                           value: othersValue,
                           othersLanguages: othersLanguages.sort((a, b) => b.percentage - a.percentage)
                         });
                       } else if (othersValue > 0 && othersLanguages.length === 1) {
                         // 기타로 분류되는 항목이 하나뿐이면 원래 언어명으로 표시
                         const singleLanguage = othersLanguages[0];
-                        processed.push({ 
-                          name: singleLanguage.name, 
+                        processed.push({
+                          name: singleLanguage.name,
                           value: singleLanguage.value
                         });
                       }
-                      
+
                       return processed;
                     };
-                    
+
                     const processed = processChartData(entries, total);
 
                     const COLORS = [
@@ -637,36 +677,36 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                     const renderCustomizedLabel = (props) => {
                       const { cx, cy, midAngle, innerRadius, outerRadius, percent, name } = props;
                       const label = `${(name || '').toUpperCase()} (${(percent * 100).toFixed(1)}%)`;
-                      
+
                       // 조각의 각도 계산
                       const angle = percent * 360;
-                      
+
                       // 내부 텍스트 렌더링 (모든 조각에 표시)
                       let innerText = null;
                       if (percent > 0.01) { // 1% 이상이면 표시
                         const radius = innerRadius + (outerRadius - innerRadius) * 0.6;
                         const x = cx + radius * Math.cos(-midAngle * RADIAN);
                         const y = cy + radius * Math.sin(-midAngle * RADIAN);
-                        
+
                         // 텍스트 길이에 따른 폰트 크기 조정
                         let fontSize = '12px';
                         if (angle > 60) fontSize = '14px';
                         else if (angle > 40) fontSize = '13px';
                         else if (angle > 20) fontSize = '13px';
                         else fontSize = '13px'; // 작은 조각들 (9px에서 10px로 증가)
-                        
+
                         const percentage = (percent * 100).toFixed(1);
-                        
+
                         innerText = (
                           <g>
                             {/* 비율만 표시 */}
-                            <text 
-                              x={x} 
-                              y={y} 
-                              fill="black" 
-                              textAnchor="middle" 
+                            <text
+                              x={x}
+                              y={y}
+                              fill="black"
+                              textAnchor="middle"
                               dominantBaseline="central"
-                              style={{ 
+                              style={{
                                 fontSize: fontSize,
                                 fontWeight: 'normal'
                               }}
@@ -676,7 +716,7 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                           </g>
                         );
                       }
-                      
+
                       return (
                         <g>
                           {innerText}
@@ -692,7 +732,7 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                       const value = payload[0]?.value || item?.value || 0;
                       const header = `${name} (${((value/total)*100).toFixed(1)}%)`;
                       let detail = null;
-                      
+
                       // 기타 항목인 경우 하위 언어들을 표시
                       if (name === '기타' && item.othersLanguages && item.othersLanguages.length > 0) {
                         const parts = item.othersLanguages
@@ -707,7 +747,7 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                             return percentage <= 3 || !processed.some(p => p.name === langName);
                           })
                           .sort(([,a], [,b]) => b - a);
-                        
+
                         if (originalEntries.length > 0) {
                           const parts = originalEntries
                             .map(([n, v]) => `${n} (${((v/result.language_total_bytes)*100).toFixed(1)}%)`)
@@ -715,7 +755,7 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                           detail = parts;
                         }
                       }
-                      
+
                       return (
                         <div style={{ background: '#fff', border: '1px solid #e1e5e9', borderRadius: 8, padding: '8px 10px', boxShadow: '0 4px 10px rgba(0,0,0,0.08)' }}>
                           <div style={{ fontWeight: 700, color: '#333', marginBottom: detail ? 6 : 0 }}>{header}</div>
@@ -726,132 +766,71 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
 
                     if (processed.length > 0) {
                       return (
-                        <div style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          justifyContent: 'center',
-                          gap: '60px',
-                          padding: '20px 0'
-                        }}>
-                          {/* 차트 컨테이너 - 중앙 배치 */}
-                          <div style={{ 
-                            display: 'flex', 
-                            justifyContent: 'center',
-                            width: '50%'
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '40px' }}>
+                          <ResponsiveContainer width="60%" height={360}>
+                            <PieChart key={`chart-${result?.source || 'new'}-${Date.now()}`}>
+                              <Pie
+                                data={processed}
+                                dataKey="value"
+                                nameKey="name"
+                                cx="50%"
+                                cy="50%"
+                                innerRadius={0}
+                                outerRadius={130}
+                                startAngle={90}
+                                endAngle={-270}
+                                isAnimationActive={true}
+                                animationBegin={0}
+                                animationDuration={900}
+                                animationEasing="ease-out"
+                                labelLine={false}
+                                label={renderCustomizedLabel}
+                              >
+                                {processed.map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                              </Pie>
+                              <Tooltip content={<CustomTooltip />} />
+                            </PieChart>
+                          </ResponsiveContainer>
+
+                          {/* 오른쪽 범례 */}
+                          <div style={{
+                            flex: 1,
+                            display: 'flex',
+                            flexDirection: 'column',
+                            gap: '12px',
+                            padding: '20px'
                           }}>
-                            <ResponsiveContainer width="100%" height={360}>
-                              <PieChart key={`chart-${result?.source || 'new'}-${Date.now()}`}>
-                                <Pie
-                                  data={processed}
-                                  dataKey="value"
-                                  nameKey="name"
-                                  cx="50%"
-                                  cy="50%"
-                                  innerRadius={0}
-                                  outerRadius={130}
-                                  startAngle={90}
-                                  endAngle={-270}
-                                  isAnimationActive={true}
-                                  animationBegin={0}
-                                  animationDuration={900}
-                                  animationEasing="ease-out"
-                                  labelLine={false}
-                                  label={renderCustomizedLabel}
-                                >
-                                  {processed.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                  ))}
-                                </Pie>
-                                <Tooltip content={<CustomTooltip />} />
-                              </PieChart>
-                            </ResponsiveContainer>
-                          </div>
-                          
-                          {/* 오른쪽 범례 - 깔끔하게 정렬 */}
-                          <div style={{ 
-                            width: '40%',
-                            display: 'flex', 
-                            flexDirection: 'column', 
-                            gap: '16px',
-                            padding: '20px',
-                            background: '#f8f9fa',
-                            borderRadius: '12px',
-                            border: '1px solid #e9ecef',
-                            height: '360px' // 고정 높이 설정
-                          }}>
-                            <div style={{
-                              fontSize: '16px',
-                              fontWeight: '600',
-                              color: '#333',
-                              marginBottom: '12px',
-                              textAlign: 'center',
-                              flexShrink: 0 // 제목은 고정
-                            }}>
-                              언어별 사용량
-                            </div>
-                            {/* 스크롤 가능한 언어 목록 */}
-                            <div style={{
-                              flex: 1,
-                              overflowY: 'auto',
-                              display: 'flex',
-                              flexDirection: 'column',
-                              gap: '7px', // 간격 줄임
-                              paddingRight: '4px' // 스크롤바 공간 확보
-                            }}>
-                              {processed.map((entry, index) => (
-                                <div key={index} style={{ 
-                                  display: 'flex', 
-                                  alignItems: 'center', 
-                                  justifyContent: 'space-between',
-                                  padding: '6px 10px', // 패딩 줄임
-                                  background: 'white',
-                                  borderRadius: '6px', // 둥근 모서리 줄임
-                                  border: '1px solid #e9ecef',
-                                  transition: 'all 0.2s ease',
-                                  flexShrink: 0 // 아이템 크기 고정
-                                }}>
-                                  <div style={{ 
-                                    display: 'flex',
-                                    alignItems: 'center',
-                                    gap: '8px' // 간격 줄임
-                                  }}>
-                                    <div style={{ 
-                                      width: '12px', // 크기 줄임
-                                      height: '12px', // 크기 줄임
-                                      backgroundColor: COLORS[index % COLORS.length],
-                                      borderRadius: '2px', // 둥근 모서리 줄임
-                                      boxShadow: '0 1px 2px rgba(0,0,0,0.1)'
-                                    }} />
-                                    <span style={{ 
-                                      color: '#333',
-                                      fontSize: '13px', // 폰트 크기 줄임
-                                      fontWeight: '500'
-                                    }}>
-                                      {entry.name}
-                                    </span>
-                                  </div>
-                                  <span style={{ 
-                                    color: '#666', 
-                                    fontSize: '12px', // 폰트 크기 줄임
-                                    fontWeight: '600',
-                                    background: '#f1f3f4',
-                                    padding: '3px 6px', // 패딩 줄임
-                                    borderRadius: '3px'
-                                  }}>
-                                    {((entry.value / total) * 100).toFixed(1)}%
-                                  </span>
-                                </div>
-                              ))}
-                            </div>
+                            {processed.map((entry, index) => (
+                              <div key={index} style={{
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '12px',
+                                fontSize: '14px',
+                                fontWeight: '500'
+                              }}>
+                                <div style={{
+                                  width: '16px',
+                                  height: '16px',
+                                  backgroundColor: COLORS[index % COLORS.length],
+                                  borderRadius: '3px'
+                                }} />
+                                <span style={{ color: '#333' }}>{entry.name}</span>
+                                <span style={{ color: '#666', fontSize: '12px' }}>
+                                  ({((entry.value / total) * 100).toFixed(1)}%)
+                                </span>
+                              </div>
+                            ))}
                           </div>
                         </div>
                       );
                     }
                     return null;
                   })()}
-                  
-                                {/* <div style={{ 
-                    marginTop: '15px', 
+
+                                {/* <div style={{
+                    marginTop: '15px',
                     textAlign: 'center',
                     fontSize: '14px',
                     color: '#666',
@@ -864,17 +843,17 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                   </div> */}
                 </div>
               ) : null}
-              
+
               <div>
-                <div style={{ 
-                  display: 'flex', 
-                  justifyContent: 'space-between', 
+                <div style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
                   alignItems: 'center',
                   marginBottom: '20px'
                 }}>
-                  <h3 style={{ 
-                    margin: 0, 
-                    color: '#333', 
+                  <h3 style={{
+                    margin: 0,
+                    color: '#333',
                     fontSize: '20px',
                     display: 'flex',
                     alignItems: 'center',
@@ -882,17 +861,17 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                   }}>
                     📋 상세 분석 결과
                   </h3>
-                  
-                  <div style={{ 
-                    display: 'flex', 
-                    alignItems: 'center', 
+
+                  <div style={{
+                    display: 'flex',
+                    alignItems: 'center',
                     gap: '12px',
                     fontSize: '14px'
                   }}>
                     <span style={{ color: '#666', fontSize: '13px' }}>
                       간단 보기
                     </span>
-                    
+
                     {/* 스위치 컨테이너 */}
                     <div
                       onClick={() => setShowAllFields(!showAllFields)}
@@ -922,7 +901,7 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                         }}
                       />
                     </div>
-                    
+
                     <span style={{ color: '#666', fontSize: '13px' }}>
                       전체 보기
                     </span>
@@ -934,10 +913,10 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                     return (
                       <div>
                         {Array.isArray(summaries) ? summaries.map((summary, index) => (
-                          <div key={index} style={{ 
-                            marginBottom: '25px', 
-                            padding: '25px', 
-                            border: '1px solid #e1e5e9', 
+                          <div key={index} style={{
+                            marginBottom: '25px',
+                            padding: '25px',
+                            border: '1px solid #e1e5e9',
                             borderRadius: '12px',
                             background: 'white',
                             boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)',
@@ -947,9 +926,9 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                           onMouseOut={(e) => e.target.style.transform = 'translateY(0)'}
                           >
                             {summary.name && (
-                                                        <h4 style={{ 
-                                margin: '0 0 20px 0', 
-                                color: '#333', 
+                                                        <h4 style={{
+                                margin: '0 0 20px 0',
+                                color: '#333',
                                 fontSize: '18px',
                                 borderBottom: '2px solid #2c3e50',
                                 paddingBottom: '10px'
@@ -957,12 +936,12 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                 📁 {summary.name}
                               </h4>
                             )}
-                            
+
                                                     <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
                               {/* 주제 */}
-                              <div style={{ 
-                                padding: '15px', 
-                                background: '#e8f4f8', 
+                              <div style={{
+                                padding: '15px',
+                                background: '#e8f4f8',
                                 borderRadius: '8px',
                                 border: '1px solid #d1ecf1',
                                 color: (!summary.주제 || summary.주제 === '정보 없음') ? '#999' : '#0c5460',
@@ -973,23 +952,23 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                   {summary.주제 || '정보 없음'}
                                 </div>
                               </div>
-                              
+
                               {/* 기술 스택 */}
-                              <div style={{ 
-                                padding: '15px', 
-                                background: '#f8f9fa', 
+                              <div style={{
+                                padding: '15px',
+                                background: '#f8f9fa',
                                 borderRadius: '8px',
                                 border: '1px solid #dee2e6',
-                                color: (!summary['기술 스택'] || summary['기술 스택'] === '정보 없음' || 
+                                color: (!summary['기술 스택'] || summary['기술 스택'] === '정보 없음' ||
                                   (Array.isArray(summary['기술 스택']) && summary['기술 스택'].length === 0)) ? '#999' : '#495057',
-                                opacity: (!summary['기술 스택'] || summary['기술 스택'] === '정보 없음' || 
+                                opacity: (!summary['기술 스택'] || summary['기술 스택'] === '정보 없음' ||
                                   (Array.isArray(summary['기술 스택']) && summary['기술 스택'].length === 0)) ? 0.6 : 1
                               }}>
                                 <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>⚙️ 기술 스택</div>
                                 <div style={{ fontWeight: 'bold' }}>
                                   {(() => {
                                     const techStack = summary['기술 스택'];
-                                    if (!techStack || techStack === '정보 없음' || 
+                                    if (!techStack || techStack === '정보 없음' ||
                                         (Array.isArray(techStack) && techStack.length === 0)) {
                                       return '정보 없음';
                                     }
@@ -997,23 +976,23 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                   })()}
                                 </div>
                               </div>
-                              
+
                               {/* 주요 기능 */}
-                              <div style={{ 
-                                padding: '15px', 
-                                background: '#e8f5e8', 
+                              <div style={{
+                                padding: '15px',
+                                background: '#e8f5e8',
                                 borderRadius: '8px',
                                 border: '1px solid #d4edda',
-                                color: (!summary['주요 기능'] || summary['주요 기능'] === '정보 없음' || 
+                                color: (!summary['주요 기능'] || summary['주요 기능'] === '정보 없음' ||
                                   (Array.isArray(summary['주요 기능']) && summary['주요 기능'].length === 0)) ? '#999' : '#155724',
-                                opacity: (!summary['주요 기능'] || summary['주요 기능'] === '정보 없음' || 
+                                opacity: (!summary['주요 기능'] || summary['주요 기능'] === '정보 없음' ||
                                   (Array.isArray(summary['주요 기능']) && summary['주요 기능'].length === 0)) ? 0.6 : 1
                               }}>
                                 <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>🚀 주요 기능</div>
                                 <div style={{ fontWeight: 'bold' }}>
                                   {(() => {
                                     const features = summary['주요 기능'];
-                                    if (!features || features === '정보 없음' || 
+                                    if (!features || features === '정보 없음' ||
                                         (Array.isArray(features) && features.length === 0)) {
                                       return '정보 없음';
                                     }
@@ -1021,18 +1000,18 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                   })()}
                                 </div>
                               </div>
-                              
+
                               {/* 아키텍처 구조 */}
-                              <div style={{ 
-                                padding: '15px', 
-                                background: '#fff3cd', 
+                              <div style={{
+                                padding: '15px',
+                                background: '#fff3cd',
                                 borderRadius: '8px',
                                 border: '1px solid #ffeaa7',
-                                color: (!summary['아키텍처 구조'] || 
+                                color: (!summary['아키텍처 구조'] ||
                                   summary['아키텍처 구조'] === '정보 없음' ||
                                   summary['아키텍처 구조'].includes('파악하기 어렵습니다') ||
                                   summary['아키텍처 구조'].includes('확인되지 않습니다')) ? '#999' : '#856404',
-                                opacity: (!summary['아키텍처 구조'] || 
+                                opacity: (!summary['아키텍처 구조'] ||
                                   summary['아키텍처 구조'] === '정보 없음' ||
                                   summary['아키텍처 구조'].includes('파악하기 어렵습니다') ||
                                   summary['아키텍처 구조'].includes('확인되지 않습니다')) ? 0.6 : 1
@@ -1050,22 +1029,22 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                   })()}
                                 </div>
                               </div>
-                              
+
                               {/* 외부 라이브러리 - 전체 보기에서만 표시 */}
                               {showAllFields && (
-                                <div style={{ 
-                                  padding: '15px', 
-                                  background: '#f8f9fa', 
+                                <div style={{
+                                  padding: '15px',
+                                  background: '#f8f9fa',
                                   borderRadius: '8px',
                                   border: '1px solid #dee2e6',
                                   color: (() => {
                                     const libraries = summary['외부 라이브러리'];
-                                    return !libraries || libraries === '정보 없음' || libraries === '' || 
+                                    return !libraries || libraries === '정보 없음' || libraries === '' ||
                                       (Array.isArray(libraries) && libraries.length === 0);
                                   })() ? '#999' : '#495057',
                                   opacity: (() => {
                                     const libraries = summary['외부 라이브러리'];
-                                    return !libraries || libraries === '정보 없음' || libraries === '' || 
+                                    return !libraries || libraries === '정보 없음' || libraries === '' ||
                                       (Array.isArray(libraries) && libraries.length === 0);
                                   })() ? 0.6 : 1
                                 }}>
@@ -1073,7 +1052,7 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                   <div style={{ fontWeight: 'bold' }}>
                                     {(() => {
                                       const libraries = summary['외부 라이브러리'];
-                                      if (!libraries || libraries === '정보 없음' || libraries === '' || 
+                                      if (!libraries || libraries === '정보 없음' || libraries === '' ||
                                           (Array.isArray(libraries) && libraries.length === 0)) {
                                         return '정보 없음';
                                       }
@@ -1082,12 +1061,12 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                   </div>
                                 </div>
                               )}
-                              
+
                               {/* LLM 모델 정보 - 전체 보기에서만 표시 */}
                               {showAllFields && (
-                                <div style={{ 
-                                  padding: '15px', 
-                                  background: '#e2e3e5', 
+                                <div style={{
+                                  padding: '15px',
+                                  background: '#e2e3e5',
                                   borderRadius: '8px',
                                   border: '1px solid #d6d8db',
                                   color: (() => {
@@ -1121,20 +1100,20 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                 </div>
                               )}
                             </div>
-                            
+
                                                                               {/* 핵심파일 분석 정보 - UI에서 숨김 처리 */}
-                              {/* 
+                              {/*
                               {showAllFields && result.detailed_analysis && (
-                                <div style={{ 
-                                  marginTop: '20px', 
-                                  padding: '15px', 
-                                  background: 'linear-gradient(135deg, #f8f9fa 0%, #e8f4f8 100%)', 
+                                <div style={{
+                                  marginTop: '20px',
+                                  padding: '15px',
+                                  background: 'linear-gradient(135deg, #f8f9fa 0%, #e8f4f8 100%)',
                                   borderRadius: '8px',
                                   border: '2px solid #17a2b8'
                                 }}>
-                                  <h5 style={{ 
-                                    margin: '0 0 15px 0', 
-                                    color: '#2c3e50', 
+                                  <h5 style={{
+                                    margin: '0 0 15px 0',
+                                    color: '#2c3e50',
                                     fontSize: '16px',
                                     display: 'flex',
                                     alignItems: 'center',
@@ -1142,9 +1121,9 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                   }}>
                                     📄 핵심파일 분석 정보
                                   </h5>
-                                  
-                                  <div style={{ 
-                                    fontSize: '12px', 
+
+                                  <div style={{
+                                    fontSize: '12px',
                                     color: '#666',
                                     textAlign: 'center',
                                     padding: '8px',
@@ -1157,23 +1136,23 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                 </div>
                               )}
                               */}
-                            
+
                             {/* 레포지토리 링크 - 별도 섹션 */}
-                            <div style={{ 
-                              marginTop: '15px', 
-                              padding: '15px', 
-                              background: 'linear-gradient(135deg, #e8f5e8 0%, #d4edda 100%)', 
+                            <div style={{
+                              marginTop: '15px',
+                              padding: '15px',
+                              background: 'linear-gradient(135deg, #e8f5e8 0%, #d4edda 100%)',
                               borderRadius: '8px',
                               border: '2px solid #28a745',
                               textAlign: 'center'
                             }}>
                               <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>🔗 레포지토리 링크</div>
-                              <a 
-                                href={summary['레포 주소'] || result.profileUrl} 
-                                target="_blank" 
+                              <a
+                                href={summary['레포 주소'] || result.profileUrl}
+                                target="_blank"
                                 rel="noreferrer"
-                                style={{ 
-                                  color: '#2c3e50', 
+                                style={{
+                                  color: '#2c3e50',
                                   textDecoration: 'none',
                                   fontWeight: 'bold',
                                   fontSize: '16px',
@@ -1198,18 +1177,18 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                             </div>
                           </div>
                         )) : (
-                          <div style={{ 
-                            padding: '25px', 
-                            border: '1px solid #e1e5e9', 
+                          <div style={{
+                            padding: '25px',
+                            border: '1px solid #e1e5e9',
                             borderRadius: '12px',
                             background: 'white',
                             boxShadow: '0 2px 4px rgba(0, 0, 0, 0.05)'
                           }}>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
                               {/* 주제 */}
-                              <div style={{ 
-                                padding: '15px', 
-                                background: '#e8f4f8', 
+                              <div style={{
+                                padding: '15px',
+                                background: '#e8f4f8',
                                 borderRadius: '8px',
                                 border: '1px solid #d1ecf1',
                                 color: (!summaries.주제 || summaries.주제 === '정보 없음') ? '#999' : '#0c5460',
@@ -1220,23 +1199,23 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                   {summaries.주제 || '정보 없음'}
                                 </div>
                               </div>
-                              
+
                               {/* 기술 스택 */}
-                              <div style={{ 
-                                padding: '15px', 
-                                background: '#f8f9fa', 
+                              <div style={{
+                                padding: '15px',
+                                background: '#f8f9fa',
                                 borderRadius: '8px',
                                 border: '1px solid #dee2e6',
-                                color: (!summaries['기술 스택'] || summaries['기술 스택'] === '정보 없음' || 
+                                color: (!summaries['기술 스택'] || summaries['기술 스택'] === '정보 없음' ||
                                 (Array.isArray(summaries['기술 스택']) && summaries['기술 스택'].length === 0)) ? '#999' : '#495057',
-                                opacity: (!summaries['기술 스택'] || summaries['기술 스택'] === '정보 없음' || 
+                                opacity: (!summaries['기술 스택'] || summaries['기술 스택'] === '정보 없음' ||
                                 (Array.isArray(summaries['기술 스택']) && summaries['기술 스택'].length === 0)) ? 0.6 : 1
                               }}>
                                 <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>⚙️ 기술 스택</div>
                                 <div style={{ fontWeight: 'bold' }}>
                                   {(() => {
                                     const techStack = summaries['기술 스택'];
-                                    if (!techStack || techStack === '정보 없음' || 
+                                    if (!techStack || techStack === '정보 없음' ||
                                         (Array.isArray(techStack) && techStack.length === 0)) {
                                       return '정보 없음';
                                     }
@@ -1244,23 +1223,23 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                   })()}
                                 </div>
                               </div>
-                              
+
                               {/* 주요 기능 */}
-                              <div style={{ 
-                                padding: '15px', 
-                                background: '#e8f5e8', 
+                              <div style={{
+                                padding: '15px',
+                                background: '#e8f5e8',
                                 borderRadius: '8px',
                                 border: '1px solid #d4edda',
-                                color: (!summaries['주요 기능'] || summaries['주요 기능'] === '정보 없음' || 
+                                color: (!summaries['주요 기능'] || summaries['주요 기능'] === '정보 없음' ||
                                 (Array.isArray(summaries['주요 기능']) && summaries['주요 기능'].length === 0)) ? '#999' : '#155724',
-                                opacity: (!summaries['주요 기능'] || summaries['주요 기능'] === '정보 없음' || 
+                                opacity: (!summaries['주요 기능'] || summaries['주요 기능'] === '정보 없음' ||
                                 (Array.isArray(summaries['주요 기능']) && summaries['주요 기능'].length === 0)) ? 0.6 : 1
                               }}>
                                 <div style={{ fontSize: '14px', opacity: 0.8, marginBottom: '5px' }}>🚀 주요 기능</div>
                                 <div style={{ fontWeight: 'bold' }}>
                                   {(() => {
                                     const features = summaries['주요 기능'];
-                                    if (!features || features === '정보 없음' || 
+                                    if (!features || features === '정보 없음' ||
                                         (Array.isArray(features) && features.length === 0)) {
                                       return '정보 없음';
                                     }
@@ -1268,18 +1247,18 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                   })()}
                                 </div>
                               </div>
-                              
+
                               {/* 아키텍처 구조 */}
-                              <div style={{ 
-                                padding: '15px', 
-                                background: '#fff3cd', 
+                              <div style={{
+                                padding: '15px',
+                                background: '#fff3cd',
                                 borderRadius: '8px',
                                 border: '1px solid #ffeaa7',
-                                color: (!summaries['아키텍처 구조'] || 
+                                color: (!summaries['아키텍처 구조'] ||
                                   summaries['아키텍처 구조'] === '정보 없음' ||
                                   summaries['아키텍처 구조'].includes('파악하기 어렵습니다') ||
                                   summaries['아키텍처 구조'].includes('확인되지 않습니다')) ? '#999' : '#856404',
-                                opacity: (!summaries['아키텍처 구조'] || 
+                                opacity: (!summaries['아키텍처 구조'] ||
                                   summaries['아키텍처 구조'] === '정보 없음' ||
                                   summaries['아키텍처 구조'].includes('파악하기 어렵습니다') ||
                                   summaries['아키텍처 구조'].includes('확인되지 않습니다')) ? 0.6 : 1
@@ -1297,22 +1276,22 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                   })()}
                                 </div>
                               </div>
-                              
+
                               {/* 외부 라이브러리 - 전체 보기에서만 표시 */}
                               {showAllFields && (
-                                <div style={{ 
-                                  padding: '15px', 
-                                  background: '#f8f9fa', 
+                                <div style={{
+                                  padding: '15px',
+                                  background: '#f8f9fa',
                                   borderRadius: '8px',
                                   border: '1px solid #dee2e6',
                                   color: (() => {
                                     const libraries = summaries['외부 라이브러리'];
-                                    return !libraries || libraries === '정보 없음' || libraries === '' || 
+                                    return !libraries || libraries === '정보 없음' || libraries === '' ||
                                       (Array.isArray(libraries) && libraries.length === 0);
                                   })() ? '#999' : '#495057',
                                   opacity: (() => {
                                     const libraries = summaries['외부 라이브러리'];
-                                    return !libraries || libraries === '정보 없음' || libraries === '' || 
+                                    return !libraries || libraries === '정보 없음' || libraries === '' ||
                                       (Array.isArray(libraries) && libraries.length === 0);
                                   })() ? 0.6 : 1
                                 }}>
@@ -1320,7 +1299,7 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                   <div style={{ fontWeight: 'bold' }}>
                                     {(() => {
                                       const libraries = summaries['외부 라이브러리'];
-                                      if (!libraries || libraries === '정보 없음' || libraries === '' || 
+                                      if (!libraries || libraries === '정보 없음' || libraries === '' ||
                                           (Array.isArray(libraries) && libraries.length === 0)) {
                                         return '정보 없음';
                                       }
@@ -1329,12 +1308,12 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                   </div>
                                 </div>
                               )}
-                              
+
                               {/* LLM 모델 정보 - 전체 보기에서만 표시 */}
                               {showAllFields && (
-                                <div style={{ 
-                                  padding: '15px', 
-                                  background: '#e2e3e5', 
+                                <div style={{
+                                  padding: '15px',
+                                  background: '#e2e3e5',
                                   borderRadius: '8px',
                                   border: '1px solid #d6d8db',
                                   color: (() => {
@@ -1368,23 +1347,23 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                                 </div>
                               )}
                             </div>
-                            
+
                             {/* 레포지토리 링크 - 별도 섹션 */}
-                            <div style={{ 
-                              marginTop: '15px', 
-                              padding: '15px', 
-                              // background: 'linear-gradient(135deg, #e8f5e8 0%, #d4edda 100%)', 
+                            <div style={{
+                              marginTop: '15px',
+                              padding: '15px',
+                              // background: 'linear-gradient(135deg, #e8f5e8 0%, #d4edda 100%)',
                               borderRadius: '8px',
                               // border: '2px solid #28a745',
                               textAlign: 'center'
                             }}>
                               <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>🔗 레포지토리 링크</div>
-                              <a 
-                                href={summaries['레포 주소']} 
-                                target="_blank" 
+                              <a
+                                href={summaries['레포 주소']}
+                                target="_blank"
                                 rel="noreferrer"
-                                style={{ 
-                                  color: '#2c3e50', 
+                                style={{
+                                  color: '#2c3e50',
                                   textDecoration: 'none',
                                   fontWeight: 'bold',
                                   fontSize: '16px',
@@ -1414,17 +1393,17 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                   } catch (e) {
                     // JSON 파싱 실패 시 기존 텍스트 형태로 표시
                     return (
-                      <div style={{ 
-                        padding: '20px', 
-                        background: '#fff3cd', 
-                        border: '1px solid #ffeaa7', 
+                      <div style={{
+                        padding: '20px',
+                        background: '#fff3cd',
+                        border: '1px solid #ffeaa7',
                         borderRadius: '8px',
                         color: '#856404'
                       }}>
-                        <div style={{ 
-                          display: 'flex', 
-                          alignItems: 'center', 
-                          gap: '10px', 
+                        <div style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: '10px',
                           marginBottom: '15px',
                           fontSize: '18px',
                           fontWeight: 'bold'
@@ -1432,8 +1411,8 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                           <span>⚠️</span>
                           <span>원시 분석 결과</span>
                         </div>
-                        <pre style={{ 
-                          whiteSpace: 'pre-wrap', 
+                        <pre style={{
+                          whiteSpace: 'pre-wrap',
                           wordBreak: 'break-word',
                           margin: 0,
                           fontSize: '14px',
@@ -1451,16 +1430,16 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
 
           {/* AI 기반 아키텍처 분석 결과 - 맨 아래에 배치 */}
           {result && result.detailed_analysis?.architecture_analysis && result.detailed_analysis.architecture_analysis.total_repos_analyzed > 0 && (
-            <div style={{ 
-              marginTop: '20px', 
-              padding: '20px', 
-              background: 'linear-gradient(135deg, #f8f9fa 0%, #e8f4f8 100%)', 
+            <div style={{
+              marginTop: '20px',
+              padding: '20px',
+              background: 'linear-gradient(135deg, #f8f9fa 0%, #e8f4f8 100%)',
               borderRadius: '12px',
               border: '2px solid #17a2b8'
             }}>
-              <h5 style={{ 
-                margin: '0 0 20px 0', 
-                color: '#2c3e50', 
+              <h5 style={{
+                margin: '0 0 20px 0',
+                color: '#2c3e50',
                 fontSize: '18px',
                 display: 'flex',
                 alignItems: 'center',
@@ -1469,9 +1448,9 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
               }}>
                 🤖 AI 기반 아키텍처 분석 결과
               </h5>
-              
-              <div style={{ 
-                fontSize: '12px', 
+
+              <div style={{
+                fontSize: '12px',
                 color: '#666',
                 textAlign: 'center',
                 padding: '8px',
@@ -1481,9 +1460,9 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
               }}>
                 총 {result.detailed_analysis.architecture_analysis.total_repos_analyzed}개 레포지토리에 대해 AI 기반 아키텍처 분석을 수행했습니다.
               </div>
-              
+
               {result.detailed_analysis.architecture_analysis.architecture_results.map((arch, index) => (
-                <div key={index} style={{ 
+                <div key={index} style={{
                   marginBottom: '20px',
                   padding: '15px',
                   background: 'white',
@@ -1491,22 +1470,22 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                   border: '1px solid #dee2e6',
                   boxShadow: '0 2px 4px rgba(0,0,0,0.05)'
                 }}>
-                  <div style={{ 
-                    display: 'flex', 
-                    justifyContent: 'space-between', 
+                  <div style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
                     alignItems: 'center',
                     marginBottom: '15px'
                   }}>
-                    <h6 style={{ 
-                      margin: 0, 
-                      color: '#2c3e50', 
+                    <h6 style={{
+                      margin: 0,
+                      color: '#2c3e50',
                       fontSize: '16px',
                       fontWeight: 'bold'
                     }}>
                       📁 {arch.owner}/{arch.repo}
                     </h6>
-                    <div style={{ 
-                      fontSize: '12px', 
+                    <div style={{
+                      fontSize: '12px',
                       color: '#666',
                       display: 'flex',
                       gap: '10px'
@@ -1515,13 +1494,13 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                       <span>📄 {arch.opened_files.length}개 파일</span>
                     </div>
                   </div>
-                  
+
                   {/* 분석 실패 메시지 */}
                   {arch.topic === '분석 실패' && (
-                    <div style={{ 
+                    <div style={{
                       marginBottom: '15px',
-                      padding: '10px', 
-                      background: '#f8d7da', 
+                      padding: '10px',
+                      background: '#f8d7da',
                       borderRadius: '6px',
                       border: '1px solid #f5c6cb'
                     }}>
@@ -1531,21 +1510,21 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                       </div>
                     </div>
                   )}
-                  
+
                   {/* 분석 성공한 경우에만 상세 정보 표시 */}
                   {arch.topic !== '분석 실패' && (
                     <>
-                      <div style={{ 
-                        display: 'grid', 
-                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', 
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                         gap: '10px',
                         marginBottom: '15px'
                       }}>
                         {/* 기술 스택 */}
                         {arch.tech_stack && arch.tech_stack.length > 0 && (
-                          <div style={{ 
-                            padding: '10px', 
-                            background: '#e3f2fd', 
+                          <div style={{
+                            padding: '10px',
+                            background: '#e3f2fd',
                             borderRadius: '6px',
                             border: '1px solid #bbdefb'
                           }}>
@@ -1555,12 +1534,12 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                             </div>
                           </div>
                         )}
-                        
+
                         {/* 외부 라이브러리 */}
                         {arch.external_libs && arch.external_libs.length > 0 && (
-                          <div style={{ 
-                            padding: '10px', 
-                            background: '#fff3cd', 
+                          <div style={{
+                            padding: '10px',
+                            background: '#fff3cd',
                             borderRadius: '6px',
                             border: '1px solid #ffeaa7'
                           }}>
@@ -1571,12 +1550,12 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                             </div>
                           </div>
                         )}
-                        
+
                         {/* LLM 모델 */}
                         {arch.llm_models && arch.llm_models.length > 0 && (
-                          <div style={{ 
-                            padding: '10px', 
-                            background: '#e8f5e8', 
+                          <div style={{
+                            padding: '10px',
+                            background: '#e8f5e8',
                             borderRadius: '6px',
                             border: '1px solid #c8e6c9'
                           }}>
@@ -1587,13 +1566,13 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                           </div>
                         )}
                       </div>
-                      
+
                       {/* 주요 기능 (아키텍처 구조에서 추출) */}
                       {arch.architecture && arch.architecture !== '분석 완료' && arch.architecture !== '분석 실패' && (
-                        <div style={{ 
+                        <div style={{
                           marginBottom: '15px',
-                          padding: '10px', 
-                          background: '#e8f5e8', 
+                          padding: '10px',
+                          background: '#e8f5e8',
                           borderRadius: '6px',
                           border: '1px solid #d4edda'
                         }}>
@@ -1603,12 +1582,12 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                           </div>
                         </div>
                       )}
-                      
+
                       {/* 아키텍처 구조 */}
                       {arch.architecture && arch.architecture !== '분석 완료' && arch.architecture !== '분석 실패' && (
-                        <div style={{ 
-                          padding: '12px', 
-                          background: '#f8f9fa', 
+                        <div style={{
+                          padding: '12px',
+                          background: '#f8f9fa',
                           borderRadius: '6px',
                           border: '1px solid #dee2e6',
                           fontSize: '13px',
@@ -1622,12 +1601,12 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                           </div>
                         </div>
                       )}
-                      
+
                       {/* 분석된 파일 목록 - 상세 분석 결과 다음에 표시 */}
                       {arch.opened_files && arch.opened_files.length > 0 && (
-                        <div style={{ 
-                          padding: '10px', 
-                          background: '#f8f9fa', 
+                        <div style={{
+                          padding: '10px',
+                          background: '#f8f9fa',
                           borderRadius: '6px',
                           border: '1px solid #dee2e6'
                         }}>
@@ -1642,9 +1621,9 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
                   )}
                 </div>
               ))}
-              
-              <div style={{ 
-                fontSize: '12px', 
+
+              <div style={{
+                fontSize: '12px',
                 color: '#666',
                 textAlign: 'center',
                 padding: '8px',
@@ -1657,7 +1636,87 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
             </div>
           )}
 
+          {/* 토큰 사용량 표시 - 맨 아래에 배치 */}
+          {result && result.token_usage && (
+            <div style={{
+              marginTop: '20px',
+              padding: '15px',
+              background: 'linear-gradient(135deg, #f8f9fa 0%, #e8f4f8 100%)',
+              borderRadius: '8px',
+              border: '2px solid #28a745'
+            }}>
+              <h5 style={{
+                margin: '0 0 15px 0',
+                color: '#2c3e50',
+                fontSize: '16px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '8px'
+              }}>
+                📊 API 토큰 사용량
+              </h5>
 
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+                gap: '15px'
+              }}>
+                {/* GitHub API 호출 수 */}
+                <div style={{
+                  padding: '12px',
+                  background: 'white',
+                  borderRadius: '6px',
+                  border: '1px solid #dee2e6',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>🔗 GitHub API</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#2c3e50' }}>
+                    {result.token_usage.github_api_calls || 0}회 호출
+                  </div>
+                </div>
+
+                {/* OpenAI API 호출 수 */}
+                <div style={{
+                  padding: '12px',
+                  background: 'white',
+                  borderRadius: '6px',
+                  border: '1px solid #dee2e6',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>🤖 OpenAI API</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#2c3e50' }}>
+                    {result.token_usage.openai_api_calls || 0}회 호출
+                  </div>
+                </div>
+
+                {/* OpenAI 토큰 사용량 */}
+                <div style={{
+                  padding: '12px',
+                  background: 'white',
+                  borderRadius: '6px',
+                  border: '1px solid #dee2e6',
+                  textAlign: 'center'
+                }}>
+                  <div style={{ fontSize: '14px', color: '#666', marginBottom: '5px' }}>🔤 토큰 사용량</div>
+                  <div style={{ fontSize: '18px', fontWeight: 'bold', color: '#2c3e50' }}>
+                    {result.token_usage.openai_tokens_used || 0} 토큰
+                  </div>
+                </div>
+              </div>
+
+              <div style={{
+                fontSize: '12px',
+                color: '#666',
+                textAlign: 'center',
+                marginTop: '10px',
+                padding: '8px',
+                background: 'rgba(255,255,255,0.8)',
+                borderRadius: '4px'
+              }}>
+                💡 API 호출 횟수와 토큰 사용량은 분석 품질과 비용을 추적하는 데 도움이 됩니다.
+              </div>
+            </div>
+          )}
       </div>
     </div>
   );
@@ -1666,4 +1725,3 @@ const TestGithubSummary = ({ initialUsername = '', autoSubmit = false, applicant
 export default TestGithubSummary;
 
 
- 

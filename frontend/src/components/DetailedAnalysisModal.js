@@ -29,7 +29,7 @@ const ModalContent = styled(motion.div)`
 `;
 
 const CloseButton = styled.button`
-  position: absolute;
+  position: fixed;
   top: 16px;
   right: 16px;
   background: none;
@@ -40,6 +40,7 @@ const CloseButton = styled.button`
   padding: 8px;
   border-radius: 50%;
   transition: all 0.2s;
+  z-index: 3010;
 
   &:hover {
     background: #f5f5f5;
@@ -480,36 +481,199 @@ const DetailedAnalysisModal = ({ isOpen, onClose, analysisData, applicantName = 
               <DocumentSection>
                 <DocumentHeader>
                   <FiFileText />
-                  <DocumentTitle>이력서 분석 결과</DocumentTitle>
+                  <DocumentTitle>이력서 종합분석결과</DocumentTitle>
                 </DocumentHeader>
-                <AnalysisGrid>
-                  {Object.entries(processedData.resumeAnalysis).map(([key, value]) => {
-                    if (!value || typeof value !== 'object' || !('score' in value)) return null;
 
-                    const score = value.score;
-                    const grade = getScoreGrade(score);
+                {/* 새로운 분석 결과 형식 지원 */}
+                {processedData.resumeAnalysis.evaluation_weights ? (
+                  <>
+                    {/* 가중치 정보 표시 */}
+                    <div style={{ marginBottom: '20px', padding: '15px', backgroundColor: '#fff3cd', borderRadius: '8px', border: '2px solid #ffc107' }}>
+                      <h4 style={{ margin: '0 0 10px 0', fontSize: '14px', color: '#856404', fontWeight: '600' }}>📊 평가 가중치</h4>
+                      <p style={{ margin: '0', fontSize: '13px', color: '#856404', lineHeight: '1.5' }}>
+                        <strong style={{ backgroundColor: '#ffc107', padding: '2px 6px', borderRadius: '4px', color: '#000' }}>가중치 적용 이유:</strong>
+                        <span style={{ marginLeft: '8px', fontWeight: '500' }}>{processedData.resumeAnalysis.evaluation_weights.weight_reasoning}</span>
+                      </p>
+                    </div>
 
-                    return (
-                      <AnalysisItem key={key} score={score}>
-                        <ItemHeader>
-                          <ItemTitle>
-                            {getResumeAnalysisLabel(key)}
-                          </ItemTitle>
-                          <ItemScore>
-                            <ScoreNumber score={score}>{score}</ScoreNumber>
-                            <ScoreMax>/10</ScoreMax>
-                            <StatusIcon score={score}>
-                              {grade.icon}
-                            </StatusIcon>
-                          </ItemScore>
-                        </ItemHeader>
-                        <ItemDescription>
-                          {value.description || value.reason || '분석 결과가 없습니다.'}
-                        </ItemDescription>
-                      </AnalysisItem>
-                    );
-                  })}
-                </AnalysisGrid>
+                    {/* 점수 카드들 */}
+                    <AnalysisGrid>
+                      {[
+                        { key: 'education_score', label: '학력 및 전공', analysis: 'education_analysis' },
+                        { key: 'experience_score', label: '경력 및 직무 경험', analysis: 'experience_analysis' },
+                        { key: 'skills_score', label: '보유 기술 및 역량', analysis: 'skills_analysis' },
+                        { key: 'projects_score', label: '프로젝트 및 성과', analysis: 'projects_analysis' },
+                        { key: 'growth_score', label: '자기계발 및 성장', analysis: 'growth_analysis' }
+                      ].map(({ key, label, analysis }) => {
+                        const score = processedData.resumeAnalysis[key];
+                        if (score === undefined) return null;
+
+                        const grade = getScoreGrade(score);
+                        const analysisText = processedData.resumeAnalysis[analysis];
+
+                        return (
+                          <AnalysisItem key={key} score={score}>
+                            <ItemHeader>
+                              <ItemTitle>{label}</ItemTitle>
+                              <ItemScore>
+                                <ScoreNumber score={score}>{score}</ScoreNumber>
+                                <ScoreMax>/100</ScoreMax>
+                                <StatusIcon score={score}>
+                                  {grade.icon}
+                                </StatusIcon>
+                              </ItemScore>
+                            </ItemHeader>
+                            <ItemDescription>
+                              {analysisText ? (
+                                <div dangerouslySetInnerHTML={{ __html: analysisText }} />
+                              ) : (
+                                '분석 결과가 없습니다.'
+                              )}
+                            </ItemDescription>
+                          </AnalysisItem>
+                        );
+                      })}
+                    </AnalysisGrid>
+
+                    {/* 종합 점수 */}
+                    <div style={{ marginTop: '20px', padding: '20px', backgroundColor: '#d4edda', borderRadius: '12px', textAlign: 'center', border: '3px solid #28a745', boxShadow: '0 4px 12px rgba(40, 167, 69, 0.2)' }}>
+                      <h3 style={{ margin: '0 0 12px 0', color: '#155724', fontSize: '24px', fontWeight: '700' }}>
+                        🎯 종합 점수: <span style={{ color: '#28a745', fontSize: '32px' }}>{processedData.resumeAnalysis.analysis_result?.overall_score || processedData.resumeAnalysis.overall_score}</span>/100
+                      </h3>
+                      <div style={{ backgroundColor: '#f8fff9', padding: '15px', borderRadius: '8px', border: '1px solid #c3e6cb' }}>
+                        <p style={{ margin: '0', fontSize: '15px', color: '#155724', lineHeight: '1.6', fontWeight: '500' }}>
+                          <strong style={{ color: '#155724' }}>📋 종합 평가:</strong>
+                          <br />
+                          <div dangerouslySetInnerHTML={{ __html: processedData.resumeAnalysis.analysis_result?.overall_feedback || processedData.resumeAnalysis.overall_feedback }} />
+                        </p>
+                      </div>
+                    </div>
+
+                    {/* 강점 및 개선점 */}
+                    {((processedData.resumeAnalysis.analysis_result?.strengths || processedData.resumeAnalysis.strengths)?.length > 0 || (processedData.resumeAnalysis.analysis_result?.improvements || processedData.resumeAnalysis.improvements)?.length > 0) && (
+                      <div style={{ marginTop: '20px' }}>
+                        {(processedData.resumeAnalysis.analysis_result?.strengths || processedData.resumeAnalysis.strengths)?.length > 0 && (
+                          <div style={{ marginBottom: '16px', padding: '15px', backgroundColor: '#d4edda', borderRadius: '8px', border: '2px solid #28a745' }}>
+                            <h4 style={{ margin: '0 0 12px 0', color: '#155724', fontSize: '16px', fontWeight: '600' }}>✅ 주요 강점</h4>
+                            <ul style={{ margin: '0', paddingLeft: '20px' }}>
+                              {(processedData.resumeAnalysis.analysis_result?.strengths || processedData.resumeAnalysis.strengths || []).map((strength, index) => (
+                                <li key={index} style={{ marginBottom: '6px', fontSize: '14px', lineHeight: '1.5', fontWeight: '500' }}>
+                                  <span style={{ backgroundColor: '#28a745', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '12px', marginRight: '8px' }}>강점</span>
+                                  <span dangerouslySetInnerHTML={{ __html: strength }} />
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+
+                        {(processedData.resumeAnalysis.analysis_result?.improvements || processedData.resumeAnalysis.improvements)?.length > 0 && (
+                          <div style={{ padding: '15px', backgroundColor: '#f8d7da', borderRadius: '8px', border: '2px solid #dc3545' }}>
+                            <h4 style={{ margin: '0 0 12px 0', color: '#721c24', fontSize: '16px', fontWeight: '600' }}>⚠️ 개선 영역</h4>
+                            <ul style={{ margin: '0', paddingLeft: '20px' }}>
+                              {(processedData.resumeAnalysis.analysis_result?.improvements || processedData.resumeAnalysis.improvements || []).map((improvement, index) => (
+                                <li key={index} style={{ marginBottom: '6px', fontSize: '14px', lineHeight: '1.5', fontWeight: '500' }}>
+                                  <span style={{ backgroundColor: '#dc3545', color: 'white', padding: '2px 6px', borderRadius: '4px', fontSize: '12px', marginRight: '8px' }}>개선</span>
+                                  <span dangerouslySetInnerHTML={{ __html: improvement }} />
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* 실행 계획형 권장사항 */}
+                    {(processedData.resumeAnalysis.analysis_result?.recommendations || processedData.resumeAnalysis.recommendations)?.length > 0 && (
+                      <div style={{ marginTop: '20px' }}>
+                        <h4 style={{ margin: '0 0 12px 0', color: '#7c3aed' }}>🎯 실행 계획형 개선 권장사항</h4>
+                        {(processedData.resumeAnalysis.analysis_result?.recommendations || processedData.resumeAnalysis.recommendations || []).map((rec, index) => (
+                          <div key={index} style={{
+                            marginBottom: '12px',
+                            padding: '12px',
+                            backgroundColor: '#f3f4f6',
+                            borderRadius: '6px',
+                            borderLeft: `4px solid ${rec.priority === 'high' ? '#dc2626' : rec.priority === 'medium' ? '#f59e0b' : '#6b7280'}`
+                          }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                              <strong style={{ fontSize: '14px' }}>{rec.action}</strong>
+                              <span style={{
+                                fontSize: '12px',
+                                padding: '2px 8px',
+                                borderRadius: '12px',
+                                backgroundColor: rec.priority === 'high' ? '#fecaca' : rec.priority === 'medium' ? '#fed7aa' : '#e5e7eb',
+                                color: rec.priority === 'high' ? '#dc2626' : rec.priority === 'medium' ? '#f59e0b' : '#6b7280'
+                              }}>
+                                {rec.priority === 'high' ? '높음' : rec.priority === 'medium' ? '보통' : '낮음'}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#6b7280', marginBottom: '4px' }}>
+                              <strong>기간:</strong> {rec.timeline}
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#374151', marginBottom: '4px' }}>
+                              <strong>방법:</strong> {rec.method}
+                            </div>
+                            <div style={{ fontSize: '12px', color: '#059669' }}>
+                              <strong>기대 효과:</strong> {rec.expected_impact}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* 분석 노트 */}
+                    {processedData.resumeAnalysis.analysis_notes && (
+                      <div style={{ marginTop: '20px', padding: '12px', backgroundColor: '#fef3c7', borderRadius: '8px' }}>
+                        <h4 style={{ margin: '0 0 8px 0', fontSize: '14px', color: '#92400e' }}>📝 분석 노트</h4>
+                        {processedData.resumeAnalysis.analysis_notes.key_technologies?.length > 0 && (
+                          <div style={{ marginBottom: '8px' }}>
+                            <strong style={{ fontSize: '12px' }}>핵심 기술:</strong>
+                            <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                              {processedData.resumeAnalysis.analysis_notes.key_technologies.join(', ')}
+                            </span>
+                          </div>
+                        )}
+                        {processedData.resumeAnalysis.analysis_notes.performance_metrics?.length > 0 && (
+                          <div>
+                            <strong style={{ fontSize: '12px' }}>성과 지표:</strong>
+                            <span style={{ fontSize: '12px', marginLeft: '4px' }}>
+                              {processedData.resumeAnalysis.analysis_notes.performance_metrics.join(', ')}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  /* 기존 형식 지원 (하위 호환성) */
+                  <AnalysisGrid>
+                    {Object.entries(processedData.resumeAnalysis).map(([key, value]) => {
+                      if (!value || typeof value !== 'object' || !('score' in value)) return null;
+
+                      const score = value.score;
+                      const grade = getScoreGrade(score);
+
+                      return (
+                        <AnalysisItem key={key} score={score}>
+                          <ItemHeader>
+                            <ItemTitle>
+                              {getResumeAnalysisLabel(key)}
+                            </ItemTitle>
+                            <ItemScore>
+                              <ScoreNumber score={score}>{score}</ScoreNumber>
+                              <ScoreMax>/10</ScoreMax>
+                              <StatusIcon score={score}>
+                                {grade.icon}
+                              </StatusIcon>
+                            </ItemScore>
+                          </ItemHeader>
+                          <ItemDescription>
+                            {value.description || value.reason || '분석 결과가 없습니다.'}
+                          </ItemDescription>
+                        </AnalysisItem>
+                      );
+                    })}
+                  </AnalysisGrid>
+                )}
               </DocumentSection>
             )}
 

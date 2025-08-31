@@ -1,13 +1,13 @@
 import os
-from typing import Any, Dict, List, Optional
 from datetime import datetime
+from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models.applicant import Applicant, ApplicantCreate
 from modules.core.services.embedding_service import EmbeddingService
+from modules.core.services.mongo_service import MongoService
 from modules.core.services.similarity_service import SimilarityService
 from modules.core.services.vector_service import VectorService
-from modules.core.services.mongo_service import MongoService
 
 router = APIRouter(prefix="/api/applicants", tags=["applicants"])
 
@@ -74,10 +74,14 @@ async def get_all_applicants(
             print(f"🔍 API 응답 - 첫 번째 지원자 필드들: {list(first_applicant.keys())}")
             print(f"🔍 API 응답 - email 존재: {'email' in first_applicant}")
             print(f"🔍 API 응답 - phone 존재: {'phone' in first_applicant}")
+            print(f"🔍 API 응답 - skills 존재: {'skills' in first_applicant}")
             if 'email' in first_applicant:
                 print(f"🔍 API 응답 - email 값: {first_applicant['email']}")
             if 'phone' in first_applicant:
                 print(f"🔍 API 응답 - phone 값: {first_applicant['phone']}")
+            if 'skills' in first_applicant:
+                print(f"🔍 API 응답 - skills 값: {first_applicant['skills']}")
+                print(f"🔍 API 응답 - skills 타입: {type(first_applicant['skills'])}")
 
         # 응답 데이터 확인 (디버깅용)
         if result.get('applicants') and len(result['applicants']) > 0:
@@ -249,9 +253,9 @@ async def get_talent_recommendations(
         from bson import ObjectId
         applicant_collection = mongo_service.db.applicants
         print(f"  - 지원자 컬렉션: {applicant_collection.name}")
-        
+
         target_applicant = await applicant_collection.find_one({"_id": ObjectId(applicant_id)})
-        
+
         if not target_applicant:
             print(f"❌ [유사인재 추천 API] 지원자를 찾을 수 없음: {applicant_id}")
             raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
@@ -276,7 +280,7 @@ async def get_talent_recommendations(
         print(f"🔍 [유사인재 추천 API] 3단계: 유사 인재 추천 수행")
         print(f"  - 검색 제한: 5명")
         print(f"  - 검색 시작 시간: {datetime.now().isoformat()}")
-        
+
         start_time = datetime.now()
         result = await similarity_service.search_similar_applicants_hybrid(
             target_applicant=target_applicant,
@@ -284,7 +288,7 @@ async def get_talent_recommendations(
             limit=5
         )
         end_time = datetime.now()
-        
+
         search_duration = (end_time - start_time).total_seconds()
         print(f"  - 검색 완료 시간: {end_time.isoformat()}")
         print(f"  - 검색 소요 시간: {search_duration:.2f}초")
@@ -292,22 +296,18 @@ async def get_talent_recommendations(
         print(f"📊 [유사인재 추천 API] 검색 결과 분석")
         print(f"  - 결과 성공 여부: {result.get('success', False)}")
         print(f"  - 결과 메시지: {result.get('message', 'N/A')}")
-        
+
         if result.get('success'):
             data = result.get('data', {})
             print(f"  - 검색 방법: {data.get('search_method', 'N/A')}")
-            ensemble_weights = data.get('ensemble_weights', {})
-            if ensemble_weights:
-                print(f"  - 가중치 설정: vector: {ensemble_weights.get('vector', 0.5)}, keyword: {ensemble_weights.get('keyword', 0.5)}")
-            else:
-                print(f"  - 가중치 설정: N/A")
+            print(f"  - 가중치 설정: {data.get('weights', 'N/A')}")
             print(f"  - 총 결과 수: {data.get('total', 0)}")
             print(f"  - 벡터 검색 결과 수: {data.get('vector_count', 0)}")
             print(f"  - 키워드 검색 결과 수: {data.get('keyword_count', 0)}")
-            
+
             results = data.get('results', [])
             print(f"  - 상세 결과 수: {len(results)}")
-            
+
             for i, res in enumerate(results[:3]):  # 상위 3개만 로깅
                 applicant = res.get('applicant', {})
                 print(f"    #{i+1}: {applicant.get('name', 'N/A')} "
@@ -333,12 +333,14 @@ async def get_talent_recommendations(
                 "response_timestamp": end_time.isoformat()
             }
         }
-        
+
         print(f"✅ [유사인재 추천 API] === 요청 완료 ===")
         print(f"  - 응답 상태: success")
         print(f"  - 총 소요 시간: {search_duration:.2f}초")
-        
-        return response_data
+
+        # 라우터 끝단에서만 안전 직렬화 적용
+        from utils.response import respond
+        return respond(response_data)
 
     except HTTPException:
         print(f"❌ [유사인재 추천 API] HTTP 예외 발생 - 재발생")
@@ -348,11 +350,11 @@ async def get_talent_recommendations(
         print(f"  - 오류 타입: {type(e).__name__}")
         print(f"  - 오류 메시지: {str(e)}")
         print(f"  - 오류 스택: {e.__traceback__}")
-        
+
         import traceback
         print(f"  - 상세 스택 트레이스:")
         traceback.print_exc()
-        
+
         raise HTTPException(
             status_code=500,
             detail=f"유사 인재 추천 중 오류가 발생했습니다: {str(e)}"

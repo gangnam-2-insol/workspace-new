@@ -11,8 +11,7 @@ const JobPostingRegistration = React.lazy(() => import('./pages/JobPostingRegist
 const AIJobRegistrationPage = React.lazy(() => import('./pages/JobPostingRegistration/AIJobRegistrationPage'));
 const ResumeManagement = React.lazy(() => import('./pages/ResumeManagement/ResumeManagement'));
 const ApplicantManagement = React.lazy(() => import('./pages/ApplicantManagement'));
-const InterviewManagement = React.lazy(() => import('./pages/InterviewManagement/InterviewManagement'));
-const InterviewCalendar = React.lazy(() => import('./pages/InterviewManagement/InterviewCalendar'));
+
 const CoverLetterValidation = React.lazy(() => import('./pages/CoverLetterValidation/CoverLetterValidation'));
 const TalentRecommendation = React.lazy(() => import('./pages/TalentRecommendation/TalentRecommendation'));
 const UserManagement = React.lazy(() => import('./pages/UserManagement/UserManagement'));
@@ -21,6 +20,8 @@ const SampleDataManagement = React.lazy(() => import('./pages/SampleDataManageme
 const TestGithubSummary = React.lazy(() => import('./pages/TestGithubSummary'));
 const PDFOCRPage = React.lazy(() => import('./pages/PDFOCRPage/PDFOCRPage'));
 const CompanyCultureManagement = React.lazy(() => import('./pages/CompanyCultureManagement/CompanyCultureManagement'));
+const AnalysisWeightsPage = React.lazy(() => import('./pages/AnalysisWeightsPage'));
+const HelpPage = React.lazy(() => import('./pages/HelpPage/HelpPage'));
 
 
 
@@ -150,10 +151,6 @@ function App() {
         detail: { value: newWorkContent }
       });
       window.dispatchEvent(event);
-    } else if (action === 'openLangGraphRegistration') {
-      // 랭그래프모드용 채용공고등록도우미 열기
-      const event = new CustomEvent('openLangGraphRegistration');
-      window.dispatchEvent(event);
     } else if (action === 'openAIJobRegistration') {
       // AI 채용공고 등록 페이지로 이동
       navigate('/ai-job-registration');
@@ -170,8 +167,7 @@ function App() {
             <Route path="/ai-job-registration" element={<AIJobRegistrationPage />} />
             <Route path="/resume" element={<ResumeManagement />} />
             <Route path="/applicants" element={<ApplicantManagement />} />
-            <Route path="/interview" element={<InterviewManagement />} />
-            <Route path="/interview-calendar" element={<InterviewCalendar />} />
+
             <Route path="/portfolio" element={<Navigate to="/github-test" replace />} />
             <Route path="/cover-letter" element={<CoverLetterValidation />} />
             <Route path="/talent" element={<TalentRecommendation />} />
@@ -179,6 +175,8 @@ function App() {
             <Route path="/settings" element={<Settings />} />
             <Route path="/sample-data" element={<SampleDataManagement />} />
             <Route path="/company-culture" element={<CompanyCultureManagement />} />
+            <Route path="/analysis-weights" element={<AnalysisWeightsPage />} />
+            <Route path="/help" element={<HelpPage />} />
             <Route path="/github-test" element={<TestGithubSummary />} />
             <Route path="/pdf-ocr" element={<PDFOCRPage />} />
             <Route path="*" element={<div style={{ padding: '20px', textAlign: 'center' }}>페이지를 찾을 수 없습니다.</div>} />

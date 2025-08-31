@@ -63,7 +63,7 @@ class JobPostingUpdate(BaseModel):
 
 class JobPosting(JobPostingBase):
     id: Optional[str] = Field(None)
-    status: JobStatus = Field(default=JobStatus.DRAFT, description="채용공고 상태")
+    status: JobStatus = Field(default=JobStatus.PUBLISHED, description="채용공고 상태")
     applicants: int = Field(default=0, description="지원자 수")
     views: int = Field(default=0, description="조회수")
     bookmarks: int = Field(default=0, description="북마크 수")

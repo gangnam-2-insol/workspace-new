@@ -1,8 +1,9 @@
 from datetime import datetime
-from typing import Optional, Dict, Any
-from typing import Optional, List, Union
-from pydantic import BaseModel, Field
+from typing import Any, Dict, List, Optional, Union
+
 from bson import ObjectId
+from pydantic import BaseModel, Field
+
 
 class ApplicantBase(BaseModel):
     name: str = Field(..., description="지원자 이름")
@@ -10,13 +11,28 @@ class ApplicantBase(BaseModel):
     phone: Optional[str] = Field(None, description="지원자 전화번호")
 
 class ApplicantCreate(ApplicantBase):
+    # ===== 이력서 (Resume) 필드들 =====
+    # 기본 정보
     position: Optional[str] = Field(None, description="지원 직무")
     department: Optional[str] = Field(None, description="부서")
+
+    # 경력 정보
     experience: Optional[Union[str, int]] = Field(None, description="경력")
+
+    # 기술 스택
     skills: Optional[Union[str, List[str]]] = Field(None, description="기술 스택")
-    growthBackground: Optional[str] = Field(None, description="성장 배경")
-    motivation: Optional[str] = Field(None, description="지원 동기")
+
+    # 경력 사항
     careerHistory: Optional[str] = Field(None, description="경력 사항")
+
+    # ===== 자소서 (Cover Letter) 필드들 =====
+    # 성장 배경
+    growthBackground: Optional[str] = Field(None, description="성장 배경")
+
+    # 지원 동기
+    motivation: Optional[str] = Field(None, description="지원 동기")
+
+    # ===== 공통 필드들 =====
     analysisScore: Optional[int] = Field(None, ge=0, le=100, description="분석 점수 (0-100)")
     analysisResult: Optional[str] = Field(None, description="분석 결과")
     status: Optional[str] = Field(default="pending", description="상태")
@@ -34,13 +50,29 @@ class ApplicantCreate(ApplicantBase):
 
 class Applicant(ApplicantBase):
     id: str = Field(alias="_id", description="지원자 ID")
+
+    # ===== 이력서 (Resume) 필드들 =====
+    # 기본 정보
     position: Optional[str] = Field(None, description="지원 직무")
     department: Optional[str] = Field(None, description="부서")
+
+    # 경력 정보
     experience: Optional[Union[str, int]] = Field(None, description="경력")
+
+    # 기술 스택
     skills: Optional[Union[str, List[str]]] = Field(None, description="기술 스택")
-    growthBackground: Optional[str] = Field(None, description="성장 배경")
-    motivation: Optional[str] = Field(None, description="지원 동기")
+
+    # 경력 사항
     careerHistory: Optional[str] = Field(None, description="경력 사항")
+
+    # ===== 자소서 (Cover Letter) 필드들 =====
+    # 성장 배경
+    growthBackground: Optional[str] = Field(None, description="성장 배경")
+
+    # 지원 동기
+    motivation: Optional[str] = Field(None, description="지원 동기")
+
+    # ===== 공통 필드들 =====
     analysisScore: Optional[int] = Field(None, ge=0, le=100, description="분석 점수 (0-100)")
     analysisResult: Optional[str] = Field(None, description="분석 결과")
     status: Optional[str] = Field(default="pending", description="상태")
@@ -72,12 +104,14 @@ class Applicant(ApplicantBase):
                 "name": "홍길동",
                 "email": "hong@example.com",
                 "phone": "010-1234-5678",
+                # 이력서 필드들
                 "position": "백엔드 개발자",
                 "experience": "3년",
                 "skills": ["Java", "Spring Boot", "MySQL"],
+                "careerHistory": "2022년부터 스타트업에서...",
+                # 자소서 필드들
                 "growthBackground": "학창 시절부터 프로그래밍에 관심...",
                 "motivation": "귀사의 기술력에 매료되어...",
-                "careerHistory": "2022년부터 스타트업에서...",
                 "analysisScore": 85,
                 "analysisResult": "Java와 Spring 기반의 백엔드 개발 경험이 있습니다.",
                 "status": "pending",

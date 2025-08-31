@@ -33,7 +33,7 @@ const InterviewCalendarView = ({
     <div className="calendar-view">
       {/* 캘린더 헤더 */}
       <div className="calendar-header">
-        <button 
+        <button
           className="btn btn-secondary"
           onClick={() => navigateMonth(-1)}
         >
@@ -42,7 +42,7 @@ const InterviewCalendarView = ({
         <h2 className="calendar-title">
           {currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월
         </h2>
-        <button 
+        <button
           className="btn btn-secondary"
           onClick={() => navigateMonth(1)}
         >
@@ -78,8 +78,8 @@ const InterviewCalendarView = ({
             const isToday = dateStr === formatDate(new Date());
 
             days.push(
-              <div 
-                key={day} 
+              <div
+                key={day}
                 className={`calendar-day ${isToday ? 'today' : ''} ${interviewsForDate.length > 0 ? 'has-interviews' : ''}`}
               >
                 <div className="day-number">{day}</div>
@@ -104,7 +104,7 @@ const InterviewCalendarView = ({
                     </div>
                   </div>
                 )}
-                <button 
+                <button
                   className="add-interview-btn"
                   onClick={() => openCalendarScheduleModal(dateStr)}
                   title="면접 일정 추가"

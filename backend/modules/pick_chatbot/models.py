@@ -18,6 +18,9 @@ class IntentType(str, Enum):
     PAGE_NAVIGATION = "page_navigation"
     JOB_POSTING_CREATION = "job_posting_creation"
     APPLICANT_MANAGEMENT = "applicant_management"
+    RESUME_UPLOAD = "resume_upload"
+    RESUME_SEARCH = "resume_search"
+    AI_ANALYSIS = "ai_analysis"
     GENERAL_QUESTION = "general_question"
     UNKNOWN = "unknown"
 
@@ -26,7 +29,10 @@ class ToolType(str, Enum):
     GITHUB_ANALYZER = "github_analyzer"
     PAGE_NAVIGATOR = "page_navigator"
     JOB_POSTING_CREATOR = "job_posting_creator"
-    APPLICANT_SEARCHER = "applicant_searcher"
+    APPLICANT_MANAGER = "applicant_manager"
+    PDF_OCR = "pdf_ocr"
+    RESUME_SEARCHER = "resume_searcher"
+    AI_ANALYZER = "ai_analyzer"
 
 # 에이전트 요청 모델
 @dataclass
@@ -78,7 +84,7 @@ class ChatSession(BaseModel):
     created_at: datetime = Field(default_factory=datetime.utcnow, description="생성일시")
     last_activity: datetime = Field(default_factory=datetime.utcnow, description="마지막 활동")
     is_active: bool = Field(default=True, description="활성 상태")
-    
+
     class Config:
         populate_by_name = True
         arbitrary_types_allowed = True
@@ -194,6 +200,6 @@ class ConversationHistory(BaseModel):
     messages: List[Dict[str, Any]] = Field(default_factory=list, description="메시지 목록")
     created_at: datetime = Field(default_factory=datetime.utcnow, description="생성일시")
     updated_at: datetime = Field(default_factory=datetime.utcnow, description="수정일시")
-    
+
     class Config:
         json_encoders = {datetime: lambda v: v.isoformat()}

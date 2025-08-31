@@ -196,7 +196,7 @@ def _build_applicant_data(name: Optional[str], email: Optional[str], phone: Opti
         analysisScore=final_analysis_score,
         analysisResult=final_analysis_result,
         status="pending",
-        job_posting_id=job_posting_id if job_posting_id else None
+        job_posting_id=job_posting_id if job_posting_id and job_posting_id != "default_job_posting" else None
     )
 
 def _extract_position_from_text(text: str) -> str:
@@ -655,11 +655,15 @@ async def upload_multiple_documents(
                 # 지원자 데이터 생성
                 applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
 
+                # 지원자 데이터에 채용공고 자동 할당
+                from backend.modules.core.utils.job_posting_assignment import ensure_applicant_has_job_posting
+                applicant_data = await ensure_applicant_has_job_posting(db, applicant_data.dict())
+
                 # MongoDB에 저장
                 result = mongo_saver.save_resume_with_ocr(
                     ocr_result=enhanced_ocr_result,
                     applicant_data=applicant_data,
-                    job_posting_id=job_posting_id,
+                    job_posting_id=applicant_data.get("job_posting_id"),
                     file_path=temp_file_path
                 )
 

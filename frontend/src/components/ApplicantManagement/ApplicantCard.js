@@ -12,6 +12,7 @@ import {
 } from 'react-icons/fi';
 import CoverLetterSummary from '../CoverLetterSummary';
 import { getStatusText } from '../../utils/analysisHelpers';
+import { parseSkills, formatSkills } from '../../utils/skillParser';
 
 // 스타일 컴포넌트들 - 순서 중요!
 const ApplicantName = styled.h3`
@@ -41,12 +42,12 @@ const ApplicantCard = styled(motion.div)`
   &:hover {
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.15);
     transform: translateY(-2px);
-    
+
     /* hover 시에도 이름과 직무는 기본 색상 유지 */
     ${ApplicantName} {
       color: var(--text-primary);
     }
-    
+
     ${ApplicantPosition} {
       color: var(--text-secondary);
     }
@@ -144,6 +145,38 @@ const InfoRow = styled.div`
   }
 `;
 
+const SkillsContainer = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  align-items: center;
+`;
+
+const SkillTag = styled.span`
+  background: linear-gradient(135deg, #667eea, #764ba2);
+  color: white;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(102, 126, 234, 0.2);
+  transition: all 0.2s ease;
+
+  &:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 6px rgba(102, 126, 234, 0.3);
+  }
+`;
+
+const MoreSkills = styled.span`
+  background: #f3f4f6;
+  color: #6b7280;
+  padding: 2px 8px;
+  border-radius: 8px;
+  font-size: 11px;
+  font-weight: 500;
+`;
+
 const CardActions = styled.div`
   display: flex;
   gap: 8px;
@@ -239,15 +272,16 @@ const MemoizedApplicantCard = React.memo(({
   selectedJobPostingId,
   onStatusChange
 }) => {
-  // 디버깅을 위한 로깅
-  console.log('🎯 MemoizedApplicantCard 렌더링:', {
-    name: applicant?.name,
-    email: applicant?.email,
-    phone: applicant?.phone,
-    id: applicant?.id,
-    allFields: Object.keys(applicant || {}),
-    fullData: applicant
-  });
+  // 🔍 디버깅: 렌더링 최적화를 위한 로깅 (개발 모드에서만)
+  if (process.env.NODE_ENV === 'development') {
+    console.log('🎯 MemoizedApplicantCard 렌더링:', {
+      name: applicant?.name,
+      id: applicant?.id,
+      status: applicant?.status,
+      rank,
+      timestamp: new Date().toISOString()
+    });
+  }
 
   const handleStatusUpdate = useCallback(async (newStatus) => {
     try {
@@ -307,12 +341,24 @@ const MemoizedApplicantCard = React.memo(({
         </InfoRow>
         <InfoRow>
           <FiCode />
-          <span>
-            {Array.isArray(applicant.skills)
-              ? applicant.skills.join(', ')
-              : applicant.skills || '기술 정보 없음'
-            }
-          </span>
+          <SkillsContainer>
+            {(() => {
+              const skillData = formatSkills(applicant.skills, 3);
+              if (skillData.totalCount === 0) {
+                return <span>기술 정보 없음</span>;
+              }
+              return (
+                <>
+                  {skillData.displaySkills.map((skill, index) => (
+                    <SkillTag key={index}>{skill}</SkillTag>
+                  ))}
+                  {skillData.remainingCount > 0 && (
+                    <MoreSkills>+{skillData.remainingCount}</MoreSkills>
+                  )}
+                </>
+              );
+            })()}
+          </SkillsContainer>
         </InfoRow>
 
         {/* 자소서 요약 섹션 */}
@@ -358,6 +404,30 @@ const MemoizedApplicantCard = React.memo(({
       </CardActions>
     </ApplicantCard>
   );
+}, (prevProps, nextProps) => {
+  // 🔍 메모이제이션 비교 함수 - 실제로 변경된 props만 감지
+  const prevApplicant = prevProps.applicant;
+  const nextApplicant = nextProps.applicant;
+
+  // 지원자 정보가 변경되었는지 확인
+  if (prevApplicant?.id !== nextApplicant?.id ||
+      prevApplicant?.name !== nextApplicant?.name ||
+      prevApplicant?.status !== nextApplicant?.status ||
+      prevApplicant?.position !== nextApplicant?.position ||
+      prevApplicant?.email !== nextApplicant?.email ||
+      prevApplicant?.phone !== nextApplicant?.phone ||
+      prevApplicant?.skills !== nextApplicant?.skills) {
+    return false; // 리렌더링 필요
+  }
+
+  // 다른 props 변경 확인
+  if (prevProps.rank !== nextProps.rank ||
+      prevProps.selectedJobPostingId !== nextProps.selectedJobPostingId) {
+    return false; // 리렌더링 필요
+  }
+
+  // 함수 참조는 무시 (useCallback으로 최적화됨)
+  return true; // 리렌더링 불필요
 });
 
 MemoizedApplicantCard.displayName = 'MemoizedApplicantCard';
