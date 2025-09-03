@@ -85,8 +85,3 @@ def analyze_top_applicant():
 
 if __name__ == "__main__":
     analyze_top_applicant()
-<<<<<<< Updated upstream
-=======
-
-
->>>>>>> Stashed changes

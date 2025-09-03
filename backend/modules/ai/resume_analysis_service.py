@@ -66,11 +66,9 @@ class ResumeAnalysisService:
         """HuggingFace 분석기 지연 로딩"""
         if self.analyzers["huggingface"] is None:
             try:
-<<<<<<< Updated upstream
                 print("📥 HuggingFace 분석기 로딩 중...")
-=======
                 print("📥 HuggingFace 분석기 로딩 중.")
->>>>>>> Stashed changes
+                print("📥 HuggingFace 분석기 로딩 중.")
                 self.analyzers["huggingface"] = HuggingFaceResumeAnalyzer()
                 print("✅ HuggingFace 분석기 로딩 완료")
             except Exception as e:

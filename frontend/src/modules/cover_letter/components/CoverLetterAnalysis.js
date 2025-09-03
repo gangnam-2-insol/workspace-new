@@ -104,10 +104,7 @@ const Card = styled.div`
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
-<<<<<<< Updated upstream
-=======
   min-height: ${props => props.minHeight || 'auto'};
->>>>>>> Stashed changes
 
   &::before {
     content: '';
@@ -161,14 +158,6 @@ const SummaryText = styled.p`
   font-size: 14px;
   color: #475569;
   line-height: 1.6;
-<<<<<<< Updated upstream
-  background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
-  padding: 16px;
-  border-radius: 12px;
-  margin: 0;
-  border: 1px solid #e2e8f0;
-  box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
-=======
   background: white;
   padding: 20px;
   border-radius: 12px;
@@ -178,7 +167,6 @@ const SummaryText = styled.p`
   min-height: 280px;
   max-height: 400px;
   overflow-y: auto;
->>>>>>> Stashed changes
 `;
 
 const BarChartContainer = styled.div`
@@ -535,11 +523,9 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
     return (
       <Container>
         <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
-<<<<<<< Updated upstream
           <div>분석 데이터를 불러오는 중...</div>
-=======
           <div>분석 데이터를 불러오는 중.</div>
->>>>>>> Stashed changes
+          <div>분석 데이터를 불러오는 중.</div>
         </div>
       </Container>
     );
@@ -618,11 +604,8 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
         )}
       </HeaderSection>
 
-<<<<<<< Updated upstream
       {/* 메인 콘텐츠 */}
-=======
       {/* 첫 번째 행 - 종합 평가와 항목별 상세 분석 */}
->>>>>>> Stashed changes
       <MainContent>
         {/* 왼쪽 패널 */}
         <LeftPanel>
@@ -637,7 +620,6 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
               />
             </RadarChartSection>
           </Card>
-<<<<<<< Updated upstream
 
           {/* 전체적인 총평 */}
           <Card>
@@ -646,8 +628,6 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
               {summary}
             </SummaryText>
           </Card>
-=======
->>>>>>> Stashed changes
         </LeftPanel>
 
         {/* 오른쪽 패널 */}
@@ -679,8 +659,6 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
         </RightPanel>
       </MainContent>
 
-<<<<<<< Updated upstream
-=======
       {/* 두 번째 행 - 전체적인 총평과 상세분석 설명을 같은 선상에 배치 */}
       <MainContent>
         {/* 왼쪽 패널 */}
@@ -796,7 +774,6 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
         </RightPanel>
       </MainContent>
 
->>>>>>> Stashed changes
       {/* 개선 권장사항 섹션 */}
       {recommendations && recommendations.length > 0 && (
         <FullWidthCard>
@@ -875,7 +852,6 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
         </FullWidthCard>
       )}
 
-<<<<<<< Updated upstream
       {/* 상세 설명 섹션 */}
       {selectedCategory && (
         <Card style={{ marginTop: '24px' }}>
@@ -931,9 +907,6 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
           </div>
         </Card>
       )}
-=======
-      
->>>>>>> Stashed changes
     </Container>
   );
 };

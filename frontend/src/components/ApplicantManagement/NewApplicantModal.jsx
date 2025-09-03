@@ -588,11 +588,9 @@ const NewApplicantModal = ({
               onClick={handleSubmit}
               disabled={!resumeFile || !resumeData.name || !resumeData.email || isCheckingDuplicate}
             >
-<<<<<<< Updated upstream
               {isCheckingDuplicate ? '중복 확인 중...' : '등록하기'}
-=======
               {isCheckingDuplicate ? '중복 확인 중.' : '등록하기'}
->>>>>>> Stashed changes
+              {isCheckingDuplicate ? '중복 확인 중.' : '등록하기'}
             </Button>
           </ResumeModalFooter>
         </ModalBody>

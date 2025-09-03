@@ -149,11 +149,9 @@ const AIAnalysisModal = ({
                     {isAnalyzing ? (
                       <>
                         <FiRefreshCw className="spinning" />
-<<<<<<< Updated upstream
                         분석 중...
-=======
                         분석 중.
->>>>>>> Stashed changes
+                        분석 중.
                       </>
                     ) : (
                       <>
@@ -167,11 +165,9 @@ const AIAnalysisModal = ({
                     {isAnalyzing ? (
                       <>
                         <FiRefreshCw className="spinning" />
-<<<<<<< Updated upstream
                         재분석 중...
-=======
                         재분석 중.
->>>>>>> Stashed changes
+                        재분석 중.
                       </>
                     ) : (
                       <>

@@ -179,8 +179,3 @@ def analyze_data_patterns():
 
 if __name__ == "__main__":
     analyze_data_patterns()
-<<<<<<< Updated upstream
-=======
-
-
->>>>>>> Stashed changes

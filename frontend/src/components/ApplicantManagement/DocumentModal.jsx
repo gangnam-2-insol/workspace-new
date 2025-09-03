@@ -463,11 +463,9 @@ const DocumentModal = ({
               )}
             </>
           ) : (
-<<<<<<< Updated upstream
-            '문서를 불러오는 중...'
-=======
+            '문서를 불러오는 중...',
+            '문서를 불러오는 중.',
             '문서를 불러오는 중.'
->>>>>>> Stashed changes
           )}
         </DocumentText>
 

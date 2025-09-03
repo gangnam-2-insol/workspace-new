@@ -157,8 +157,3 @@ def generate_analysis_summary():
 
 if __name__ == "__main__":
     generate_analysis_summary()
-<<<<<<< Updated upstream
-=======
-
-
->>>>>>> Stashed changes
