@@ -145,49 +145,6 @@ npm start
 ```bash
 docker run -d --name mongodb -p 27017:27017 mongo:6.0
 ```
-
-## 📊 이니셜별 특이사항
-
-### 👤 JR (Junior Developer)
-- **담당 영역**: 이력서 분석 시스템, RAG 적용
-- **특이사항**: 
-  - OpenAI GPT-4o 기반 이력서 분석 (업그레이드 완료)
-  - Pinecone 벡터 DB 연동
-  - 청킹 기반 유사도 분석 시스템
-  - BM25 키워드 검색 엔진 구현
-
-### 🧠 KH (Knowledge Hub)
-- **담당 영역**: 컨텍스트 분류, Agent 시스템
-- **특이사항**:
-  - 유연한 컨텍스트 분류 시스템 (Flexible Context Classification)
-  - 의도 기반 자동 분류 및 도구 선택
-  - 복잡한 보너스 계산 시스템 (조합 가중치, 복잡도 보너스)
-  - LangGraph 기반 Agent 워크플로우
-
-### 💼 MJ (Management Junior)
-- **담당 영역**: 지원자 관리, 문서 분류
-- **특이사항**:
-  - 내용 기반 문서 유형 분류 시스템
-  - AI 기반 상세 문서 분석 (9개 항목 세분화)
-  - 타입 불일치 경고 시스템
-  - 고도화된 AI 프롬프트 엔지니어링
-
-### 🎨 YC (Young Creator)
-- **담당 영역**: UI/UX, 프론트엔드 개발
-- **특이사항**:
-  - 4가지 AI 모드 구현 (자율, 개별, 어시스턴트, 테스트중)
-  - 실시간 필드 업데이트 및 검증
-  - 창의적 제목 추천 시스템 (4가지 컨셉)
-  - 모듈화된 컴포넌트 구조
-
-### 🌐 GW (Global Worker)
-- **담당 영역**: PDF OCR, AI 통합
-- **특이사항**:
-  - GPT-4o Vision API 기반 PDF OCR 시스템
-  - Tesseract + AI 하이브리드 텍스트 추출
-  - 13가지 이름 추출 패턴 시스템
-  - 환경변수 최적화 및 서버 실행 자동화
-
 ## 🔧 주요 API 엔드포인트
 
 ### 채용공고 관리
@@ -225,27 +182,6 @@ docker run -d --name mongodb -p 27017:27017 mongo:6.0
 7. **🔒 세션 관리**: 24시간 대화 기록 보존 및 복원
 8. **⚙️ 모듈화**: 컴포넌트 기반으로 쉬운 확장과 유지보수
 
-## 🛠️ 설치 및 실행
-
-### 1. 백엔드 서버 실행 (포트 8000)
-```bash
-cd backend
-pip install -r requirements.txt
-python main.py
-```
-
-### 2. 프론트엔드 실행 (포트 3001)
-```bash
-cd frontend
-npm install
-npm start
-```
-
-### 3. MongoDB 실행 (Docker)
-```bash
-docker run -d --name mongodb -p 27017:27017 mongo:6.0
-```
-
 ## 📊 이니셜별 특이사항
 
 ### 👤 **JR** (Junior Developer)
@@ -281,5 +217,5 @@ docker run -d --name mongodb -p 27017:27017 mongo:6.0
 
 ---
 
-**마지막 업데이트**: 2025년 1월 15일 | **버전**: v3.0 | **메인테이너**: AI Development Team  
+**마지막 업데이트**: 2025년 9월 3일 | **버전**: v3.0 | **메인테이너**: AI Development Team  
 **주요 개발자**: JR (이력서), KH (Agent), MJ (관리), YC (UI), GW (OCR)
