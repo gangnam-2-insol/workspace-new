@@ -622,12 +622,12 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
           </Card>
 
           {/* 전체적인 총평 */}
-          <Card>
+          {/* <Card>
             <CardTitle>📝 전체적인 총평</CardTitle>
             <SummaryText>
               {summary}
             </SummaryText>
-          </Card>
+          </Card> */}
         </LeftPanel>
 
         {/* 오른쪽 패널 */}
@@ -683,11 +683,11 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
               }
             </CardTitle>
             <div style={{
-              padding: '20px',
+              // padding: '20px',  
               backgroundColor: 'white',
-              borderRadius: '12px',
-              border: '1px solid #e2e8f0',
-              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+              // borderRadius: '12px',
+              // border: '1px solid #e2e8f0',
+              // boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
               minHeight: '280px',
               maxHeight: '400px',
               overflowY: 'auto'
@@ -853,7 +853,7 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
       )}
 
       {/* 상세 설명 섹션 */}
-      {selectedCategory && (
+      {/* {selectedCategory && (
         <Card style={{ marginTop: '24px' }}>
           <CardTitle>
             {categories.find(cat => cat.key === selectedCategory)?.label} 상세 분석
@@ -906,7 +906,7 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
             </p>
           </div>
         </Card>
-      )}
+      )} */}
     </Container>
   );
 };
