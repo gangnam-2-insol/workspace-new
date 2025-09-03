@@ -23,7 +23,11 @@ class HuggingFaceResumeAnalyzer:
         else:
             self.device = device
         
+<<<<<<< Updated upstream
         print(f"🔧 HuggingFace 분석기 초기화 중... (디바이스: {self.device})")
+=======
+        print(f"🔧 HuggingFace 분석기 초기화 중. (디바이스: {self.device})")
+>>>>>>> Stashed changes
         
         # 모델 로딩
         self._load_models()
@@ -34,6 +38,7 @@ class HuggingFaceResumeAnalyzer:
         """AI 모델들 로딩"""
         try:
             # 1. 임베딩 모델: multi-qa-MiniLM-L6-cos-v1
+<<<<<<< Updated upstream
             print("📥 임베딩 모델 로딩 중...")
             self.embedding_model = SentenceTransformer('multi-qa-MiniLM-L6-cos-v1', device=self.device)
             
@@ -47,6 +52,21 @@ class HuggingFaceResumeAnalyzer:
             
             # 4. 문법검사 모델: prithivida/grammar_error_correcter_v1
             print("📥 문법검사 모델 로딩 중...")
+=======
+            print("📥 임베딩 모델 로딩 중.")
+            self.embedding_model = SentenceTransformer('multi-qa-MiniLM-L6-cos-v1', device=self.device)
+            
+            # 2. 요약 모델: facebook/bart-large-cnn
+            print("📥 요약 모델 로딩 중.")
+            self.summarizer = pipeline("summarization", model="facebook/bart-large-cnn", device=self.device)
+            
+            # 3. 분류 모델: facebook/bart-large-mnli
+            print("📥 분류 모델 로딩 중.")
+            self.classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli", device=self.device)
+            
+            # 4. 문법검사 모델: prithivida/grammar_error_correcter_v1
+            print("📥 문법검사 모델 로딩 중.")
+>>>>>>> Stashed changes
             self.grammar_corrector = pipeline("text2text-generation", model="prithivida/grammar_error_correcter_v1", device=self.device)
             
         except Exception as e:
@@ -58,7 +78,11 @@ class HuggingFaceResumeAnalyzer:
         try:
             start_time = time.time()
             
+<<<<<<< Updated upstream
             print(f"🔍 {applicant_data.get('name', '알 수 없음')} 이력서 분석 시작...")
+=======
+            print(f"🔍 {applicant_data.get('name', '알 수 없음')} 이력서 분석 시작.")
+>>>>>>> Stashed changes
             
             # 이력서 내용 추출
             resume_content = self._extract_resume_content(applicant_data)

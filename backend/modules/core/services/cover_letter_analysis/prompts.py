@@ -14,11 +14,11 @@ SUMMARY_AND_STRENGTHS_PROMPT = """
 
 응답은 반드시 다음 JSON 형식으로만 출력하라:
 {{
-  "summary": "한 문장 요약...",
+  "summary": "한 문장 요약.",
   "top_strengths": [
-    {{"strength":"팀 리딩 경험", "evidence":"3번째 문단: '팀을 이끌며...'", "confidence": 0.92}},
-    {{"strength":"문제 해결 능력", "evidence":"2번째 문단: '어려운 상황에서...'", "confidence": 0.88}},
-    {{"strength":"성과 지향적 사고", "evidence":"4번째 문단: '결과적으로...'", "confidence": 0.85}}
+    {{"strength":"팀 리딩 경험", "evidence":"3번째 문단: '팀을 이끌며.'", "confidence": 0.92}},
+    {{"strength":"문제 해결 능력", "evidence":"2번째 문단: '어려운 상황에서.'", "confidence": 0.88}},
+    {{"strength":"성과 지향적 사고", "evidence":"4번째 문단: '결과적으로.'", "confidence": 0.85}}
   ]
 }}
 """

@@ -1022,17 +1022,28 @@ const ApplicantDetailModal = ({
 
             // 템플릿 텍스트 제거
             if (recommendReason.startsWith('[') && recommendReason.endsWith(']')) {
+<<<<<<< Updated upstream
               recommendReason = '추천 근거를 분석 중입니다...';
+=======
+              recommendReason = '추천 근거를 분석 중입니다.';
+>>>>>>> Stashed changes
             }
           }
 
           const similarityFactor = content.match(/🎯 \*\*유사성 요인\*\*: ([^\n]+)/)?.[1]?.trim();
 
           parsed[name] = {
+<<<<<<< Updated upstream
             coreCommon: coreCommon || '분석 중...',
             mainFeature: mainFeature || '분석 중...',
             recommendReason: recommendReason || '분석 중...',
             similarityFactor: similarityFactor || '분석 중...'
+=======
+            coreCommon: coreCommon || '분석 중.',
+            mainFeature: mainFeature || '분석 중.',
+            recommendReason: recommendReason || '분석 중.',
+            similarityFactor: similarityFactor || '분석 중.'
+>>>>>>> Stashed changes
           };
 
           console.log(`파싱된 지원자: "${name}"`, parsed[name]);
@@ -1377,7 +1388,11 @@ const ApplicantDetailModal = ({
 
               {recommendationsLoading && (
                 <LoadingSpinner>
+<<<<<<< Updated upstream
                   유사한 인재를 찾고 있습니다...
+=======
+                  유사한 인재를 찾고 있습니다.
+>>>>>>> Stashed changes
                 </LoadingSpinner>
               )}
 
@@ -1570,7 +1585,11 @@ const ApplicantDetailModal = ({
               <Content>
                 {isLoadingRecommendedApplicant ? (
                   <LoadingSpinner>
+<<<<<<< Updated upstream
                     추천된 지원자 정보를 불러오는 중...
+=======
+                    추천된 지원자 정보를 불러오는 중.
+>>>>>>> Stashed changes
                   </LoadingSpinner>
                 ) : selectedRecommendedApplicant ? (
                   <>

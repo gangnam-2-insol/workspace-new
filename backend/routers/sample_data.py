@@ -17,6 +17,235 @@ router = APIRouter(tags=["샘플 데이터"])
 # Faker 초기화 (한국어)
 fake = Faker('ko_KR')
 
+# 실제적인 내용 생성 함수들
+def generate_realistic_growth_background(position, experience):
+    """실제적인 성장 배경 생성"""
+    growth_templates = {
+        "프론트엔드 개발자": [
+            f"웹 개발에 대한 관심으로 시작하여 {experience}간 React, Vue.js 등 모던 프레임워크를 학습하고 실무에 적용했습니다.",
+            f"사용자 경험 개선에 대한 열정으로 프론트엔드 개발을 시작하여 {experience}간 다양한 프로젝트를 통해 성장했습니다.",
+            f"웹 표준과 접근성에 대한 이해를 바탕으로 {experience}간 프론트엔드 개발 경험을 쌓아왔습니다."
+        ],
+        "백엔드 개발자": [
+            f"서버 사이드 로직에 대한 깊은 이해를 바탕으로 {experience}간 Java, Python 등 다양한 언어로 서버 개발 경험을 쌓았습니다.",
+            f"데이터베이스 설계와 API 개발에 대한 관심으로 시작하여 {experience}간 안정적인 백엔드 시스템을 구축했습니다.",
+            f"시스템 아키텍처와 성능 최적화에 중점을 두고 {experience}간 백엔드 개발 경험을 쌓아왔습니다."
+        ],
+        "풀스택 개발자": [
+            f"전체 개발 프로세스에 대한 이해를 바탕으로 {experience}간 프론트엔드와 백엔드 개발을 병행하며 풀스택 역량을 키워왔습니다.",
+            f"다양한 기술 스택을 학습하여 {experience}간 웹 애플리케이션의 전체 라이프사이클을 경험했습니다.",
+            f"사용자 요구사항부터 배포까지 전체 과정을 이해하고 {experience}간 풀스택 개발 경험을 쌓았습니다."
+        ],
+        "데이터 분석가": [
+            f"데이터 기반 의사결정의 중요성을 인식하고 {experience}간 Python, R, SQL을 활용한 데이터 분석 경험을 쌓았습니다.",
+            f"통계학적 지식을 바탕으로 {experience}간 비즈니스 인사이트 도출을 위한 데이터 분석을 수행했습니다.",
+            f"머신러닝과 통계 분석에 대한 관심으로 시작하여 {experience}간 다양한 데이터 분석 프로젝트를 진행했습니다."
+        ],
+        "QA 엔지니어": [
+            f"품질 보증의 중요성을 인식하고 {experience}간 다양한 테스트 방법론과 도구를 학습하여 적용했습니다.",
+            f"사용자 관점에서의 테스트에 대한 이해를 바탕으로 {experience}간 효율적인 테스트 프로세스를 구축했습니다.",
+            f"자동화 테스트와 지속적 통합에 대한 관심으로 {experience}간 QA 프로세스 개선 경험을 쌓았습니다."
+        ]
+    }
+    
+    templates = growth_templates.get(position, [
+        f"해당 분야에 대한 깊은 관심과 열정으로 {experience}간 지속적인 학습과 실무 경험을 쌓아왔습니다.",
+        f"전문성을 키우기 위해 {experience}간 다양한 프로젝트와 기술을 학습하며 성장했습니다.",
+        f"실무 경험을 통해 {experience}간 해당 분야의 전문성을 쌓아왔습니다."
+    ])
+    
+    return random.choice(templates)
+
+def generate_realistic_motivation(position, company):
+    """실제적인 지원 동기 생성"""
+    motivation_templates = {
+        "프론트엔드 개발자": [
+            f"{company}에서 사용자 중심의 웹 서비스를 개발하고 싶어 지원하게 되었습니다. 사용자 경험 개선과 최신 웹 기술 적용에 대한 열정을 가지고 있습니다.",
+            f"{company}의 혁신적인 웹 서비스 개발에 참여하고 싶어 지원했습니다. 반응형 디자인과 성능 최적화에 대한 전문성을 바탕으로 기여하고 싶습니다.",
+            f"{company}에서 모던 웹 기술을 활용한 대규모 서비스 개발에 참여하고 싶어 지원하게 되었습니다."
+        ],
+        "백엔드 개발자": [
+            f"{company}의 안정적이고 확장 가능한 서버 시스템 구축에 기여하고 싶어 지원했습니다. 데이터베이스 설계와 API 개발에 대한 전문성을 가지고 있습니다.",
+            f"{company}에서 마이크로서비스 아키텍처와 클라우드 인프라 구축에 참여하고 싶어 지원하게 되었습니다.",
+            f"{company}의 대용량 트래픽을 처리할 수 있는 고성능 백엔드 시스템 개발에 기여하고 싶습니다."
+        ],
+        "풀스택 개발자": [
+            f"{company}에서 웹 애플리케이션의 전체 개발 라이프사이클에 참여하고 싶어 지원했습니다. 프론트엔드와 백엔드 개발 경험을 바탕으로 기여하고 싶습니다.",
+            f"{company}의 풀스택 개발팀에서 다양한 기술 스택을 활용한 프로젝트에 참여하고 싶어 지원하게 되었습니다.",
+            f"{company}에서 사용자 요구사항부터 배포까지 전체 과정을 담당하며 성장하고 싶습니다."
+        ],
+        "데이터 분석가": [
+            f"{company}의 데이터 기반 의사결정 프로세스에 기여하고 싶어 지원했습니다. 비즈니스 인사이트 도출과 예측 모델링에 대한 전문성을 가지고 있습니다.",
+            f"{company}에서 빅데이터 분석과 머신러닝을 활용한 혁신적인 솔루션 개발에 참여하고 싶어 지원하게 되었습니다.",
+            f"{company}의 데이터 분석팀에서 통계적 분석과 시각화를 통해 비즈니스 가치를 창출하고 싶습니다."
+        ],
+        "QA 엔지니어": [
+            f"{company}의 제품 품질 향상에 기여하고 싶어 지원했습니다. 효율적인 테스트 프로세스 구축과 자동화에 대한 전문성을 가지고 있습니다.",
+            f"{company}에서 사용자 중심의 품질 보증 프로세스를 구축하고 싶어 지원하게 되었습니다.",
+            f"{company}의 QA 팀에서 지속적인 품질 개선과 테스트 자동화를 통해 제품의 신뢰성을 높이고 싶습니다."
+        ]
+    }
+    
+    templates = motivation_templates.get(position, [
+        f"{company}에서 해당 분야의 전문성을 바탕으로 성장하고 싶어 지원하게 되었습니다.",
+        f"{company}의 혁신적인 프로젝트에 참여하여 새로운 도전을 하고 싶어 지원했습니다.",
+        f"{company}에서 실무 경험을 바탕으로 기여하고 함께 성장하고 싶습니다."
+    ])
+    
+    return random.choice(templates)
+
+def generate_realistic_career_history(position, experience):
+    """실제적인 경력 사항 생성"""
+    career_templates = {
+        "프론트엔드 개발자": [
+            f"{experience}간 React, Vue.js 기반 웹 애플리케이션 개발 경험. 사용자 경험 개선 및 성능 최적화에 중점을 두고 개발했습니다.",
+            f"프론트엔드 개발 {experience} 경력으로 TypeScript, Next.js를 활용한 대규모 프로젝트 참여 경험이 있습니다.",
+            f"{experience}간 모던 웹 기술 스택을 활용한 반응형 웹사이트 및 SPA 개발 경험을 보유하고 있습니다."
+        ],
+        "백엔드 개발자": [
+            f"{experience}간 Java, Spring Boot 기반 서버 애플리케이션 개발 경험. RESTful API 설계 및 데이터베이스 최적화에 능숙합니다.",
+            f"백엔드 개발 {experience} 경력으로 Node.js, Express, MongoDB를 활용한 마이크로서비스 아키텍처 구축 경험이 있습니다.",
+            f"{experience}간 Python, Django, PostgreSQL을 활용한 안정적인 서버 시스템 개발 경험을 보유하고 있습니다."
+        ],
+        "풀스택 개발자": [
+            f"{experience}간 프론트엔드와 백엔드 개발 경험을 보유. React, Node.js, MongoDB 스택으로 풀스택 애플리케이션을 개발했습니다.",
+            f"풀스택 개발 {experience} 경력으로 Vue.js, Python, FastAPI, PostgreSQL을 활용한 웹 서비스 구축 경험이 있습니다.",
+            f"{experience}간 TypeScript, Next.js, Prisma, PostgreSQL을 활용한 현대적인 웹 애플리케이션 개발 경험을 보유하고 있습니다."
+        ],
+        "데이터 분석가": [
+            f"{experience}간 Python, R, SQL을 활용한 데이터 분석 경험. 머신러닝 모델 개발 및 비즈니스 인사이트 도출에 중점을 두고 있습니다.",
+            f"데이터 분석 {experience} 경력으로 통계 분석, 시각화, 예측 모델링 경험이 풍부합니다.",
+            f"{experience}간 빅데이터 처리 및 분석 경험을 보유. Tableau, Power BI를 활용한 대시보드 구축 경험이 있습니다."
+        ],
+        "QA 엔지니어": [
+            f"{experience}간 웹 애플리케이션 테스트 자동화 경험. Selenium, Cypress를 활용한 효율적인 테스트 프로세스 구축 경험이 있습니다.",
+            f"QA 엔지니어 {experience} 경력으로 기능 테스트, 성능 테스트, 보안 테스트 경험이 풍부합니다.",
+            f"{experience}간 다양한 테스트 도구와 방법론을 활용한 품질 보증 경험을 보유하고 있습니다."
+        ]
+    }
+    
+    templates = career_templates.get(position, [
+        f"{experience}간 해당 분야에서 실무 경험을 쌓아왔습니다.",
+        f"관련 업무 {experience} 경력으로 다양한 프로젝트에 참여한 경험이 있습니다.",
+        f"{experience}간 전문성을 바탕으로 성과를 창출한 경험이 풍부합니다."
+    ])
+    
+    return random.choice(templates)
+
+def generate_realistic_analysis_result(position, experience):
+    """실제적인 분석 결과 생성"""
+    analysis_templates = {
+        "프론트엔드 개발자": [
+            f"프론트엔드 개발 {experience} 경력으로 React, Vue.js 등 모던 프레임워크 활용 능력이 우수합니다. 사용자 경험 개선과 성능 최적화에 대한 이해가 깊습니다.",
+            f"웹 표준과 접근성에 대한 이해가 뛰어나며, 반응형 디자인 구현 능력이 우수합니다. {experience}간의 실무 경험을 바탕으로 안정적인 개발이 가능합니다.",
+            f"최신 웹 기술 트렌드에 대한 이해가 깊고, TypeScript, Next.js 등 현대적인 도구 활용 능력이 우수합니다."
+        ],
+        "백엔드 개발자": [
+            f"백엔드 개발 {experience} 경력으로 서버 아키텍처 설계와 데이터베이스 최적화 능력이 뛰어납니다. 안정적이고 확장 가능한 시스템 구축이 가능합니다.",
+            f"RESTful API 설계와 마이크로서비스 아키텍처에 대한 이해가 깊습니다. {experience}간의 경험을 바탕으로 고성능 서버 시스템 개발이 가능합니다.",
+            f"보안과 성능 최적화에 대한 이해가 뛰어나며, 클라우드 환경에서의 서버 운영 경험이 풍부합니다."
+        ],
+        "풀스택 개발자": [
+            f"풀스택 개발 {experience} 경력으로 프론트엔드와 백엔드 개발 능력이 균형있게 우수합니다. 전체 개발 라이프사이클에 대한 이해가 깊습니다.",
+            f"다양한 기술 스택을 활용한 웹 애플리케이션 개발 경험이 풍부합니다. {experience}간의 경험을 바탕으로 독립적인 프로젝트 진행이 가능합니다.",
+            f"사용자 요구사항 분석부터 배포까지 전체 과정을 담당할 수 있는 역량을 보유하고 있습니다."
+        ],
+        "데이터 분석가": [
+            f"데이터 분석 {experience} 경력으로 통계 분석과 머신러닝 모델 개발 능력이 우수합니다. 비즈니스 인사이트 도출 능력이 뛰어납니다.",
+            f"Python, R, SQL을 활용한 데이터 처리와 분석 능력이 우수합니다. {experience}간의 경험을 바탕으로 복잡한 데이터 분석이 가능합니다.",
+            f"데이터 시각화와 대시보드 구축 능력이 뛰어나며, 비즈니스 의사결정을 지원하는 분석 결과를 제공할 수 있습니다."
+        ],
+        "QA 엔지니어": [
+            f"QA 엔지니어 {experience} 경력으로 다양한 테스트 방법론과 도구 활용 능력이 우수합니다. 효율적인 테스트 프로세스 구축이 가능합니다.",
+            f"자동화 테스트와 지속적 통합에 대한 이해가 깊습니다. {experience}간의 경험을 바탕으로 품질 보증 프로세스 개선이 가능합니다.",
+            f"사용자 관점에서의 테스트 설계 능력이 뛰어나며, 제품의 신뢰성 향상에 기여할 수 있습니다."
+        ]
+    }
+    
+    templates = analysis_templates.get(position, [
+        f"해당 분야 {experience} 경력으로 전문적인 역량을 보유하고 있습니다. 실무 경험을 바탕으로 안정적인 업무 수행이 가능합니다.",
+        f"관련 업무에 대한 깊은 이해와 {experience}간의 경험을 바탕으로 성과를 창출할 수 있는 역량을 보유하고 있습니다.",
+        f"전문성을 바탕으로 한 문제 해결 능력과 {experience}간의 실무 경험을 통해 안정적인 업무 수행이 가능합니다."
+    ])
+    
+    return random.choice(templates)
+
+def generate_realistic_job_description(position):
+    """실제적인 채용공고 설명 생성"""
+    description_templates = {
+        "프론트엔드 개발자": [
+            "사용자 경험을 중시하는 웹 서비스 개발을 담당합니다. React, Vue.js 등 모던 프레임워크를 활용하여 반응형 웹 애플리케이션을 개발하고, 성능 최적화 및 웹 접근성 개선에 기여합니다.",
+            "대규모 웹 서비스의 프론트엔드 개발을 담당합니다. TypeScript, Next.js 등을 활용한 현대적인 웹 개발 경험을 바탕으로 사용자 친화적인 인터페이스를 구축합니다.",
+            "모바일 퍼스트 접근법으로 반응형 웹사이트 및 SPA 개발을 담당합니다. 최신 웹 기술 트렌드를 반영하여 사용자 경험을 향상시키는 역할을 수행합니다."
+        ],
+        "백엔드 개발자": [
+            "안정적이고 확장 가능한 서버 시스템 개발을 담당합니다. Java, Spring Boot, Node.js 등을 활용한 RESTful API 설계 및 데이터베이스 최적화를 수행합니다.",
+            "마이크로서비스 아키텍처 기반의 백엔드 시스템 구축을 담당합니다. 대용량 트래픽 처리와 데이터베이스 성능 최적화에 중점을 두고 개발합니다.",
+            "클라우드 환경에서의 서버 인프라 구축 및 관리를 담당합니다. 보안과 성능을 고려한 안정적인 백엔드 시스템을 개발합니다."
+        ],
+        "풀스택 개발자": [
+            "웹 애플리케이션의 전체 개발 라이프사이클을 담당합니다. 프론트엔드와 백엔드 개발 경험을 바탕으로 사용자 요구사항부터 배포까지 전체 과정을 관리합니다.",
+            "풀스택 개발팀에서 다양한 기술 스택을 활용한 프로젝트를 담당합니다. React, Node.js, Python, Django 등을 활용한 웹 서비스 개발을 수행합니다.",
+            "독립적인 프로젝트 진행이 가능한 풀스택 개발자를 모집합니다. 사용자 요구사항 분석부터 최종 배포까지 전체 과정을 담당할 수 있는 역량을 보유해야 합니다."
+        ],
+        "데이터 분석가": [
+            "비즈니스 데이터 분석 및 인사이트 도출을 담당합니다. Python, R, SQL을 활용한 데이터 처리 및 머신러닝 모델 개발을 수행합니다.",
+            "대시보드 구축 및 데이터 시각화를 담당합니다. Tableau, Power BI 등을 활용하여 비즈니스 의사결정을 지원하는 분석 결과를 제공합니다.",
+            "예측 모델링 및 통계 분석을 담당합니다. 빅데이터 처리 및 분석을 통해 비즈니스 성과 향상에 기여하는 역할을 수행합니다."
+        ],
+        "QA 엔지니어": [
+            "웹 애플리케이션의 품질 보증 및 테스트 자동화를 담당합니다. Selenium, Cypress 등을 활용한 효율적인 테스트 프로세스를 구축합니다.",
+            "사용자 관점에서의 테스트 설계 및 실행을 담당합니다. 기능 테스트, 성능 테스트, 보안 테스트를 통해 제품의 신뢰성을 향상시킵니다.",
+            "지속적 통합 환경에서의 테스트 자동화를 담당합니다. CI/CD 파이프라인에 통합된 테스트 프로세스를 구축하여 개발 효율성을 높입니다."
+        ]
+    }
+    
+    templates = description_templates.get(position, [
+        "해당 분야의 전문성을 바탕으로 안정적인 업무 수행을 담당합니다. 실무 경험을 바탕으로 성과를 창출할 수 있는 역량을 보유해야 합니다.",
+        "관련 업무에 대한 깊은 이해를 바탕으로 다양한 프로젝트에 참여합니다. 전문성을 바탕으로 한 문제 해결 능력을 보유해야 합니다.",
+        "실무 경험을 바탕으로 안정적인 업무 수행을 담당합니다. 해당 분야의 전문성을 바탕으로 성과를 창출할 수 있는 역량을 보유해야 합니다."
+    ])
+    
+    return random.choice(templates)
+
+def generate_realistic_job_requirements(position):
+    """실제적인 채용공고 요구사항 생성"""
+    requirements_templates = {
+        "프론트엔드 개발자": [
+            "React, Vue.js 등 모던 프레임워크 활용 경험 필수\nJavaScript, TypeScript, HTML, CSS에 대한 깊은 이해\n반응형 웹 디자인 및 웹 접근성에 대한 이해\n성능 최적화 및 웹 표준에 대한 지식",
+            "TypeScript, Next.js 등 현대적인 웹 개발 도구 활용 경험\n웹 성능 최적화 및 사용자 경험 개선 경험\nGit을 활용한 버전 관리 및 협업 경험\n웹 보안 및 SEO에 대한 기본 지식",
+            "모던 웹 기술 스택 활용 경험 필수\n반응형 디자인 및 크로스 브라우징 경험\n웹 접근성 및 사용성 개선 경험\n빠르게 변화하는 기술 트렌드에 대한 학습 능력"
+        ],
+        "백엔드 개발자": [
+            "Java, Spring Boot 또는 Node.js, Express 활용 경험 필수\nRESTful API 설계 및 구현 경험\n데이터베이스 설계 및 최적화 경험\n마이크로서비스 아키텍처에 대한 이해",
+            "서버 사이드 개발 경험 필수\n데이터베이스 성능 최적화 경험\n클라우드 환경에서의 서버 운영 경험\n보안 및 인증 시스템 구현 경험",
+            "백엔드 개발 경험 필수\n대용량 트래픽 처리 경험\n데이터베이스 설계 및 관리 경험\nAPI 설계 및 문서화 경험"
+        ],
+        "풀스택 개발자": [
+            "프론트엔드와 백엔드 개발 경험 필수\nReact, Node.js, Python 등 다양한 기술 스택 활용 경험\n전체 개발 라이프사이클 관리 경험\n독립적인 프로젝트 진행 능력",
+            "풀스택 개발 경험 필수\n사용자 요구사항 분석부터 배포까지 전체 과정 경험\n다양한 데이터베이스 활용 경험\n클라우드 환경에서의 배포 및 운영 경험",
+            "웹 애플리케이션 전체 개발 경험 필수\n프론트엔드와 백엔드 기술에 대한 균형잡힌 이해\n프로젝트 관리 및 팀 협업 경험\n새로운 기술 학습 및 적용 능력"
+        ],
+        "데이터 분석가": [
+            "Python, R, SQL을 활용한 데이터 분석 경험 필수\n통계 분석 및 머신러닝 모델 개발 경험\n데이터 시각화 도구 활용 경험\n비즈니스 인사이트 도출 능력",
+            "데이터 분석 경험 필수\nTableau, Power BI 등 시각화 도구 활용 경험\n예측 모델링 및 통계 분석 경험\n대시보드 구축 및 보고서 작성 경험",
+            "데이터 처리 및 분석 경험 필수\n빅데이터 처리 기술 활용 경험\n머신러닝 알고리즘 이해 및 적용 경험\n비즈니스 의사결정 지원 경험"
+        ],
+        "QA 엔지니어": [
+            "웹 애플리케이션 테스트 경험 필수\nSelenium, Cypress 등 테스트 자동화 도구 활용 경험\n기능 테스트, 성능 테스트, 보안 테스트 경험\n품질 보증 프로세스 구축 경험",
+            "QA 엔지니어 경험 필수\n사용자 관점에서의 테스트 설계 경험\n지속적 통합 환경에서의 테스트 자동화 경험\n테스트 방법론 및 도구 활용 경험",
+            "품질 보증 경험 필수\n테스트 자동화 및 CI/CD 파이프라인 구축 경험\n다양한 테스트 도구 및 방법론 활용 경험\n제품 신뢰성 향상 경험"
+        ]
+    }
+    
+    templates = requirements_templates.get(position, [
+        "해당 분야 실무 경험 필수\n관련 기술 스택에 대한 깊은 이해\n문제 해결 능력 및 학습 의지\n팀 협업 및 커뮤니케이션 능력",
+        "관련 업무 경험 필수\n전문성을 바탕으로 한 업무 수행 능력\n새로운 기술 학습 및 적용 능력\n프로젝트 관리 및 성과 창출 능력",
+        "실무 경험 필수\n해당 분야 전문성 및 문제 해결 능력\n지속적인 학습 및 성장 의지\n안정적인 업무 수행 능력"
+    ])
+    
+    return random.choice(templates)
+
 # MongoDB 연결 의존성
 def get_database():
     mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/hireme")
@@ -202,11 +431,11 @@ async def generate_sample_applicants(
                 "department": department,
                 "experience": experience,
                 "skills": ", ".join(skills),
-                "growthBackground": fake.text(max_nb_chars=200),
-                "motivation": fake.text(max_nb_chars=300),
-                "careerHistory": fake.text(max_nb_chars=250),
+                "growthBackground": generate_realistic_growth_background(position, experience),
+                "motivation": generate_realistic_motivation(position, company),
+                "careerHistory": generate_realistic_career_history(position, experience),
                 "analysisScore": random.randint(60, 95),
-                "analysisResult": fake.text(max_nb_chars=200),
+                "analysisResult": generate_realistic_analysis_result(position, experience),
                 "status": status,
                 "job_posting_id": selected_job_id,
                 "github_url": random.choice(github_urls) if random.choice([True, False]) else None,
@@ -300,8 +529,8 @@ async def generate_sample_job_postings(
                 "salary": salary,
                 "experience": random.choice(["신입", "경력", "고급"]),
                 "education": "대졸 이상",
-                "description": fake.text(max_nb_chars=500),
-                "requirements": fake.text(max_nb_chars=300),
+                "description": generate_realistic_job_description(position),
+                "requirements": generate_realistic_job_requirements(position),
                 "benefits": "주말보장, 재택가능, 점심식대 지원, 연차휴가",
                 "deadline": "2024-12-31",
                 "status": "published",  # 모든 채용공고를 활성화 상태로 통일

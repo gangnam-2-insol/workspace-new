@@ -15,6 +15,153 @@ DATABASE_NAME = "hireme"
 
 fake = Faker(['ko_KR'])
 
+# 실제적인 내용 생성 함수들
+def generate_realistic_project_description():
+    """실제적인 프로젝트 설명 생성"""
+    project_templates = [
+        "React와 Node.js를 활용한 풀스택 웹 애플리케이션 개발. 사용자 인증, 데이터 관리, 실시간 채팅 기능을 구현했습니다.",
+        "Python Django와 PostgreSQL을 활용한 이커머스 플랫폼 구축. 결제 시스템, 재고 관리, 주문 처리 기능을 개발했습니다.",
+        "Vue.js와 Spring Boot를 활용한 기업용 관리 시스템 개발. 직원 관리, 프로젝트 추적, 보고서 생성 기능을 구현했습니다.",
+        "Flutter를 활용한 크로스 플랫폼 모바일 애플리케이션 개발. GPS 기반 위치 서비스와 실시간 알림 기능을 구현했습니다.",
+        "Python과 TensorFlow를 활용한 머신러닝 모델 개발. 이미지 분류 및 예측 분석 시스템을 구축했습니다.",
+        "AWS와 Docker를 활용한 클라우드 기반 마이크로서비스 아키텍처 구축. 자동화된 배포 및 모니터링 시스템을 개발했습니다.",
+        "TypeScript와 Next.js를 활용한 SEO 최적화된 웹사이트 개발. 서버 사이드 렌더링과 정적 사이트 생성 기능을 구현했습니다.",
+        "MongoDB와 Express.js를 활용한 RESTful API 서버 개발. 데이터 검증, 인증, 권한 관리 기능을 구현했습니다."
+    ]
+    return random.choice(project_templates)
+
+def generate_realistic_notes():
+    """실제적인 노트 생성"""
+    notes_templates = [
+        "기술적 역량이 우수하며 팀워크 능력도 뛰어납니다. 새로운 기술 학습에 적극적이고 문제 해결 능력이 뛰어납니다.",
+        "실무 경험이 풍부하고 프로젝트 관리 능력이 우수합니다. 커뮤니케이션 스킬과 리더십을 겸비하고 있습니다.",
+        "코딩 스킬과 알고리즘 이해도가 높습니다. 코드 품질과 성능 최적화에 대한 이해가 깊습니다.",
+        "사용자 경험 개선에 대한 관심이 높고 디자인 감각이 뛰어납니다. 프론트엔드와 백엔드 개발 경험이 균형있습니다.",
+        "데이터 분석과 머신러닝에 대한 전문성이 뛰어납니다. 비즈니스 인사이트 도출 능력이 우수합니다.",
+        "DevOps와 클라우드 인프라 관리 경험이 풍부합니다. 자동화와 모니터링 시스템 구축에 능숙합니다.",
+        "품질 보증과 테스트 자동화에 대한 이해가 깊습니다. 효율적인 테스트 프로세스 구축 경험이 있습니다.",
+        "모바일 앱 개발 경험이 풍부하고 크로스 플랫폼 개발에 능숙합니다. 사용자 인터페이스 설계 능력이 우수합니다."
+    ]
+    return random.choice(notes_templates)
+
+def generate_realistic_job_description(position):
+    """실제적인 채용공고 설명 생성"""
+    description_templates = {
+        "프론트엔드 개발자": [
+            "사용자 경험을 중시하는 웹 서비스 개발을 담당합니다. React, Vue.js 등 모던 프레임워크를 활용하여 반응형 웹 애플리케이션을 개발하고, 성능 최적화 및 웹 접근성 개선에 기여합니다.",
+            "대규모 웹 서비스의 프론트엔드 개발을 담당합니다. TypeScript, Next.js 등을 활용한 현대적인 웹 개발 경험을 바탕으로 사용자 친화적인 인터페이스를 구축합니다.",
+            "모바일 퍼스트 접근법으로 반응형 웹사이트 및 SPA 개발을 담당합니다. 최신 웹 기술 트렌드를 반영하여 사용자 경험을 향상시키는 역할을 수행합니다."
+        ],
+        "백엔드 개발자": [
+            "안정적이고 확장 가능한 서버 시스템 개발을 담당합니다. Java, Spring Boot, Node.js 등을 활용한 RESTful API 설계 및 데이터베이스 최적화를 수행합니다.",
+            "마이크로서비스 아키텍처 기반의 백엔드 시스템 구축을 담당합니다. 대용량 트래픽 처리와 데이터베이스 성능 최적화에 중점을 두고 개발합니다.",
+            "클라우드 환경에서의 서버 인프라 구축 및 관리를 담당합니다. 보안과 성능을 고려한 안정적인 백엔드 시스템을 개발합니다."
+        ],
+        "풀스택 개발자": [
+            "웹 애플리케이션의 전체 개발 라이프사이클을 담당합니다. 프론트엔드와 백엔드 개발 경험을 바탕으로 사용자 요구사항부터 배포까지 전체 과정을 관리합니다.",
+            "풀스택 개발팀에서 다양한 기술 스택을 활용한 프로젝트를 담당합니다. React, Node.js, Python, Django 등을 활용한 웹 서비스 개발을 수행합니다.",
+            "독립적인 프로젝트 진행이 가능한 풀스택 개발자를 모집합니다. 사용자 요구사항 분석부터 최종 배포까지 전체 과정을 담당할 수 있는 역량을 보유해야 합니다."
+        ],
+        "데이터 분석가": [
+            "비즈니스 데이터 분석 및 인사이트 도출을 담당합니다. Python, R, SQL을 활용한 데이터 처리 및 머신러닝 모델 개발을 수행합니다.",
+            "대시보드 구축 및 데이터 시각화를 담당합니다. Tableau, Power BI 등을 활용하여 비즈니스 의사결정을 지원하는 분석 결과를 제공합니다.",
+            "예측 모델링 및 통계 분석을 담당합니다. 빅데이터 처리 및 분석을 통해 비즈니스 성과 향상에 기여하는 역할을 수행합니다."
+        ],
+        "QA 엔지니어": [
+            "웹 애플리케이션의 품질 보증 및 테스트 자동화를 담당합니다. Selenium, Cypress 등을 활용한 효율적인 테스트 프로세스를 구축합니다.",
+            "사용자 관점에서의 테스트 설계 및 실행을 담당합니다. 기능 테스트, 성능 테스트, 보안 테스트를 통해 제품의 신뢰성을 향상시킵니다.",
+            "지속적 통합 환경에서의 테스트 자동화를 담당합니다. CI/CD 파이프라인에 통합된 테스트 프로세스를 구축하여 개발 효율성을 높입니다."
+        ]
+    }
+    
+    templates = description_templates.get(position, [
+        "해당 분야의 전문성을 바탕으로 안정적인 업무 수행을 담당합니다. 실무 경험을 바탕으로 성과를 창출할 수 있는 역량을 보유해야 합니다.",
+        "관련 업무에 대한 깊은 이해를 바탕으로 다양한 프로젝트에 참여합니다. 전문성을 바탕으로 한 문제 해결 능력을 보유해야 합니다.",
+        "실무 경험을 바탕으로 안정적인 업무 수행을 담당합니다. 해당 분야의 전문성을 바탕으로 성과를 창출할 수 있는 역량을 보유해야 합니다."
+    ])
+    
+    return random.choice(templates)
+
+def generate_realistic_school_name():
+    """실제적인 학교 이름 생성"""
+    school_names = [
+        "서울대학교", "연세대학교", "고려대학교", "한양대학교", "성균관대학교",
+        "중앙대학교", "경희대학교", "서강대학교", "동국대학교", "건국대학교",
+        "홍익대학교", "숙명여자대학교", "이화여자대학교", "서울시립대학교", "국민대학교",
+        "단국대학교", "아주대학교", "인하대학교", "부산대학교", "전남대학교"
+    ]
+    return random.choice(school_names)
+
+def generate_realistic_major(position):
+    """실제적인 전공 생성"""
+    major_templates = {
+        "프론트엔드 개발자": [
+            "컴퓨터공학과", "소프트웨어학과", "정보통신공학과", "컴퓨터정보학과", "웹공학과"
+        ],
+        "백엔드 개발자": [
+            "컴퓨터공학과", "소프트웨어학과", "정보통신공학과", "컴퓨터정보학과", "전자공학과"
+        ],
+        "풀스택 개발자": [
+            "컴퓨터공학과", "소프트웨어학과", "정보통신공학과", "컴퓨터정보학과", "전자공학과"
+        ],
+        "데이터 분석가": [
+            "통계학과", "수학과", "산업공학과", "경영학과", "컴퓨터공학과"
+        ],
+        "QA 엔지니어": [
+            "컴퓨터공학과", "소프트웨어학과", "정보통신공학과", "컴퓨터정보학과", "전자공학과"
+        ]
+    }
+    
+    templates = major_templates.get(position, [
+        "컴퓨터공학과", "소프트웨어학과", "정보통신공학과", "컴퓨터정보학과", "전자공학과"
+    ])
+    
+    return random.choice(templates)
+
+def generate_realistic_career_description(position):
+    """실제적인 경력 설명 생성"""
+    career_description_templates = {
+        "프론트엔드 개발자": [
+            "React, Vue.js 기반 웹 애플리케이션 개발 및 유지보수",
+            "TypeScript, Next.js를 활용한 대규모 프로젝트 참여",
+            "반응형 웹사이트 및 SPA 개발 및 성능 최적화",
+            "웹 접근성 및 사용자 경험 개선 프로젝트 진행"
+        ],
+        "백엔드 개발자": [
+            "Java, Spring Boot 기반 서버 애플리케이션 개발",
+            "Node.js, Express를 활용한 RESTful API 설계 및 구현",
+            "데이터베이스 설계 및 성능 최적화",
+            "마이크로서비스 아키텍처 기반 시스템 구축"
+        ],
+        "풀스택 개발자": [
+            "React, Node.js 스택을 활용한 풀스택 웹 애플리케이션 개발",
+            "Vue.js, Python, FastAPI를 활용한 웹 서비스 구축",
+            "TypeScript, Next.js, Prisma를 활용한 현대적인 웹 개발",
+            "전체 개발 라이프사이클 관리 및 프로젝트 리딩"
+        ],
+        "데이터 분석가": [
+            "Python, R, SQL을 활용한 데이터 분석 및 시각화",
+            "머신러닝 모델 개발 및 비즈니스 인사이트 도출",
+            "Tableau, Power BI를 활용한 대시보드 구축",
+            "통계 분석 및 예측 모델링 프로젝트 진행"
+        ],
+        "QA 엔지니어": [
+            "웹 애플리케이션 테스트 자동화 및 품질 보증",
+            "Selenium, Cypress를 활용한 효율적인 테스트 프로세스 구축",
+            "기능 테스트, 성능 테스트, 보안 테스트 수행",
+            "CI/CD 파이프라인에 통합된 테스트 자동화 구축"
+        ]
+    }
+    
+    templates = career_description_templates.get(position, [
+        "해당 분야 실무 업무 담당 및 프로젝트 진행",
+        "관련 기술 스택을 활용한 개발 및 운영 업무",
+        "팀 협업을 통한 프로젝트 성과 창출",
+        "새로운 기술 학습 및 적용을 통한 업무 개선"
+    ])
+    
+    return random.choice(templates)
+
 # 기술 스택 목록
 TECH_STACKS = [
     "Python", "JavaScript", "TypeScript", "React", "Vue.js", "Angular", "Node.js", 
@@ -110,25 +257,7 @@ def generate_job_posting():
         "salary_range": salary_range,
         "required_skills": required_skills,
         "preferred_skills": preferred_skills,
-        "description": f"""
-{company}에서 {position}를 모집합니다.
-
-[주요 업무]
-- {position} 관련 개발 및 운영 업무
-- 서비스 기획부터 개발, 배포까지 전 과정 참여
-- 코드 리뷰 및 기술 문서 작성
-- 팀원들과의 협업을 통한 프로젝트 진행
-
-[자격 요건]
-- {random.choice(EDUCATION_LEVELS)} 이상
-- 관련 분야 경험자 우대
-- 새로운 기술에 대한 학습 의지
-
-[우대 사항]
-- 관련 프로젝트 경험
-- 오픈소스 기여 경험
-- 팀 리딩 경험
-        """.strip(),
+        "description": generate_realistic_job_description(position),
         "benefits": [
             "4대보험 완비",
             "연차 자유 사용",
@@ -166,8 +295,8 @@ def generate_applicant(job_posting_ids):
     # 학력 정보
     education = {
         "level": random.choice(EDUCATION_LEVELS),
-        "school": fake.company() + " 대학교",
-        "major": random.choice(["컴퓨터공학과", "소프트웨어학과", "전자공학과", "정보통신학과", "산업공학과", "경영학과"]),
+        "school": generate_realistic_school_name(),
+        "major": generate_realistic_major(position),
         "graduation_year": random.randint(2015, 2023)
     }
     
@@ -177,9 +306,9 @@ def generate_applicant(job_posting_ids):
         for i in range(random.randint(1, min(3, experience_years))):
             career_history.append({
                 "company": random.choice(COMPANY_NAMES),
-                "position": random.choice(POSITIONS),
+                "position": position,
                 "duration": f"{random.randint(1, 36)}개월",
-                "description": f"{random.choice(POSITIONS)} 업무 담당"
+                "description": generate_realistic_career_description(position)
             })
     
     # 포트폴리오 프로젝트
@@ -187,7 +316,7 @@ def generate_applicant(job_posting_ids):
     for i in range(random.randint(1, 4)):
         projects.append({
             "name": f"프로젝트 {i+1}",
-            "description": fake.text(max_nb_chars=200),
+            "description": generate_realistic_project_description(),
             "tech_stack": random.sample(skills, min(len(skills), random.randint(2, 5))),
             "url": fake.url() if random.choice([True, False]) else None,
             "github_url": f"https://github.com/{fake.user_name()}/{fake.word()}" if random.choice([True, False]) else None
@@ -230,7 +359,7 @@ def generate_applicant(job_posting_ids):
         "github_url": f"https://github.com/{fake.user_name()}" if random.choice([True, False]) else None,
         "linkedin_url": f"https://linkedin.com/in/{fake.user_name()}" if random.choice([True, False]) else None,
         "scores": scores,
-        "notes": fake.text(max_nb_chars=300) if random.choice([True, False]) else "",
+                    "notes": generate_realistic_notes() if random.choice([True, False]) else "",
         "interview_date": None,
         "created_at": datetime.now() - timedelta(days=random.randint(1, 30)),
         "updated_at": datetime.now()

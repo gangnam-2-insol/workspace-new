@@ -104,6 +104,10 @@ const Card = styled.div`
   transition: all 0.3s ease;
   position: relative;
   overflow: hidden;
+<<<<<<< Updated upstream
+=======
+  min-height: ${props => props.minHeight || 'auto'};
+>>>>>>> Stashed changes
 
   &::before {
     content: '';
@@ -157,12 +161,24 @@ const SummaryText = styled.p`
   font-size: 14px;
   color: #475569;
   line-height: 1.6;
+<<<<<<< Updated upstream
   background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
   padding: 16px;
   border-radius: 12px;
   margin: 0;
   border: 1px solid #e2e8f0;
   box-shadow: inset 0 1px 3px rgba(0, 0, 0, 0.05);
+=======
+  background: white;
+  padding: 20px;
+  border-radius: 12px;
+  margin: 0;
+  border: 1px solid #e2e8f0;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  min-height: 280px;
+  max-height: 400px;
+  overflow-y: auto;
+>>>>>>> Stashed changes
 `;
 
 const BarChartContainer = styled.div`
@@ -519,7 +535,11 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
     return (
       <Container>
         <div style={{ textAlign: 'center', padding: '40px', color: '#666' }}>
+<<<<<<< Updated upstream
           <div>분석 데이터를 불러오는 중...</div>
+=======
+          <div>분석 데이터를 불러오는 중.</div>
+>>>>>>> Stashed changes
         </div>
       </Container>
     );
@@ -598,7 +618,11 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
         )}
       </HeaderSection>
 
+<<<<<<< Updated upstream
       {/* 메인 콘텐츠 */}
+=======
+      {/* 첫 번째 행 - 종합 평가와 항목별 상세 분석 */}
+>>>>>>> Stashed changes
       <MainContent>
         {/* 왼쪽 패널 */}
         <LeftPanel>
@@ -613,6 +637,7 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
               />
             </RadarChartSection>
           </Card>
+<<<<<<< Updated upstream
 
           {/* 전체적인 총평 */}
           <Card>
@@ -621,6 +646,8 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
               {summary}
             </SummaryText>
           </Card>
+=======
+>>>>>>> Stashed changes
         </LeftPanel>
 
         {/* 오른쪽 패널 */}
@@ -652,6 +679,124 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
         </RightPanel>
       </MainContent>
 
+<<<<<<< Updated upstream
+=======
+      {/* 두 번째 행 - 전체적인 총평과 상세분석 설명을 같은 선상에 배치 */}
+      <MainContent>
+        {/* 왼쪽 패널 */}
+        <LeftPanel>
+          {/* 전체적인 총평 */}
+          <Card>
+            <CardTitle>📝 전체적인 총평</CardTitle>
+            <SummaryText>
+              {summary}
+            </SummaryText>
+          </Card>
+        </LeftPanel>
+
+        {/* 오른쪽 패널 */}
+        <RightPanel>
+          {/* 상세분석 설명 */}
+          <Card>
+            <CardTitle>
+              {selectedCategory 
+                ? `📋 ${categories.find(cat => cat.key === selectedCategory)?.label} 상세 분석`
+                : '📋 상세분석 설명'
+              }
+            </CardTitle>
+            <div style={{
+              padding: '20px',
+              backgroundColor: 'white',
+              borderRadius: '12px',
+              border: '1px solid #e2e8f0',
+              boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+              minHeight: '280px',
+              maxHeight: '400px',
+              overflowY: 'auto'
+            }}>
+              {selectedCategory ? (
+                <div style={{ fontSize: '14px', lineHeight: '1.6', color: '#4b5563' }}>
+                  <p style={{ marginBottom: '12px', fontWeight: '600' }}>
+                    현재 점수: <span style={{ color: '#3b82f6' }}>{Math.round(data[selectedCategory] || 0)}점</span>
+                  </p>
+                  <p>
+                    {selectedCategory === 'technical_suitability' && (
+                      analysisData?.technical_suitability?.feedback ||
+                      (data[selectedCategory] >= 80 ?
+                        '기술적 역량이 매우 우수합니다. 직무 요구사항과 높은 일치도를 보입니다.' :
+                       data[selectedCategory] >= 60 ?
+                        '기본적인 기술 역량은 갖추고 있으나, 보완이 필요합니다.' :
+                        '기술적 역량 향상이 필요합니다.')
+                    )}
+                    {selectedCategory === 'job_understanding' && (
+                      analysisData?.job_understanding?.feedback ||
+                      (data[selectedCategory] >= 80 ?
+                        '직무에 대한 이해도가 매우 높습니다.' :
+                       data[selectedCategory] >= 60 ?
+                        '직무의 기본적인 내용은 파악하고 있으나, 더욱 심화할 필요가 있습니다.' :
+                        '직무에 대한 기본적인 이해부터 시작해야 합니다.')
+                    )}
+                    {selectedCategory === 'growth_potential' && (
+                      analysisData?.growth_potential?.feedback ||
+                      (data[selectedCategory] >= 80 ?
+                        '성장 가능성이 매우 높습니다. 새로운 기술 학습과 변화 적응 능력이 뛰어납니다.' :
+                       data[selectedCategory] >= 60 ?
+                        '기본적인 성장 가능성은 있으나, 더 적극적인 태도가 필요합니다.' :
+                        '성장을 위한 적극적인 노력이 필요합니다.')
+                    )}
+                    {selectedCategory === 'teamwork_communication' && (
+                      analysisData?.teamwork_communication?.feedback ||
+                      (data[selectedCategory] >= 80 ?
+                        '팀워크와 커뮤니케이션 능력이 매우 우수합니다.' :
+                       data[selectedCategory] >= 60 ?
+                        '기본적인 협업 능력은 있으나, 개선이 필요합니다.' :
+                        '팀워크와 커뮤니케이션 능력 향상이 필요합니다.')
+                    )}
+                    {selectedCategory === 'motivation_company_fit' && (
+                      analysisData?.motivation_company_fit?.feedback ||
+                      (data[selectedCategory] >= 80 ?
+                        '지원동기와 회사 가치관 부합도가 매우 높습니다.' :
+                       data[selectedCategory] >= 60 ?
+                        '기본적인 지원동기는 있으나, 회사와의 부합도를 높일 필요가 있습니다.' :
+                        '지원동기와 회사 가치관에 대한 이해를 더욱 명확히 해야 합니다.')
+                    )}
+                  </p>
+                </div>
+              ) : (
+                <div style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '14px',
+                  color: '#475569',
+                  lineHeight: '1.6',
+                  background: 'white',
+                  padding: '20px',
+                  borderRadius: '12px',
+                  margin: 0,
+                  border: '1px solid #e2e8f0',
+                  boxShadow: '0 1px 3px rgba(0, 0, 0, 0.05)',
+                  minHeight: '280px',
+                  maxHeight: '400px',
+                  overflowY: 'auto'
+                }}>
+                  <p style={{
+                    color: '#6b7280',
+                    fontSize: '14px',
+                    textAlign: 'center',
+                    margin: 0,
+                    lineHeight: '1.5'
+                  }}>
+                    항목을 클릭하여<br/>상세 분석을 확인하세요
+                  </p>
+                </div>
+              )}
+            </div>
+          </Card>
+        </RightPanel>
+      </MainContent>
+
+>>>>>>> Stashed changes
       {/* 개선 권장사항 섹션 */}
       {recommendations && recommendations.length > 0 && (
         <FullWidthCard>
@@ -730,6 +875,7 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
         </FullWidthCard>
       )}
 
+<<<<<<< Updated upstream
       {/* 상세 설명 섹션 */}
       {selectedCategory && (
         <Card style={{ marginTop: '24px' }}>
@@ -785,6 +931,9 @@ const CoverLetterAnalysis = ({ analysisData, applicant }) => {
           </div>
         </Card>
       )}
+=======
+      
+>>>>>>> Stashed changes
     </Container>
   );
 };

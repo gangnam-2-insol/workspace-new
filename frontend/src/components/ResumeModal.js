@@ -253,7 +253,11 @@ const AnalysisSection = styled.div`
   padding: 24px;
   border: 1px solid #e2e8f0;
   position: relative;
+<<<<<<< Updated upstream
   min-height: ${props => props.isLoading ? 'auto' : '600px'};
+=======
+  min-height: ${props => props.isLoading ? 'auto' : '800px'};
+>>>>>>> Stashed changes
 `;
 
 // AI 분석 로딩 오버레이 스타일
@@ -276,7 +280,7 @@ const AnalysisCard = styled.div`
   border: 1px solid #e2e8f0;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.05);
   height: auto;
-  min-height: 280px;
+  min-height: 548px;
 `;
 
 const AnalysisCardTitle = styled.h4`
@@ -1785,7 +1789,11 @@ const ResumeModal = ({ isOpen, onClose, applicant }) => {
                         <InfoLabel>분석 결과</InfoLabel>
                         <InfoValue style={{ fontSize: '14px', lineHeight: '1.5' }}>
                           {aiAnalysisResult && aiAnalysisResult.analysis_result && aiAnalysisResult.analysis_result.overall_feedback
+<<<<<<< Updated upstream
                             ? aiAnalysisResult.analysis_result.overall_feedback.substring(0, 100) + '...'
+=======
+                            ? aiAnalysisResult.analysis_result.overall_feedback
+>>>>>>> Stashed changes
                             : '분석 결과가 없습니다.'}
                         </InfoValue>
                       </InfoContent>
@@ -1882,7 +1890,11 @@ const ResumeModal = ({ isOpen, onClose, applicant }) => {
                   </AnalysisCard>
 
                   {/* 통합 분석 결과 */}
+<<<<<<< Updated upstream
                   <DetailCard style={{ height: '548px' }}>
+=======
+                  <DetailCard style={{ height: 'auto', minHeight: '548px' }}>
+>>>>>>> Stashed changes
                     <DetailCardTitle style={{ color: '#495057', backgroundColor: '#e9ecef', borderBottom: '2px solid #6c757d' }}>
                       <FiTarget size={16} />
                       🎯 이력서 종합 분석 결과

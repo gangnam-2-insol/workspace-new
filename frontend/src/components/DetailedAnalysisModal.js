@@ -278,10 +278,13 @@ const ScoreMax = styled.span`
 `;
 
 const ItemDescription = styled.p`
-  font-size: 12px;
+  font-size: 13px;
   color: #666;
-  line-height: 1.4;
+  line-height: 1.5;
   margin: 0;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+  white-space: normal;
 `;
 
 const StatusIcon = styled.div`

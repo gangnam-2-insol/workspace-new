@@ -58,7 +58,11 @@ const TickText = styled.text`
 const CustomRadarChart = ({ data, labels, maxValue = 10 }) => {
   const centerX = 160;
   const centerY = 160;
+<<<<<<< Updated upstream
   const radius = 120;
+=======
+  const radius = 100;
+>>>>>>> Stashed changes
   const numAxes = labels.length;
 
   // 각 축의 각도 계산 (12시 방향부터 시계방향)
@@ -119,11 +123,19 @@ const CustomRadarChart = ({ data, labels, maxValue = 10 }) => {
     // 긴 텍스트에 따라 간격 조정
     let labelDistance;
     if (label.includes('팀워크') || label.includes('커뮤니케이션')) {
+<<<<<<< Updated upstream
       labelDistance = radius + 60; // 긴 텍스트
     } else if (label.includes('회사 가치관') || label.includes('부합도')) {
       labelDistance = radius + 70; // 가장 긴 텍스트
     } else {
       labelDistance = radius + 40; // 기본 텍스트
+=======
+      labelDistance = radius + 70; // 긴 텍스트
+    } else if (label.includes('회사 가치관') || label.includes('부합도')) {
+      labelDistance = radius + 80; // 가장 긴 텍스트
+    } else {
+      labelDistance = radius + 50; // 기본 텍스트
+>>>>>>> Stashed changes
     }
     return {
       ...getCoordinates(angle, labelDistance),
@@ -151,7 +163,11 @@ const CustomRadarChart = ({ data, labels, maxValue = 10 }) => {
 
   return (
     <RadarContainer>
+<<<<<<< Updated upstream
       <RadarSVG viewBox="0 0 320 320">
+=======
+      <RadarSVG viewBox="0 0 320 350">
+>>>>>>> Stashed changes
         {/* 그리드 원 */}
         {gridCircles}
 

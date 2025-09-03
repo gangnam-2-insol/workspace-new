@@ -230,7 +230,7 @@ class CoverLetterAnalyzer:
                 return result
             except json.JSONDecodeError as e:
                 logger.error(f"LLM 응답 JSON 파싱 실패: {str(e)}")
-                logger.error(f"응답 내용: {response[:500]}...")
+                logger.error(f"응답 내용: {response[:500]}.")
                 raise ValueError("LLM 응답을 JSON으로 파싱할 수 없습니다.")
 
         except Exception as e:
