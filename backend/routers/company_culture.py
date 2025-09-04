@@ -1,14 +1,17 @@
-import os
 import logging
-from typing import List, Dict, Any
+import os
+from typing import Any, Dict, List
+
 from fastapi import APIRouter, Depends, HTTPException, Query
 from motor.motor_asyncio import AsyncIOMotorClient
 
 logger = logging.getLogger(__name__)
 
 from models.company_culture import (
-    CompanyCultureCreate, CompanyCultureUpdate, CompanyCultureResponse,
-    ApplicantCultureScore
+    ApplicantCultureScore,
+    CompanyCultureCreate,
+    CompanyCultureResponse,
+    CompanyCultureUpdate,
 )
 from modules.company_culture.services import CompanyCultureService, get_database
 from services.llm_service import LLMService
@@ -137,93 +140,64 @@ async def generate_ai_cultures(
 ):
     """AI를 사용한 인재상 자동 생성 (키워드 기반)"""
     try:
-        print(f"🔍 [AI 인재상 추천] 요청 데이터: {request_data}")
-
         keywords = request_data.get("keywords", [])
         job = request_data.get("job", "")
         department = request_data.get("department", "")
         use_trends = request_data.get("use_trends", False)
 
-        print(f"🔍 [AI 인재상 추천] 파싱된 데이터:")
-        print(f"   - 키워드: {keywords}")
-        print(f"   - 직무: {job}")
-        print(f"   - 부서: {department}")
-        print(f"   - 트렌드 사용: {use_trends}")
+        logger.info(f"AI 인재상 추천 요청 - 키워드: {keywords}, 직무: {job}, 부서: {department}")
 
         # 키워드 기반 맞춤형 인재상 생성
         recommended_cultures = await generate_custom_cultures(keywords, job, department, use_trends)
 
-        print(f"🔍 [AI 인재상 추천] 생성된 인재상 수: {len(recommended_cultures)}")
-        for i, culture in enumerate(recommended_cultures):
-            print(f"   {i+1}. {culture.get('name', 'N/A')}")
-
+        logger.info(f"생성된 인재상 수: {len(recommended_cultures)}")
         return recommended_cultures
     except Exception as e:
-        print(f"❌ [AI 인재상 추천] 오류 발생: {str(e)}")
-        import traceback
-        print(f"❌ [AI 인재상 추천] 스택 트레이스: {traceback.format_exc()}")
+        logger.error(f"AI 인재상 생성 실패: {str(e)}")
         raise HTTPException(status_code=500, detail="AI 인재상 생성에 실패했습니다.")
 
 async def generate_custom_cultures(keywords: list, job: str, department: str, use_trends: bool) -> list:
     """키워드 기반 맞춤형 인재상 생성 (LLM + 크롤링 통합)"""
 
-    print(f"🔍 [generate_custom_cultures] 시작")
-    print(f"   - 키워드: {keywords}")
-    print(f"   - 직무: {job}")
-    print(f"   - 부서: {department}")
-    print(f"   - 트렌드 사용: {use_trends}")
+    logger.info(f"맞춤형 인재상 생성 시작 - 키워드: {keywords}, 직무: {job}, 부서: {department}")
 
     try:
         # LLM 서비스 초기화
-        print(f"🔍 [generate_custom_cultures] LLM 서비스 초기화 시작")
         llm_service = LLMService()
-        print(f"🔍 [generate_custom_cultures] LLM 서비스 초기화 완료")
-
         trend_crawler = TrendCrawler()
-        print(f"🔍 [generate_custom_cultures] 트렌드 크롤러 초기화 완료")
 
         # 트렌드 수집 (use_trends가 True인 경우)
         trends = []
         if use_trends:
-            print(f"🔍 [generate_custom_cultures] 트렌드 수집 시작")
             trends = await trend_crawler.get_job_trends(job)
-            print(f"🔍 [generate_custom_cultures] 수집된 트렌드: {trends}")
+            logger.info(f"수집된 트렌드: {trends}")
 
         # LLM을 사용한 인재상 생성
-        print(f"🔍 [generate_custom_cultures] LLM 인재상 생성 시작")
         llm_cultures = await llm_service.generate_culture_recommendations(
             keywords=keywords,
             job=job,
             department=department,
             trends=trends
         )
-        print(f"🔍 [generate_custom_cultures] LLM 인재상 생성 완료: {len(llm_cultures) if llm_cultures else 0}개")
 
         # LLM 결과가 있으면 반환, 없으면 기본 규칙 기반으로 폴백
         if llm_cultures and len(llm_cultures) > 0:
-            print(f"🔍 [generate_custom_cultures] LLM 결과 사용 (최대 7개)")
+            logger.info(f"LLM 결과 사용 - {len(llm_cultures)}개 인재상")
             return llm_cultures[:7]  # 최대 7개 반환
 
         # 폴백: 기본 규칙 기반 추천
-        print(f"🔍 [generate_custom_cultures] LLM 결과 없음, 폴백 사용")
+        logger.info("LLM 결과 없음, 폴백 사용")
         return await _fallback_recommendations(keywords, job, department)
 
     except Exception as e:
-        print(f"❌ [generate_custom_cultures] LLM 기반 추천 실패: {str(e)}")
-        import traceback
-        print(f"❌ [generate_custom_cultures] 스택 트레이스: {traceback.format_exc()}")
         logger.error(f"LLM 기반 추천 실패: {str(e)}")
         # 완전한 폴백: 기본 규칙 기반 추천
-        print(f"🔍 [generate_custom_cultures] 폴백으로 전환")
         return await _fallback_recommendations(keywords, job, department)
 
 async def _fallback_recommendations(keywords: list, job: str, department: str) -> list:
     """기본 규칙 기반 인재상 추천 (폴백)"""
 
-    print(f"🔍 [_fallback_recommendations] 폴백 추천 시작")
-    print(f"   - 키워드: {keywords}")
-    print(f"   - 직무: {job}")
-    print(f"   - 부서: {department}")
+    logger.info(f"폴백 추천 시작 - 키워드: {keywords}, 직무: {job}, 부서: {department}")
 
     # 키워드 기반 맞춤 인재상 생성
     custom_cultures = []

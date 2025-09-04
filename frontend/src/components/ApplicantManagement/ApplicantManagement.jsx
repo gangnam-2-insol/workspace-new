@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence } from 'framer-motion';
 import { FiFileText } from 'react-icons/fi';
 import useApplicants from './hooks/useApplicants';
@@ -10,7 +10,7 @@ import ApplicantCard from './components/ApplicantCard';
 import ApplicantBoard from './components/ApplicantBoard';
 import StatsCards from './components/StatsCards';
 import SearchBarUI from './components/SearchBar';
-import BaseModal from './components/BaseModal';
+import ApplicantManagementModals from './ApplicantManagementModals';
 import * as S from './styles';
 import * as U from './utils';
 
@@ -59,18 +59,66 @@ const ApplicantManagement = () => {
   const paginated = filteredApplicants.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage);
 
   /* 7. 모달 상태 */
-  const [modal, setModal] = useState(null);          // null | 'detail' | 'resume' | 'document'
-  const [modalData, setModalData] = useState(null);
+  const [detailModal, setDetailModal] = useState({ isOpen: false, applicant: null });
+  const [resumeModal, setResumeModal] = useState({ isOpen: false, applicant: null });
+  const [documentModal, setDocumentModal] = useState({
+    isOpen: false,
+    type: '',
+    applicant: null,
+    documentData: null,
+    similarityData: null,
+    isLoadingSimilarity: false
+  });
+  const [newApplicantModal, setNewApplicantModal] = useState({
+    isOpen: false,
+    existingApplicant: null,
+    isCheckingDuplicate: false
+  });
 
   /* 8. 이벤트 핸들러 */
-  const handleCardClick = (applicant) => {
-    setModalData(applicant);
-    setModal('detail');
-  };
-  const closeModal = () => {
-    setModal(null);
-    setModalData(null);
-  };
+  const handleCardClick = useCallback((applicant) => {
+    setDetailModal({ isOpen: true, applicant });
+  }, []);
+
+  const handleDetailModalClose = useCallback(() => {
+    setDetailModal({ isOpen: false, applicant: null });
+  }, []);
+
+  const handleResumeModalOpen = useCallback(() => {
+    setNewApplicantModal({ isOpen: true, existingApplicant: null, isCheckingDuplicate: false });
+  }, []);
+
+  const handleResumeModalClose = useCallback(() => {
+    setNewApplicantModal({ isOpen: false, existingApplicant: null, isCheckingDuplicate: false });
+  }, []);
+
+  const handleDocumentModalOpen = useCallback((type, applicant) => {
+    setDocumentModal({
+      isOpen: true,
+      type,
+      applicant,
+      documentData: null,
+      similarityData: null,
+      isLoadingSimilarity: false
+    });
+  }, []);
+
+  const handleDocumentModalClose = useCallback(() => {
+    setDocumentModal({
+      isOpen: false,
+      type: '',
+      applicant: null,
+      documentData: null,
+      similarityData: null,
+      isLoadingSimilarity: false
+    });
+  }, []);
+
+  const handleNewApplicantSubmit = useCallback((result) => {
+    // 새 지원자 등록 후 목록 새로고침
+    reload();
+    handleResumeModalClose();
+  }, [reload, handleResumeModalClose]);
 
   const handleViewModeChange = (mode) => {
     setViewMode(mode);
@@ -108,7 +156,7 @@ const ApplicantManagement = () => {
             <S.Subtitle>채용 공고별 지원자 현황을 관리하고 검토하세요</S.Subtitle>
           </S.HeaderLeft>
           <S.HeaderRight>
-            <S.NewResumeButton onClick={() => setModal('resume')}>
+            <S.NewResumeButton onClick={handleResumeModalOpen}>
               <FiFileText size={16} />새 지원자 등록
             </S.NewResumeButton>
           </S.HeaderRight>
@@ -221,40 +269,21 @@ const ApplicantManagement = () => {
       )}
 
       {/* ================================= Modal 구간 ================================= */}
-      <AnimatePresence>
-        {/* 상세 모달 */}
-        {modal === 'detail' && modalData && (
-          <BaseModal title="지원자 상세" onClose={closeModal}>
-            <div>
-              <h3>{modalData.name}</h3>
-              <p>이메일: {modalData.email}</p>
-              <p>직무: {modalData.position}</p>
-              <p>상태: {U.getStatusText(modalData.status)}</p>
-              {/* 상세 내용(예: Profile, Skills, 문서 버튼) 삽입 */}
-            </div>
-          </BaseModal>
-        )}
-
-        {/* 새 이력서 등록 모달 */}
-        {modal === 'resume' && (
-          <BaseModal title="새 지원자 등록" onClose={closeModal}>
-            <div>
-              <p>새 지원자 등록 기능은 별도 구현이 필요합니다.</p>
-              {/* ResumeModal 내부 JSX 삽입 */}
-            </div>
-          </BaseModal>
-        )}
-
-        {/* 문서 뷰 모달 */}
-        {modal === 'document' && modalData && (
-          <BaseModal title="문서 보기" onClose={closeModal}>
-            <div>
-              <p>문서 보기 기능은 별도 구현이 필요합니다.</p>
-              {/* DocumentModal 내부 JSX 삽입 */}
-            </div>
-          </BaseModal>
-        )}
-      </AnimatePresence>
+      <ApplicantManagementModals
+        detailModal={detailModal}
+        resumeModal={resumeModal}
+        documentModal={documentModal}
+        newApplicantModal={newApplicantModal}
+        onDetailModalOpen={setDetailModal}
+        onDetailModalClose={handleDetailModalClose}
+        onResumeModalOpen={setResumeModal}
+        onResumeModalClose={handleResumeModalClose}
+        onDocumentModalOpen={handleDocumentModalOpen}
+        onDocumentModalClose={handleDocumentModalClose}
+        onNewApplicantModalOpen={setNewApplicantModal}
+        onNewApplicantModalClose={handleResumeModalClose}
+        onResumeSubmit={handleNewApplicantSubmit}
+      />
     </S.Container>
   );
 };

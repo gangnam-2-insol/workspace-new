@@ -16,7 +16,8 @@ import {
   FiUpload,
   FiDownload,
   FiCode,
-  FiTable
+  FiTable,
+  FiUser
 } from 'react-icons/fi';
 
 const Container = styled.div`
@@ -294,6 +295,70 @@ const UploadSubtext = styled.div`
   color: var(--text-light);
 `;
 
+const FormContainer = styled.div`
+  background: #f8f9fa;
+  border-radius: var(--border-radius);
+  padding: 24px;
+  margin-bottom: 24px;
+`;
+
+const FormTitle = styled.h3`
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+`;
+
+const FormGrid = styled.div`
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin-bottom: 16px;
+
+  @media (max-width: 768px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const FormField = styled.div`
+  display: flex;
+  flex-direction: column;
+`;
+
+const FormLabel = styled.label`
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-secondary);
+  margin-bottom: 8px;
+`;
+
+const FormInput = styled.input`
+  padding: 12px 16px;
+  border: 1px solid #dee2e6;
+  border-radius: 8px;
+  font-size: 14px;
+  transition: var(--transition);
+
+  &:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 3px rgba(0, 123, 255, 0.1);
+  }
+
+  &::placeholder {
+    color: #6c757d;
+  }
+`;
+
+const FormDescription = styled.div`
+  font-size: 12px;
+  color: var(--text-light);
+  margin-top: 4px;
+`;
+
 const TabContainer = styled.div`
   margin-bottom: 24px;
 `;
@@ -337,6 +402,30 @@ const SampleDataManagement = () => {
   const [uploadedFile, setUploadedFile] = useState(null);
   const [jobPostings, setJobPostings] = useState([]);
   const [applicants, setApplicants] = useState([]);
+
+  // 개별 지원자 생성 상태
+  const [singleApplicantForm, setSingleApplicantForm] = useState({
+    name: '',
+    email: '',
+    github_url: ''
+  });
+
+  // 토스트 알림 상태
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState('success');
+
+  // 토스트 알림 표시 함수
+  const showToastNotification = (message, type = 'success') => {
+    setToastMessage(message);
+    setToastType(type);
+    setShowToast(true);
+
+    // 5초 후 토스트 숨기기
+    setTimeout(() => {
+      setShowToast(false);
+    }, 5000);
+  };
 
   // 현재 데이터 통계 조회
   const loadCurrentStats = async () => {
@@ -455,8 +544,8 @@ const SampleDataManagement = () => {
     }
   };
 
-  // 샘플 자소서 데이터 생성
-  const generateSampleCoverLetters = async (count = 50) => {
+  // 샘플 자소서 데이터 생성 (자소서가 없는 지원자들만)
+  const generateSampleCoverLetters = async () => {
     // 먼저 기존 지원자 확인
     if (applicants.length === 0) {
       setMessage({
@@ -469,7 +558,7 @@ const SampleDataManagement = () => {
     setLoading(true);
     setProgress(0);
     setCurrentOperation('자소서 샘플 데이터 생성 중...');
-    setMessage({ type: 'info', text: '자소서 샘플 데이터를 생성하고 있습니다...' });
+    setMessage({ type: 'info', text: '자소서가 없는 지원자들을 위한 자소서 데이터를 생성하고 있습니다...' });
 
     try {
       const response = await fetch(`${API_BASE_URL}/api/sample/generate-cover-letters`, {
@@ -477,7 +566,7 @@ const SampleDataManagement = () => {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ count })
+        body: JSON.stringify({})
       });
 
       if (response.ok) {
@@ -575,12 +664,61 @@ const SampleDataManagement = () => {
     }
   };
 
-  // 통계 새로고침
-  const refreshStats = async () => {
+
+
+  // 개별 지원자 생성
+  const createSingleApplicant = async () => {
+    if (!singleApplicantForm.name || !singleApplicantForm.email) {
+      setMessage({ type: 'error', text: '이름과 이메일은 필수 입력 항목입니다.' });
+      return;
+    }
+
     setLoading(true);
-    await loadCurrentStats();
-    setLoading(false);
-    setMessage({ type: 'success', text: '통계가 새로고침되었습니다!' });
+    setCurrentOperation('개별 지원자 생성 중...');
+    setMessage({ type: 'info', text: '개별 지원자를 생성하고 있습니다...' });
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/sample/create-single-applicant`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(singleApplicantForm)
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        const successMessage = `${result.message} (${result.job_posting.position} - ${result.job_posting.company})`;
+
+        setMessage({
+          type: 'success',
+          text: successMessage
+        });
+
+        // 토스트 알림 표시
+        showToastNotification(`✅ ${singleApplicantForm.name} 지원자가 성공적으로 등록되었습니다!`, 'success');
+
+        // 폼 초기화
+        setSingleApplicantForm({
+          name: '',
+          email: '',
+          github_url: ''
+        });
+
+        // 데이터 새로고침
+        loadCurrentStats();
+        loadApplicants();
+      } else {
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '개별 지원자 생성 실패');
+      }
+    } catch (error) {
+      setMessage({ type: 'error', text: error.message || '개별 지원자 생성에 실패했습니다.' });
+      console.error('개별 지원자 생성 오류:', error);
+    } finally {
+      setLoading(false);
+      setCurrentOperation('');
+    }
   };
 
   // 파일 업로드 처리
@@ -589,29 +727,51 @@ const SampleDataManagement = () => {
 
     setLoading(true);
     setProgress(0);
-    setCurrentOperation('엑셀 파일 업로드 중...');
-    setMessage({ type: 'info', text: '엑셀 파일을 업로드하고 있습니다...' });
+    setCurrentOperation('JSON 파일 업로드 중...');
+    setMessage({ type: 'info', text: 'JSON 파일을 업로드하고 있습니다...' });
 
     try {
-      const formData = new FormData();
-      formData.append('file', file);
+      // JSON 파일 읽기
+      const text = await file.text();
+      const jsonData = JSON.parse(text);
 
-      const response = await fetch(`${API_BASE_URL}/api/sample/upload-excel`, {
+      const response = await fetch(`${API_BASE_URL}/api/sample/upload-json`, {
         method: 'POST',
-        body: formData
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(jsonData)
       });
 
-      if (response.ok) {
+            if (response.ok) {
         const result = await response.json();
-        setMessage({ type: 'success', text: `${result.uploaded_count}개의 데이터가 성공적으로 업로드되었습니다!` });
+        let successMessage = `${result.uploaded_count}개의 데이터가 성공적으로 업로드되었습니다!`;
+        if (result.job_posting_count > 0) {
+          successMessage += ` (기존 ${result.job_posting_count}개 채용공고에 랜덤 할당됨)`;
+        }
+        if (result.vector_saved_count > 0) {
+          successMessage += ` ${result.vector_saved_count}개 데이터가 벡터 DB에 저장됨`;
+        }
+        setMessage({ type: 'success', text: successMessage });
         setProgress(100);
         loadCurrentStats();
         setUploadedFile(null);
+
+        // 업로드 완료 후 자동으로 데이터 생성 탭으로 이동
+        setTimeout(() => {
+          setActiveTab('generate');
+          let toastMessage = 'JSON 데이터 업로드 완료! 지원자들에게 채용공고가 자동 할당되었습니다.';
+          if (result.vector_saved_count > 0) {
+            toastMessage += ` 벡터 DB에도 ${result.vector_saved_count}개 저장됨`;
+          }
+          showToastNotification(toastMessage);
+        }, 1500);
       } else {
-        throw new Error('파일 업로드 실패');
+        const errorData = await response.json();
+        throw new Error(errorData.detail || '파일 업로드 실패');
       }
     } catch (error) {
-      setMessage({ type: 'error', text: '엑셀 파일 업로드에 실패했습니다.' });
+      setMessage({ type: 'error', text: `JSON 파일 업로드에 실패했습니다: ${error.message}` });
       console.error('파일 업로드 오류:', error);
     } finally {
       setLoading(false);
@@ -637,12 +797,11 @@ const SampleDataManagement = () => {
     const files = e.dataTransfer.files;
     if (files.length > 0) {
       const file = files[0];
-      if (file.type === 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
-          file.type === 'application/vnd.ms-excel') {
+      if (file.type === 'application/json' || file.name.endsWith('.json')) {
         setUploadedFile(file);
         handleFileUpload(file);
       } else {
-        setMessage({ type: 'error', text: '엑셀 파일(.xlsx, .xls)만 업로드 가능합니다.' });
+        setMessage({ type: 'error', text: 'JSON 파일(.json)만 업로드 가능합니다.' });
       }
     }
   };
@@ -656,8 +815,97 @@ const SampleDataManagement = () => {
     }
   };
 
+  // JSON 템플릿 다운로드
+  const downloadJsonTemplate = async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/api/sample/json-template`);
+      if (response.ok) {
+        const template = await response.json();
+        const blob = new Blob([JSON.stringify(template, null, 2)], { type: 'application/json' });
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'sample-data-template.json';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        showToastNotification('JSON 템플릿이 다운로드되었습니다!');
+      } else {
+        throw new Error('템플릿 다운로드 실패');
+      }
+    } catch (error) {
+      showToastNotification('템플릿 다운로드에 실패했습니다.', 'error');
+      console.error('템플릿 다운로드 오류:', error);
+    }
+  };
+
   return (
     <Container>
+      {/* 토스트 알림 */}
+      {showToast && (
+        <div
+          style={{
+            position: 'fixed',
+            top: '20px',
+            right: '20px',
+            background: toastType === 'success'
+              ? 'linear-gradient(135deg, #28a745 0%, #20c997 100%)'
+              : toastType === 'error'
+              ? 'linear-gradient(135deg, #dc3545 0%, #fd7e14 100%)'
+              : 'linear-gradient(135deg, #007bff 0%, #6610f2 100%)',
+            color: 'white',
+            padding: '16px 20px',
+            borderRadius: '12px',
+            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)',
+            zIndex: 10000,
+            maxWidth: '400px',
+            fontSize: '14px',
+            lineHeight: '1.5',
+            animation: 'slideInRight 0.3s ease-out',
+            border: '1px solid rgba(255, 255, 255, 0.2)',
+            backdropFilter: 'blur(10px)',
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: '12px'
+          }}
+        >
+          <div style={{
+            fontSize: '20px',
+            marginTop: '2px'
+          }}>
+            {toastType === 'success' ? '✅' : toastType === 'error' ? '❌' : 'ℹ️'}
+          </div>
+          <div style={{ flex: 1 }}>
+            {toastMessage.split('\n').map((line, index) => (
+              <div key={index} style={{
+                marginBottom: index < toastMessage.split('\n').length - 1 ? '4px' : '0'
+              }}>
+                {line}
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={() => setShowToast(false)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'white',
+              cursor: 'pointer',
+              fontSize: '16px',
+              padding: '0',
+              marginLeft: '8px',
+              opacity: '0.8',
+              transition: 'opacity 0.2s ease'
+            }}
+            onMouseEnter={(e) => e.target.style.opacity = '1'}
+            onMouseLeave={(e) => e.target.style.opacity = '0.8'}
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       <Header>
         <Title>샘플 데이터 관리</Title>
         <Subtitle>
@@ -784,7 +1032,7 @@ const SampleDataManagement = () => {
               onClick={() => setActiveTab('upload')}
             >
               <FiUpload />
-              엑셀 업로드
+              JSON 업로드
             </Tab>
             <Tab
               active={activeTab === 'manage'}
@@ -815,8 +1063,8 @@ const SampleDataManagement = () => {
                   <span>AI가 자동으로 다양한 샘플 데이터를 생성합니다</span>
                 </InfoItem>
                 <InfoItem>
-                  <span>엑셀 업로드</span>
-                  <span>기존 엑셀 파일을 업로드하여 데이터를 등록합니다</span>
+                  <span>JSON 업로드</span>
+                  <span>JSON 파일을 업로드하여 데이터를 등록합니다</span>
                 </InfoItem>
                 <InfoItem>
                   <span>데이터 초기화</span>
@@ -941,6 +1189,78 @@ const SampleDataManagement = () => {
                     <SchemaTd>✓</SchemaTd>
                     <SchemaTd>상태 (pending/reviewing/interview_scheduled/passed/rejected)</SchemaTd>
                   </tr>
+                  <tr>
+                    <SchemaTd>analysisScore</SchemaTd>
+                    <SchemaTd>Number</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>분석 점수 (0-100)</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>analysisResult</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>분석 결과</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>job_posting_id</SchemaTd>
+                    <SchemaTd>ObjectId</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>연결된 채용공고 ID</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>github_url</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✗</SchemaTd>
+                    <SchemaTd>GitHub 프로필 URL</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>linkedin_url</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✗</SchemaTd>
+                    <SchemaTd>LinkedIn 프로필 URL</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>portfolio_url</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✗</SchemaTd>
+                    <SchemaTd>포트폴리오 URL</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>resume_id</SchemaTd>
+                    <SchemaTd>ObjectId</SchemaTd>
+                    <SchemaTd>✗</SchemaTd>
+                    <SchemaTd>연결된 이력서 ID</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>cover_letter_id</SchemaTd>
+                    <SchemaTd>ObjectId</SchemaTd>
+                    <SchemaTd>✗</SchemaTd>
+                    <SchemaTd>연결된 자기소개서 ID</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>portfolio_id</SchemaTd>
+                    <SchemaTd>ObjectId</SchemaTd>
+                    <SchemaTd>✗</SchemaTd>
+                    <SchemaTd>연결된 포트폴리오 ID</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>ranks</SchemaTd>
+                    <SchemaTd>Object</SchemaTd>
+                    <SchemaTd>✗</SchemaTd>
+                    <SchemaTd>랭킹 정보 (resume, coverLetter, portfolio, total)</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>created_at</SchemaTd>
+                    <SchemaTd>Date</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>생성일시</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>updated_at</SchemaTd>
+                    <SchemaTd>Date</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>수정일시</SchemaTd>
+                  </tr>
                 </tbody>
               </SchemaTable>
             </SchemaContainer>
@@ -1020,6 +1340,205 @@ const SampleDataManagement = () => {
                     <SchemaTd>✓</SchemaTd>
                     <SchemaTd>상태 (draft/published/closed)</SchemaTd>
                   </tr>
+                  <tr>
+                    <SchemaTd>type</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>고용 형태 (full-time/part-time/contract)</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>education</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>학력 요건</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>benefits</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>복리후생</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>deadline</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>지원 마감일</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>applicants</SchemaTd>
+                    <SchemaTd>Number</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>지원자 수</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>views</SchemaTd>
+                    <SchemaTd>Number</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>조회수</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>bookmarks</SchemaTd>
+                    <SchemaTd>Number</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>북마크 수</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>shares</SchemaTd>
+                    <SchemaTd>Number</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>공유 수</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>created_at</SchemaTd>
+                    <SchemaTd>Date</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>생성일시</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>updated_at</SchemaTd>
+                    <SchemaTd>Date</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>수정일시</SchemaTd>
+                  </tr>
+                </tbody>
+              </SchemaTable>
+            </SchemaContainer>
+
+            <SchemaContainer>
+              <SchemaTitle>
+                <FiFileText />
+                자소서 (cover_letters) 테이블
+              </SchemaTitle>
+              <SchemaTable>
+                <thead>
+                  <tr>
+                    <SchemaTh>필드명</SchemaTh>
+                    <SchemaTh>타입</SchemaTh>
+                    <SchemaTh>필수</SchemaTh>
+                    <SchemaTh>설명</SchemaTh>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <SchemaTd>applicant_id</SchemaTd>
+                    <SchemaTd>ObjectId</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>연결된 지원자 ID</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>content</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>자소서 전체 내용</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>motivation</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>지원 동기</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>career_goals</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>경력 목표</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>strengths</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>강점 및 역량</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>experience</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>관련 경험</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>achievements</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>주요 성과</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>skills</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>보유 기술</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>projects</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>프로젝트 경험</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>education</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>학력 사항</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>certifications</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>자격증</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>languages</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>언어 능력</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>personal_statement</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>자기소개</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>future_plans</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>향후 계획</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>filename</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>파일명</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>file_size</SchemaTd>
+                    <SchemaTd>Number</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>파일 크기 (bytes)</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>extracted_text</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>추출된 텍스트</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>status</SchemaTd>
+                    <SchemaTd>String</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>상태 (submitted/reviewed/approved/rejected)</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>created_at</SchemaTd>
+                    <SchemaTd>Date</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>생성일시</SchemaTd>
+                  </tr>
+                  <tr>
+                    <SchemaTd>updated_at</SchemaTd>
+                    <SchemaTd>Date</SchemaTd>
+                    <SchemaTd>✓</SchemaTd>
+                    <SchemaTd>수정일시</SchemaTd>
+                  </tr>
                 </tbody>
               </SchemaTable>
             </SchemaContainer>
@@ -1089,11 +1608,76 @@ const SampleDataManagement = () => {
                   <span>{applicants.length}명</span>
                 </InfoItem>
                 <InfoItem>
-                  <span>자소서 생성 가능</span>
-                  <span>{applicants.length > 0 ? '가능' : '불가능 (지원자 필요)'}</span>
+                  <span>자소서 생성 대상</span>
+                  <span>{applicants.length > 0 ? '자소서가 없는 지원자들' : '불가능 (지원자 필요)'}</span>
                 </InfoItem>
               </InfoList>
             </InfoCard>
+
+            {/* 개별 지원자 생성 폼 */}
+            <FormContainer>
+              <FormTitle>
+                <FiUser />
+                개별 지원자 생성
+              </FormTitle>
+              <FormDescription>
+                테스트용 개별 지원자를 생성합니다. 이름과 이메일은 필수 입력 항목이며, 나머지 정보는 자동으로 생성됩니다.
+              </FormDescription>
+
+              <FormGrid>
+                <FormField>
+                  <FormLabel>이름 *</FormLabel>
+                  <FormInput
+                    type="text"
+                    placeholder="예: 홍길동"
+                    value={singleApplicantForm.name}
+                    onChange={(e) => setSingleApplicantForm(prev => ({
+                      ...prev,
+                      name: e.target.value
+                    }))}
+                  />
+                </FormField>
+
+                <FormField>
+                  <FormLabel>이메일 주소 *</FormLabel>
+                  <FormInput
+                    type="email"
+                    placeholder="예: hong@example.com"
+                    value={singleApplicantForm.email}
+                    onChange={(e) => setSingleApplicantForm(prev => ({
+                      ...prev,
+                      email: e.target.value
+                    }))}
+                  />
+                </FormField>
+              </FormGrid>
+
+              <FormField>
+                <FormLabel>GitHub 주소 (선택사항)</FormLabel>
+                <FormInput
+                  type="url"
+                  placeholder="예: https://github.com/username"
+                  value={singleApplicantForm.github_url}
+                  onChange={(e) => setSingleApplicantForm(prev => ({
+                    ...prev,
+                    github_url: e.target.value
+                  }))}
+                />
+                <FormDescription>
+                  입력하지 않으면 자동으로 생성됩니다.
+                </FormDescription>
+              </FormField>
+
+              <Button
+                onClick={createSingleApplicant}
+                disabled={loading || !singleApplicantForm.name || !singleApplicantForm.email}
+                variant="primary"
+                style={{ marginTop: '16px' }}
+              >
+                <FiUser />
+                특정 지원자 생성
+              </Button>
+            </FormContainer>
 
             <ButtonGroup>
               {/* 채용공고 생성 버튼들을 먼저 배치 */}
@@ -1142,55 +1726,37 @@ const SampleDataManagement = () => {
               {/* 구분선 */}
               <div style={{ width: '100%', height: '1px', background: '#dee2e6', margin: '16px 0' }} />
 
-              {/* 자소서 생성 버튼들 */}
+              {/* 자소서 생성 버튼 */}
               <Button
-                onClick={() => generateSampleCoverLetters(50)}
+                onClick={generateSampleCoverLetters}
                 disabled={loading || applicants.length === 0}
                 variant={applicants.length === 0 ? 'danger' : 'success'}
               >
                 <FiFileText />
-                50개 자소서 생성
+                자소서가 없는 지원자들을 위한 자소서 생성
                 {applicants.length === 0 && ' (지원자 필요)'}
-              </Button>
-
-              <Button
-                onClick={() => generateSampleCoverLetters(100)}
-                disabled={loading || applicants.length === 0}
-                variant={applicants.length === 0 ? 'danger' : 'success'}
-              >
-                <FiFileText />
-                100개 자소서 생성
-                {applicants.length === 0 && ' (지원자 필요)'}
-              </Button>
-
-              <Button
-                onClick={refreshStats}
-                disabled={loading}
-              >
-                <FiRefreshCw />
-                통계 새로고침
               </Button>
             </ButtonGroup>
           </Section>
         )}
 
-        {/* 엑셀 업로드 탭 */}
+        {/* JSON 업로드 탭 */}
         {activeTab === 'upload' && (
           <Section>
             <SectionTitle>
               <FiUpload />
-              엑셀 파일 업로드
+              JSON 데이터 업로드
             </SectionTitle>
 
             <InfoCard>
               <InfoTitle>
                 <FiInfo />
-                엑셀 파일 업로드 가이드
+                JSON 데이터 업로드 가이드
               </InfoTitle>
               <InfoList>
                 <InfoItem>
                   <span>지원 형식</span>
-                  <span>.xlsx, .xls, .csv</span>
+                  <span>.json</span>
                 </InfoItem>
                 <InfoItem>
                   <span>최대 크기</span>
@@ -1201,8 +1767,8 @@ const SampleDataManagement = () => {
                   <span>UTF-8</span>
                 </InfoItem>
                 <InfoItem>
-                  <span>시트명</span>
-                  <span>첫 번째 시트 사용</span>
+                  <span>데이터 구조</span>
+                  <span>applicants, job_postings 배열</span>
                 </InfoItem>
               </InfoList>
             </InfoCard>
@@ -1211,42 +1777,90 @@ const SampleDataManagement = () => {
               onDragOver={handleDragOver}
               onDragLeave={handleDragLeave}
               onDrop={handleDrop}
-              onClick={() => document.getElementById('file-input').click()}
+              onClick={() => document.getElementById('json-file-input').click()}
             >
               <UploadIcon>
                 <FiUpload size={48} />
               </UploadIcon>
               <UploadText>
-                {uploadedFile ? uploadedFile.name : '클릭하거나 파일을 드래그하여 업로드하세요'}
+                {uploadedFile ? uploadedFile.name : '클릭하거나 JSON 파일을 드래그하여 업로드하세요'}
               </UploadText>
               <UploadSubtext>
-                지원 형식: .xlsx, .xls, .csv (최대 10MB)
+                지원 형식: .json (최대 10MB)
               </UploadSubtext>
               <FileInput
-                id="file-input"
+                id="json-file-input"
                 type="file"
-                accept=".xlsx,.xls,.csv"
+                accept=".json"
                 onChange={handleFileSelect}
               />
             </FileUploadArea>
 
             <ButtonGroup>
               <Button
-                onClick={() => document.getElementById('file-input').click()}
+                onClick={() => document.getElementById('json-file-input').click()}
                 disabled={loading}
               >
                 <FiUpload />
-                파일 선택
+                JSON 파일 선택
               </Button>
 
               <Button
-                onClick={() => window.open('/sample-template.xlsx', '_blank')}
+                onClick={downloadJsonTemplate}
                 disabled={loading}
               >
                 <FiDownload />
-                템플릿 다운로드
+                JSON 템플릿 다운로드
               </Button>
             </ButtonGroup>
+
+            {/* 업로드 완료 후 다음 단계 안내 */}
+            {message && message.type === 'success' && message.text.includes('업로드되었습니다') && (
+              <InfoCard style={{ marginTop: '24px', background: '#d4edda', border: '1px solid #c3e6cb' }}>
+                <InfoTitle style={{ color: '#155724' }}>
+                  <FiCheckCircle />
+                  업로드 완료! 다음 단계를 진행하세요
+                </InfoTitle>
+                <InfoList>
+                  <InfoItem>
+                    <span>✅ JSON 데이터가 성공적으로 등록되었습니다</span>
+                    <span></span>
+                  </InfoItem>
+                  <InfoItem>
+                    <span>🎯 지원자들에게 기존 채용공고가 랜덤하게 할당되었습니다</span>
+                    <span></span>
+                  </InfoItem>
+                  <InfoItem>
+                    <span>🔍 데이터가 벡터 데이터베이스에도 저장되어 검색 기능을 사용할 수 있습니다</span>
+                    <span></span>
+                  </InfoItem>
+                  <InfoItem>
+                    <span>📊 현재 데이터 통계를 확인하세요</span>
+                    <span></span>
+                  </InfoItem>
+                  <InfoItem>
+                    <span>🚀 추가 데이터를 생성하거나 관리하세요</span>
+                    <span></span>
+                  </InfoItem>
+                </InfoList>
+                <ButtonGroup style={{ marginTop: '16px' }}>
+                  <Button
+                    onClick={() => setActiveTab('generate')}
+                    variant="success"
+                  >
+                    <FiPlus />
+                    추가 데이터 생성하기
+                  </Button>
+                  <Button
+                    onClick={() => setActiveTab('help')}
+                    variant="primary"
+                  >
+                    <FiInfo />
+                    도움말 보기
+                  </Button>
+                </ButtonGroup>
+              </InfoCard>
+            )}
           </Section>
         )}
 
@@ -1280,6 +1894,17 @@ const SampleDataManagement = () => {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
+        }
+
+        @keyframes slideInRight {
+          from {
+            transform: translateX(100%);
+            opacity: 0;
+          }
+          to {
+            transform: translateX(0);
+            opacity: 1;
+          }
         }
       `}</style>
     </Container>

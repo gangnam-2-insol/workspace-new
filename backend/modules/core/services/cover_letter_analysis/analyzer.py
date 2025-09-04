@@ -42,13 +42,72 @@ class CoverLetterAnalyzer:
             provider_name = self.llm_config.get("provider", "openai")
             self.llm_provider = LLMProviderFactory.create_provider(provider_name, self.llm_config)
 
-            if self.llm_provider and self.llm_provider.is_healthy():
+            if self.llm_provider:
                 logger.info(f"LLM 프로바이더 초기화 성공: {provider_name}")
+                # is_healthy() 체크 제거 - 이벤트 루프 충돌 방지
             else:
                 logger.error(f"LLM 프로바이더 초기화 실패: {provider_name}")
 
         except Exception as e:
             logger.error(f"LLM 프로바이더 초기화 중 오류: {str(e)}")
+
+    async def analyze_cover_letter_text(
+        self,
+        text_content: str,
+        filename: str = "cover_letter.txt",
+        job_description: str = "",
+        analysis_type: str = "comprehensive"
+    ) -> CoverLetterAnalysis:
+        """
+        DB에 저장된 텍스트 데이터를 직접 분석
+
+        Args:
+            text_content: 자소서 텍스트 내용
+            filename: 파일명 (참고용)
+            job_description: 직무 설명
+            analysis_type: 분석 유형
+
+        Returns:
+            분석 결과
+        """
+        start_time = time.time()
+
+        try:
+            # 1. 텍스트 유효성 검사
+            if not text_content or not text_content.strip():
+                raise ValueError("자소서 내용이 비어있습니다.")
+
+            # 2. 텍스트 전처리
+            extracted_text = text_content.strip()
+
+            # 3. LLM 분석 실행
+            analysis_result = await self._run_llm_analysis(
+                extracted_text,
+                job_description,
+                analysis_type
+            )
+
+            # 4. 결과 반환
+            return CoverLetterAnalysis(
+                filename=filename,
+                original_text=extracted_text,
+                extracted_text=extracted_text,
+                analysis_result=analysis_result,
+                processing_time=time.time() - start_time,
+                status="success"
+            )
+
+        except Exception as e:
+            logger.error(f"자소서 텍스트 분석 실패: {filename}, 오류: {str(e)}")
+            return CoverLetterAnalysis(
+                filename=filename,
+                original_text=text_content,
+                extracted_text=text_content,
+                analysis_result=None,
+                processing_time=time.time() - start_time,
+                status="error",
+                error_message=str(e)
+            )
 
     async def analyze_cover_letter(
         self,

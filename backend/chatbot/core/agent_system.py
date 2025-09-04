@@ -3,19 +3,25 @@
 사용자의 요청을 분석하고 적절한 도구를 자동으로 선택하여 처리합니다.
 """
 
-import re
 import json
 import math
-from typing import Dict, Any, List, Optional
+import re
 from dataclasses import dataclass
+from typing import Any, Dict, List, Optional
+
 try:
     from openai_service import OpenAIService
 except ImportError:
     OpenAIService = None
 import os
+
 from dotenv import load_dotenv
-from .context_classifier import classify_context, is_recruitment_text
-from .context_classifier import FlexibleContextClassifier
+
+from .context_classifier import (
+    FlexibleContextClassifier,
+    classify_context,
+    is_recruitment_text,
+)
 from .enhanced_field_extractor import enhanced_extractor
 from .two_stage_classifier import two_stage_classifier
 
@@ -36,22 +42,22 @@ class AgentState:
     tool_result: str = ""
     final_response: str = ""
     error: str = ""
-    
+
     def __post_init__(self):
         if self.conversation_history is None:
             self.conversation_history = []
 
 class IntentDetectionNode:
     """사용자 의도를 파악하는 노드"""
-    
+
     def __init__(self):
         self.context_classifier = FlexibleContextClassifier()
-        
+
         # 강력 키워드 (LangGraph 모드에서 무시)
         self.exclude_keywords = [
             "제출", "등록", "신청", "가입", "회원가입", "로그인", "결제", "구매", "주문"
         ]
-        
+
         # 채용 관련 키워드
         self.recruitment_keywords = [
             "모집", "채용", "구인", "지원", "이력서", "자기소개서", "면접", "연봉", "급여",
@@ -63,17 +69,17 @@ class IntentDetectionNode:
     def run(self, state: Dict[str, Any]) -> Dict[str, Any]:
         user_input = state.get("user_input", "")
         mode = state.get("mode", "chat")
-        
+
         print(f"\n🎯 [의도 감지 시작] 모드: {mode}")
         print(f"🎯 [의도 감지] 사용자 입력: {user_input}")
-        
+
         # LangGraph 모드에서 강력 키워드 무시
         if mode == "langgraph":
             print(f"🎯 [의도 감지] LangGraph 모드 - 강력 키워드 무시")
-            
+
             # 2단계 분류 시스템 사용
             classification_result = two_stage_classifier.classify_text(user_input)
-            
+
             if classification_result['is_recruitment']:
                 intent = "recruit"
                 confidence = classification_result['confidence']
@@ -85,7 +91,7 @@ class IntentDetectionNode:
                     print(f"🔁 [보강] 의미 기반 분류가 채용이 아님 → 규칙 기반 필드 추출 시도")
                     extracted_fields_fallback = enhanced_extractor.extract_fields_enhanced(user_input)
                     # 실제 값이 있는 필드만 카운트
-                    valid_fields = {k: v for k, v in extracted_fields_fallback.items() 
+                    valid_fields = {k: v for k, v in extracted_fields_fallback.items()
                                   if v is not None and v != "" and v != "null"}
                     if valid_fields:
                         intent = "recruit"
@@ -102,18 +108,18 @@ class IntentDetectionNode:
                     confidence = 0.8
                     extracted_fields = {}
                     print(f"⚠️ [보강 실패] 규칙 기반 추출 중 오류: {_e}")
-            
+
         else:
             # 일반 모드에서는 기존 로직 사용
             print(f"🎯 [의도 감지] 일반 모드 - 기존 로직 사용")
-            
+
             # 기존 컨텍스트 분류기 사용
             context_result = self.context_classifier.classify_context(user_input)
             context_score = context_result.total_score
             context_confidence = context_result.confidence
-            
+
             print(f"🎯 [의도 감지] 컨텍스트 분류 결과: 점수={context_score}, 신뢰도={context_confidence}")
-            
+
             # 의도 결정
             if context_confidence >= 0.5 and context_score >= 5:
                 intent = "recruit"
@@ -123,11 +129,11 @@ class IntentDetectionNode:
                 intent = "chat"
                 confidence = 0.8
                 print(f"🎯 [의도 감지] 일반 대화로 판정")
-            
+
             extracted_fields = {}
-        
+
         print(f"🎯 [의도 감지 완료] 최종 의도: {intent}, 신뢰도: {confidence}")
-        
+
         return {
             "intent": intent,
             "confidence": confidence,
@@ -136,7 +142,7 @@ class IntentDetectionNode:
 
 class WebSearchNode:
     """웹 검색 도구 노드"""
-    
+
     def process_search(self, search_query: str) -> str:
         try:
             # 시뮬레이션된 검색 결과 제공
@@ -170,7 +176,7 @@ class WebSearchNode:
 • VS Code의 새로운 확장 기능
 • Git 최신 기능과 워크플로우
 • CI/CD 파이프라인 자동화"""
-                
+
             elif "채용" in search_query or "구인" in search_query:
                 result = """💼 2024년 IT 업계 채용 동향:
 
@@ -196,7 +202,7 @@ class WebSearchNode:
 • 신입 개발자: 연봉 3,000만원~4,000만원
 • 경력 3-5년: 연봉 4,000만원~6,000만원
 • 경력 5년 이상: 연봉 5,000만원~8,000만원"""
-                
+
             elif "기술" in search_query or "기술스택" in search_query:
                 result = """🛠️ 2024년 인기 기술 스택:
 
@@ -235,7 +241,7 @@ class WebSearchNode:
 • Flutter
 • Swift (iOS)
 • Kotlin (Android)"""
-                
+
             else:
                 result = f"""🔍 검색 결과: {search_query}
 
@@ -248,20 +254,20 @@ class WebSearchNode:
 • 구체적인 키워드를 사용하세요
 • 최신 정보를 위해 날짜 필터를 활용하세요
 • 신뢰할 수 있는 소스를 확인하세요"""
-            
+
             return result
-            
+
         except Exception as e:
             print(f"웹 검색 중 오류: {str(e)}")
             return "죄송합니다. 검색 중 오류가 발생했습니다."
 
 class CalculatorNode:
     """계산 도구 노드"""
-    
+
     def process_calculation(self, user_input: str) -> str:
         try:
             user_input = user_input.lower()
-            
+
             # 수식 계산
             if any(op in user_input for op in ['+', '-', '*', '/', '=']):
                 # 수식 추출
@@ -278,7 +284,7 @@ class CalculatorNode:
                         return "수식 계산 중 오류가 발생했습니다."
                 else:
                     return "계산할 수식을 찾을 수 없습니다."
-            
+
             # 연봉 관련 계산
             elif "연봉" in user_input or "월급" in user_input:
                 # 연봉에서 월급 계산
@@ -286,10 +292,10 @@ class CalculatorNode:
                 if salary_match:
                     annual_salary = int(salary_match.group(1))
                     monthly_salary = annual_salary / 12
-                    
+
                     # 4대보험 공제 (약 10%)
                     net_monthly = monthly_salary * 0.9
-                    
+
                     result = f"""💰 연봉 {annual_salary:,}만원의 월급 계산:
 
 📊 기본 정보:
@@ -304,35 +310,35 @@ class CalculatorNode:
 • 정확한 공제액은 개인 상황에 따라 다를 수 있습니다
 • 퇴직연금, 각종 수당 등이 추가될 수 있습니다
 • 세금 계산은 연말정산 시 정확히 계산됩니다"""
-                    
+
                     return result
                 else:
                     return "연봉 정보를 찾을 수 없습니다. '연봉 4000만원'과 같이 입력해주세요."
-            
+
             # 퍼센트 계산
             elif "%" in user_input or "퍼센트" in user_input:
                 percent_match = re.search(r'(\d+)%', user_input)
                 number_match = re.search(r'(\d+)', user_input)
-                
+
                 if percent_match and number_match:
                     percent = int(percent_match.group(1))
                     number = int(number_match.group(1))
                     result_value = number * percent / 100
-                    
+
                     return f"🧮 퍼센트 계산: {number}의 {percent}% = {result_value}"
                 else:
                     return "퍼센트 계산을 위한 정보가 부족합니다."
-            
+
             else:
                 return "계산할 수 있는 내용을 찾을 수 없습니다. 수식, 연봉, 퍼센트 등을 입력해주세요."
-            
+
         except Exception as e:
             print(f"계산 중 오류: {str(e)}")
             return "죄송합니다. 계산 중 오류가 발생했습니다."
 
 class RecruitmentNode:
     """채용공고 작성 도구 노드"""
-    
+
     def process_recruitment(self, user_input: str) -> str:
         try:
             # Gemini AI를 사용하여 채용공고 내용 생성
@@ -383,7 +389,7 @@ class RecruitmentNode:
 
 답변은 한국어로 작성하고, 이모지를 적절히 사용하여 가독성을 높여주세요.
 """
-            
+
             if openai_service:
                 try:
                     # 새로운 이벤트 루프 생성하여 사용
@@ -400,18 +406,18 @@ class RecruitmentNode:
                     return "죄송합니다. AI 서비스 호출 중 오류가 발생했습니다."
             else:
                 return "죄송합니다. AI 서비스를 사용할 수 없습니다."
-            
+
         except Exception as e:
             print(f"채용공고 작성 중 오류: {str(e)}")
             return "죄송합니다. 채용공고 작성 중 오류가 발생했습니다."
 
 class DatabaseQueryNode:
     """데이터베이스 조회 도구 노드"""
-    
+
     def process_db_query(self, user_input: str) -> str:
         try:
             user_input = user_input.lower()
-            
+
             # 시뮬레이션된 DB 조회 결과 제공
             if "채용공고" in user_input or "구인" in user_input:
                 result = """📋 저장된 채용공고 목록:
@@ -456,7 +462,7 @@ class DatabaseQueryNode:
 • 평균 연봉: 4,220만원
 • 가장 인기 지역: 서울 (2개)
 • 가장 인기 직종: 개발자 (3개)"""
-                
+
             elif "이력서" in user_input or "지원자" in user_input:
                 result = """📄 저장된 이력서 목록:
 
@@ -495,7 +501,7 @@ class DatabaseQueryNode:
 • 평균 경력: 2.8년
 • 가장 인기 기술: Python (3명)
 • 서류통과율: 40%"""
-                
+
             elif "면접" in user_input or "일정" in user_input:
                 result = """📅 면접 일정:
 
@@ -527,7 +533,7 @@ class DatabaseQueryNode:
 • 총 면접: 4건
 • 평균 면접 시간: 1시간
 • 면접관 수: 평균 2.5명"""
-                
+
             else:
                 result = f"""📋 데이터베이스 조회 결과: {user_input}
 
@@ -541,29 +547,29 @@ class DatabaseQueryNode:
 • "채용공고 보여줘"
 • "이력서 목록"
 • "면접 일정" """
-            
+
             return result
-            
+
         except Exception as e:
             print(f"DB 조회 중 오류: {str(e)}")
             return "죄송합니다. 데이터베이스 조회 중 오류가 발생했습니다."
 
 class FallbackNode:
     """일반 대화 처리 노드"""
-    
+
     def __init__(self):
         self.system_prompt = """
-당신은 친근하고 도움이 되는 AI 어시스턴트입니다. 
-채용 관련 질문이면 전문적인 조언을 제공하고, 
+당신은 친근하고 도움이 되는 AI 어시스턴트입니다.
+채용 관련 질문이면 전문적인 조언을 제공하고,
 일반적인 질문이면 친근하게 답변해주세요.
 
 답변은 한국어로 하고, 이모지를 적절히 사용하여 친근하게 만들어주세요.
 """
-    
+
     def process_chat(self, user_input: str) -> str:
         try:
             user_input = user_input.lower()
-            
+
             # 채용 관련 질문인지 확인 (더 포괄적인 키워드 추가)
             recruitment_keywords = [
                 '채용', '구인', '면접', '이력서', '연봉', '급여', '직장', '취업',
@@ -572,7 +578,7 @@ class FallbackNode:
                 '협의', '마감일', '문의처', '지원방법', '제출', '등록', '작성'
             ]
             is_recruitment_related = any(keyword in user_input for keyword in recruitment_keywords)
-            
+
             if is_recruitment_related:
                 # 채용 관련 전문적인 답변
                 if "면접" in user_input:
@@ -599,7 +605,7 @@ class FallbackNode:
 • 기술 면접은 코딩 테스트 준비
 • 행동 면접은 STAR 기법 활용
 • 문화적 적합성도 중요"""
-                    
+
                 elif "이력서" in user_input:
                     result = """📄 이력서 작성 가이드:
 
@@ -628,7 +634,7 @@ class FallbackNode:
 • 최신 정보로 업데이트
 • 지원 직무에 맞게 수정
 • 거짓 정보 금지"""
-                    
+
                 elif "연봉" in user_input or "급여" in user_input:
                     result = """💰 연봉 협상 가이드:
 
@@ -655,7 +661,7 @@ class FallbackNode:
 • 성과급/인센티브
 • 연봉 인상 가능성
 • 근무 환경과의 균형"""
-                    
+
                 elif "서류" in user_input or "제출" in user_input or "지원방법" in user_input:
                     result = """📋 지원 서류 및 방법 가이드:
 
@@ -684,14 +690,14 @@ class FallbackNode:
 • 제출 확인 메일 확인
 
 🤝 추가 문의사항이 있으시면 언제든 말씀해주세요!"""
-                    
+
                 else:
                     result = """💼 채용 관련 도움말:
 
 🎯 주요 서비스:
 • 채용공고 등록 및 관리
 • 이력서 분석 및 평가
-• 면접 일정 관리
+
 • 지원자 추천
 
 📋 채용 프로세스:
@@ -708,7 +714,7 @@ class FallbackNode:
 • 빠른 피드백
 
 🤝 추가 도움이 필요하시면 언제든 말씀해주세요!"""
-                    
+
             else:
                 # 일반 대화: 하드코딩된 고정 멘트 대신 LLM으로 자연스러운 답변 생성
                 try:
@@ -737,16 +743,16 @@ class FallbackNode:
                         result = "네, 알겠습니다. 더 구체적으로 말씀해 주실 수 있을까요?"
                 except Exception:
                     result = "네, 알겠습니다. 더 구체적으로 말씀해 주실 수 있을까요?"
-            
+
             return result
-            
+
         except Exception as e:
             print(f"대화 처리 중 오류: {str(e)}")
             return "죄송합니다. 대화 처리 중 오류가 발생했습니다."
 
 class ResponseFormatterNode:
     """응답 포매터 노드"""
-    
+
     def format_response(self, tool_result: str, intent: str, error: str = "") -> str:
         try:
             if error:
@@ -765,15 +771,15 @@ class ResponseFormatterNode:
                     additional_msg = "\n\n📋 다른 데이터 조회가 필요하시면 말씀해주세요!"
                 else:  # chat은 꼬리 문구를 붙이지 않음 (반복 멘트 방지)
                     additional_msg = ""
-                
+
                 return f"{tool_result}{additional_msg}"
-            
+
         except Exception as e:
             return f"❌ 응답 포맷팅 중 오류가 발생했습니다: {str(e)}"
 
 class AgentSystem:
     """기본 Agent 시스템"""
-    
+
     def __init__(self):
         self.intent_detector = IntentDetectionNode()
         self.web_search = WebSearchNode()
@@ -782,7 +788,7 @@ class AgentSystem:
         self.db_query = DatabaseQueryNode()
         self.fallback = FallbackNode()
         self.formatter = ResponseFormatterNode()
-        
+
     def process_request(self, user_input: str, conversation_history: List[Dict[str, str]] = None, session_id: str = None, mode: str = "chat") -> Dict[str, Any]:
         """사용자 요청을 처리하고 결과를 반환합니다."""
         try:
@@ -791,50 +797,50 @@ class AgentSystem:
             intent = intent_result["intent"]
             confidence = intent_result["confidence"]
             extracted_fields = intent_result["extracted_fields"]
-            
+
             # 2단계: DOM 액션 의도 감지
             print("\n" + "="*50)
             print("🔍 [DOM 액션 감지 디버깅]")
             print("="*50)
-            
+
             from langgraph_config import is_dom_action_intent
-            
+
             # 입력 전처리
             text = user_input.lower()
             print(f"\n1️⃣ 입력 전처리:")
             print(f"  원본: {user_input}")
             print(f"  전처리: {text}")
-            
+
             # 액션 키워드 체크
             click_words = ["클릭", "선택", "누르", "체크"]
             view_words = ["보여줘", "보기", "확인", "조회", "열람"]
             has_click = any(w in text for w in click_words)
             has_view = any(w in text for w in view_words)
-            
+
             print(f"\n2️⃣ 키워드 체크:")
             print(f"  클릭 키워드: {[w for w in click_words if w in text]}")
             print(f"  보기 키워드: {[w for w in view_words if w in text]}")
             print(f"  클릭 감지: {'✅' if has_click else '❌'}")
             print(f"  보기 감지: {'✅' if has_view else '❌'}")
-            
+
             # 대상 추출 시도
             print(f"\n3️⃣ 대상 추출:")
             name_match = re.search(r'([가-힣]{2,4})\s*(지원자|님|의|을|를|에게)?', text)
             doc_match = re.search(r'(자소서|이력서|포트폴리오|분석\s*결과|상세\s*정보)', text)
-            
+
             target = None
             if name_match:
                 target = name_match.group(1)
                 print(f"  이름 패턴 매칭: ✅ -> {target}")
             else:
                 print("  이름 패턴 매칭: ❌")
-                
+
             if doc_match:
                 target = doc_match.group(1).strip()
                 print(f"  문서 패턴 매칭: ✅ -> {target}")
             else:
                 print("  문서 패턴 매칭: ❌")
-            
+
             # DOM 액션 판정
             is_dom_action = is_dom_action_intent(user_input)
             print(f"\n4️⃣ 최종 판정:")
@@ -842,11 +848,11 @@ class AgentSystem:
             print(f"  has_click/view: {'✅' if (has_click or has_view) else '❌'}")
             print(f"  추출된 대상: {target or '없음'}")
             print("="*50 + "\n")
-            
+
             # 3단계: 도구 선택 및 실행
             tool_result = ""
             error = ""
-            
+
             if is_dom_action or has_click or has_view:
                 # DOM 액션 처리
                 print("🎯 [DOM] 액션 감지됨!")
@@ -877,10 +883,10 @@ class AgentSystem:
                 tool_result = self.db_query.process_db_query(user_input)
             else:  # chat
                 tool_result = self.fallback.process_chat(user_input)
-            
+
             # 3단계: 응답 포맷팅
             final_response = self.formatter.format_response(tool_result, intent, error)
-            
+
             # 4단계: 채용공고 관련 필드 추출 보강 (채용 의도일 때만)
             if not extracted_fields and intent == "recruit":
                 try:
@@ -889,7 +895,7 @@ class AgentSystem:
                         extracted_fields = fallback_fields
                 except Exception:
                     pass
-            
+
             return {
                 "success": True,
                 "response": final_response,
@@ -898,7 +904,7 @@ class AgentSystem:
                 "session_id": session_id,
                 "extracted_fields": extracted_fields  # 추출된 필드 정보 추가
             }
-            
+
         except Exception as e:
             return {
                 "success": False,
@@ -907,25 +913,25 @@ class AgentSystem:
                 "error": str(e),
                 "extracted_fields": {}
             }
-    
+
     def _extract_job_posting_fields(self, user_input: str) -> Dict[str, Any]:
         """향상된 필드 추출 (AI + 사전 + 규칙 결합)"""
         try:
             print(f"\n🎯 [필드 추출 시작] 사용자 입력: {user_input}")
-            
+
             # 향상된 필드 추출기 사용
             extracted_fields = enhanced_extractor.extract_fields_enhanced(user_input)
-            
+
             print(f"\n🎯 [필드 추출 완료] 최종 결과:")
             print(f"🎯 [필드 추출 완료] 추출된 필드 개수: {len(extracted_fields)}개")
             for key, value in extracted_fields.items():
                 print(f"🎯 [필드 추출 완료] {key}: {value}")
-            
+
             if not extracted_fields:
                 print(f"⚠️ [필드 추출 완료] 추출된 필드가 없습니다!")
-            
+
             return extracted_fields
-            
+
         except Exception as e:
             print(f"❌ [필드 추출 오류] {e}")
             return {}

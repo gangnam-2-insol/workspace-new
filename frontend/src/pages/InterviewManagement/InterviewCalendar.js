@@ -176,7 +176,7 @@ const InterviewCalendar = () => {
     platform: '회사 면접실'
   });
   const [notifications, setNotifications] = useState([]);
-  
+
   // 데이터 변경 시 로컬 스토리지에 저장 (InterviewManagement와 같은 키 사용)
   useEffect(() => {
     try {
@@ -215,7 +215,7 @@ const InterviewCalendar = () => {
 
     // storage 이벤트 리스너 추가 (다른 탭에서의 변경 감지)
     window.addEventListener('storage', handleStorageChange);
-    
+
     // 커스텀 이벤트 리스너 추가
     window.addEventListener('applicantsUpdated', handleApplicantsUpdate);
 
@@ -273,7 +273,7 @@ const InterviewCalendar = () => {
     const id = Date.now();
     const notification = { id, message, type };
     setNotifications(prev => [...prev, notification]);
-    
+
     // 3초 후 자동 제거
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
@@ -376,7 +376,7 @@ const InterviewCalendar = () => {
       {/* 알림 토스트 */}
       <div className="notifications">
         {notifications.map((notification) => (
-          <div 
+          <div
             key={notification.id}
             className={`notification ${notification.type}`}
             onClick={() => removeNotification(notification.id)}
@@ -388,7 +388,7 @@ const InterviewCalendar = () => {
               {notification.type === 'info' && <FiMessageSquare />}
               <span>{notification.message}</span>
             </div>
-            <button 
+            <button
               className="notification-close"
               onClick={(e) => {
                 e.stopPropagation();
@@ -410,7 +410,7 @@ const InterviewCalendar = () => {
               면접 일정 캘린더 뷰
             </span>
           </div>
-          <button 
+          <button
             className="btn btn-primary"
             onClick={() => openCalendarScheduleModal(formatDate(new Date()))}
           >
@@ -444,7 +444,7 @@ const InterviewCalendar = () => {
       <div className="calendar-view">
         {/* 캘린더 헤더 */}
         <div className="calendar-header">
-          <button 
+          <button
             className="btn btn-secondary"
             onClick={() => navigateMonth(-1)}
           >
@@ -453,7 +453,7 @@ const InterviewCalendar = () => {
           <h2 className="calendar-title">
             {currentDate.getFullYear()}년 {currentDate.getMonth() + 1}월
           </h2>
-          <button 
+          <button
             className="btn btn-secondary"
             onClick={() => navigateMonth(1)}
           >
@@ -489,8 +489,8 @@ const InterviewCalendar = () => {
               const isToday = dateStr === formatDate(new Date());
 
               days.push(
-                <div 
-                  key={day} 
+                <div
+                  key={day}
                   className={`calendar-day ${isToday ? 'today' : ''} ${interviewsForDate.length > 0 ? 'has-interviews' : ''}`}
                 >
                   <div className="day-number">{day}</div>
@@ -515,7 +515,7 @@ const InterviewCalendar = () => {
                       </div>
                     </div>
                   )}
-                  <button 
+                  <button
                     className="add-interview-btn"
                     onClick={() => openCalendarScheduleModal(dateStr)}
                     title="면접 일정 추가"
@@ -547,4 +547,4 @@ const InterviewCalendar = () => {
   );
 };
 
-export default InterviewCalendar; 
+export default InterviewCalendar;

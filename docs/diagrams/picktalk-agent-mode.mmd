@@ -1,0 +1,27 @@
+flowchart TD
+    U["사용자"] --> PICK["PickTalk 챗봇"]
+    PICK --> AGENT["AI 에이전트"]
+    
+    U -->|"자연어 입력"| INPUT["사용자 입력"]
+    INPUT --> AGENT
+    
+    subgraph "AI 에이전트 자율 사고 과정"
+        AGENT --> THINK["🤔 의도 분석 & 계획 수립"]
+        THINK --> PLAN["📋 실행 계획 생성"]
+        PLAN --> EXECUTE["🔧 툴 실행"]
+        EXECUTE --> EVALUATE["📊 결과 평가"]
+        EVALUATE --> DECIDE["🤔 추가 판단 필요?"]
+        
+        DECIDE -->|"예"| THINK
+        DECIDE -->|"아니오"| RESPONSE["✅ 최종 응답"]
+    end
+    
+    RESPONSE --> U
+    
+    classDef user fill:#e3f2fd,stroke:#1976d2,stroke-width:2px
+    classDef system fill:#f3e5f5,stroke:#7b1fa2,stroke-width:2px
+    classDef agent fill:#e8f5e8,stroke:#2e7d32,stroke-width:2px
+    
+    class U user
+    class PICK system
+    class AGENT,THINK,PLAN,EXECUTE,EVALUATE,DECIDE,RESPONSE agent

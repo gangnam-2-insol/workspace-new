@@ -470,6 +470,45 @@ const JobPostingRegistration = () => {
 
   // 챗봇 액션 이벤트 리스너
     useEffect(() => {
+      // 에이전트가 직접 호출할 수 있는 전역 함수 등록
+      window.openPickTalkModal = (extractedData) => {
+        console.log('🚀 [전역 함수] 픽톡 모달 직접 열기:', extractedData);
+
+        // 에이전트가 추출한 데이터로 폼 초기화
+        const agentFormData = {
+          title: extractedData.title || '',
+          company: extractedData.company || '',
+          location: extractedData.location || '',
+          type: extractedData.type || 'full-time',
+          salary: extractedData.salary || '',
+          experience: extractedData.experience_level || '신입',
+          description: extractedData.description || extractedData.main_duties || '',
+          requirements: extractedData.requirements || '',
+          benefits: extractedData.benefits || '',
+          deadline: extractedData.deadline || '',
+          department: extractedData.department || '',
+          headcount: extractedData.headcount || '',
+          work_type: extractedData.work_type || '',
+          work_hours: extractedData.work_hours || '',
+          contact_email: extractedData.contact_email || '',
+          selected_culture_id: null
+        };
+
+        console.log('🚀 [에이전트 데이터] 픽톡 모달에 전달:', agentFormData);
+
+        // 픽톡 모달 열기
+        setShowTextRegistration(true);
+
+        // 에이전트 데이터를 TextBasedRegistration에 전달
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('setAgentExtractedData', {
+            detail: { extractedData: agentFormData }
+          }));
+        }, 500);
+
+        console.log('✅ [전역 함수] 픽톡 모달 열기 완료');
+      };
+
       // URL 파라미터에서 자동입력 데이터 확인
       const urlParams = new URLSearchParams(window.location.search);
       const autoFillParam = urlParams.get('autoFill');
@@ -483,6 +522,56 @@ const JobPostingRegistration = () => {
         }
       }
 
+      // 타이핑 애니메이션 이벤트 리스너
+      const handleTypingAnimation = (event) => {
+        console.log('🚀 [타이핑 애니메이션] 시작:', event.detail);
+        const { fields, extractedData, speed } = event.detail;
+
+        // 타이핑 애니메이션 시작
+        startTypingAnimation(fields, extractedData, speed);
+      };
+
+      window.addEventListener('startTypingAnimation', handleTypingAnimation);
+
+      return () => {
+        window.removeEventListener('startTypingAnimation', handleTypingAnimation);
+        // 전역 함수 제거
+        if (window.openPickTalkModal) {
+          delete window.openPickTalkModal;
+        }
+      };
+
+      // 타이핑 애니메이션 함수
+      const startTypingAnimation = (fields, extractedData, speed) => {
+        console.log('🚀 [타이핑 애니메이션] 실행:', { fields, extractedData, speed });
+
+        // 각 필드별로 순차적으로 타이핑 애니메이션 실행
+        fields.forEach((field, index) => {
+          const fieldName = field.name;
+          const delay = field.delay;
+
+          setTimeout(() => {
+            console.log(`📝 [타이핑] ${fieldName} 필드 입력 시작`);
+
+            // 해당 필드에 데이터 입력
+            if (extractedData[fieldName]) {
+              const value = extractedData[fieldName];
+
+              // 배열인 경우 문자열로 변환
+              const displayValue = Array.isArray(value) ? value.join(', ') : value;
+
+              // formData 업데이트
+              setFormData(prev => ({
+                ...prev,
+                [fieldName]: displayValue
+              }));
+
+              console.log(`✅ [타이핑] ${fieldName} 필드 입력 완료:`, displayValue);
+            }
+          }, delay);
+        });
+      };
+
       const handleRegistrationMethod = () => {
         console.log('=== 새 공고 등록 - 픽톡 에이전트 시작 ===');
         setShowTextRegistration(true);
@@ -490,6 +579,46 @@ const JobPostingRegistration = () => {
         setTimeout(() => {
           window.dispatchEvent(new CustomEvent('startTextBasedAIChatbot'));
         }, 500);
+      };
+
+      // 에이전트에서 전달받은 데이터로 픽톡 모달 열기
+      const handlePickTalkJobModal = (event) => {
+        console.log('=== 에이전트 픽톡 모달 열기 시작 ===');
+        const { extractedData, source } = event.detail;
+
+        // 에이전트가 추출한 데이터로 폼 초기화
+        const agentFormData = {
+          title: extractedData.title || '',
+          company: extractedData.company || '',
+          location: extractedData.location || '',
+          type: extractedData.type || 'full-time',
+          salary: extractedData.salary || '',
+          experience: extractedData.experience_level || '신입',
+          description: extractedData.description || extractedData.main_duties || '',
+          requirements: extractedData.requirements || '',
+          benefits: extractedData.benefits || '',
+          deadline: extractedData.deadline || '',
+          department: extractedData.department || '',
+          headcount: extractedData.headcount || '',
+          work_type: extractedData.work_type || '',
+          work_hours: extractedData.work_hours || '',
+          contact_email: extractedData.contact_email || '',
+          selected_culture_id: null
+        };
+
+        console.log('🚀 [에이전트 데이터] 픽톡 모달에 전달:', agentFormData);
+
+        // 픽톡 모달 열기
+        setShowTextRegistration(true);
+
+        // 에이전트 데이터를 TextBasedRegistration에 전달
+        setTimeout(() => {
+          window.dispatchEvent(new CustomEvent('setAgentExtractedData', {
+            detail: { extractedData: agentFormData }
+          }));
+        }, 500);
+
+        console.log('=== 에이전트 픽톡 모달 열기 완료 ===');
       };
 
       const handleTextRegistration = () => {
@@ -598,6 +727,7 @@ const JobPostingRegistration = () => {
     window.addEventListener('openTextRegistration', handleTextRegistration);
     window.addEventListener('openImageRegistration', handleImageRegistration);
     window.addEventListener('openTemplateModal', handleTemplateModal);
+    window.addEventListener('openPickTalkJobModal', handlePickTalkJobModal);
 
     window.addEventListener('startTextBasedFlow', handleStartTextBasedFlow);
     window.addEventListener('startImageBasedFlow', handleStartImageBasedFlow);
@@ -610,12 +740,13 @@ const JobPostingRegistration = () => {
     window.addEventListener('updateSalary', handleUpdateSalary);
     window.addEventListener('updateWorkContent', handleUpdateWorkContent);
 
-    // 클린업
-    return () => {
-      window.removeEventListener('openRegistrationMethod', handleRegistrationMethod);
-      window.removeEventListener('openTextRegistration', handleTextRegistration);
-      window.removeEventListener('openImageRegistration', handleImageRegistration);
-      window.removeEventListener('openTemplateModal', handleTemplateModal);
+          // 클린업
+      return () => {
+        window.removeEventListener('openRegistrationMethod', handleRegistrationMethod);
+        window.removeEventListener('openTextRegistration', handleTextRegistration);
+        window.removeEventListener('openImageRegistration', handleImageRegistration);
+        window.removeEventListener('openTemplateModal', handleTemplateModal);
+        window.removeEventListener('openPickTalkJobModal', handlePickTalkJobModal);
 
       window.removeEventListener('startTextBasedFlow', handleStartTextBasedFlow);
       window.removeEventListener('startImageBasedFlow', handleStartImageBasedFlow);

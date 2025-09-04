@@ -8,9 +8,11 @@ import pandas as pd
 from bson import ObjectId
 from faker import Faker
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from modules.core.services.embedding_service import EmbeddingService
+from modules.core.services.vector_service import VectorService
 from motor.motor_asyncio import AsyncIOMotorClient
 
-router = APIRouter(prefix="/api/sample", tags=["샘플 데이터"])
+router = APIRouter(tags=["샘플 데이터"])
 
 # Faker 초기화 (한국어)
 fake = Faker('ko_KR')
@@ -20,6 +22,105 @@ def get_database():
     mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017/hireme")
     client = AsyncIOMotorClient(mongo_uri)
     return client.hireme
+
+# 벡터 서비스 초기화
+def get_vector_service():
+    try:
+        pinecone_api_key = os.getenv("PINECONE_API_KEY")
+        pinecone_index_name = os.getenv("PINECONE_INDEX_NAME", "hireme-index")
+        pinecone_environment = os.getenv("PINECONE_ENVIRONMENT", "us-west1-gcp")
+
+        if pinecone_api_key:
+            return VectorService(
+                api_key=pinecone_api_key,
+                index_name=pinecone_index_name,
+                environment=pinecone_environment
+            )
+        else:
+            print("⚠️ Pinecone API 키가 설정되지 않아 벡터 서비스를 사용할 수 없습니다.")
+            return None
+    except Exception as e:
+        print(f"⚠️ 벡터 서비스 초기화 실패: {e}")
+        return None
+
+# 임베딩 서비스 초기화
+def get_embedding_service():
+    try:
+        return EmbeddingService()
+    except Exception as e:
+        print(f"⚠️ 임베딩 서비스 초기화 실패: {e}")
+        return None
+
+# 벡터 저장을 위한 헬퍼 함수
+async def save_to_vector_db(data: Dict[str, Any], data_type: str, vector_service: VectorService, embedding_service: EmbeddingService):
+    """데이터를 벡터 데이터베이스에 저장"""
+    try:
+        if not vector_service or not embedding_service:
+            print(f"⚠️ 벡터 서비스 또는 임베딩 서비스가 초기화되지 않아 {data_type} 벡터 저장을 건너뜁니다.")
+            return False
+
+        # 텍스트 데이터 추출
+        text_content = ""
+        if data_type == "applicant":
+            # 지원자 데이터에서 텍스트 추출
+            text_parts = [
+                f"이름: {data.get('name', '')}",
+                f"직무: {data.get('position', '')}",
+                f"부서: {data.get('department', '')}",
+                f"경력: {data.get('experience', '')}",
+                f"기술: {data.get('skills', '')}",
+                f"성장배경: {data.get('growthBackground', '')}",
+                f"지원동기: {data.get('motivation', '')}",
+                f"경력사항: {data.get('careerHistory', '')}",
+                f"분석결과: {data.get('analysisResult', '')}"
+            ]
+            text_content = " ".join([part for part in text_parts if part.split(": ")[1]])
+
+        elif data_type == "job_posting":
+            # 채용공고 데이터에서 텍스트 추출
+            text_parts = [
+                f"제목: {data.get('title', '')}",
+                f"회사: {data.get('company', '')}",
+                f"위치: {data.get('location', '')}",
+                f"부서: {data.get('department', '')}",
+                f"직무: {data.get('position', '')}",
+                f"급여: {data.get('salary', '')}",
+                f"경력: {data.get('experience', '')}",
+                f"설명: {data.get('description', '')}",
+                f"요구사항: {data.get('requirements', '')}"
+            ]
+            text_content = " ".join([part for part in text_parts if part.split(": ")[1]])
+
+        if not text_content.strip():
+            print(f"⚠️ {data_type} 데이터에 저장할 텍스트가 없습니다.")
+            return False
+
+        # 임베딩 생성
+        embedding = await embedding_service.get_embedding(text_content)
+        if not embedding:
+            print(f"⚠️ {data_type} 데이터의 임베딩 생성에 실패했습니다.")
+            return False
+
+        # 메타데이터 준비
+        metadata = {
+            "data_type": data_type,
+            "data_id": str(data.get("_id", "")),
+            "created_at": datetime.now().isoformat(),
+            "text_content": text_content[:1000]  # 메타데이터에는 짧은 텍스트만
+        }
+
+        # 벡터 저장
+        vector_id = await vector_service.save_vector(embedding, metadata)
+        if vector_id:
+            print(f"✅ {data_type} 벡터 저장 성공: {vector_id}")
+            return True
+        else:
+            print(f"❌ {data_type} 벡터 저장 실패")
+            return False
+
+    except Exception as e:
+        print(f"❌ {data_type} 벡터 저장 중 오류 발생: {e}")
+        return False
 
 @router.post("/generate-applicants")
 async def generate_sample_applicants(
@@ -82,6 +183,17 @@ async def generate_sample_applicants(
             # 해당 직무에 맞는 기술 스킬 생성
             skills = random.sample(skills_map.get(position, ["기술 스킬"]), random.randint(2, 4))
 
+            # GitHub URL 목록 (제공된 URL들)
+            github_urls = [
+                "https://github.com/kyungho222/myResume",
+                "https://github.com/kyungho222/hireme",
+                "https://github.com/kyungho222",
+                "https://github.com/rangrang-53",
+                "https://github.com/gaa149",
+                "https://github.com/Drew9703",
+                "https://github.com/Seastar0521"
+            ]
+
             applicant = {
                 "name": fake.name(),
                 "email": fake.email(),
@@ -97,6 +209,9 @@ async def generate_sample_applicants(
                 "analysisResult": fake.text(max_nb_chars=200),
                 "status": status,
                 "job_posting_id": selected_job_id,
+                "github_url": random.choice(github_urls) if random.choice([True, False]) else None,
+                "linkedin_url": f"https://linkedin.com/in/{fake.user_name()}" if random.choice([True, False]) else None,
+                "portfolio_url": f"https://portfolio.example.com/{fake.user_name()}" if random.choice([True, False]) else None,
                 "created_at": datetime.now(),
                 "updated_at": datetime.now()
             }
@@ -189,7 +304,7 @@ async def generate_sample_job_postings(
                 "requirements": fake.text(max_nb_chars=300),
                 "benefits": "주말보장, 재택가능, 점심식대 지원, 연차휴가",
                 "deadline": "2024-12-31",
-                "status": "draft",
+                "status": "published",  # 모든 채용공고를 활성화 상태로 통일
                 "applicants": 0,
                 "views": 0,
                 "bookmarks": 0,
@@ -333,6 +448,235 @@ async def upload_excel_file(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"파일 업로드 실패: {str(e)}")
 
+@router.post("/upload-json")
+async def upload_json_data(
+    data: Dict[str, Any],
+    db: AsyncIOMotorClient = Depends(get_database)
+):
+    """JSON 데이터 업로드 및 처리"""
+    try:
+        uploaded_count = 0
+        errors = []
+        vector_saved_count = 0
+
+        # 벡터 서비스 초기화
+        vector_service = get_vector_service()
+        embedding_service = get_embedding_service()
+
+        # 데이터 타입 확인
+        if not isinstance(data, dict):
+            raise HTTPException(status_code=400, detail="JSON 데이터는 객체 형태여야 합니다.")
+
+        # 지원자 데이터 처리
+        if 'applicants' in data and isinstance(data['applicants'], list):
+            # 기존 채용공고 ID 목록 가져오기
+            existing_job_postings = await db.job_postings.find({}, {"_id": 1}).to_list(None)
+            job_posting_ids = [str(job["_id"]) for job in existing_job_postings]
+
+            for index, applicant in enumerate(data['applicants']):
+                try:
+                    # 랜덤하게 채용공고 ID 할당
+                    assigned_job_posting_id = None
+                    if job_posting_ids:
+                        import random
+                        assigned_job_posting_id = random.choice(job_posting_ids)
+                    else:
+                        # 채용공고가 없으면 기본 채용공고 생성
+                        from backend.modules.core.utils.job_posting_assignment import (
+                            create_default_job_posting_if_needed,
+                        )
+                        assigned_job_posting_id = await create_default_job_posting_if_needed(db)
+
+                    applicant_data = {
+                        "name": str(applicant.get('name', '')),
+                        "email": str(applicant.get('email', '')),
+                        "phone": str(applicant.get('phone', '')),
+                        "github_url": str(applicant.get('github_url', '')),
+                        "position": str(applicant.get('position', '')),
+                        "department": str(applicant.get('department', '')),
+                        "experience": str(applicant.get('experience', '신입')),
+                        "skills": str(applicant.get('skills', '')),
+                        "growthBackground": str(applicant.get('growthBackground', '')),
+                        "motivation": str(applicant.get('motivation', '')),
+                        "careerHistory": str(applicant.get('careerHistory', '')),
+                        "analysisScore": int(applicant.get('analysisScore', 0)),
+                        "analysisResult": str(applicant.get('analysisResult', '')),
+                        "status": str(applicant.get('status', 'pending')),
+                        "job_posting_id": assigned_job_posting_id,  # 랜덤 할당된 채용공고 ID
+                        "created_at": datetime.now(),
+                        "updated_at": datetime.now()
+                    }
+
+                    # 필수 필드 검증
+                    if not applicant_data["name"] or not applicant_data["email"]:
+                        errors.append(f"지원자 {index + 1}: 이름과 이메일은 필수입니다.")
+                        continue
+
+                    # DB에 삽입
+                    result = await db.applicants.insert_one(applicant_data)
+                    uploaded_count += 1
+
+                    # 자소서 데이터가 있으면 별도로 저장
+                    if result.inserted_id and applicant.get('cover_letter_id'):
+                        cover_letter_data = {
+                            "_id": ObjectId(applicant.get('cover_letter_id')),
+                            "applicant_id": str(result.inserted_id),
+                            "content": f"{applicant.get('growthBackground', '')}\n\n{applicant.get('motivation', '')}\n\n{applicant.get('careerHistory', '')}",
+                            "extracted_text": f"{applicant.get('growthBackground', '')}\n\n{applicant.get('motivation', '')}\n\n{applicant.get('careerHistory', '')}",
+                            "growthBackground": applicant.get('growthBackground', ''),
+                            "motivation": applicant.get('motivation', ''),
+                            "careerHistory": applicant.get('careerHistory', ''),
+                            "filename": f"자소서_{applicant.get('name', '')}.txt",
+                            "file_size": len(f"{applicant.get('growthBackground', '')}\n\n{applicant.get('motivation', '')}\n\n{applicant.get('careerHistory', '')}"),
+                            "status": "submitted",
+                            "created_at": datetime.now(),
+                            "updated_at": datetime.now()
+                        }
+
+                        try:
+                            await db.cover_letters.insert_one(cover_letter_data)
+                        except Exception as e:
+                            print(f"자소서 저장 실패: {e}")
+
+                    # 벡터 데이터베이스에 저장
+                    if result.inserted_id:
+                        applicant_data["_id"] = result.inserted_id
+                        vector_saved = await save_to_vector_db(applicant_data, "applicant", vector_service, embedding_service)
+                        if vector_saved:
+                            vector_saved_count += 1
+
+                except Exception as e:
+                    errors.append(f"지원자 {index + 1}: {str(e)}")
+
+        # 채용공고 데이터 처리
+        if 'job_postings' in data and isinstance(data['job_postings'], list):
+            for index, job_posting in enumerate(data['job_postings']):
+                try:
+                    job_posting_data = {
+                        "title": str(job_posting.get('title', '')),
+                        "company": str(job_posting.get('company', '')),
+                        "location": str(job_posting.get('location', '')),
+                        "department": str(job_posting.get('department', '')),
+                        "position": str(job_posting.get('position', '')),
+                        "salary": str(job_posting.get('salary', '')),
+                        "experience": str(job_posting.get('experience', '신입')),
+                        "description": str(job_posting.get('description', '')),
+                        "requirements": str(job_posting.get('requirements', '')),
+                        "status": str(job_posting.get('status', 'published')),
+                        "created_at": datetime.now(),
+                        "updated_at": datetime.now()
+                    }
+
+                    # 필수 필드 검증
+                    if not job_posting_data["title"] or not job_posting_data["company"]:
+                        errors.append(f"채용공고 {index + 1}: 제목과 회사명은 필수입니다.")
+                        continue
+
+                    # DB에 삽입
+                    result = await db.job_postings.insert_one(job_posting_data)
+                    uploaded_count += 1
+
+                    # 벡터 데이터베이스에 저장
+                    if result.inserted_id:
+                        job_posting_data["_id"] = result.inserted_id
+                        vector_saved = await save_to_vector_db(job_posting_data, "job_posting", vector_service, embedding_service)
+                        if vector_saved:
+                            vector_saved_count += 1
+
+                except Exception as e:
+                    errors.append(f"채용공고 {index + 1}: {str(e)}")
+
+        # 데이터가 없는 경우
+        if uploaded_count == 0 and not errors:
+            raise HTTPException(status_code=400, detail="지원자(applicants) 또는 채용공고(job_postings) 데이터가 필요합니다.")
+
+        # 응답 메시지 생성
+        message = f"{uploaded_count}개의 데이터가 성공적으로 업로드되었습니다."
+        if 'applicants' in data and uploaded_count > 0:
+            message += f" 지원자들에게 기존 채용공고가 랜덤하게 할당되었습니다."
+        if vector_saved_count > 0:
+            message += f" {vector_saved_count}개의 데이터가 벡터 데이터베이스에 저장되었습니다."
+
+        return {
+            "success": True,
+            "message": message,
+            "uploaded_count": uploaded_count,
+            "vector_saved_count": vector_saved_count,
+            "errors": errors if errors else None,
+            "job_posting_count": len(job_posting_ids) if 'applicants' in data else 0
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"JSON 데이터 업로드 실패: {str(e)}")
+
+@router.get("/json-template")
+async def get_json_template():
+    """JSON 템플릿 다운로드"""
+    template = {
+        "applicants": [
+            {
+                "name": "홍길동",
+                "email": "hong@example.com",
+                "phone": "010-1234-5678",
+                "github_url": "https://github.com/hong",
+                "position": "프론트엔드 개발자",
+                "department": "개발팀",
+                "experience": "3년",
+                "skills": "React, JavaScript, TypeScript",
+                "growthBackground": "스타트업에서 프론트엔드 개발 경험",
+                "motivation": "사용자 경험을 개선하는 개발자가 되고 싶습니다",
+                "careerHistory": "A회사 프론트엔드 개발자 2년, B회사 웹 개발자 1년",
+                "analysisScore": 85,
+                "analysisResult": "우수한 프론트엔드 개발 역량을 보유",
+                "status": "pending"
+            },
+            {
+                "name": "김철수",
+                "email": "kim@example.com",
+                "phone": "010-9876-5432",
+                "github_url": "https://github.com/kim",
+                "position": "백엔드 개발자",
+                "department": "개발팀",
+                "experience": "5년",
+                "skills": "Python, Django, PostgreSQL",
+                "growthBackground": "대기업에서 백엔드 시스템 개발 경험",
+                "motivation": "안정적이고 확장 가능한 시스템을 구축하고 싶습니다",
+                "careerHistory": "C회사 백엔드 개발자 3년, D회사 풀스택 개발자 2년",
+                "analysisScore": 92,
+                "analysisResult": "뛰어난 백엔드 개발 역량과 시스템 설계 능력",
+                "status": "pending"
+            }
+        ],
+        "job_postings": [
+            {
+                "title": "프론트엔드 개발자 모집",
+                "company": "테크스타트업",
+                "location": "서울 강남구",
+                "department": "개발팀",
+                "position": "프론트엔드 개발자",
+                "salary": "4000만원 ~ 6000만원",
+                "experience": "3년 이상",
+                "description": "혁신적인 웹 서비스를 개발할 프론트엔드 개발자를 모집합니다.",
+                "requirements": "React, JavaScript, TypeScript 경험 필수",
+                "status": "published"
+            },
+            {
+                "title": "백엔드 개발자 모집",
+                "company": "글로벌 IT기업",
+                "location": "서울 서초구",
+                "department": "개발팀",
+                "position": "백엔드 개발자",
+                "salary": "5000만원 ~ 8000만원",
+                "experience": "5년 이상",
+                "description": "대규모 시스템을 설계하고 개발할 백엔드 개발자를 모집합니다.",
+                "requirements": "Python, Django, PostgreSQL 경험 필수",
+                "status": "published"
+            }
+        ]
+    }
+
+    return template
+
 @router.post("/reset-all")
 async def reset_all_data(db: AsyncIOMotorClient = Depends(get_database)):
     """모든 데이터 초기화"""
@@ -380,18 +724,32 @@ async def generate_sample_cover_letters(
     data: Dict[str, Any],
     db: AsyncIOMotorClient = Depends(get_database)
 ):
-    """샘플 자소서 데이터 생성"""
+    """자소서가 없는 지원자들을 위한 샘플 자소서 데이터 생성"""
     try:
-        count = data.get('count', 50)
-
-        # 기존 지원자 ID 목록 가져오기
-        applicants = await db.applicants.find({}, {"_id": 1, "name": 1, "position": 1}).to_list(100)
+        # 기존 지원자 목록 조회
+        applicants = await db.applicants.find({}, {"_id": 1, "name": 1, "position": 1}).to_list(1000)
 
         if not applicants:
             raise HTTPException(
                 status_code=400,
                 detail="자소서를 생성하기 전에 먼저 지원자를 생성해주세요."
             )
+
+        # 자소서가 없는 지원자들만 필터링
+        applicants_without_cover_letters = []
+        for applicant in applicants:
+            existing_cover_letter = await db.cover_letters.find_one({"applicant_id": applicant["_id"]})
+            if not existing_cover_letter:
+                applicants_without_cover_letters.append(applicant)
+
+        if not applicants_without_cover_letters:
+            return {
+                "success": True,
+                "message": "모든 지원자에게 이미 자소서가 생성되어 있습니다.",
+                "generated_count": 0,
+                "total_applicants": len(applicants),
+                "applicants_without_cover_letters": 0
+            }
 
         # 자소서 템플릿 데이터
         cover_letter_templates = [
@@ -439,10 +797,9 @@ async def generate_sample_cover_letters(
             }
         ]
 
-                # 자소서 데이터 생성 (1인 1자소서 매칭)
+                # 자소서 데이터 생성 (자소서가 없는 지원자들만)
         cover_letters = []
-        for i in range(min(count, len(applicants))):
-            applicant = applicants[i]
+        for applicant in applicants_without_cover_letters:
 
             # 지원자의 직무에 맞게 템플릿 선택
             position = applicant.get("position", "개발자")
@@ -528,7 +885,13 @@ async def generate_sample_cover_letters(
                     {"$set": {"cover_letter_id": str(result.inserted_ids[i])}}
                 )
 
-        return {"message": f"{len(cover_letters)}개의 자소서 데이터가 성공적으로 생성되었습니다.", "count": len(cover_letters)}
+        return {
+            "success": True,
+            "message": f"{len(cover_letters)}개의 자소서가 성공적으로 생성되었습니다! (자소서가 없는 지원자 {len(applicants_without_cover_letters)}명 중)",
+            "generated_count": len(cover_letters),
+            "total_applicants": len(applicants),
+            "applicants_without_cover_letters": len(applicants_without_cover_letters)
+        }
 
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"자소서 데이터 생성 실패: {str(e)}")
@@ -628,3 +991,88 @@ async def get_sample_cover_letters():
             "success": False,
             "message": f"샘플 자소서 데이터 조회에 실패했습니다: {str(e)}"
         }
+
+@router.post("/create-single-applicant")
+async def create_single_applicant(
+    request: dict,
+    db: AsyncIOMotorClient = Depends(get_database)
+):
+    """개별 지원자를 생성합니다."""
+    try:
+        # 필수 필드 검증
+        required_fields = ["name", "email"]
+        for field in required_fields:
+            if not request.get(field):
+                raise HTTPException(
+                    status_code=400,
+                    detail=f"필수 필드가 누락되었습니다: {field}"
+                )
+
+        # 이메일 중복 확인
+        existing_applicant = await db.applicants.find_one({"email": request["email"]})
+        if existing_applicant:
+            raise HTTPException(
+                status_code=400,
+                detail=f"이미 존재하는 이메일입니다: {request['email']}"
+            )
+
+        # 기존 채용공고 확인
+        job_postings = await db.job_postings.find().to_list(1000)
+        if not job_postings:
+            raise HTTPException(
+                status_code=400,
+                detail="지원자를 생성하기 전에 먼저 채용공고를 생성해주세요."
+            )
+
+        # 랜덤 채용공고 선택
+        selected_job = random.choice(job_postings)
+
+        # 지원자 데이터 생성
+        applicant_data = {
+            "name": request["name"],
+            "email": request["email"],
+            "phone": request.get("phone", f"010-{random.randint(1000, 9999)}-{random.randint(1000, 9999)}"),
+            "position": selected_job.get("position", "개발자"),
+            "experience": f"{random.randint(1, 10)}년",
+            "skills": request.get("skills", "JavaScript, React, Node.js"),
+            "status": random.choice(["서류합격", "면접대기", "보류", "서류불합격"]),
+            "job_posting_id": str(selected_job["_id"]),
+            "created_at": datetime.utcnow(),
+            "updated_at": datetime.utcnow(),
+            "analysisScore": random.randint(60, 95),
+            "department": selected_job.get("department", "개발팀"),
+            "growthBackground": f"{request['name']}의 성장 배경 및 학습 경험",
+            "motivation": f"{selected_job.get('position', '개발자')} 직무에 대한 {request['name']}의 지원 동기",
+            "careerHistory": f"{random.randint(1, 10)}년 경력의 {request['name']}의 주요 업무 경험",
+            "resume_id": str(ObjectId()),
+            "cover_letter_id": str(ObjectId()),
+            "portfolio_id": str(ObjectId()),
+            "github_url": request.get("github_url", f"https://github.com/{request['name'].lower()}"),
+            "linkedin_url": f"https://linkedin.com/in/{request['name'].lower()}",
+            "portfolio_url": f"https://portfolio.example.com/{request['name'].lower()}",
+            "ranks": {
+                "resume": random.randint(70, 95),
+                "coverLetter": random.randint(65, 90),
+                "portfolio": random.randint(70, 95),
+                "total": random.randint(70, 90)
+            }
+        }
+
+        # MongoDB에 저장
+        result = await db.applicants.insert_one(applicant_data)
+
+        return {
+            "success": True,
+            "message": f"{request['name']} 지원자가 성공적으로 생성되었습니다!",
+            "applicant_id": str(result.inserted_id),
+            "job_posting": {
+                "title": selected_job.get("title"),
+                "position": selected_job.get("position"),
+                "company": selected_job.get("company")
+            }
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"개별 지원자 생성 중 오류가 발생했습니다: {str(e)}")

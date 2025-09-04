@@ -1,12 +1,13 @@
 import os
+from datetime import datetime
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from models.applicant import Applicant, ApplicantCreate
 from modules.core.services.embedding_service import EmbeddingService
+from modules.core.services.mongo_service import MongoService
 from modules.core.services.similarity_service import SimilarityService
 from modules.core.services.vector_service import VectorService
-from modules.core.services.mongo_service import MongoService
 
 router = APIRouter(prefix="/api/applicants", tags=["applicants"])
 
@@ -35,8 +36,9 @@ async def create_or_get_applicant(
 ):
     """지원자를 생성하거나 기존 지원자를 조회합니다."""
     try:
-        applicant = mongo_service.create_or_get_applicant(applicant_data)
-        return applicant
+        result = await mongo_service.create_or_get_applicant(applicant_data)
+        # 응답 구조에서 applicant 부분만 반환
+        return result["applicant"]
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"지원자 생성/조회 실패: {str(e)}")
 
@@ -46,7 +48,7 @@ async def get_applicant(
     mongo_service: MongoService = Depends(get_mongo_service)
 ):
     """지원자를 조회합니다."""
-    applicant = mongo_service.get_applicant(applicant_id)
+    applicant = await mongo_service.get_applicant_by_id(applicant_id)
     if not applicant:
         raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
     return applicant
@@ -72,10 +74,14 @@ async def get_all_applicants(
             print(f"🔍 API 응답 - 첫 번째 지원자 필드들: {list(first_applicant.keys())}")
             print(f"🔍 API 응답 - email 존재: {'email' in first_applicant}")
             print(f"🔍 API 응답 - phone 존재: {'phone' in first_applicant}")
+            print(f"🔍 API 응답 - skills 존재: {'skills' in first_applicant}")
             if 'email' in first_applicant:
                 print(f"🔍 API 응답 - email 값: {first_applicant['email']}")
             if 'phone' in first_applicant:
                 print(f"🔍 API 응답 - phone 값: {first_applicant['phone']}")
+            if 'skills' in first_applicant:
+                print(f"🔍 API 응답 - skills 값: {first_applicant['skills']}")
+                print(f"🔍 API 응답 - skills 타입: {type(first_applicant['skills'])}")
 
         # 응답 데이터 확인 (디버깅용)
         if result.get('applicants') and len(result['applicants']) > 0:
@@ -178,7 +184,14 @@ async def get_applicant_cover_letter(
         # 2. 자소서 ID 확인
         cover_letter_id = applicant.get("cover_letter_id")
         if not cover_letter_id:
-            raise HTTPException(status_code=404, detail="자소서가 없습니다")
+            # 자소서가 없는 경우 빈 응답 반환 (404 대신)
+            return {
+                "status": "success",
+                "applicant_id": applicant_id,
+                "cover_letter": None,
+                "message": "자소서가 없습니다",
+                "has_cover_letter": False
+            }
 
         # 3. 자소서 조회
         from bson import ObjectId
@@ -192,13 +205,25 @@ async def get_applicant_cover_letter(
         client.close()
 
         if not cover_letter:
-            raise HTTPException(status_code=404, detail="자소서를 찾을 수 없습니다")
+            # 자소서 ID는 있지만 실제 자소서가 없는 경우
+            return {
+                "status": "success",
+                "applicant_id": applicant_id,
+                "cover_letter": None,
+                "message": "자소서를 찾을 수 없습니다",
+                "has_cover_letter": False
+            }
+
+        # ObjectId를 문자열로 변환하여 JSON 직렬화 문제 해결
+        if "_id" in cover_letter:
+            cover_letter["_id"] = str(cover_letter["_id"])
 
         return {
             "status": "success",
             "applicant_id": applicant_id,
             "cover_letter": cover_letter,
-            "message": "자소서 조회 완료"
+            "message": "자소서 조회 완료",
+            "has_cover_letter": True
         }
 
     except HTTPException:
@@ -208,6 +233,131 @@ async def get_applicant_cover_letter(
         raise HTTPException(
             status_code=500,
             detail=f"자소서 조회 중 오류가 발생했습니다: {str(e)}"
+        )
+
+@router.post("/{applicant_id}/recommendations")
+async def get_talent_recommendations(
+    applicant_id: str,
+    mongo_service: MongoService = Depends(get_mongo_service)
+):
+    """지원자 기반 유사 인재 추천"""
+    try:
+        print(f"🚀 [유사인재 추천 API] === 요청 시작 ===")
+        print(f"📋 [유사인재 추천 API] 요청 정보:")
+        print(f"  - 지원자 ID: {applicant_id}")
+        print(f"  - 요청 시간: {datetime.now().isoformat()}")
+        print(f"  - MongoDB 서비스: {type(mongo_service).__name__}")
+
+        # 1. 지원자 존재 확인
+        print(f"🔍 [유사인재 추천 API] 1단계: 지원자 존재 확인")
+        from bson import ObjectId
+        applicant_collection = mongo_service.db.applicants
+        print(f"  - 지원자 컬렉션: {applicant_collection.name}")
+
+        target_applicant = await applicant_collection.find_one({"_id": ObjectId(applicant_id)})
+
+        if not target_applicant:
+            print(f"❌ [유사인재 추천 API] 지원자를 찾을 수 없음: {applicant_id}")
+            raise HTTPException(status_code=404, detail="지원자를 찾을 수 없습니다")
+
+        print(f"✅ [유사인재 추천 API] 지원자 확인 완료")
+        print(f"  - 지원자 이름: {target_applicant.get('name', 'N/A')}")
+        print(f"  - 지원자 직무: {target_applicant.get('position', 'N/A')}")
+        print(f"  - 지원자 경력: {target_applicant.get('experience', 'N/A')}")
+        print(f"  - 지원자 기술스택: {target_applicant.get('skills', 'N/A')}")
+        print(f"  - 이력서 ID: {target_applicant.get('resume_id', 'N/A')}")
+        print(f"  - 지원자 필드 목록: {list(target_applicant.keys())}")
+
+        # 2. 유사도 서비스 초기화
+        print(f"🔧 [유사인재 추천 API] 2단계: 유사도 서비스 초기화")
+        similarity_service = get_similarity_service()
+        print(f"  - 유사도 서비스 타입: {type(similarity_service).__name__}")
+        print(f"  - 임베딩 서비스: {type(similarity_service.embedding_service).__name__}")
+        print(f"  - 벡터 서비스: {type(similarity_service.vector_service).__name__}")
+        print(f"  - LLM 서비스: {type(similarity_service.llm_service).__name__}")
+
+        # 3. 유사 인재 추천 수행
+        print(f"🔍 [유사인재 추천 API] 3단계: 유사 인재 추천 수행")
+        print(f"  - 검색 제한: 5명")
+        print(f"  - 검색 시작 시간: {datetime.now().isoformat()}")
+
+        start_time = datetime.now()
+        result = await similarity_service.search_similar_applicants_hybrid(
+            target_applicant=target_applicant,
+            applicants_collection=applicant_collection,
+            limit=5
+        )
+        end_time = datetime.now()
+
+        search_duration = (end_time - start_time).total_seconds()
+        print(f"  - 검색 완료 시간: {end_time.isoformat()}")
+        print(f"  - 검색 소요 시간: {search_duration:.2f}초")
+
+        print(f"📊 [유사인재 추천 API] 검색 결과 분석")
+        print(f"  - 결과 성공 여부: {result.get('success', False)}")
+        print(f"  - 결과 메시지: {result.get('message', 'N/A')}")
+
+        if result.get('success'):
+            data = result.get('data', {})
+            print(f"  - 검색 방법: {data.get('search_method', 'N/A')}")
+            print(f"  - 가중치 설정: {data.get('weights', 'N/A')}")
+            print(f"  - 총 결과 수: {data.get('total', 0)}")
+            print(f"  - 벡터 검색 결과 수: {data.get('vector_count', 0)}")
+            print(f"  - 키워드 검색 결과 수: {data.get('keyword_count', 0)}")
+
+            results = data.get('results', [])
+            print(f"  - 상세 결과 수: {len(results)}")
+
+            for i, res in enumerate(results[:3]):  # 상위 3개만 로깅
+                applicant = res.get('applicant', {})
+                print(f"    #{i+1}: {applicant.get('name', 'N/A')} "
+                      f"(최종:{res.get('final_score', 0):.3f}, "
+                      f"V:{res.get('vector_score', 0):.3f}, "
+                      f"K:{res.get('keyword_score', 0):.3f})")
+        else:
+            print(f"  - 오류 정보: {result.get('error', 'N/A')}")
+            print(f"  - 디버그 정보: {result.get('debug_info', 'N/A')}")
+
+        # 4. 응답 구성
+        print(f"📤 [유사인재 추천 API] 4단계: 응답 구성")
+        response_data = {
+            "status": "success",
+            "applicant_id": applicant_id,
+            "recommendations": result,
+            "message": "유사 인재 추천 완료",
+            "debug_info": {
+                "search_duration_seconds": search_duration,
+                "target_applicant_name": target_applicant.get('name', 'N/A'),
+                "target_applicant_position": target_applicant.get('position', 'N/A'),
+                "request_timestamp": start_time.isoformat(),
+                "response_timestamp": end_time.isoformat()
+            }
+        }
+
+        print(f"✅ [유사인재 추천 API] === 요청 완료 ===")
+        print(f"  - 응답 상태: success")
+        print(f"  - 총 소요 시간: {search_duration:.2f}초")
+
+        # 라우터 끝단에서만 안전 직렬화 적용
+        from utils.response import respond
+        return respond(response_data)
+
+    except HTTPException:
+        print(f"❌ [유사인재 추천 API] HTTP 예외 발생 - 재발생")
+        raise
+    except Exception as e:
+        print(f"❌ [유사인재 추천 API] 예상치 못한 오류 발생")
+        print(f"  - 오류 타입: {type(e).__name__}")
+        print(f"  - 오류 메시지: {str(e)}")
+        print(f"  - 오류 스택: {e.__traceback__}")
+
+        import traceback
+        print(f"  - 상세 스택 트레이스:")
+        traceback.print_exc()
+
+        raise HTTPException(
+            status_code=500,
+            detail=f"유사 인재 추천 중 오류가 발생했습니다: {str(e)}"
         )
 
 @router.post("/{applicant_id}/cover-letter")

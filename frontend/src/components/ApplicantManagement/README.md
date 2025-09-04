@@ -1,34 +1,81 @@
-# ApplicantManagement 컴포넌트
+# 지원자 관리 컴포넌트
 
-지원자 관리 기능을 제공하는 모듈화된 React 컴포넌트입니다.
+## 📋 개요
 
-## 📁 프로젝트 구조
+이 컴포넌트는 지원자 관리 시스템의 핵심 기능을 제공합니다. 지원자 목록 조회, 필터링, 검색, 랭킹, 그리고 다양한 모달을 통한 상세 정보 확인 및 관리 기능을 포함합니다.
+
+## 🗂️ 컴포넌트 구조
 
 ```
-src/components/ApplicantManagement/
-├── index.js                           # ① public API
-├── ApplicantManagement.jsx            # ② 메인 로직 (상위 컴포넌트)
-├── styles.js                          # ③ styled‑components 한 곳에 모음
-├── utils.js                           # ④ 공통 유틸
-├── services/
-│  ├── api.js                          # ⑤ API 호출
-│  └── jobPostingApi.js               # ⑥ 채용공고 API
-├── hooks/
-│  ├── useApplicants.js                # ⑦ useApplicants
-│  ├── useStats.js                     # ⑧ useStats
-│  ├── useSelection.js                # ⑨ useSelection
-│  ├── useFilters.js                  # ⑩ useFilters
-│  └── useRanking.js                  # ⑪ useRanking
-├── components/
-│  ├── ApplicantCard.jsx               # ⑫ 카드(그리드용)
-│  ├── ApplicantBoard.jsx              # ⑬ 보드(행)용
-│  ├── StatsCards.jsx                  # ⑭ 통계 카드
-│  ├── SearchBar.jsx                   # ⑮ 검색·필터·랭킹 UI
-│  └── BaseModal.jsx                   # ⑯ 공통 Modal 구조
-└── README.md                          # 사용 안내
+ApplicantManagement/
+├── ApplicantManagement.jsx          # 메인 컴포넌트
+├── ApplicantDetailModal.jsx         # 지원자 상세정보 모달
+├── DocumentModal.jsx                # 문서 보기 모달 (이력서, 자소서, 포트폴리오)
+├── NewApplicantModal.jsx            # 새 지원자 등록 모달
+├── ApplicantManagementModals.jsx    # 통합 모달 관리 컴포넌트
+├── ApplicantCard.js                 # 지원자 카드 컴포넌트
+├── ApplicantBoard.js                # 지원자 보드 뷰 컴포넌트
+├── StatsCards.js                    # 통계 카드 컴포넌트
+├── SearchBar.js                     # 검색 및 필터 컴포넌트
+├── FilterModal.js                   # 필터 모달 컴포넌트
+├── ResumeUploadModal.js             # 이력서 업로드 모달
+├── styles.js                        # 스타일 정의
+├── utils.js                         # 유틸리티 함수
+└── hooks/                           # 커스텀 훅
+    ├── useApplicants.js            # 지원자 데이터 관리
+    ├── useStats.js                 # 통계 데이터 관리
+    ├── useSelection.js             # 선택 상태 관리
+    ├── useFilters.js               # 필터 상태 관리
+    └── useRanking.js               # 랭킹 계산
 ```
 
-## 🚀 사용법
+## 🚀 주요 기능
+
+### 1. 지원자 목록 관리
+- 그리드/보드 뷰 전환
+- 페이지네이션
+- 정렬 및 필터링
+- 검색 기능
+
+### 2. 모달 시스템
+- **지원자 상세정보 모달**: 기본 정보 및 액션 버튼
+- **문서 보기 모달**: 이력서, 자소서, 포트폴리오 상세 보기
+- **새 지원자 등록 모달**: 파일 업로드 및 정보 입력
+
+### 3. 데이터 분석
+- 지원자 통계
+- AI 기반 랭킹
+- 유사도 체크 (자소서)
+
+## 🎯 모달 컴포넌트 상세
+
+### ApplicantDetailModal
+지원자의 기본 정보를 표시하고, 이력서, 자소서, 포트폴리오 보기로 이동할 수 있는 액션 버튼을 제공합니다.
+
+**주요 기능:**
+- 지원자 기본 정보 표시
+- 상태별 배지 표시
+- 문서 보기 액션 버튼
+
+### DocumentModal
+이력서, 자소서, 포트폴리오를 상세하게 보여주는 모달입니다.
+
+**주요 기능:**
+- 문서 타입별 표시
+- 포트폴리오 뷰 선택 (GitHub/기존 포트폴리오)
+- 자소서 유사도 체크 결과
+- 원본/요약 보기 토글
+
+### NewApplicantModal
+새로운 지원자를 등록하는 모달입니다.
+
+**주요 기능:**
+- PDF 파일 드래그&드롭 업로드
+- 지원자 정보 입력 폼
+- 기존 지원자 중복 체크
+- GitHub URL 연동
+
+## 🔧 사용법
 
 ### 기본 사용법
 
@@ -37,132 +84,168 @@ import ApplicantManagement from './components/ApplicantManagement';
 
 function App() {
   return (
-    <div className="App">
+    <div>
       <ApplicantManagement />
     </div>
   );
 }
 ```
 
-### 환경 변수 설정
+### 모달 상태 관리
 
-```env
-REACT_APP_API_URL=http://localhost:8000
+```jsx
+const [detailModal, setDetailModal] = useState({ isOpen: false, applicant: null });
+const [documentModal, setDocumentModal] = useState({ 
+  isOpen: false, 
+  type: '', 
+  applicant: null 
+});
+const [newApplicantModal, setNewApplicantModal] = useState({ isOpen: false });
+
+// 모달 열기
+const handleCardClick = (applicant) => {
+  setDetailModal({ isOpen: true, applicant });
+};
+
+// 모달 닫기
+const handleDetailModalClose = () => {
+  setDetailModal({ isOpen: false, applicant: null });
+};
 ```
 
-## 🔧 주요 기능
+### API 연동
 
-### 1. 지원자 목록 관리
-- 그리드/보드 뷰 전환
-- 페이지네이션
-- 실시간 검색 및 필터링
+```jsx
+// 지원자 목록 조회
+const { applicants, loading, reload } = useApplicants();
 
-### 2. 상태 관리
-- 지원자 상태 업데이트 (합격/보류/불합격)
-- 일괄 상태 변경
+// 새 지원자 등록
+const handleNewApplicantSubmit = async (formData) => {
+  try {
+    const response = await fetch('/api/applicants', {
+      method: 'POST',
+      body: formData,
+    });
+    if (response.ok) {
+      reload(); // 목록 새로고침
+    }
+  } catch (error) {
+    console.error('등록 실패:', error);
+  }
+};
+```
 
-### 3. 통계 대시보드
-- 총 지원자 수
-- 합격/보류/불합격 비율
-- 실시간 업데이트
+## 🎨 스타일 시스템
 
-### 4. 랭킹 시스템
-- 지원자 자동 랭킹
-- 키워드 기반 점수 계산
-
-## 📋 API 엔드포인트
-
-### 지원자 관련
-- `GET /api/applicants` - 지원자 목록 조회
-- `PUT /api/applicants/{id}/status` - 상태 업데이트
-- `GET /api/applicants/stats/overview` - 통계 조회
-
-### 채용공고 관련
-- `GET /api/job-postings` - 채용공고 목록
-
-### 포트폴리오 관련
-- `GET /api/portfolios/applicant/{id}` - 지원자별 포트폴리오
-
-## 🎨 스타일링
-
-CSS 변수를 사용하여 일관된 디자인을 유지합니다:
+### CSS 변수
 
 ```css
 :root {
-  --primary-color: #3b82f6;
-  --primary-dark: #2563eb;
-  --text-primary: #1f2937;
-  --text-secondary: #6b7280;
-  --border-color: #e5e7eb;
-  --background-secondary: #f9fafb;
+  --primary-color: #00c851;        /* 주요 색상 */
+  --primary-dark: #00a844;         /* 주요 색상 (어두운 버전) */
+  --text-primary: #333333;         /* 주요 텍스트 색상 */
+  --text-secondary: #666666;       /* 보조 텍스트 색상 */
+  --text-light: #999999;           /* 밝은 텍스트 색상 */
+  --border-color: #e0e0e0;         /* 테두리 색상 */
+  --background-secondary: #f5f5f5; /* 보조 배경 색상 */
 }
 ```
 
-## 🔄 상태 관리
+### 애니메이션
 
-### 로컬 상태
-- `viewMode`: 그리드/보드 뷰 모드
-- `currentPage`: 현재 페이지
-- `modal`: 모달 상태
-- `selected`: 선택된 지원자들
+모든 모달은 `framer-motion`을 사용하여 부드러운 애니메이션을 제공합니다:
 
-### 커스텀 훅
-- `useApplicants`: 지원자 데이터 관리
-- `useStats`: 통계 데이터 관리
-- `useSelection`: 선택 기능 관리
-- `useFilters`: 필터링 기능 관리
-- `useRanking`: 랭킹 기능 관리
+```jsx
+const modalVariants = {
+  initial: { opacity: 0, scale: 0.9 },
+  animate: { opacity: 1, scale: 1 },
+  exit: { opacity: 0, scale: 0.9 }
+};
+```
 
-## 🛠️ 확장 가능한 부분
+## 🔌 API 엔드포인트
 
-### 1. 추가 모달
-- `FilterModal.jsx` - 고급 필터링
-- `ResumeModal.jsx` - 새 지원자 등록
-- `DocumentModal.jsx` - 문서 뷰어
-- `DetailedAnalysisModal.jsx` - 상세 분석
+### 지원자 관련
+- `GET /api/applicants` - 지원자 목록 조회
+- `POST /api/applicants` - 새 지원자 등록
+- `GET /api/applicants/:id` - 지원자 상세 조회
 
-### 2. 추가 기능
-- 이메일 발송 기능
-- 엑셀 내보내기
-- 지원자 비교 기능
-- 면접 일정 관리
+### 문서 관련
+- `GET /api/applicants/:id/resume` - 이력서 조회
+- `GET /api/applicants/:id/cover-letter` - 자소서 조회
+- `GET /api/applicants/:id/portfolio` - 포트폴리오 조회
 
-### 3. 성능 최적화
-- 가상화 스크롤링 (대용량 데이터)
-- 메모이제이션 최적화
-- 지연 로딩
+### 분석 관련
+- `POST /api/applicants/ranking` - 지원자 랭킹 계산
+- `GET /api/coverletter/similarity-check/:id` - 자소서 유사도 체크
 
-## 🐛 문제 해결
+## 🧪 테스트
 
-### 빌드 오류
-- 중복 선언된 styled-components 확인
-- import 경로 확인
-- 의존성 설치 확인
+### 단위 테스트
+각 모달 컴포넌트의 독립적 동작을 테스트합니다.
 
-### API 오류
-- 서버 연결 상태 확인
-- 환경 변수 설정 확인
-- CORS 설정 확인
+### 통합 테스트
+모달 간 상호작용과 데이터 흐름을 테스트합니다.
 
-## 📝 개발 가이드
+## 🔒 보안 고려사항
 
-### 새 컴포넌트 추가
-1. `components/` 폴더에 새 파일 생성
-2. 스타일은 `styles.js`에 추가
-3. 필요한 훅은 `hooks/` 폴더에 추가
-4. API 호출은 `services/` 폴더에 추가
+- 파일 업로드 시 타입 검증
+- 사용자 입력 데이터 이스케이프 처리
+- API 요청 시 적절한 인증/인가
 
-### 스타일 수정
-- `styles.js` 파일에서 해당 컴포넌트 스타일 수정
-- CSS 변수 활용하여 일관성 유지
-- 반응형 디자인 고려
+## 📱 반응형 디자인
 
-### API 수정
-- `services/` 폴더의 해당 API 파일 수정
-- 에러 핸들링 추가
-- 로딩 상태 관리
+모든 컴포넌트는 모바일과 데스크톱 환경을 지원합니다:
 
-## 📄 라이선스
+```jsx
+@media (max-width: 768px) {
+  .grid-template-columns: 1fr;
+  .modal-max-width: 95%;
+  .padding: 16px;
+}
+```
 
-이 프로젝트는 MIT 라이선스 하에 배포됩니다.
+## 🚀 성능 최적화
+
+- React.memo를 사용한 컴포넌트 최적화
+- useCallback을 사용한 함수 메모이제이션
+- 조건부 렌더링으로 불필요한 DOM 생성 방지
+
+## 🔄 마이그레이션 가이드
+
+### 기존 코드에서 변경사항
+
+1. **모달 상태 관리 방식 변경**
+   ```jsx
+   // 기존
+   const [modal, setModal] = useState(null);
+   
+   // 새로운 방식
+   const [detailModal, setDetailModal] = useState({ isOpen: false, applicant: null });
+   ```
+
+2. **모달 컴포넌트 교체**
+   ```jsx
+   // 기존
+   <BaseModal title="지원자 상세" onClose={closeModal}>
+     {/* 내용 */}
+   </BaseModal>
+   
+   // 새로운 방식
+   <ApplicantManagementModals
+     detailModal={detailModal}
+     onDetailModalClose={handleDetailModalClose}
+     // ... 기타 props
+   />
+   ```
+
+## 📚 추가 리소스
+
+- [React Hooks 가이드](https://reactjs.org/docs/hooks-intro.html)
+- [styled-components 문서](https://styled-components.com/docs)
+- [framer-motion 문서](https://www.framer.com/motion/)
+
+---
+
+이 문서는 지원자 관리 컴포넌트의 사용법과 구조를 설명합니다. 추가 질문이나 수정사항이 있으시면 언제든지 문의해 주세요.
 

@@ -15,6 +15,8 @@ from typing import Annotated, Any, Dict, List, Optional, TypedDict
 from dotenv import load_dotenv
 from modules.core.services.openai_service import OpenAIService
 
+from .dynamic_message_generator import DynamicMessageGenerator
+
 # LangGraph 관련 import
 try:
     # Pydantic 버전 충돌을 피하기 위해 환경 변수 설정
@@ -36,11 +38,17 @@ except (ImportError, TypeError, Exception) as e:
 
 load_dotenv()
 
-# OpenAI 설정
+# OpenAI LLM 서비스 설정
 try:
-    openai_service = OpenAIService(model_name="gpt-4o")
+    from modules.core.services.llm_service import LLMService
+    llm_service = LLMService()
+    print(f"🔍 [LangGraph] OpenAI LLM 서비스 초기화 성공")
 except Exception as e:
-    openai_service = None
+    print(f"❌ [LangGraph] OpenAI LLM 서비스 초기화 실패: {e}")
+    llm_service = None
+
+# OpenAI 서비스 (비활성화)
+openai_service = None
 
 # 상태 정의 (LangGraph용)
 class AgentState(TypedDict):
@@ -293,12 +301,12 @@ async def intent_detection_node(state: AgentState) -> AgentState:
         user_input = state["user_input"].lower()
 
         # 1. 혼합 의도 감지
-        is_mixed, parts = detect_mixed_intent(user_input)
+        is_mixed, sub_intents, parts, confidence = detect_mixed_intent(user_input)
         if is_mixed:
             state["intent"] = "mixed"
-            state["sub_intents"] = ["info_request", "ui_action"]
+            state["sub_intents"] = sub_intents
             state["sub_parts"] = parts
-            state["confidence"] = 0.9
+            state["confidence"] = confidence
             return state
 
         # 2. 키워드 기반 빠른 분류
@@ -346,8 +354,8 @@ async def intent_detection_node(state: AgentState) -> AgentState:
 """
 
         prompt = f"{system_prompt}\n\n사용자 입력: {user_input}"
-        if openai_service:
-            response = await openai_service.generate_response(prompt)
+        if llm_service:
+            response = await llm_service.chat_completion([{"role": "user", "content": prompt}])
             intent = response.strip().lower()
         else:
             intent = "chat"
@@ -380,8 +388,8 @@ async def info_handler_node(state: AgentState) -> AgentState:
 """
 
         prompt = f"{system_prompt}\n\n사용자 질문: {user_input}"
-        if openai_service:
-            response = await openai_service.generate_response(prompt)
+        if llm_service:
+            response = await llm_service.chat_completion([{"role": "user", "content": prompt}])
         else:
             response = "죄송합니다. AI 서비스를 사용할 수 없습니다."
 
@@ -480,8 +488,8 @@ async def resume_analyzer_node(state: AgentState) -> AgentState:
 """
 
         prompt = f"{system_prompt}\n\n분석 요청: {user_input}"
-        if openai_service:
-            response = await openai_service.generate_response(prompt)
+        if llm_service:
+            response = await llm_service.chat_completion([{"role": "user", "content": prompt}])
         else:
             response = "죄송합니다. AI 서비스를 사용할 수 없습니다."
 
@@ -642,8 +650,8 @@ async def recruitment_node(state: AgentState) -> AgentState:
 답변은 한국어로 작성하고, 이모지를 적절히 사용하여 가독성을 높여주세요.
 """
 
-        if openai_service:
-            result = await openai_service.generate_response(prompt)
+        if llm_service:
+            result = await llm_service.chat_completion([{"role": "user", "content": prompt}])
         else:
             result = "죄송합니다. AI 서비스를 사용할 수 없습니다."
 
@@ -715,16 +723,28 @@ def fallback_node(state: AgentState) -> AgentState:
     try:
         user_input = state["user_input"]
 
+        # 동적 메시지 생성기 초기화
+        message_generator = DynamicMessageGenerator()
+
+        # 사용자 맥락 정보 추출
+        user_context = {
+            'current_page': state.get('metadata', {}).get('current_page', ''),
+            'current_step': state.get('metadata', {}).get('current_step', ''),
+            'previous_input': state.get('metadata', {}).get('previous_input', {}),
+            'user_tone': state.get('metadata', {}).get('user_tone', 'friendly'),
+            'completed_steps': state.get('metadata', {}).get('completed_steps', []),
+            'progress': state.get('metadata', {}).get('progress', 0)
+        }
+
         # 일반적인 대화 처리
         if "안녕" in user_input or "hello" in user_input.lower():
-            result = "안녕하세요! 😊 무엇을 도와드릴까요? 채용 관련 질문이나 일반적인 대화 모두 환영합니다! 💬"
+            result = message_generator.generate_contextual_message(user_context)
         elif "도움" in user_input or "help" in user_input.lower():
             result = """🤖 AI 채용 관리 시스템 도움말:
 
 📋 주요 기능:
 • 채용공고 작성 및 관리
 • 이력서 분석 및 평가
-• 면접 일정 관리
 • 인재 추천 및 매칭
 
 💡 사용법:
@@ -738,9 +758,15 @@ def fallback_node(state: AgentState) -> AgentState:
 • 구체적인 내용을 요청하면 더 정확한 답변을 드릴 수 있습니다
 • 이모지도 사용 가능합니다! 😊"""
         elif "감사" in user_input or "고마워" in user_input:
-            result = "천만에요! 😊 도움이 되어서 기쁩니다. 추가로 궁금한 것이 있으시면 언제든 말씀해주세요! 🙏"
+            result = message_generator.tone_templates[user_context['user_tone']]['thanks']
         else:
-            result = "안녕하세요! 😊 무엇을 도와드릴까요? 채용 관련 질문이나 일반적인 대화 모두 환영합니다! 💬"
+            # 맥락에 맞는 동적 메시지 생성
+            result = message_generator.generate_contextual_message(user_context)
+
+            # 진행 상황에 따른 격려 메시지 추가
+            if user_context['progress'] > 0:
+                encouragement = message_generator.generate_encouragement_message(user_context)
+                result += f"\n\n{encouragement}"
 
         state["tool_result"] = result
         state["current_node"] = "fallback"
@@ -840,8 +866,8 @@ UI 액션:
             current_intent=current_intent
         )
 
-        if openai_service:
-            response = await openai_service.generate_response(prompt)
+        if llm_service:
+            response = await llm_service.chat_completion([{"role": "user", "content": prompt}])
             revalidated_intent = response.strip().lower()
         else:
             revalidated_intent = current_intent

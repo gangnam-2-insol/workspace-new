@@ -21,23 +21,20 @@ except ImportError:
     print("LangChain 하이브리드 서비스를 사용할 수 없습니다.")
 
 class SimilarityService:
-    def __init__(self, embedding_service: EmbeddingService, vector_service: VectorService):
+    def __init__(self, embedding_service: EmbeddingService, vector_service: VectorService, llm_service: LLMService = None):
         """
         유사도 검색 서비스 초기화
 
         Args:
             embedding_service (EmbeddingService): 임베딩 서비스
             vector_service (VectorService): 벡터 서비스
+            llm_service (LLMService, optional): LLM 서비스
         """
         self.embedding_service = embedding_service
         self.vector_service = vector_service
         self.chunking_service = ChunkingService()
-        self.llm_service = LLMService()
+        self.llm_service = llm_service or LLMService()
         self.keyword_search_service = KeywordSearchService()
-
-        # MongoService import 추가
-        from .mongo_service import MongoService
-        self.mongo_service = MongoService()
 
         # LangChain 하이브리드 서비스 초기화
         self.langchain_hybrid = None
@@ -138,8 +135,19 @@ class SimilarityService:
             print(f"[SimilarityService] 문서 ID: {document_id}")
             print(f"[SimilarityService] 문서 타입: {document_type}")
 
+            # MongoDB 연결 생성
+            from .mongo_service import MongoService
+            mongo_service = MongoService()
+            db = mongo_service.db
+
             # 해당 문서 조회
-            document = await collection.find_one({"_id": ObjectId(document_id)})
+            if document_type == "cover_letter":
+                document = await db.cover_letters.find_one({"_id": ObjectId(document_id)})
+            elif collection is not None:
+                document = await collection.find_one({"_id": ObjectId(document_id)})
+            else:
+                raise ValueError("컬렉션이 제공되지 않았습니다.")
+
             if not document:
                 raise ValueError(f"{document_type}을(를) 찾을 수 없습니다.")
 
@@ -175,7 +183,12 @@ class SimilarityService:
 
                 # 결과 저장
                 for match in search_result["matches"]:
-                    match_document_id = match["metadata"]["resume_id"]  # 메타데이터 키명은 벡터 서비스 확인 필요
+                    # 문서 타입에 따라 적절한 ID 키 사용
+                    if document_type == "cover_letter":
+                        match_document_id = match["metadata"].get("document_id", match["metadata"].get("resume_id"))
+                    else:
+                        match_document_id = match["metadata"].get("resume_id", match["metadata"].get("document_id"))
+
                     similarity_score = match["score"]
                     chunk_type = match["metadata"]["chunk_type"]
 
@@ -230,7 +243,12 @@ class SimilarityService:
             results = []
             if document_scores:
                 document_ids = [ObjectId(score["document_id"]) for score in document_scores]
-                documents_detail = await collection.find({"_id": {"$in": document_ids}}).to_list(1000)
+                if document_type == "cover_letter":
+                    documents_detail = await db.cover_letters.find({"_id": {"$in": document_ids}}).to_list(1000)
+                elif collection is not None:
+                    documents_detail = await collection.find({"_id": {"$in": document_ids}}).to_list(1000)
+                else:
+                    documents_detail = []
 
                 for score_data in document_scores:
                     document_detail = next((d for d in documents_detail if str(d["_id"]) == score_data["document_id"]), None)
@@ -239,13 +257,11 @@ class SimilarityService:
                         if "created_at" in document_detail:
                             document_detail["created_at"] = document_detail["created_at"].isoformat()
 
-                        # LLM을 통한 유사성 분석 추가
-                        llm_analysis = await self.llm_service.analyze_similarity_reasoning(
-                            original_resume=document,
-                            similar_resume=document_detail,
-                            similarity_score=score_data["similarity_score"],
-                            chunk_details=score_data["chunk_details"]
-                        )
+                        # 개별 문서별 LLM 분석은 제거 (전체 결과에서 한 번만 수행)
+                        llm_analysis = {
+                            "success": True,
+                            "analysis": "전체 결과에서 분석됩니다."
+                        }
 
                         results.append({
                             "similarity_score": score_data["similarity_score"],
@@ -257,7 +273,7 @@ class SimilarityService:
                         })
 
             # 전체 결과에 대한 표절 위험도 분석 추가
-            plagiarism_analysis = await self.llm_service.analyze_plagiarism_risk(
+            plagiarism_analysis = await self.llm_service.analyze_plagiarism_suspicion(
                 original_resume=document,
                 similar_resumes=results
             )
@@ -277,7 +293,7 @@ class SimilarityService:
                     },
                     f"similar_{document_type}s": results,
                     "total": len(results),
-                    "plagiarism_analysis": plagiarism_analysis
+                    "suspicion_analysis": plagiarism_analysis
                 }
             }
 
@@ -392,8 +408,8 @@ class SimilarityService:
                 filter_type="cover_letter"
             )
 
-            # 표절 의심 결과 필터링 (임계값 0.7 이상)
-            plagiarism_threshold = 0.7
+            # 표절 의심 결과 필터링 (임계값 0.8 이상)
+            plagiarism_threshold = 0.8
             suspected_plagiarism = []
 
             for match in search_result["matches"]:
@@ -429,7 +445,7 @@ class SimilarityService:
                                 cover_letter_detail[key] = str(value)  # ObjectId도 문자열로
 
                         # 표절 위험도 분석
-                        plagiarism_analysis = await self.llm_service.analyze_plagiarism_risk(
+                        plagiarism_analysis = await self.llm_service.analyze_plagiarism_suspicion(
                             original_resume=cover_letter,
                             similar_resumes=[{"resume": cover_letter_detail, "similarity_score": match["score"]}]
                         )
@@ -437,9 +453,9 @@ class SimilarityService:
                         results.append({
                             "similarity_score": match["score"],
                             "similarity_percentage": round(match["score"] * 100, 1),
-                            "plagiarism_risk": "HIGH" if match["score"] >= 0.85 else "MEDIUM",
+                            "suspicion_risk": "HIGH" if match["score"] >= 0.85 else "MEDIUM",
                             "cover_letter": cover_letter_detail,
-                            "plagiarism_analysis": plagiarism_analysis
+                            "suspicion_analysis": plagiarism_analysis
                         })
 
             # 유사도 점수로 정렬
@@ -466,12 +482,12 @@ class SimilarityService:
             return {
                 "success": True,
                 "document_type": "cover_letter",
-                "analysis_type": "plagiarism_check",
+                "analysis_type": "suspicion_check",
                 "data": {
                     "original_cover_letter": original_data,
-                    "suspected_plagiarism": results,
+                    "suspected_suspicion": results,
                     "total": len(results),
-                    "plagiarism_threshold": plagiarism_threshold
+                    "suspicion_threshold": plagiarism_threshold
                 }
             }
 
@@ -525,23 +541,43 @@ class SimilarityService:
             print(f"검색 결과 수: {len(search_result['matches'])}")
             print(f"=== 검색 임베딩 처리 완료 ===")
 
-            # MongoDB에서 상세 정보 조회
-            resume_ids = [ObjectId(match["metadata"]["resume_id"]) for match in search_result["matches"]]
-            resumes = await collection.find({"_id": {"$in": resume_ids}}).to_list(1000)
+            # MongoDB에서 상세 정보 조회 (벡터 타입에 따라 ID 필드 결정)
+            document_ids = []
+            for match in search_result["matches"]:
+                metadata = match["metadata"]
+                if metadata.get("document_type") == "applicant":
+                    document_ids.append(ObjectId(metadata.get("applicant_id")))
+                else:
+                    document_ids.append(ObjectId(metadata.get("document_id")))
+
+            applicants = await collection.find({"_id": {"$in": document_ids}}).to_list(1000)
 
             # 검색 결과와 상세 정보 매칭
             results = []
             for match in search_result["matches"]:
-                resume = next((r for r in resumes if str(r["_id"]) == match["metadata"]["resume_id"]), None)
-                if resume:
-                    resume["_id"] = str(resume["_id"])
-                    resume["resume_id"] = str(resume["resume_id"])
-                    resume["created_at"] = resume["created_at"].isoformat()
+                metadata = match["metadata"]
+                if metadata.get("document_type") == "applicant":
+                    doc_id = metadata.get("applicant_id")
+                else:
+                    doc_id = metadata.get("document_id")
+
+                applicant = next((a for a in applicants if str(a["_id"]) == doc_id), None)
+                if applicant:
+                    applicant["_id"] = str(applicant["_id"])
+                    # applicant_id가 없으면 _id를 사용
+                    if "applicant_id" not in applicant:
+                        applicant["applicant_id"] = str(applicant["_id"])
+                    else:
+                        applicant["applicant_id"] = str(applicant["applicant_id"])
+
+                    # created_at이 있으면 ISO 형식으로 변환
+                    if "created_at" in applicant and applicant["created_at"]:
+                        applicant["created_at"] = applicant["created_at"].isoformat()
 
                     results.append({
-                        "score": match["score"],
+                        "similarity_score": match["score"],
                         "metadata": match["metadata"],
-                        "resume": resume
+                        "applicant": applicant
                     })
 
             return {
@@ -1033,18 +1069,49 @@ class SimilarityService:
             except Exception:
                 pass  # 벡터가 없으면 새로 생성
 
-            # 지원자 정보로 텍스트 생성
+            # 지원자 정보로 텍스트 생성 (실제 데이터 구조에 맞게 수정)
             text_parts = []
-            if applicant.get('position'):
-                text_parts.append(f"지원직무: {applicant['position']}")
-            if applicant.get('experience'):
-                text_parts.append(f"경력: {applicant['experience']}년")
+
+            # 기본 정보
+            personal_info = applicant.get('personal_info', {})
+            if personal_info.get('name'):
+                text_parts.append(f"이름: {personal_info['name']}")
+
+            # 지원 직무
+            if applicant.get('desired_position'):
+                text_parts.append(f"지원직무: {applicant['desired_position']}")
+
+            # 경력 정보
+            if applicant.get('experience_years'):
+                text_parts.append(f"경력: {applicant['experience_years']}년")
+
+            # 기술 스택
             if applicant.get('skills'):
                 if isinstance(applicant['skills'], list):
                     skills_text = " ".join(applicant['skills'])
                 else:
                     skills_text = str(applicant['skills'])
                 text_parts.append(f"기술스택: {skills_text}")
+
+            # 경력 사항
+            if applicant.get('career_history'):
+                if isinstance(applicant['career_history'], list):
+                    career_text = " ".join([f"{career.get('company', '')} {career.get('position', '')} {career.get('description', '')}" for career in applicant['career_history']])
+                else:
+                    career_text = str(applicant['career_history'])
+                text_parts.append(f"경력사항: {career_text}")
+
+            # 프로젝트
+            if applicant.get('projects'):
+                if isinstance(applicant['projects'], list):
+                    project_text = " ".join([f"{project.get('name', '')} {project.get('description', '')}" for project in applicant['projects']])
+                else:
+                    project_text = str(applicant['projects'])
+                text_parts.append(f"프로젝트: {project_text}")
+
+            # 노트/기타 정보
+            if applicant.get('notes'):
+                text_parts.append(f"기타정보: {applicant['notes']}")
 
             if not text_parts:
                 print(f"[SimilarityService] 지원자 정보 부족으로 벡터 생성 스킵: {applicant.get('name', 'Unknown')}")
@@ -1067,9 +1134,9 @@ class SimilarityService:
                     "document_id": applicant_id,
                     "document_type": "applicant",
                     "chunk_type": "applicant",  # LangChain 필터용
-                    "name": applicant.get("name", ""),
-                    "position": applicant.get("position", ""),
-                    "experience": applicant.get("experience", ""),
+                    "name": personal_info.get("name", ""),
+                    "position": applicant.get("desired_position", ""),
+                    "experience": applicant.get("experience_years", ""),
                     "skills": applicant.get("skills", ""),
                     "text": applicant_text,  # LangChain이 필요로 하는 text 필드
                     "text_preview": applicant_text[:100] + "..." if len(applicant_text) > 100 else applicant_text,
@@ -1085,10 +1152,68 @@ class SimilarityService:
             print(f"[SimilarityService] 지원자 벡터 저장 실패: {e}")
             return False
 
+    async def _analyze_ideal_candidate_with_llm(self, target_applicant: Dict[str, Any]) -> Dict[str, Any]:
+        """
+        지원자 정보를 바탕으로 이상적인 인재상 LLM 분석 수행
+
+        Args:
+            target_applicant (Dict): 기준 지원자
+
+        Returns:
+            Dict: LLM 분석 결과
+        """
+        try:
+            print(f"[SimilarityService] === LLM 기반 이상적인 인재상 분석 시작 ===")
+            print(f"[SimilarityService] 기준 지원자: {target_applicant.get('name', 'N/A')}")
+
+            # 지원자 정보 수집
+            applicant_info = {
+                "name": target_applicant.get("name", "N/A"),
+                "position": target_applicant.get("position", "N/A"),
+                "experience": target_applicant.get("experience", "N/A"),
+                "skills": target_applicant.get("skills", "N/A"),
+                "department": target_applicant.get("department", "N/A"),
+                "education": target_applicant.get("education", "N/A"),
+                "growthBackground": target_applicant.get("growthBackground", ""),
+                "motivation": target_applicant.get("motivation", ""),
+                "careerHistory": target_applicant.get("careerHistory", "")
+            }
+
+            # 이력서 내용 추가 (resume_id가 있는 경우)
+            if target_applicant.get('resume_id'):
+                try:
+                    from bson import ObjectId
+                    from .mongo_service import MongoService
+                    mongo_service = MongoService()
+                    resume = await mongo_service.db.resumes.find_one({"_id": ObjectId(target_applicant['resume_id'])})
+                    if resume:
+                        if resume.get('extracted_text'):
+                            applicant_info["resume_text"] = resume['extracted_text']
+                        if resume.get('summary'):
+                            applicant_info["resume_summary"] = resume['summary']
+                        if resume.get('keywords'):
+                            applicant_info["resume_keywords"] = resume['keywords']
+                except Exception as e:
+                    print(f"[SimilarityService] 이력서 조회 실패: {e}")
+
+            # LLM 분석 요청
+            analysis_result = await self.llm_service.analyze_ideal_candidate(applicant_info)
+
+            print(f"[SimilarityService] LLM 분석 완료: 이상적인 인재상 분석")
+            return analysis_result
+
+        except Exception as e:
+            print(f"[SimilarityService] LLM 분석 실패: {str(e)}")
+            return {
+                "success": False,
+                "error": str(e),
+                "message": "LLM 분석 중 오류가 발생했습니다."
+            }
+
     async def _analyze_similar_applicants_with_llm(self, target_applicant: Dict[str, Any],
                                                  similar_applicants: List[Dict[str, Any]]) -> Dict[str, Any]:
         """
-        유사 지원자들에 대한 LLM 분석 수행
+        유사 지원자들에 대한 LLM 분석 수행 (기존 방식 유지)
 
         Args:
             target_applicant (Dict): 기준 지원자
@@ -1115,9 +1240,9 @@ class SimilarityService:
                 "department": target_applicant.get("department", "N/A")
             }
 
-            # 유사 지원자들 정보 요약 (상위 3명)
+            # 유사 지원자들 정보 요약 (모든 지원자)
             similar_info = []
-            for i, result in enumerate(similar_applicants[:3]):
+            for i, result in enumerate(similar_applicants):
                 applicant = result.get("applicant", {})
                 similar_info.append({
                     "rank": i + 1,
@@ -1130,6 +1255,11 @@ class SimilarityService:
                     "vector_score": result.get("vector_score", 0),
                     "keyword_score": result.get("keyword_score", 0)
                 })
+
+            # LLM 분석에 전달되는 인재 정보 로깅
+            print(f"[SimilarityService] LLM 분석에 전달할 인재들:")
+            for info in similar_info:
+                print(f"  - {info['name']} ({info['position']})")
 
             # LLM 분석 요청
             analysis_result = await self.llm_service.analyze_similar_applicants(
@@ -1194,7 +1324,8 @@ class SimilarityService:
             if target_applicant.get('resume_id'):
                 try:
                     from bson import ObjectId
-                    from services.mongo_service import MongoService
+
+                    from .mongo_service import MongoService
                     mongo_service = MongoService()
                     resume = await mongo_service.db.resumes.find_one({"_id": ObjectId(target_applicant['resume_id'])})
                     if resume:
@@ -1251,14 +1382,48 @@ class SimilarityService:
 
             print(f"[SimilarityService] 벡터 검색 결과: {len(vector_results)}개")
 
-            # 4. 키워드 검색 수행 (이력서 내용 기반)
+            # 4. LangChain 하이브리드 검색 시도 (우선 - 키워드 검색 포함)
+            if self.langchain_hybrid and vector_query_text:
+                print(f"[SimilarityService] LangChain 하이브리드 검색 사용")
+                # 이력서 컬렉션 가져오기 (키워드 검색용)
+                from .mongo_service import MongoService
+                mongo_service = MongoService()
+                resumes_collection = mongo_service.db.resumes
+
+                langchain_result = await self.langchain_hybrid.search_similar_applicants_langchain(
+                    vector_query=vector_query_text,
+                    keyword_query=keyword_query_text,
+                    applicants_collection=applicants_collection,
+                    resumes_collection=resumes_collection,
+                    target_applicant=target_applicant,
+                    limit=limit
+                )
+
+                # LLM 분석 추가 (이상적인 인재상 분석으로 변경)
+                if langchain_result and langchain_result.get("success"):
+                    print(f"[SimilarityService] 이상적인 인재상 LLM 분석 수행...")
+                    llm_analysis = await self._analyze_ideal_candidate_with_llm(target_applicant)
+                    langchain_result["data"]["llm_analysis"] = llm_analysis
+
+                return langchain_result
+
+            # 5. 기존 방식 폴백 (LangChain 실패 시) - 키워드 검색 수행
+            print(f"[SimilarityService] 기존 하이브리드 검색 사용 (폴백)")
+            
+            # 폴백 시에만 키워드 검색 수행 (이력서 내용 기반)
             keyword_results = []
             if keyword_query_text:
-                print(f"[SimilarityService] 키워드 검색 수행 (이력서 내용 기반)...")
-                # Elasticsearch 기반 BM25 검색 실행
+                print(f"[SimilarityService] 폴백: 키워드 검색 수행 (이력서 내용 기반)...")
+                
+                # 이력서 컬렉션에서 검색
+                from .mongo_service import MongoService
+                mongo_service = MongoService()
+                resumes_collection = mongo_service.db.resumes
+                
+                # Elasticsearch 기반 BM25 검색 실행 (이력서 컬렉션 대상)
                 es_result = await self.keyword_search_service.search_by_keywords(
                     query=keyword_query_text,
-                    collection=applicants_collection,
+                    collection=resumes_collection,
                     limit=limit * 2
                 )
                 # 융합 로직에서 기대하는 형식({_id, _score})으로 변환
@@ -1276,41 +1441,10 @@ class SimilarityService:
                         except Exception:
                             continue
             else:
-                print(f"[SimilarityService] 키워드 검색 스킵 (이력서 내용 없음)")
+                print(f"[SimilarityService] 폴백: 키워드 검색 스킵 (이력서 내용 없음)")
 
-            print(f"[SimilarityService] 키워드 검색 결과: {len(keyword_results)}개")
-
-            # 5. LangChain 하이브리드 검색 시도 (우선)
-            if self.langchain_hybrid and vector_query_text:
-                print(f"[SimilarityService] LangChain 하이브리드 검색 사용")
-                # 이력서 컬렉션 가져오기 (키워드 검색용)
-                from services.mongo_service import MongoService
-                mongo_service = MongoService()
-                resumes_collection = mongo_service.db.resumes
-
-                langchain_result = await self.langchain_hybrid.search_similar_applicants_langchain(
-                    vector_query=vector_query_text,
-                    keyword_query=keyword_query_text,
-                    applicants_collection=applicants_collection,
-                    resumes_collection=resumes_collection,
-                    target_applicant=target_applicant,
-                    limit=limit
-                )
-
-                # LLM 분석 추가
-                if langchain_result and langchain_result.get("success"):
-                    similar_applicants = langchain_result.get("data", {}).get("results", [])
-                    if similar_applicants:
-                        print(f"[SimilarityService] 유사 인재에 대한 LLM 분석 수행...")
-                        llm_analysis = await self._analyze_similar_applicants_with_llm(
-                            target_applicant, similar_applicants
-                        )
-                        langchain_result["data"]["llm_analysis"] = llm_analysis
-
-                return langchain_result
-
-            # 6. 기존 방식 폴백 (LangChain 실패 시)
-            print(f"[SimilarityService] 기존 하이브리드 검색 사용 (폴백)")
+            print(f"[SimilarityService] 폴백: 키워드 검색 결과: {len(keyword_results)}개")
+            
             return await self._fuse_applicant_search_results(
                 vector_results, keyword_results, applicants_collection,
                 target_applicant, vector_query_text, limit
@@ -1331,14 +1465,26 @@ class SimilarityService:
         지원자 기반 벡터 + 키워드 검색 결과 융합
         """
         try:
-            print(f"[SimilarityService] === 지원자 기반 결과 융합 시작 ===")
+            print(f"🔗 [SimilarityService] === 지원자 기반 결과 융합 시작 ===")
+            print(f"📊 [SimilarityService] 입력 데이터:")
+            print(f"  - 벡터 결과 수: {len(vector_results)}")
+            print(f"  - 키워드 결과 수: {len(keyword_results)}")
+            print(f"  - 검색 제한: {limit}명")
+            print(f"  - 기준 지원자: {target_applicant.get('name', 'N/A')}")
 
             # 벡터 결과를 지원자 ID 기반으로 변환
+            print(f"🔄 [SimilarityService] 1단계: 벡터 결과 변환")
             vector_applicant_scores = {}
-            for match in vector_results:
+            for i, match in enumerate(vector_results):
+                print(f"  - 벡터 결과 #{i+1} 처리:")
+                print(f"    - 메타데이터: {match.get('metadata', {})}")
+                print(f"    - 점수: {match.get('score', 0)}")
+                
                 # 지원자 벡터의 경우 document_id가 applicant_id임
                 applicant_id = match["metadata"].get("document_id")
                 if applicant_id and applicant_id != str(target_applicant.get("_id")):
+                    print(f"    - 지원자 ID: {applicant_id}")
+                    
                     # applicant_id로 지원자 찾기
                     from bson import ObjectId
                     applicant = await applicants_collection.find_one({"_id": ObjectId(applicant_id)})
@@ -1348,12 +1494,24 @@ class SimilarityService:
                                 "score": match["score"],
                                 "applicant": applicant
                             }
+                            print(f"    ✅ 지원자 매칭 성공: {applicant.get('name', 'N/A')}")
+                        else:
+                            print(f"    ⚠️ 중복 지원자 ID (기존 점수 유지)")
+                    else:
+                        print(f"    ❌ 지원자 조회 실패: {applicant_id}")
+                else:
+                    print(f"    ⚠️ 유효하지 않은 지원자 ID 또는 기준 지원자와 동일")
 
-            print(f"[SimilarityService] 벡터 검색으로 매칭된 지원자 수: {len(vector_applicant_scores)}")
+            print(f"  - 벡터 검색으로 매칭된 지원자 수: {len(vector_applicant_scores)}")
 
             # 키워드 결과를 지원자 ID 기반으로 변환
+            print(f"🔄 [SimilarityService] 2단계: 키워드 결과 변환")
             keyword_applicant_scores = {}
-            for result in keyword_results:
+            for i, result in enumerate(keyword_results):
+                print(f"  - 키워드 결과 #{i+1} 처리:")
+                print(f"    - 이력서 ID: {result.get('_id')}")
+                print(f"    - 원본 점수: {result.get('_score', 0)}")
+                
                 resume_id = result.get("_id")
                 if resume_id and resume_id != target_applicant.get("resume_id"):
                     # resume_id로 지원자 찾기
@@ -1370,27 +1528,45 @@ class SimilarityService:
                                 "original_score": bm25_score,
                                 "applicant": applicant
                             }
+                            print(f"    ✅ 지원자 매칭 성공: {applicant.get('name', 'N/A')} (정규화 점수: {normalized_score:.3f})")
+                        else:
+                            print(f"    ⚠️ 중복 지원자 ID (기존 점수 유지)")
+                    else:
+                        print(f"    ❌ 지원자 조회 실패 (resume_id: {resume_id})")
+                else:
+                    print(f"    ⚠️ 유효하지 않은 이력서 ID 또는 기준 지원자와 동일")
 
-            print(f"[SimilarityService] 키워드 검색으로 매칭된 지원자 수: {len(keyword_applicant_scores)}")
+            print(f"  - 키워드 검색으로 매칭된 지원자 수: {len(keyword_applicant_scores)}")
 
             # 결과 융합
+            print(f"🔗 [SimilarityService] 3단계: 결과 융합")
             fused_results = []
             all_applicant_ids = set(vector_applicant_scores.keys()) | set(keyword_applicant_scores.keys())
+            print(f"  - 총 고유 지원자 수: {len(all_applicant_ids)}")
 
             for applicant_id in all_applicant_ids:
+                print(f"  - 지원자 ID {applicant_id} 융합:")
+                
                 v_score = vector_applicant_scores.get(applicant_id, {}).get("score", 0)
                 k_score_data = keyword_applicant_scores.get(applicant_id, {})
                 k_score_normalized = k_score_data.get("score", 0)
                 k_score = k_score_data.get("original_score", 0)
 
+                print(f"    - 벡터 점수: {v_score:.3f}")
+                print(f"    - 키워드 정규화 점수: {k_score_normalized:.3f}")
+                print(f"    - 키워드 원본 점수: {k_score:.3f}")
+
                 # 가중 평균으로 최종 점수 계산
                 final_score = (v_score * self.search_weights['vector']) + (k_score_normalized * self.search_weights['keyword'])
+                print(f"    - 최종 점수: {final_score:.3f} (가중치: V={self.search_weights['vector']}, K={self.search_weights['keyword']})")
 
                 # 지원자 정보 가져오기
                 applicant = vector_applicant_scores.get(applicant_id, {}).get("applicant") or \
                            keyword_applicant_scores.get(applicant_id, {}).get("applicant")
 
                 if applicant and final_score > 0:
+                    print(f"    ✅ 유효한 지원자: {applicant.get('name', 'N/A')}")
+                    
                     # ID와 datetime 필드 처리
                     applicant["_id"] = str(applicant["_id"])
 
@@ -1405,33 +1581,41 @@ class SimilarityService:
                     if not applicant.get('name'):
                         applicant['name'] = '이름미상'
 
+                    # 검색 방법 목록 생성
+                    search_methods = []
+                    if v_score > 0:
+                        search_methods.append("vector")
+                    if k_score_normalized > 0:
+                        search_methods.append("keyword")
+
                     fused_results.append({
                         "final_score": final_score,
                         "vector_score": v_score,
                         "keyword_score": k_score_normalized,
                         "original_keyword_score": k_score,
                         "applicant": applicant,
-                        "search_methods": [
-                            method for method, score in [
-                                ("vector", v_score),
-                                ("keyword", k_score_normalized)
-                            ] if score > 0
-                        ]
+                        "search_methods": search_methods
                     })
+                    
+                    print(f"    ✅ 융합 결과 추가 완료")
+                else:
+                    print(f"    ❌ 유효하지 않은 지원자 또는 점수 0")
 
             # 최종 점수 기준으로 정렬
+            print(f"📊 [SimilarityService] 4단계: 결과 정렬")
             fused_results.sort(key=lambda x: x["final_score"], reverse=True)
             final_results = fused_results[:limit]
 
-            print(f"[SimilarityService] 융합 결과: {len(final_results)}개 지원자")
+            print(f"  - 융합 결과: {len(final_results)}개 지원자")
             for i, result in enumerate(final_results[:3]):
                 applicant_name = result['applicant'].get('name', '이름미상')
                 applicant_position = result['applicant'].get('position', 'N/A')
-                print(f"[SimilarityService] #{i+1}: {applicant_name} ({applicant_position}) "
+                print(f"  #{i+1}: {applicant_name} ({applicant_position}) "
                       f"(최종:{result['final_score']:.3f}, V:{result['vector_score']:.3f}, "
-                      f"K:{result['keyword_score']:.3f})")
+                      f"K:{result['keyword_score']:.3f}, 방법:{result['search_methods']})")
 
-            return {
+            # 응답 구성
+            response_data = {
                 "success": True,
                 "message": "유사 인재 추천 완료",
                 "data": {
@@ -1453,12 +1637,25 @@ class SimilarityService:
                 }
             }
 
+            print(f"✅ [SimilarityService] === 지원자 기반 결과 융합 완료 ===")
+            return response_data
+
         except Exception as e:
-            print(f"[SimilarityService] 지원자 기반 결과 융합 실패: {str(e)}")
+            print(f"❌ [SimilarityService] 지원자 기반 결과 융합 실패: {str(e)}")
+            import traceback
+            print(f"  - 상세 스택 트레이스:")
+            traceback.print_exc()
             return {
                 "success": False,
                 "error": str(e),
-                "message": "결과 융합 중 오류가 발생했습니다."
+                "message": "결과 융합 중 오류가 발생했습니다.",
+                "debug_info": {
+                    "error_type": type(e).__name__,
+                    "error_message": str(e),
+                    "vector_results_count": len(vector_results),
+                    "keyword_results_count": len(keyword_results),
+                    "target_applicant_name": target_applicant.get('name', 'N/A')
+                }
             }
 
     async def delete_resume_data(self, resume_id: str) -> Dict[str, Any]:
@@ -1652,7 +1849,7 @@ class SimilarityService:
 
             # MongoDB에서 지원자 정보 조회
             try:
-                from services.mongo_service import MongoService
+                from .mongo_service import MongoService
                 mongo_service = MongoService()
 
                 similar_applicants = []
@@ -1771,3 +1968,144 @@ class SimilarityService:
         except Exception as e:
             print(f"[SimilarityService] 유사도 점수 계산 실패: {str(e)}")
             return 0.0
+
+    async def check_cover_letter_plagiarism(self, cover_letter_id: str, db) -> Dict[str, Any]:
+        """
+        자소서 표절 위험도 체크
+
+        Args:
+            cover_letter_id (str): 자소서 ID
+            db: 데이터베이스 연결
+
+        Returns:
+            Dict[str, Any]: 표절 체크 결과
+        """
+        try:
+            print(f"[INFO] 자소서 표절 체크 요청 - cover_letter_id: {cover_letter_id}")
+
+            # 자소서 ID 유효성 검사
+            if not ObjectId.is_valid(cover_letter_id):
+                raise ValueError("유효하지 않은 자소서 ID입니다.")
+
+            # 자소서 조회
+            original_cover_letter = await db.cover_letters.find_one({"_id": ObjectId(cover_letter_id)})
+            if not original_cover_letter:
+                raise ValueError("자소서를 찾을 수 없습니다.")
+
+            cover_letter_name = original_cover_letter.get('basic_info_names') or original_cover_letter.get('name', 'Unknown')
+            print(f"[INFO] 원본 자소서 조회 완료: {cover_letter_name}")
+
+            # 유사한 자소서 검색 (간단한 텍스트 유사도 기반)
+            similar_cover_letters = []
+            async for doc in db.cover_letters.find({"_id": {"$ne": ObjectId(cover_letter_id)}}):
+                # 자소서에서 실제 텍스트 추출
+                original_text = self._get_cover_letter_full_text(original_cover_letter)
+                doc_text = self._get_cover_letter_full_text(doc)
+
+                # 간단한 유사도 계산
+                similarity_score = self.calculate_simple_similarity(original_text, doc_text)
+
+                if similarity_score > 0.3:  # 30% 이상 유사한 경우만
+                    similar_cover_letters.append({
+                        'document': doc,
+                        'similarity_score': similarity_score
+                    })
+
+            print(f"[INFO] 유사한 자소서 {len(similar_cover_letters)}개 발견")
+
+            # LLM을 통한 표절 위험도 분석
+            plagiarism_analysis = await self.llm_service.analyze_plagiarism_suspicion(
+                original_cover_letter,
+                similar_cover_letters,
+                document_type="자소서"
+            )
+
+
+            # 유사도별로 정렬
+            similarity_results = sorted(similar_cover_letters, key=lambda x: x['similarity_score'], reverse=True)
+
+            # plagiarism_analysis에서 키들을 직접 반환
+            result = {
+                "cover_letter_id": cover_letter_id,
+                "original_document": {
+                    "name": cover_letter_name,
+                    "content_length": len(original_cover_letter.get('content', ''))
+                },
+                "similarity_count": len(similarity_results),
+                "max_similarity": similarity_results[0]['similarity_score'] if similarity_results else 0,
+                "top_similar": similarity_results[:5] if similarity_results else [],
+                "analysis_timestamp": datetime.now().isoformat()
+            }
+
+            # LLM 분석 결과를 직접 병합
+            if plagiarism_analysis:
+                result.update({
+                    "suspicion_level": plagiarism_analysis.get("suspicion_level", "LOW"),
+                    "suspicion_score": plagiarism_analysis.get("suspicion_score", 0.0),
+                    "analysis": plagiarism_analysis.get("analysis", "분석을 완료했습니다."),
+                    "similar_count": plagiarism_analysis.get("similar_count", len(similarity_results)),
+                    "analyzed_at": plagiarism_analysis.get("analyzed_at")
+                })
+
+            return result
+
+        except Exception as e:
+            print(f"[ERROR] 자소서 표절 체크 실패: {str(e)}")
+            raise e
+
+    def calculate_simple_similarity(self, text1: str, text2: str) -> float:
+        """
+        간단한 텍스트 유사도 계산 (Jaccard 유사도 사용)
+
+        Args:
+            text1 (str): 비교할 텍스트 1
+            text2 (str): 비교할 텍스트 2
+
+        Returns:
+            float: 유사도 점수 (0.0 ~ 1.0)
+        """
+        if not text1 or not text2:
+            return 0.0
+
+        # 단어 기반 Jaccard 유사도
+        words1 = set(text1.lower().split())
+        words2 = set(text2.lower().split())
+
+        if not words1 and not words2:
+            return 1.0
+        if not words1 or not words2:
+            return 0.0
+
+        intersection = len(words1.intersection(words2))
+        union = len(words1.union(words2))
+
+        return intersection / union if union > 0 else 0.0
+
+    def _get_cover_letter_full_text(self, cover_letter: Dict[str, Any]) -> str:
+        """
+        자소서에서 전체 텍스트를 추출합니다.
+
+        Args:
+            cover_letter (Dict[str, Any]): 자소서 데이터
+
+        Returns:
+            str: 추출된 전체 텍스트
+        """
+        text_parts = []
+
+        # 다양한 텍스트 필드에서 내용 추출
+        if cover_letter.get('extracted_text'):
+            text_parts.append(cover_letter['extracted_text'])
+
+        if cover_letter.get('growthBackground'):
+            text_parts.append(cover_letter['growthBackground'])
+
+        if cover_letter.get('motivation'):
+            text_parts.append(cover_letter['motivation'])
+
+        if cover_letter.get('careerHistory'):
+            text_parts.append(cover_letter['careerHistory'])
+
+        # 모든 텍스트를 결합
+        combined_text = ' '.join(text_parts)
+        return combined_text.strip()

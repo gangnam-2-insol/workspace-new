@@ -1,7 +1,8 @@
-import os
 import json
 import logging
-from typing import List, Dict, Any
+import os
+from typing import Any, Dict, List
+
 import openai
 from openai import AsyncOpenAI
 
@@ -11,12 +12,15 @@ class LLMService:
     """LLM 서비스 클래스"""
 
     def __init__(self):
-        # 기본 API 키 (기존 방식)
-        self.default_api_key = os.getenv("OPENAI_API_KEY", "your-api-key-here")
-        self.default_client = AsyncOpenAI(api_key=self.default_api_key)
-        self.model = "gpt-4o"
-        print(f"🔍 [LLMService] 초기화 - 기본 API 키 길이: {len(self.default_api_key) if self.default_api_key else 0}")
-        print(f"🔍 [LLMService] 모델: {self.model}")
+        # OpenAI 설정
+        self.openai_api_key = os.getenv("OPENAI_API_KEY")
+        self.openai_model = "gpt-4o-mini"
+
+        if not self.openai_api_key:
+            raise ValueError("OPENAI_API_KEY가 설정되지 않았습니다.")
+
+        print(f"🔍 [LLMService] 초기화 - OpenAI 모드")
+        print(f"🔍 [LLMService] OpenAI 모델: {self.openai_model}")
 
     async def generate_culture_recommendations(
         self,
@@ -27,69 +31,60 @@ class LLMService:
     ) -> List[Dict[str, str]]:
         """키워드 기반 인재상 추천 생성"""
 
-        print(f"🔍 [LLMService] generate_culture_recommendations 시작")
-        print(f"   - 키워드: {keywords}")
-        print(f"   - 직무: {job}")
-        print(f"   - 부서: {department}")
-        print(f"   - 트렌드: {trends}")
+        logger.info(f"인재상 추천 생성 시작 - 키워드: {keywords}, 직무: {job}, 부서: {department}")
 
         try:
-            # 인재상 추천용 API 키 (env 파일에서 로드)
-            from dotenv import load_dotenv
-            load_dotenv()
-            # fallback 제거하고 직접 환경변수만 사용
-            culture_api_key = os.getenv("OPENAI_API_KEY")
-            if not culture_api_key:
-                raise Exception("OPENAI_API_KEY 환경변수가 설정되지 않았습니다.")
-
-            culture_client = AsyncOpenAI(api_key=culture_api_key)
-
-            print(f"🔍 [LLMService] 인재상 추천용 API 키 길이: {len(culture_api_key) if culture_api_key else 0}")
-            print(f"🔍 [LLMService] 인재상 추천용 API 키 미리보기: {culture_api_key[:20] if culture_api_key else 'None'}...")
-            print(f"🔍 [LLMService] DEBUG OPENAI KEY: {culture_api_key}")
-            print(f"🔍 [LLMService] 키 타입 확인: {'sk-proj-' if culture_api_key and culture_api_key.startswith('sk-proj-') else 'sk-' if culture_api_key and culture_api_key.startswith('sk-') else 'unknown'}")
-
             # 프롬프트 구성
-            print(f"🔍 [LLMService] 프롬프트 구성 시작")
             prompt = self._build_prompt(keywords, job, department, trends)
-            print(f"🔍 [LLMService] 프롬프트 구성 완료 (길이: {len(prompt)})")
+            logger.debug(f"프롬프트 구성 완료 (길이: {len(prompt)})")
 
-            # LLM 호출
-            print(f"🔍 [LLMService] OpenAI API 호출 시작")
-            response = await culture_client.chat.completions.create(
-                model=self.model,
-                messages=[
-                    {
-                        "role": "system",
-                        "content": "당신은 회사 인재상 전문가입니다. 사용자의 키워드와 직무 정보를 바탕으로 맞춤형 인재상을 추천해주세요."
-                    },
-                    {
-                        "role": "user",
-                        "content": prompt
-                    }
-                ],
-                temperature=0.7,
-                max_tokens=1000
-            )
-            print(f"🔍 [LLMService] OpenAI API 호출 완료")
+            # OpenAI API 호출
+            logger.info("OpenAI API 호출 시작")
+            content = await self._call_openai(prompt)
+            logger.info(f"OpenAI API 호출 완료 - 응답 길이: {len(content)}")
+            logger.debug(f"응답 미리보기: {content[:100]}...")
 
-            # 응답 파싱
-            content = response.choices[0].message.content
-            print(f"🔍 [LLMService] 응답 내용 길이: {len(content)}")
-            print(f"🔍 [LLMService] 응답 미리보기: {content[:100]}...")
-
-            result = self._parse_response(content)
-            print(f"🔍 [LLMService] 파싱된 결과: {len(result)}개")
-            return result
+            # JSON 파싱
+            try:
+                result = json.loads(content)
+                if isinstance(result, list):
+                    logger.info(f"JSON 파싱 성공 - {len(result)}개 인재상")
+                    return result
+                elif isinstance(result, dict) and "recommendations" in result:
+                    logger.info(f"JSON 파싱 성공 - {len(result['recommendations'])}개 인재상")
+                    return result["recommendations"]
+                else:
+                    raise ValueError("응답 형식이 올바르지 않습니다.")
+            except json.JSONDecodeError:
+                logger.warning("JSON 파싱 실패, 기본 추천으로 폴백")
+                return self._generate_fallback_recommendations(keywords, job, department)
 
         except Exception as e:
-            print(f"❌ [LLMService] LLM 호출 실패: {str(e)}")
-            import traceback
-            print(f"❌ [LLMService] 스택 트레이스: {traceback.format_exc()}")
-            logger.error(f"LLM 호출 실패: {str(e)}")
-            # LLM 실패 시 기본 규칙 기반 추천으로 폴백
-            print(f"🔍 [LLMService] 폴백으로 전환")
-            return self._fallback_recommendations(keywords, job, department)
+            logger.error(f"인재상 추천 생성 실패: {e}")
+            return self._generate_fallback_recommendations(keywords, job, department)
+
+    async def _call_openai(self, prompt: str) -> str:
+        """OpenAI API 호출"""
+        try:
+            client = openai.OpenAI(api_key=self.openai_api_key)
+
+            messages = [
+                {"role": "system", "content": "당신은 기업 인재상과 문화를 전문적으로 분석하는 AI 어시스턴트입니다."},
+                {"role": "user", "content": prompt}
+            ]
+
+            response = client.chat.completions.create(
+                model=self.openai_model,
+                messages=messages,
+                max_tokens=2000,
+                temperature=0.7
+            )
+
+            return response.choices[0].message.content
+
+        except Exception as e:
+            logger.error(f"OpenAI API 호출 실패: {e}")
+            raise Exception(f"OpenAI API 호출 실패: {e}")
 
     def _build_prompt(self, keywords: List[str], job: str, department: str, trends: List[str] = None) -> str:
         """프롬프트 구성"""

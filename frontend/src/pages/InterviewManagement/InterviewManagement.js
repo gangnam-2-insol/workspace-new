@@ -4,11 +4,11 @@ import InterviewCalendarView from './components/InterviewCalendarView';
 import CalendarScheduleModal from './components/CalendarScheduleModal';
 import AIScheduler from './ai/aiScheduler.js';
 import InterviewAPI from './api/interviewAPI.js';
-import { 
-  FiVideo, 
-  FiCalendar, 
-  FiClock, 
-  FiUser, 
+import {
+  FiVideo,
+  FiCalendar,
+  FiClock,
+  FiUser,
   FiSettings,
   FiPlay,
   FiPause,
@@ -360,20 +360,20 @@ const InterviewManagement = () => {
     notes: ''
   });
   const [notifications, setNotifications] = useState([]);
-  
+
   // 캘린더 관련 상태
   const [viewMode, setViewMode] = useState('calendar'); // 'grid' or 'calendar'
   const [currentDate, setCurrentDate] = useState(new Date());
   const [isCalendarScheduleModalOpen, setIsCalendarScheduleModalOpen] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
-  
+
   // 자동조정 관련 상태
   const [isAutoAdjust, setIsAutoAdjust] = useState(true); // 자동조정 여부
-  
+
   // AI 스케줄러 관련 상태
   const [aiScheduler, setAiScheduler] = useState(null);
   const [isAILoading, setIsAILoading] = useState(false);
-  
+
   // API 관련 상태
   const [interviewAPI, setInterviewAPI] = useState(null);
   const [isAPILoading, setIsAPILoading] = useState(false);
@@ -397,7 +397,7 @@ const InterviewManagement = () => {
 
     // 윈도우 리사이즈도 감지
     window.addEventListener('resize', handleResize);
-    
+
     return () => {
       resizeObserver.disconnect();
       window.removeEventListener('resize', handleResize);
@@ -408,7 +408,7 @@ const InterviewManagement = () => {
   useEffect(() => {
     if (isAutoAdjust) {
     let newGridSize = 4; // 기본값
-    
+
     if (contentWidth < 600) {
       newGridSize = 1; // 매우 작은 영역: 1명
     } else if (contentWidth < 900) {
@@ -418,7 +418,7 @@ const InterviewManagement = () => {
     } else {
       newGridSize = 4; // 큰 영역: 4명
     }
-    
+
     setApplicantsPerRow(newGridSize);
     }
   }, [contentWidth, isAutoAdjust]);
@@ -490,7 +490,7 @@ const InterviewManagement = () => {
           setIsAIScheduleModalOpen(false);
         }
       }
-      
+
       // Ctrl + F로 검색창 포커스
       if (event.ctrlKey && event.key === 'f') {
         event.preventDefault();
@@ -530,7 +530,7 @@ const InterviewManagement = () => {
 
   // 서류 합격자만 필터링
   const passedApplicants = applicants.filter(applicant => applicant.documentStatus === 'pass');
-  
+
   // 필터링된 지원자 목록 (서류 합격자 중에서)
   const filteredApplicants = passedApplicants.filter(applicant => {
     const matchesSearch = applicant.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -603,8 +603,8 @@ const InterviewManagement = () => {
       return;
     }
 
-    setApplicants(prev => prev.map(applicant => 
-      applicant.id === applicantId 
+    setApplicants(prev => prev.map(applicant =>
+      applicant.id === applicantId
         ? { ...applicant, feedback: { ...feedbackData, sent: true, sentAt: new Date().toLocaleString('ko-KR') } }
         : applicant
     ));
@@ -618,7 +618,7 @@ const InterviewManagement = () => {
     try {
       // JSZip 라이브러리가 없는 경우 간단한 다운로드 구현
       const files = [];
-      
+
       // 비디오 파일들 수집
       applicant.questions.forEach((question, index) => {
         if (question.videoUrl) {
@@ -687,8 +687,8 @@ const InterviewManagement = () => {
 
   // 합격/불합격 처리
   const updateResult = (applicantId, result) => {
-    setApplicants(prev => prev.map(applicant => 
-      applicant.id === applicantId 
+    setApplicants(prev => prev.map(applicant =>
+      applicant.id === applicantId
         ? { ...applicant, evaluation: { ...applicant.evaluation, result } }
         : applicant
     ));
@@ -699,7 +699,7 @@ const InterviewManagement = () => {
     const id = Date.now();
     const notification = { id, message, type };
     setNotifications(prev => [...prev, notification]);
-    
+
     // 3초 후 자동 제거
     setTimeout(() => {
       setNotifications(prev => prev.filter(n => n.id !== id));
@@ -813,10 +813,10 @@ const InterviewManagement = () => {
     }
 
     // 기존 지원자 정보 업데이트
-    setApplicants(prev => prev.map(applicant => 
-      applicant.id === selectedApplicantForSchedule.id 
-        ? { 
-            ...applicant, 
+    setApplicants(prev => prev.map(applicant =>
+      applicant.id === selectedApplicantForSchedule.id
+        ? {
+            ...applicant,
             interviewDate: newSchedule.interviewDate,
             interviewTime: newSchedule.interviewTime,
             duration: newSchedule.duration,
@@ -847,8 +847,8 @@ const InterviewManagement = () => {
   // 면접일정 등록 모달 열기
   const openInterviewScheduleModal = (applicant) => {
     setSelectedApplicantForSchedule(applicant);
-    setNewSchedule(prev => ({ 
-      ...prev, 
+    setNewSchedule(prev => ({
+      ...prev,
       name: applicant.name,
       position: applicant.position,
       email: applicant.email,
@@ -874,7 +874,7 @@ const InterviewManagement = () => {
     }
 
     // 면접 일정이 없는 지원자들 필터링
-    const unscheduledApplicants = applicants.filter(applicant => 
+    const unscheduledApplicants = applicants.filter(applicant =>
       !applicant.interviewDate || applicant.interviewDate === ''
     );
 
@@ -885,7 +885,7 @@ const InterviewManagement = () => {
 
     // AI 스케줄링 로직 실행
     const scheduledApplicants = generateAISchedule(unscheduledApplicants, aiScheduleSettings);
-    
+
     // 기존 지원자 목록 업데이트
     setApplicants(prev => prev.map(applicant => {
       const scheduled = scheduledApplicants.find(s => s.id === applicant.id);
@@ -1021,7 +1021,7 @@ const getStatusText = (status) => {
     setIsAILoading(true);
     try {
       const result = await aiScheduler.autoScheduleInterview(applicantData);
-      
+
       if (result.success) {
         showNotification(`AI가 추천한 시간: ${result.scheduledTime}`, 'success');
         return result.scheduledTime;
@@ -1067,7 +1067,7 @@ const getStatusText = (status) => {
 
       // AI가 추천한 시간이 있으면 사용, 없으면 사용자가 입력한 시간 사용
       const finalTime = aiScheduledTime || newSchedule.interviewTime;
-      
+
       if (!finalTime) {
         showNotification('면접 시간을 선택해주세요.', 'error');
         return;
@@ -1166,8 +1166,8 @@ const getStatusText = (status) => {
       aiScore: 0,
       documentStatus: 'pass', // 서류 합격 상태로 설정
       documents: {
-        resume: { 
-          exists: true, 
+        resume: {
+          exists: true,
           summary: newTemporaryPass.experience || '임시 등록된 지원자',
           keywords: newTemporaryPass.skills ? newTemporaryPass.skills.split(',').map(s => s.trim()) : [],
           content: `경력: ${newTemporaryPass.experience || '없음'}\n기술: ${newTemporaryPass.skills || '없음'}\n학력: ${newTemporaryPass.education || '없음'}\n메모: ${newTemporaryPass.notes || '없음'}`
@@ -1213,7 +1213,7 @@ const getStatusText = (status) => {
       {/* 알림 토스트 */}
       <div className="notifications">
         {notifications.map((notification) => (
-          <div 
+          <div
             key={notification.id}
             className={`notification ${notification.type}`}
             onClick={() => removeNotification(notification.id)}
@@ -1225,7 +1225,7 @@ const getStatusText = (status) => {
               {notification.type === 'info' && <FiMessageSquare />}
               <span>{notification.message}</span>
             </div>
-            <button 
+            <button
               className="notification-close"
               onClick={(e) => {
                 e.stopPropagation();
@@ -1247,35 +1247,35 @@ const getStatusText = (status) => {
               서류 합격자 목록 - 면접 일정 관리
             </span>
           </div>
-                      <button 
+                      <button
               className="btn btn-secondary"
               onClick={() => setIsTemporaryPassModalOpen(true)}
             >
               <FiUser />
               임시 합격자 등록
             </button>
-            <button 
+            <button
               className="btn btn-secondary"
               onClick={() => setIsAIScheduleModalOpen(true)}
             >
               <FiSettings />
               AI 자동 스케줄링
             </button>
-            <button 
+            <button
               className="btn btn-secondary"
               onClick={() => setIsSettingsModalOpen(true)}
             >
               <FiSettings />
               설정
             </button>
-          <button 
+          <button
             className="btn btn-primary"
             onClick={() => setIsScheduleModalOpen(true)}
           >
             <FiCalendar />
             면접 일정 등록
           </button>
-          <button 
+          <button
             className={`btn ${isAILoading ? 'btn-secondary' : 'btn-primary'}`}
             onClick={() => {
               if (aiScheduler) {
@@ -1326,8 +1326,8 @@ const getStatusText = (status) => {
         </div>
         <div className="filter-box">
           <FiFilter />
-          <select 
-            value={statusFilter} 
+          <select
+            value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value)}
           >
             <option value="all">전체 상태</option>
@@ -1374,7 +1374,7 @@ const getStatusText = (status) => {
                 <span className="value">{applicant.type} ({applicant.platform})</span>
               </div>
             </div>
-              
+
             {/* AI 점수 */}
             {applicant.aiScore > 0 && (
               <div className="ai-score">
@@ -1411,7 +1411,7 @@ const getStatusText = (status) => {
 
             {/* 액션 버튼 */}
             <div className="action-buttons">
-              <button 
+              <button
                 className="btn btn-primary"
                 onClick={() => {
                   setSelectedApplicant(applicant);
@@ -1421,14 +1421,14 @@ const getStatusText = (status) => {
                 <FiEye />
                 상세보기
               </button>
-              <button 
+              <button
                 className="btn btn-secondary"
                 onClick={() => openInterviewScheduleModal(applicant)}
               >
                 <FiCalendar />
                 면접일정
               </button>
-              <button 
+              <button
                 className="btn btn-secondary"
                 onClick={() => openFeedbackModal(applicant)}
               >
@@ -1447,7 +1447,7 @@ const getStatusText = (status) => {
           <div className="modal-content settings-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>설정</h2>
-              <button 
+              <button
                 className="btn-icon"
                 onClick={() => setIsSettingsModalOpen(false)}
               >
@@ -1517,7 +1517,7 @@ const getStatusText = (status) => {
                 <div className="settings-section">
                   <h3>데이터 관리</h3>
                   <div className="form-group">
-                    <button 
+                    <button
                       className="btn btn-secondary"
                       onClick={resetData}
                       style={{ background: '#ef4444', color: 'white', border: 'none' }}
@@ -1531,7 +1531,7 @@ const getStatusText = (status) => {
                   </div>
                 </div>
                 <div className="form-actions">
-                  <button 
+                  <button
                     className="btn btn-primary"
                     onClick={() => {
                       setIsSettingsModalOpen(false);
@@ -1541,7 +1541,7 @@ const getStatusText = (status) => {
                     <FiSettings />
                     설정 저장
                   </button>
-                  <button 
+                  <button
                     className="btn btn-secondary"
                     onClick={() => setIsSettingsModalOpen(false)}
                   >
@@ -1560,7 +1560,7 @@ const getStatusText = (status) => {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>임시 합격자 등록</h2>
-              <button 
+              <button
                 className="btn-icon"
                 onClick={() => setIsTemporaryPassModalOpen(false)}
               >
@@ -1641,14 +1641,14 @@ const getStatusText = (status) => {
                 />
               </div>
               <div className="form-actions">
-                <button 
+                <button
                   className="btn btn-primary"
                   onClick={createTemporaryPass}
                 >
                   <FiUser />
                   임시 합격자 등록
                 </button>
-                <button 
+                <button
                   className="btn btn-secondary"
                   onClick={() => setIsTemporaryPassModalOpen(false)}
                 >
@@ -1666,7 +1666,7 @@ const getStatusText = (status) => {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>AI 자동 스케줄링</h2>
-              <button 
+              <button
                 className="btn-icon"
                 onClick={() => setIsAIScheduleModalOpen(false)}
               >
@@ -1678,28 +1678,28 @@ const getStatusText = (status) => {
                 <h3>스케줄링 설정</h3>
                 <p>면접 일정이 없는 지원자들을 지정된 기간 내에서 자동으로 스케줄링합니다.</p>
               </div>
-              
+
               <div className="form-group">
                 <label>시작 날짜 *</label>
                 <input
                   type="date"
                   value={aiScheduleSettings.startDate}
-                  onChange={(e) => setAIScheduleSettings(prev => ({ 
-                    ...prev, 
-                    startDate: e.target.value 
+                  onChange={(e) => setAIScheduleSettings(prev => ({
+                    ...prev,
+                    startDate: e.target.value
                   }))}
                   min={new Date().toISOString().split('T')[0]}
                 />
               </div>
-              
+
               <div className="form-group">
                 <label>종료 날짜 *</label>
                 <input
                   type="date"
                   value={aiScheduleSettings.endDate}
-                  onChange={(e) => setAIScheduleSettings(prev => ({ 
-                    ...prev, 
-                    endDate: e.target.value 
+                  onChange={(e) => setAIScheduleSettings(prev => ({
+                    ...prev,
+                    endDate: e.target.value
                   }))}
                   min={aiScheduleSettings.startDate || new Date().toISOString().split('T')[0]}
                 />
@@ -1711,8 +1711,8 @@ const getStatusText = (status) => {
                   <input
                     type="time"
                     value={aiScheduleSettings.workingHours.start}
-                    onChange={(e) => setAIScheduleSettings(prev => ({ 
-                      ...prev, 
+                    onChange={(e) => setAIScheduleSettings(prev => ({
+                      ...prev,
                       workingHours: { ...prev.workingHours, start: e.target.value }
                     }))}
                   />
@@ -1722,8 +1722,8 @@ const getStatusText = (status) => {
                   <input
                     type="time"
                     value={aiScheduleSettings.workingHours.end}
-                    onChange={(e) => setAIScheduleSettings(prev => ({ 
-                      ...prev, 
+                    onChange={(e) => setAIScheduleSettings(prev => ({
+                      ...prev,
                       workingHours: { ...prev.workingHours, end: e.target.value }
                     }))}
                   />
@@ -1735,9 +1735,9 @@ const getStatusText = (status) => {
                   <label>면접 소요시간 (분)</label>
                   <select
                     value={aiScheduleSettings.interviewDuration}
-                    onChange={(e) => setAIScheduleSettings(prev => ({ 
-                      ...prev, 
-                      interviewDuration: e.target.value 
+                    onChange={(e) => setAIScheduleSettings(prev => ({
+                      ...prev,
+                      interviewDuration: e.target.value
                     }))}
                   >
                     <option value="30">30분</option>
@@ -1750,9 +1750,9 @@ const getStatusText = (status) => {
                   <label>면접 간 휴식시간 (분)</label>
                   <select
                     value={aiScheduleSettings.breakTime}
-                    onChange={(e) => setAIScheduleSettings(prev => ({ 
-                      ...prev, 
-                      breakTime: e.target.value 
+                    onChange={(e) => setAIScheduleSettings(prev => ({
+                      ...prev,
+                      breakTime: e.target.value
                     }))}
                   >
                     <option value="15">15분</option>
@@ -1767,9 +1767,9 @@ const getStatusText = (status) => {
                 <label>하루 최대 면접 수</label>
                 <select
                   value={aiScheduleSettings.maxInterviewsPerDay}
-                  onChange={(e) => setAIScheduleSettings(prev => ({ 
-                    ...prev, 
-                    maxInterviewsPerDay: e.target.value 
+                  onChange={(e) => setAIScheduleSettings(prev => ({
+                    ...prev,
+                    maxInterviewsPerDay: e.target.value
                   }))}
                 >
                   <option value="4">4명</option>
@@ -1796,7 +1796,7 @@ const getStatusText = (status) => {
               </div>
 
               <div className="form-actions">
-                <button 
+                <button
                   className="btn btn-primary"
                   onClick={executeAIScheduling}
                   disabled={applicants.filter(a => !a.interviewDate || a.interviewDate === '').length === 0}
@@ -1804,7 +1804,7 @@ const getStatusText = (status) => {
                   <FiSettings />
                   AI 스케줄링 실행
                 </button>
-                <button 
+                <button
                   className="btn btn-secondary"
                   onClick={() => setIsAIScheduleModalOpen(false)}
                 >
@@ -1822,7 +1822,7 @@ const getStatusText = (status) => {
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>면접일정 등록</h2>
-              <button 
+              <button
                 className="btn-icon"
                 onClick={() => setIsInterviewScheduleModalOpen(false)}
               >
@@ -1851,7 +1851,7 @@ const getStatusText = (status) => {
                   </div>
                 </div>
               </div>
-              
+
               <div className="form-group">
                 <label>면접 날짜 *</label>
                 <input
@@ -1902,14 +1902,14 @@ const getStatusText = (status) => {
                 />
               </div>
               <div className="form-actions">
-                <button 
+                <button
                   className="btn btn-primary"
                   onClick={createInterviewSchedule}
                 >
                   <FiCalendar />
                   면접일정 등록
                 </button>
-                <button 
+                <button
                   className="btn btn-secondary"
                   onClick={() => setIsInterviewScheduleModalOpen(false)}
                 >
@@ -1937,4 +1937,4 @@ const getStatusText = (status) => {
   );
 };
 
-export default InterviewManagement; 
+export default InterviewManagement;

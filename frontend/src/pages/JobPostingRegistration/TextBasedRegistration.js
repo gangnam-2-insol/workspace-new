@@ -8,6 +8,7 @@ import TitleRecommendationModal from '../../components/TitleRecommendationModal'
 import './TextBasedRegistration.css';
 import { FiX, FiArrowLeft, FiArrowRight, FiCheck, FiFileText, FiClock, FiMapPin, FiDollarSign, FiUsers, FiMail, FiCalendar, FiFolder, FiSettings } from 'react-icons/fi';
 import companyCultureApi from '../../services/companyCultureApi';
+import jobPostingApi from '../../services/jobPostingApi';
 
 // Styled Components
 const Overlay = styled(motion.div)`
@@ -467,8 +468,44 @@ const TextBasedRegistration = ({
     };
   }, []);
 
-  // 폼 필드 업데이트 이벤트 리스너 추가
+  // 에이전트에서 추출한 데이터를 받아서 폼에 자동 입력 (픽톡 방식)
   useEffect(() => {
+    const handleAgentExtractedData = (event) => {
+      const { extractedData } = event.detail;
+      console.log('🚀 [TextBasedRegistration] 에이전트 추출 데이터 수신:', extractedData);
+
+      // 에이전트 데이터로 폼 초기화
+      const agentFormData = {
+        title: extractedData.title || '',
+        company: extractedData.company || '',
+        location: extractedData.location || '',
+        type: extractedData.type || 'full-time',
+        salary: extractedData.salary || '',
+        experience: extractedData.experience_level || '신입',
+        description: extractedData.description || extractedData.main_duties || '',
+        requirements: extractedData.requirements || '',
+        benefits: extractedData.benefits || '',
+        deadline: extractedData.deadline || '',
+        department: extractedData.department || '',
+        headcount: extractedData.headcount || '',
+        work_type: extractedData.work_type || '',
+        work_hours: extractedData.work_hours || '',
+        contact_email: extractedData.contact_email || '',
+        selected_culture_id: null
+      };
+
+      console.log('🚀 [에이전트 데이터] 픽톡 모달에 전달:', agentFormData);
+
+      // 폼 데이터 업데이트
+      setFormData(agentFormData);
+
+      // 타이핑 애니메이션 시작 (픽톡과 동일)
+      setTimeout(() => {
+        startTypingAnimation(agentFormData);
+      }, 1000);
+    };
+
+    // 폼 필드 업데이트 이벤트 리스너
     const handleFormFieldUpdate = (event) => {
       const { field, value } = event.detail;
       console.log('=== TextBasedRegistration - 폼 필드 업데이트 이벤트 수신 ===');
@@ -538,6 +575,7 @@ const TextBasedRegistration = ({
     };
 
     // 이벤트 리스너 등록
+    window.addEventListener('setAgentExtractedData', handleAgentExtractedData);
     window.addEventListener('updateFormField', handleFormFieldUpdate);
     window.addEventListener('updateDepartment', handleDepartmentUpdate);
     window.addEventListener('updateHeadcount', handleHeadcountUpdate);
@@ -551,6 +589,7 @@ const TextBasedRegistration = ({
 
     // 클린업 함수
     return () => {
+      window.removeEventListener('setAgentExtractedData', handleAgentExtractedData);
       window.removeEventListener('updateFormField', handleFormFieldUpdate);
       window.removeEventListener('updateDepartment', handleDepartmentUpdate);
       window.removeEventListener('updateHeadcount', handleHeadcountUpdate);
@@ -592,6 +631,52 @@ const TextBasedRegistration = ({
     }
 
     return salaryValue;
+  };
+
+  // 타이핑 애니메이션 함수 (픽톡과 동일한 방식)
+  const startTypingAnimation = (agentFormData) => {
+    console.log('🚀 [타이핑 애니메이션] 시작:', agentFormData);
+
+    // 필드별로 순차적으로 타이핑 애니메이션 실행 (프론트엔드 필드명과 맞춤)
+    const fields = [
+      { name: 'title', delay: 0 },
+      { name: 'company', delay: 500 },
+      { name: 'position', delay: 1000 },
+      { name: 'location', delay: 1500 },
+      { name: 'salary', delay: 2000 },
+      { name: 'experience', delay: 2500 },
+      { name: 'requirements', delay: 3000 },
+      { name: 'preferred', delay: 3500 },
+      { name: 'department', delay: 4000 },
+      { name: 'headcount', delay: 4500 },
+      { name: 'work_hours', delay: 5000 },
+      { name: 'description', delay: 5500 }
+    ];
+
+    fields.forEach((field) => {
+      const fieldName = field.name;
+      const delay = field.delay;
+
+      setTimeout(() => {
+        console.log(`📝 [타이핑] ${fieldName} 필드 입력 시작`);
+
+        // 해당 필드에 데이터 입력
+        if (agentFormData[fieldName]) {
+          const value = agentFormData[fieldName];
+
+          // 배열인 경우 문자열로 변환
+          const displayValue = Array.isArray(value) ? value.join(', ') : value;
+
+          // formData 업데이트
+          setFormData(prev => ({
+            ...prev,
+            [fieldName]: displayValue
+          }));
+
+          console.log(`✅ [타이핑] ${fieldName} 필드 입력 완료:`, displayValue);
+        }
+      }, delay);
+    });
   };
 
   const startAIChatbot = () => {
@@ -822,9 +907,9 @@ const TextBasedRegistration = ({
                     <input
                       type="text"
                       name="headcount"
-                      value={formData.headcount || ''}
+                      value={formData.headcount || '0명'}
                       onChange={handleInputChange}
-                      placeholder="예: 1명, 2명, 3명"
+                      placeholder="예: 0명, 1명, 2명, 3명"
                       required
                       className="custom-input"
                       style={{

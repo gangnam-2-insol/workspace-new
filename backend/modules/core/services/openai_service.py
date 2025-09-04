@@ -1,6 +1,7 @@
-import openai
 import os
-from typing import Dict, Any, Optional, List
+from typing import Any, Dict, List, Optional
+
+import openai
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -26,7 +27,6 @@ class OpenAIService:
             print(f"[SUCCESS] OpenAI 서비스 초기화 성공 (모델: {model_name})")
         except Exception as e:
             print(f"[ERROR] OpenAI 서비스 초기화 실패: {e}")
-            print("[INFO] OPENAI_API_KEY가 올바르게 설정되었는지 확인하세요")
             self.client = None
 
     async def generate_response(self, prompt: str, conversation_history: Optional[List[Dict[str, Any]]] = None) -> str:
@@ -49,32 +49,32 @@ class OpenAIService:
             system_prompt = (
                 "당신은 HireMe 플랫폼의 전문 AI 채용 어시스턴트입니다.\n"
                 "채용 담당자와 지원자 모두를 돕는 스마트한 채용 솔루션을 제공합니다.\n\n"
-                
+
                 "🎯 **핵심 역할:**\n"
                 "1. 채용공고 작성 및 최적화 지원\n"
                 "2. 이력서/자기소개서 분석 및 피드백\n"
                 "3. 면접 질문 생성 및 평가 기준 제안\n"
                 "4. 채용 프로세스 전반의 컨설팅\n\n"
-                
+
                 "📋 **채용공고 작성 가이드라인:**\n"
                 "- 직무명: 구체적이고 매력적으로 (예: 'React 전문 프론트엔드 개발자')\n"
                 "- 주요업무: '무엇을 + 왜 + 기대효과' 구조로 작성\n"
                 "- 자격요건: 필수/우대 조건을 명확히 구분\n"
                 "- 복리후생: 구체적인 혜택과 근무환경 명시\n"
                 "- 지원방법: 명확한 지원 절차와 마감일 제시\n\n"
-                
+
                 "💼 **업무 설명 작성법:**\n"
                 "- 개발 업무: '웹 애플리케이션 개발 → 사용자 경험 향상 → 고객 만족도 증대'\n"
                 "- 분석 업무: '데이터 분석 및 인사이트 도출 → 의사결정 지원 → 비즈니스 성과 개선'\n"
                 "- 기획 업무: '제품 기획 및 전략 수립 → 시장 경쟁력 강화 → 매출 증대'\n\n"
-                
+
                 "🔍 **답변 스타일:**\n"
                 "- 전문적이면서도 친근한 톤\n"
                 "- 실무에 바로 적용 가능한 구체적인 조언\n"
                 "- 불필요한 설명 생략, 핵심만 간결하게\n"
                 "- 한국 채용 시장의 트렌드와 관례 반영\n"
                 "- 법적 이슈나 차별 요소는 반드시 배제\n\n"
-                
+
                 "⚡ **응답 형식:**\n"
                 "- 일반 질문: 2-3문장으로 핵심만 요약\n"
                 "- 채용공고: 체계적인 템플릿 구조 활용\n"
@@ -109,10 +109,10 @@ class OpenAIService:
     async def generate_json_response(self, prompt: str) -> str:
         """
         JSON 형식 응답에 최적화된 OpenAI 응답 생성
-        
+
         Args:
             prompt: JSON 응답을 요구하는 프롬프트
-            
+
         Returns:
             JSON 형식의 응답 텍스트
         """
@@ -122,7 +122,7 @@ class OpenAIService:
         try:
             messages = [
                 {
-                    "role": "system", 
+                    "role": "system",
                     "content": (
                         "당신은 정확한 JSON 형식으로만 응답하는 AI입니다.\n"
                         "- 반드시 유효한 JSON 형식으로만 응답하세요\n"

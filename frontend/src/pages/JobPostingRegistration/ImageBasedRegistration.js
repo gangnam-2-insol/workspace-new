@@ -959,8 +959,8 @@ const ImageBasedRegistration = ({
       <FormGrid>
         <FormGroup>
           <Label>구인 인원수</Label>
-          <Select name="headcount" value={formData.headcount} onChange={handleInputChange} required>
-            <option value="">인원 선택</option>
+          <Select name="headcount" value={formData.headcount || "0명"} onChange={handleInputChange} required>
+            <option value="0명">0명</option>
             <option value="1명">1명</option>
             <option value="2명">2명</option>
             <option value="3명">3명</option>

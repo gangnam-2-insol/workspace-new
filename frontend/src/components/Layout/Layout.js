@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Link, useLocation } from 'react-router-dom';
+import { Link, useLocation, useNavigate } from 'react-router-dom';
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 import {
@@ -20,7 +20,9 @@ import {
 	FiBriefcase,
 	FiUserCheck,
 	FiGitBranch,
-	FiMessageCircle
+	FiMessageCircle,
+	FiBarChart2,
+	FiHelpCircle
 } from 'react-icons/fi';
 
 const LayoutContainer = styled.div`
@@ -78,6 +80,12 @@ const Logo = styled.div`
   display: flex;
   align-items: center;
   gap: 12px;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+
+  &:hover {
+    transform: scale(1.05);
+  }
 `;
 
 const HeaderActions = styled.div`
@@ -115,7 +123,7 @@ const MobileMenuButton = styled(IconButton)`
 const Content = styled.main`
   padding: 24px;
   max-width: 1200px;
-  margin: 0 auto;
+  // margin: 0 auto;
 `;
 
 const NavItem = styled(Link)`
@@ -189,23 +197,49 @@ const navigationItems = [
     items: [
       { name: '설정 및 지원', path: '/settings', icon: FiSettings },
       { name: '샘플 데이터 관리', path: '/sample-data', icon: FiDatabase },
-      { name: '인재상 관리', path: '/company-culture', icon: FiUsers }
+      { name: '인재상 관리', path: '/company-culture', icon: FiUsers },
+      { name: '분석 가중치 설정', path: '/analysis-weights', icon: FiBarChart2 }
     ]
   },
   {
-    title: '개발 도구',
+    title: '지원',
     items: [
-      { name: 'GitHub 테스트', path: '/github-test', icon: FiGitBranch }
+      { name: '도움말', path: '/help', icon: FiHelpCircle }
     ]
-  }
+  },
+  // {
+  //   title: '개발 도구',
+  //   items: [
+  //     { name: 'GitHub 테스트', path: '/github-test', icon: FiGitBranch }
+  //   ]
+  // }
 ];
 
 const Layout = ({ children }) => {
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const location = useLocation();
+  const navigate = useNavigate();
 
   const toggleSidebar = () => {
     setIsSidebarOpen(!isSidebarOpen);
+  };
+
+  // 로고 클릭 시 모든 내용 초기화하고 메인으로 이동
+  const handleLogoClick = () => {
+    // 모든 세션 스토리지 데이터 초기화
+    sessionStorage.clear();
+
+    // 모든 로컬 스토리지 데이터 초기화 (선택사항)
+    localStorage.clear();
+
+    // 사이드바 닫기
+    setIsSidebarOpen(false);
+
+    // 메인 페이지로 이동
+    navigate('/');
+
+    // 페이지 새로고침으로 완전한 초기화
+    window.location.reload();
   };
 
   return (
@@ -218,22 +252,16 @@ const Layout = ({ children }) => {
         $isOpen={isSidebarOpen}
       >
         <div style={{ padding: '0 24px 24px' }}>
-          <Logo>
-            <div style={{
-              width: '32px',
-              height: '32px',
-              background: 'linear-gradient(135deg, #00c851, #00a844)',
-              borderRadius: '8px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              fontSize: '18px',
-              fontWeight: 'bold'
-            }}>
-              AI
-            </div>
-            AI 채용 관리
+          <Logo onClick={handleLogoClick} title="홈으로 이동 및 모든 데이터 초기화">
+            <img
+              src="/insolblack.png"
+              alt="Insol Logo"
+              style={{
+                width: '96px',
+                height: 'auto',
+                objectFit: 'contain'
+              }}
+            />
           </Logo>
         </div>
 

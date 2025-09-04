@@ -1,6 +1,24 @@
 import styled from 'styled-components';
 import { motion } from 'framer-motion';
 
+// CSS 변수 정의
+const cssVars = `
+  :root {
+    --primary-color: #00c851;
+    --primary-dark: #00a844;
+    --text-primary: #333333;
+    --text-secondary: #666666;
+    --text-light: #999999;
+    --border-color: #e0e0e0;
+    --background-secondary: #f5f5f5;
+  }
+`;
+
+// CSS 변수 주입
+const styleSheet = document.createElement('style');
+styleSheet.textContent = cssVars;
+document.head.appendChild(styleSheet);
+
 // 기본 레이아웃 스타일
 export const Container = styled.div`
   padding: 24px;
@@ -452,6 +470,9 @@ export const ModalTitle = styled.h2`
 `;
 
 export const ModalCloseButton = styled.button`
+  position: fixed;
+  top: 16px;
+  right: 16px;
   background: none;
   border: none;
   font-size: 24px;
@@ -459,6 +480,7 @@ export const ModalCloseButton = styled.button`
   cursor: pointer;
   padding: 4px;
   border-radius: 4px;
+  z-index: 3010;
 
   &:hover {
     background: var(--background-secondary);

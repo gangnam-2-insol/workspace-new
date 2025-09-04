@@ -1,3 +1,7 @@
+// 새로운 자소서 분석 모듈을 기본으로 사용
+import NewCoverLetterAnalysis from '../modules/cover_letter/components/CoverLetterAnalysis';
+
+// 기존 코드는 하위 호환성을 위해 유지
 import React, { useState, useRef, useEffect } from 'react';
 import styled from 'styled-components';
 
@@ -316,7 +320,7 @@ const CoverLetterAnalysis = ({ analysisData }) => {
   const allRecommendations = analysisData?.recommendations || ['지속적인 성장과 발전을 권장합니다.'];
   // slice(0, 2)를 사용하여 항상 최대 2개만 표시
   const recommendations = allRecommendations.slice(0, 2);
-  
+
   // 권장사항이 2개 미만인 경우 기본 권장사항으로 채움
   while (recommendations.length < 2) {
     recommendations.push('지속적인 성장과 발전을 권장합니다.');
@@ -810,4 +814,8 @@ const CoverLetterAnalysis = ({ analysisData }) => {
   );
 };
 
-export default CoverLetterAnalysis;
+// 새로운 모듈을 기본으로 export
+export default NewCoverLetterAnalysis;
+
+// 기존 컴포넌트도 named export로 제공 (하위 호환성)
+export { CoverLetterAnalysis as LegacyCoverLetterAnalysis };

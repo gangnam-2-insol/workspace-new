@@ -9,12 +9,7 @@ from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile
 from fastapi.responses import JSONResponse
 from models.applicant import ApplicantCreate
 from modules.core.services.chunking_service import ChunkingService
-from pdf_ocr_module.ai_analyzer import analyze_text
-from pdf_ocr_module.config import Settings
-
-# GPT-4o Vision API 기반 PDF OCR 모듈 import
-from pdf_ocr_module.main import process_pdf
-from pdf_ocr_module.mongo_saver import MongoSaver
+from pdf_ocr_module import MongoStorage, PDFProcessor, Settings
 
 router = APIRouter(tags=["integrated-ocr"])
 
@@ -48,9 +43,9 @@ def serialize_mongo_data(data):
             return data
 
 # MongoDB 서비스 의존성
-def get_mongo_saver():
-    mongo_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-    return MongoSaver(mongo_uri)
+def get_mongo_storage():
+    settings = Settings()
+    return MongoStorage(settings)
 
 
 def _extract_contact_from_text(text: str) -> Dict[str, Optional[str]]:
@@ -180,12 +175,8 @@ def _build_applicant_data(name: Optional[str], email: Optional[str], phone: Opti
     # 분석 결과 (요약에서 추출)
     final_analysis_result = ocr_result.get("summary", "")[:100] + "..." if ocr_result.get("summary") else ""
 
-    # 5. 디버깅을 위한 로그 (개발 중에만 사용)
-    print(f"🔍 지원자 정보 추출 결과:")
-    print(f"  - AI 분석 결과 (배열): names={ai_names}, emails={ai_emails}, phones={ai_phones}")
-    print(f"  - AI 분석 결과 (단일): name={ai_single_name}, email={ai_single_email}, phone={ai_single_phone}, position={ai_position}")
-    print(f"  - 텍스트 추출 결과: {extracted}")
-    print(f"  - 최종 결정: name={final_name}, email={final_email}, phone={final_phone}, position={final_position}")
+    # 5. 최종 결과 로깅
+    logger.info(f"지원자 정보 추출 완료 - 이름: {final_name}, 이메일: {final_email}, 포지션: {final_position}")
 
     return ApplicantCreate(
         name=final_name,
@@ -201,7 +192,7 @@ def _build_applicant_data(name: Optional[str], email: Optional[str], phone: Opti
         analysisScore=final_analysis_score,
         analysisResult=final_analysis_result,
         status="pending",
-        job_posting_id=job_posting_id if job_posting_id else None
+        job_posting_id=job_posting_id if job_posting_id and job_posting_id != "default_job_posting" else None
     )
 
 def _extract_position_from_text(text: str) -> str:
@@ -287,7 +278,7 @@ async def upload_resume_with_ocr(
     email: Optional[str] = Form(None),
     phone: Optional[str] = Form(None),
     job_posting_id: str = Form(...),
-    mongo_saver: MongoSaver = Depends(get_mongo_saver)
+    mongo_storage: MongoStorage = Depends(get_mongo_storage)
 ):
     """이력서를 업로드하고 OCR 처리 후 DB에 저장합니다."""
     try:
@@ -302,20 +293,18 @@ async def upload_resume_with_ocr(
             temp_file_path = Path(temp_file.name)
 
         try:
-            # GPT-4o Vision API를 사용한 PDF OCR 처리
-            ocr_result = process_pdf(str(temp_file_path))
-
-            # AI 분석 결과 가져오기
+            # PDFProcessor를 사용한 PDF OCR 처리
             settings = Settings()
-            ai_analysis = analyze_text(ocr_result.get("full_text", ""), settings)
+            processor = PDFProcessor(settings)
+            ocr_result = processor.process_pdf(str(temp_file_path))
 
             # OCR 결과에 AI 분석 결과 추가
             enhanced_ocr_result = {
                 "extracted_text": ocr_result.get("full_text", ""),
-                "summary": ai_analysis.get("summary", ""),
-                "keywords": ai_analysis.get("keywords", []),
-                "basic_info": ai_analysis.get("basic_info", {}),
-                "document_type": ai_analysis.get("structured_data", {}).get("document_type", "resume"),
+                "summary": ocr_result.get("ai_analysis", {}).get("summary", ""),
+                "keywords": ocr_result.get("ai_analysis", {}).get("keywords", []),
+                "basic_info": ocr_result.get("ai_analysis", {}).get("basic_info", {}),
+                "document_type": ocr_result.get("ai_analysis", {}).get("structured_data", {}).get("document_type", "resume"),
                 "pages": ocr_result.get("num_pages", 0)
             }
 
@@ -354,7 +343,7 @@ async def upload_cover_letter_with_ocr(
     email: Optional[str] = Form(None),
     phone: Optional[str] = Form(None),
     job_posting_id: str = Form(...),
-    mongo_saver: MongoSaver = Depends(get_mongo_saver)
+    mongo_storage: MongoStorage = Depends(get_mongo_storage)
 ):
     """자기소개서를 업로드하고 OCR 처리 후 DB에 저장합니다."""
     try:
@@ -369,20 +358,18 @@ async def upload_cover_letter_with_ocr(
             temp_file_path = Path(temp_file.name)
 
         try:
-            # GPT-4o Vision API를 사용한 PDF OCR 처리
-            ocr_result = process_pdf(str(temp_file_path))
-
-            # AI 분석 결과 가져오기
+            # PDFProcessor를 사용한 PDF OCR 처리
             settings = Settings()
-            ai_analysis = analyze_text(ocr_result.get("full_text", ""), settings)
+            processor = PDFProcessor(settings)
+            ocr_result = processor.process_pdf(str(temp_file_path))
 
             # OCR 결과에 AI 분석 결과 추가
             enhanced_ocr_result = {
                 "extracted_text": ocr_result.get("full_text", ""),
-                "summary": ai_analysis.get("summary", ""),
-                "keywords": ai_analysis.get("keywords", []),
-                "basic_info": ai_analysis.get("basic_info", {}),
-                "document_type": ai_analysis.get("structured_data", {}).get("document_type", "cover_letter"),
+                "summary": ocr_result.get("ai_analysis", {}).get("summary", ""),
+                "keywords": ocr_result.get("ai_analysis", {}).get("keywords", []),
+                "basic_info": ocr_result.get("ai_analysis", {}).get("basic_info", {}),
+                "document_type": ocr_result.get("ai_analysis", {}).get("structured_data", {}).get("document_type", "cover_letter"),
                 "pages": ocr_result.get("num_pages", 0)
             }
 
@@ -421,7 +408,7 @@ async def upload_portfolio_with_ocr(
     email: Optional[str] = Form(None),
     phone: Optional[str] = Form(None),
     job_posting_id: str = Form(...),
-    mongo_saver: MongoSaver = Depends(get_mongo_saver)
+    mongo_storage: MongoStorage = Depends(get_mongo_storage)
 ):
     """포트폴리오를 업로드하고 OCR 처리 후 DB에 저장합니다."""
     try:
@@ -436,20 +423,18 @@ async def upload_portfolio_with_ocr(
             temp_file_path = Path(temp_file.name)
 
         try:
-            # GPT-4o Vision API를 사용한 PDF OCR 처리
-            ocr_result = process_pdf(str(temp_file_path))
-
-            # AI 분석 결과 가져오기
+            # PDFProcessor를 사용한 PDF OCR 처리
             settings = Settings()
-            ai_analysis = analyze_text(ocr_result.get("full_text", ""), settings)
+            processor = PDFProcessor(settings)
+            ocr_result = processor.process_pdf(str(temp_file_path))
 
             # OCR 결과에 AI 분석 결과 추가
             enhanced_ocr_result = {
                 "extracted_text": ocr_result.get("full_text", ""),
-                "summary": ai_analysis.get("summary", ""),
-                "keywords": ai_analysis.get("keywords", []),
-                "basic_info": ai_analysis.get("basic_info", {}),
-                "document_type": ai_analysis.get("structured_data", {}).get("document_type", "portfolio"),
+                "summary": ocr_result.get("ai_analysis", {}).get("summary", ""),
+                "keywords": ocr_result.get("ai_analysis", {}).get("keywords", []),
+                "basic_info": ocr_result.get("ai_analysis", {}).get("basic_info", {}),
+                "document_type": ocr_result.get("ai_analysis", {}).get("structured_data", {}).get("document_type", "portfolio"),
                 "pages": ocr_result.get("num_pages", 0)
             }
 
@@ -490,7 +475,7 @@ async def upload_multiple_documents(
     email: Optional[str] = Form(None),
     phone: Optional[str] = Form(None),
     job_posting_id: str = Form(...),
-    mongo_saver: MongoSaver = Depends(get_mongo_saver)
+    mongo_storage: MongoStorage = Depends(get_mongo_storage)
 ):
     """여러 문서를 한 번에 업로드하고 OCR 처리 후 DB에 저장합니다."""
     try:
@@ -511,7 +496,9 @@ async def upload_multiple_documents(
                 temp_file_path = Path(temp_file.name)
                 temp_files.append(temp_file_path)
 
-            ocr_result = process_pdf(str(temp_file_path))
+            settings = Settings()
+            processor = PDFProcessor(settings)
+            ocr_result = processor.process_pdf(str(temp_file_path))
             if not applicant_data:
                 applicant_data = _build_applicant_data(name, email, phone, ocr_result, job_posting_id)
             result = await mongo_saver.save_resume_with_ocr(
@@ -533,7 +520,9 @@ async def upload_multiple_documents(
                 temp_file_path = Path(temp_file.name)
                 temp_files.append(temp_file_path)
 
-            ocr_result = process_pdf(str(temp_file_path))
+            settings = Settings()
+            processor = PDFProcessor(settings)
+            ocr_result = processor.process_pdf(str(temp_file_path))
             if not applicant_data:
                 applicant_data = _build_applicant_data(name, email, phone, ocr_result, job_posting_id)
             result = await mongo_saver.save_cover_letter_with_ocr(
@@ -555,7 +544,9 @@ async def upload_multiple_documents(
                 temp_file_path = Path(temp_file.name)
                 temp_files.append(temp_file_path)
 
-            ocr_result = process_pdf(str(temp_file_path))
+            settings = Settings()
+            processor = PDFProcessor(settings)
+            ocr_result = processor.process_pdf(str(temp_file_path))
             if not applicant_data:
                 applicant_data = _build_applicant_data(name, email, phone, ocr_result, job_posting_id)
             result = await mongo_saver.save_portfolio_with_ocr(
@@ -608,7 +599,7 @@ async def upload_multiple_documents(
     email: Optional[str] = Form(None),
     phone: Optional[str] = Form(None),
     job_posting_id: Optional[str] = Form("default_job_posting"),
-    mongo_saver: MongoSaver = Depends(get_mongo_saver)
+    mongo_storage: MongoStorage = Depends(get_mongo_storage)
 ):
     """여러 문서를 한 번에 업로드하고 OCR 처리 후 하나의 지원자 레코드로 통합 저장합니다."""
     try:
@@ -642,20 +633,17 @@ async def upload_multiple_documents(
             try:
                 # OCR 처리
                 print(f"🔍 이력서 OCR 처리 중...")
-                ocr_result = process_pdf(str(temp_file_path))
-
-                # AI 분석 결과 가져오기
-                print(f"🤖 이력서 AI 분석 중...")
                 settings = Settings()
-                ai_analysis = analyze_text(ocr_result.get("full_text", ""), settings)
+                processor = PDFProcessor(settings)
+                ocr_result = processor.process_pdf(str(temp_file_path))
 
                 # OCR 결과에 AI 분석 결과 추가
                 enhanced_ocr_result = {
                     "extracted_text": ocr_result.get("full_text", ""),
-                    "summary": ai_analysis.get("summary", ""),
-                    "keywords": ai_analysis.get("keywords", []),
-                    "basic_info": ai_analysis.get("basic_info", {}),
-                    "structured_data": ai_analysis.get("structured_data", {}),
+                    "summary": ocr_result.get("ai_analysis", {}).get("summary", ""),
+                    "keywords": ocr_result.get("ai_analysis", {}).get("keywords", []),
+                    "basic_info": ocr_result.get("ai_analysis", {}).get("basic_info", {}),
+                    "structured_data": ocr_result.get("ai_analysis", {}).get("structured_data", {}),
                     "document_type": "resume",
                     "pages": ocr_result.get("num_pages", 0)
                 }
@@ -663,11 +651,15 @@ async def upload_multiple_documents(
                 # 지원자 데이터 생성
                 applicant_data = _build_applicant_data(name, email, phone, enhanced_ocr_result, job_posting_id)
 
+                # 지원자 데이터에 채용공고 자동 할당
+                from backend.modules.core.utils.job_posting_assignment import ensure_applicant_has_job_posting
+                applicant_data = await ensure_applicant_has_job_posting(db, applicant_data.dict())
+
                 # MongoDB에 저장
                 result = mongo_saver.save_resume_with_ocr(
                     ocr_result=enhanced_ocr_result,
                     applicant_data=applicant_data,
-                    job_posting_id=job_posting_id,
+                    job_posting_id=applicant_data.get("job_posting_id"),
                     file_path=temp_file_path
                 )
 
@@ -717,20 +709,17 @@ async def upload_multiple_documents(
             try:
                 # OCR 처리
                 print(f"🔍 자기소개서 OCR 처리 중...")
-                ocr_result = process_pdf(str(temp_file_path))
-
-                # AI 분석 결과 가져오기
-                print(f"🤖 자기소개서 AI 분석 중...")
                 settings = Settings()
-                ai_analysis = analyze_text(ocr_result.get("full_text", ""), settings)
+                processor = PDFProcessor(settings)
+                ocr_result = processor.process_pdf(str(temp_file_path))
 
                 # OCR 결과에 AI 분석 결과 추가
                 enhanced_ocr_result = {
                     "extracted_text": ocr_result.get("full_text", ""),
-                    "summary": ai_analysis.get("summary", ""),
-                    "keywords": ai_analysis.get("keywords", []),
-                    "basic_info": ai_analysis.get("basic_info", {}),
-                    "structured_data": ai_analysis.get("structured_data", {}),
+                    "summary": ocr_result.get("ai_analysis", {}).get("summary", ""),
+                    "keywords": ocr_result.get("ai_analysis", {}).get("keywords", []),
+                    "basic_info": ocr_result.get("ai_analysis", {}).get("basic_info", {}),
+                    "structured_data": ocr_result.get("ai_analysis", {}).get("structured_data", {}),
                     "document_type": "cover_letter",
                     "pages": ocr_result.get("num_pages", 0)
                 }
@@ -803,20 +792,17 @@ async def upload_multiple_documents(
             try:
                 # OCR 처리
                 print(f"🔍 포트폴리오 OCR 처리 중...")
-                ocr_result = process_pdf(str(temp_file_path))
-
-                # AI 분석 결과 가져오기
-                print(f"🤖 포트폴리오 AI 분석 중...")
                 settings = Settings()
-                ai_analysis = analyze_text(ocr_result.get("full_text", ""), settings)
+                processor = PDFProcessor(settings)
+                ocr_result = processor.process_pdf(str(temp_file_path))
 
                 # OCR 결과에 AI 분석 결과 추가
                 enhanced_ocr_result = {
                     "extracted_text": ocr_result.get("full_text", ""),
-                    "summary": ai_analysis.get("summary", ""),
-                    "keywords": ai_analysis.get("keywords", []),
-                    "basic_info": ai_analysis.get("basic_info", {}),
-                    "structured_data": ai_analysis.get("structured_data", {}),
+                    "summary": ocr_result.get("ai_analysis", {}).get("summary", ""),
+                    "keywords": ocr_result.get("ai_analysis", {}).get("keywords", []),
+                    "basic_info": ocr_result.get("ai_analysis", {}).get("basic_info", {}),
+                    "structured_data": ocr_result.get("ai_analysis", {}).get("structured_data", {}),
                     "document_type": "portfolio",
                     "pages": ocr_result.get("num_pages", 0)
                 }
